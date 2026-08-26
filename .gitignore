@@ -1,3 +1,4 @@
 /target/
 proof/.lake/
 __pycache__/
+mirror-worktree/

@@ -34,6 +34,29 @@ run is loud and visible. Enabling hard protection is a one-command change
 if the repository is later made public or the plan upgraded; that choice
 belongs to the owner, not the timeline.
 
+## The mirror
+
+`mirror/timeline-1` records the observed states of the original
+directory, which has no version control of its own and is being actively
+worked by another agent toward a Layer-1 cryptocurrency design (blocks as
+mint, deletion as sink). `tools/mirror_timeline1.py` copies that tree
+read-only — same exclusions as the fork: `target/`, `__pycache__/`,
+`.lake/` — into a worktree and commits each observed state with a
+timestamp. The branch is rooted at `inherited-state`, so each mirror
+commit's diff is the other line's progress since the fork, and
+`git diff mirror/timeline-1 timeline-2` is the live divergence between
+the lines. An automation re-mirrors every 30 minutes and pushes; a state
+identical to the last observation commits nothing.
+
+One observation recorded at the mirror's creation, for whoever reads the
+divergence later: the other line's stated destination — creation as mint,
+deletion as sink — is the same economic primitive the sibling project's
+metabolic fold tested under the name of its death rule, where a measured
+discriminator showed the sink question is load-bearing (whether a death
+burns its wallet or drops it as a pickup changed the ecology's fate
+outright). The two lines will meet at that question from opposite ends:
+this one designing the sink, that one having measured one.
+
 ## Commit honesty
 
 Every commit message states what was verified and how (command and outcome),
