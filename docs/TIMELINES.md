@@ -23,9 +23,16 @@ Three CI jobs gate every push and pull request:
   target (it requires the separately pinned LadderLang checkout) and is not
   CI'd.
 
-`main` additionally carries branch protection: required status checks from
-these jobs, no force pushes, no deletions. Timeline work happens on branches
-(`timeline-2` and descendants) and lands on `main` only through green CI.
+`main` was intended to additionally carry branch protection (required
+checks, no force pushes, linear history). GitHub declined: **branch
+protection is a paid feature for private repositories** on the free tier
+(HTTP 403, "Upgrade to GitHub Pro or make this repository public"). The
+repository stays private by the same deliberate policy as its sibling
+project, so hard protection is **not currently active** — what enforces
+today is that CI runs on every push to `main` and `timeline-2` and a red
+run is loud and visible. Enabling hard protection is a one-command change
+if the repository is later made public or the plan upgraded; that choice
+belongs to the owner, not the timeline.
 
 ## Commit honesty
 
