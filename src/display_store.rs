@@ -1,9 +1,11 @@
 //! Typed local persistence for canonical display-capture artifacts.
 //!
-//! Each physical storage record contains one complete [`DisplayCaptureArtifact`]. The storage
+//! Each physical storage record contains either one complete [`DisplayCaptureArtifact`] or one
+//! [`PresentationOutputArtifact`](crate::presentation_output::PresentationOutputArtifact) that
+//! embeds a display artifact, composition timing, and before/after output topology. The storage
 //! record parent orders physical appends; the embedded [`crate::display::DisplayReceiptV2`]
-//! parent independently orders display observations. Opening or recovering a journal replays and
-//! checks both chains before exposing any writable state.
+//! parent independently orders display observations across both record kinds. Opening or
+//! recovering a journal replays and checks both chains before exposing any writable state.
 //!
 //! A successful append proves only that the exact typed candidate passed before I/O,
 //! `File::sync_all` returned success, and the appended carrier bytes were reread through the
@@ -1670,6 +1672,47 @@ mod tests {
         assert!(matches!(
             replay_display_artifact_records(&[bad_codec]),
             Err(DisplayArtifactSemanticError::ArtifactCodec {
+                record_index: 0,
+                ..
+            })
+        ));
+
+        let presentation = presentation_output(first.clone());
+        let presentation_payload = presentation.encode_canonical().unwrap();
+        for crossed in [
+            StorageRecord::new(
+                None,
+                TagKind::PresentationOutputArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &presentation_payload,
+            )
+            .unwrap(),
+            StorageRecord::new(
+                None,
+                TagKind::DisplayArtifact,
+                PRESENTATION_OUTPUT_ARTIFACT_SCHEMA,
+                &first_payload,
+            )
+            .unwrap(),
+        ] {
+            assert!(matches!(
+                replay_display_artifact_records(&[crossed]),
+                Err(DisplayArtifactSemanticError::WrongSchema {
+                    record_index: 0,
+                    ..
+                })
+            ));
+        }
+        let presentation_kind_bad_codec = StorageRecord::new(
+            None,
+            TagKind::PresentationOutputArtifact,
+            PRESENTATION_OUTPUT_ARTIFACT_SCHEMA,
+            &first_payload,
+        )
+        .unwrap();
+        assert!(matches!(
+            replay_display_artifact_records(&[presentation_kind_bad_codec]),
+            Err(DisplayArtifactSemanticError::PresentationOutputCodec {
                 record_index: 0,
                 ..
             })

@@ -13,6 +13,7 @@ use bitblock::display::{CaptureStage, DisplayCapture, DisplayLedgerV2, DisplayOu
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::display_store::{
     DisplayArtifactAppendReceipt, DisplayArtifactJournal, DisplayArtifactStoreError,
+    PresentationOutputAppendReceipt,
 };
 use bitblock::frame::{
     FrameInput, FrameLedger, FrameObservation, FrameProtocolError, FrameReceipt, FrameRef,
@@ -40,11 +41,19 @@ use bitblock::tick::{
 use bitblock::windows_present::WindowsPixelSurface;
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::windows_timing::observe_checked_present;
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::windows_topology::observe_active_output;
 #[cfg(test)]
 use bitblock::world::BEDROCK_COORD;
 use bitblock::world::World;
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::{display_artifact::DisplayCaptureArtifact, storage::StorageLimits};
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::{
+    output_topology::{OutputTopologyError, OutputTopologyObservation},
+    presentation::{CompositionTimingEnvelope, PresentationProtocolError},
+    presentation_output::PresentationOutputArtifact,
+};
 #[cfg(not(windows))]
 use softbuffer::{Context, Surface};
 #[cfg(windows)]
@@ -75,6 +84,11 @@ const OBSERVER_COLLISION_CLEARANCE: f64 = 1.0e-6;
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
 #[cfg(all(windows, feature = "protocol-research"))]
 const PRESENTATION_AUDIT_ENV: &str = "BITBLOCK_PRESENTATION_AUDIT";
+#[cfg(all(windows, feature = "protocol-research"))]
+const RESEARCH_WINDOW_TITLE: &str = "bitblock — F3 metrics · F4 pixels · F5 presentation evidence";
+#[cfg(all(windows, feature = "protocol-research"))]
+const PRESENTATION_EVIDENCE_WAITING_TITLE: &str =
+    "bitblock — F5 armed · waiting for next changed presentation";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let program = load_startup_program()?;
@@ -223,6 +237,7 @@ struct PendingRenderedFrame {
 struct LiveDisplayArtifactArchive {
     journal: DisplayArtifactJournal,
     pending_artifact: Option<DisplayCaptureArtifact>,
+    pending_presentation_output: Option<PresentationOutputArtifact>,
     faulted: bool,
 }
 
@@ -239,18 +254,27 @@ impl LiveDisplayArtifactArchive {
         Self {
             journal,
             pending_artifact: None,
+            pending_presentation_output: None,
             faulted: false,
         }
     }
 
     fn can_capture_new(&self) -> bool {
-        !self.faulted && self.pending_artifact.is_none()
+        !self.faulted
+            && self.pending_artifact.is_none()
+            && self.pending_presentation_output.is_none()
     }
 
     fn pending_artifact(&self) -> Option<bitblock::protocol::ContentTag> {
         self.pending_artifact
             .as_ref()
             .map(DisplayCaptureArtifact::tag)
+    }
+
+    fn pending_presentation_output(&self) -> Option<bitblock::protocol::ContentTag> {
+        self.pending_presentation_output
+            .as_ref()
+            .map(PresentationOutputArtifact::tag)
     }
 
     fn prepare_and_append(
@@ -298,6 +322,72 @@ impl LiveDisplayArtifactArchive {
                 Err(LiveDisplayArtifactFailure {
                     error: Box::new(error),
                     artifact: Some(artifact_tag),
+                    poisoned,
+                })
+            }
+        }
+    }
+
+    fn prepare_and_append_presentation_output(
+        &mut self,
+        expected_receipt: FrameReceiptV2,
+        expected: FrameRef<'_>,
+        capture: &DisplayCapture,
+        timing: CompositionTimingEnvelope,
+        pre_topology: bitblock::output_topology::OutputTopologyObservation,
+        post_topology: bitblock::output_topology::OutputTopologyObservation,
+    ) -> Result<PresentationOutputAppendReceipt, LiveDisplayArtifactFailure> {
+        debug_assert!(self.can_capture_new());
+        let display =
+            match self
+                .journal
+                .prepare_capture_artifact(expected_receipt, expected, capture)
+            {
+                Ok(artifact) => artifact,
+                Err(error) => {
+                    self.faulted = true;
+                    return Err(LiveDisplayArtifactFailure {
+                        error: Box::new(error),
+                        artifact: None,
+                        poisoned: self.journal.is_poisoned(),
+                    });
+                }
+            };
+        let presentation =
+            match PresentationOutputArtifact::new(display, timing, pre_topology, post_topology) {
+                Ok(artifact) => artifact,
+                Err(error) => {
+                    self.faulted = true;
+                    return Err(LiveDisplayArtifactFailure {
+                        error: Box::new(DisplayArtifactStoreError::from(error)),
+                        artifact: None,
+                        poisoned: self.journal.is_poisoned(),
+                    });
+                }
+            };
+        self.pending_presentation_output = Some(presentation);
+        self.append_pending_presentation_output()
+    }
+
+    fn append_pending_presentation_output(
+        &mut self,
+    ) -> Result<PresentationOutputAppendReceipt, LiveDisplayArtifactFailure> {
+        let presentation = self
+            .pending_presentation_output
+            .as_ref()
+            .expect("an explicit F5 retry requires one retained presentation-output artifact");
+        let presentation_tag = presentation.tag();
+        match self.journal.append_presentation_output(presentation) {
+            Ok(receipt) => {
+                self.pending_presentation_output = None;
+                Ok(receipt)
+            }
+            Err(error) => {
+                let poisoned = self.journal.is_poisoned();
+                self.faulted |= poisoned;
+                Err(LiveDisplayArtifactFailure {
+                    error: Box::new(error),
+                    artifact: Some(presentation_tag),
                     poisoned,
                 })
             }
@@ -396,6 +486,208 @@ fn report_display_artifact_result(
                 "display-artifact-refused\tdisposition={disposition}\tartifact={:?}\t{}",
                 failure.artifact, failure.error
             );
+        }
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+enum LivePresentationOutputFailure {
+    MissingTiming,
+    Timing(PresentationProtocolError),
+    TimingReceiptMismatch {
+        presented: bitblock::protocol::ContentTag,
+        timing: bitblock::protocol::ContentTag,
+    },
+    MissingWindowHandle,
+    Topology {
+        stage: &'static str,
+        error: OutputTopologyError,
+    },
+    Store(LiveDisplayArtifactFailure),
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn attempt_presentation_output_observation<ObserveTopology, Capture>(
+    archive: &mut LiveDisplayArtifactArchive,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'_>,
+    timing: CompositionTimingEnvelope,
+    mut observe_topology: ObserveTopology,
+    capture: Capture,
+) -> Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>
+where
+    ObserveTopology:
+        FnMut(&'static str) -> Result<OutputTopologyObservation, LivePresentationOutputFailure>,
+    Capture: FnOnce() -> DisplayCapture,
+{
+    if timing.receipt() != presented.receipt_v2 {
+        return Err(LivePresentationOutputFailure::TimingReceiptMismatch {
+            presented: presented.receipt_v2.tag(),
+            timing: timing.receipt().tag(),
+        });
+    }
+    let pre_topology = observe_topology("before-capture")?;
+    let capture = capture();
+    let post_topology = observe_topology("after-capture")?;
+    archive
+        .prepare_and_append_presentation_output(
+            presented.receipt_v2,
+            expected,
+            &capture,
+            timing,
+            pre_topology,
+            post_topology,
+        )
+        .map_err(LivePresentationOutputFailure::Store)
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn service_presentation_output_request_with<'a, Attempt>(
+    requested: &mut bool,
+    archive: &mut LiveDisplayArtifactArchive,
+    composite_ledger: &FrameLedgerV2,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'a>,
+    attempt: Attempt,
+) -> Option<Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>>
+where
+    Attempt: FnOnce(
+        &mut LiveDisplayArtifactArchive,
+        PresentedFrameObservation,
+        FrameRef<'a>,
+    ) -> Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>,
+{
+    if !*requested || !archive.can_capture_new() {
+        return None;
+    }
+    current_committed_composite_frame(
+        composite_ledger,
+        presented,
+        expected.width(),
+        expected.height(),
+        expected.pixels(),
+    )?;
+
+    // F5 owns one exact post-presentation observation attempt. Any later storage retry retains
+    // the complete wrapper and performs no timing, topology, capture, or pixel calls.
+    *requested = false;
+    Some(attempt(archive, presented, expected))
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn service_presentation_output_request(
+    requested: &mut bool,
+    archive: &mut LiveDisplayArtifactArchive,
+    composite_ledger: &FrameLedgerV2,
+    window: &Window,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'_>,
+    timing: Option<Result<CompositionTimingEnvelope, PresentationProtocolError>>,
+) -> Option<Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>> {
+    service_presentation_output_request_with(
+        requested,
+        archive,
+        composite_ledger,
+        presented,
+        expected,
+        |archive, presented, expected| {
+            let timing = match timing {
+                Some(Ok(timing)) => timing,
+                Some(Err(error)) => return Err(LivePresentationOutputFailure::Timing(error)),
+                None => return Err(LivePresentationOutputFailure::MissingTiming),
+            };
+            let mut cached_hwnd = None;
+            attempt_presentation_output_observation(
+                archive,
+                presented,
+                expected,
+                timing,
+                |stage| {
+                    let hwnd = match cached_hwnd {
+                        Some(hwnd) => hwnd,
+                        None => {
+                            let Some(hwnd) = win32_hwnd(window) else {
+                                return Err(LivePresentationOutputFailure::MissingWindowHandle);
+                            };
+                            cached_hwnd = Some(hwnd);
+                            hwnd
+                        }
+                    };
+                    // SAFETY: winit owns this HWND on the event-loop thread for the duration of
+                    // each synchronous observation. The collector retains no handle or transient
+                    // numeric join key.
+                    unsafe { observe_active_output(hwnd) }
+                        .map_err(|error| LivePresentationOutputFailure::Topology { stage, error })
+                },
+                || capture_visible_client(window, expected),
+            )
+        },
+    )
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn report_presentation_output_result(
+    window: &Window,
+    result: Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>,
+) {
+    match result {
+        Ok(receipt) => {
+            window.set_title(&format!(
+                "bitblock — presentation output stored {}",
+                receipt.artifact_count
+            ));
+            eprintln!(
+                "presentation-output-stored\toutput={}\tdisplay={}\ttiming={}\ttopology_before={}\ttopology_after={}\tstability={:?}\trecord={}\trange=[{}, {})\tcount={}",
+                receipt.presentation_output,
+                receipt.artifact,
+                receipt.timing_artifact,
+                receipt.topology_before,
+                receipt.topology_after,
+                receipt.route_stability,
+                receipt.carrier_append.record_tag,
+                receipt.carrier_append.start_offset,
+                receipt.carrier_append.end_offset,
+                receipt.artifact_count,
+            );
+        }
+        Err(LivePresentationOutputFailure::Store(failure)) => {
+            let disposition = if failure.poisoned {
+                "reopen-required"
+            } else if failure.artifact.is_some() {
+                "retained-f5-retry"
+            } else {
+                "bundle-admission-fault"
+            };
+            window.set_title(&format!("bitblock — presentation output {disposition}"));
+            eprintln!(
+                "presentation-output-refused\tdisposition={disposition}\toutput={:?}\t{}",
+                failure.artifact, failure.error
+            );
+        }
+        Err(LivePresentationOutputFailure::Timing(error)) => {
+            window.set_title("bitblock — presentation timing refused");
+            eprintln!("presentation-output-refused\tdisposition=timing-admission-fault\t{error}");
+        }
+        Err(LivePresentationOutputFailure::TimingReceiptMismatch { presented, timing }) => {
+            window.set_title("bitblock — presentation receipt mismatch");
+            eprintln!(
+                "presentation-output-refused\tdisposition=timing-receipt-mismatch\tpresented={}\ttiming={}",
+                presented, timing,
+            );
+        }
+        Err(LivePresentationOutputFailure::Topology { stage, error }) => {
+            window.set_title("bitblock — output topology refused");
+            eprintln!(
+                "presentation-output-refused\tdisposition=topology-admission-fault\tstage={stage}\t{error}"
+            );
+        }
+        Err(LivePresentationOutputFailure::MissingTiming) => {
+            window.set_title("bitblock — presentation timing missing");
+            eprintln!("presentation-output-refused\tdisposition=internal-missing-timing");
+        }
+        Err(LivePresentationOutputFailure::MissingWindowHandle) => {
+            window.set_title("bitblock — output topology unavailable");
+            eprintln!("presentation-output-refused\tdisposition=missing-window-handle");
         }
     }
 }
@@ -723,6 +1015,8 @@ struct App {
     #[cfg(all(windows, feature = "protocol-research"))]
     display_artifact_capture_requested: bool,
     #[cfg(all(windows, feature = "protocol-research"))]
+    presentation_output_capture_requested: bool,
+    #[cfg(all(windows, feature = "protocol-research"))]
     presentation_audit_enabled: bool,
 }
 
@@ -779,6 +1073,8 @@ impl App {
             display_artifact_archive: None,
             #[cfg(all(windows, feature = "protocol-research"))]
             display_artifact_capture_requested: false,
+            #[cfg(all(windows, feature = "protocol-research"))]
+            presentation_output_capture_requested: false,
             #[cfg(all(windows, feature = "protocol-research"))]
             presentation_audit_enabled: presentation_audit_enabled(),
         }
@@ -1382,7 +1678,8 @@ impl App {
         copy_exact(&mut buffer, frame).expect("surface does not match framebuffer shape");
 
         #[cfg(all(windows, feature = "protocol-research"))]
-        let presentation_audit_enabled = self.presentation_audit_enabled;
+        let presentation_audit_enabled =
+            self.presentation_audit_enabled || self.presentation_output_capture_requested;
         #[cfg(all(windows, feature = "protocol-research"))]
         let mut presentation_timing = None;
         #[cfg(windows)]
@@ -1475,6 +1772,25 @@ impl App {
         self.pending_sidebar_facts = None;
         self.needs_present = false;
 
+        #[cfg(all(windows, feature = "protocol-research"))]
+        if self.presentation_output_capture_requested
+            && let (Some(ledgers), Some(archive)) = (
+                self.frame_ledgers_v2.as_ref(),
+                self.display_artifact_archive.as_mut(),
+            )
+            && let Some(result) = service_presentation_output_request(
+                &mut self.presentation_output_capture_requested,
+                archive,
+                &ledgers.composite,
+                &display.window,
+                presented_output,
+                frame,
+                presentation_timing,
+            )
+        {
+            report_presentation_output_result(&display.window, result);
+        }
+
         #[cfg(windows)]
         if let Some(display_ledger) = self.display_ledger.as_mut() {
             let capture = capture_visible_client(&display.window, frame);
@@ -1550,6 +1866,12 @@ impl App {
                 eprintln!("display-artifact-disabled\tjournal requires explicit typed reopen");
                 return;
             }
+            if self.presentation_output_capture_requested
+                || archive.pending_presentation_output().is_some()
+            {
+                eprintln!("display-artifact-request\tbusy=presentation-output");
+                return;
+            }
             if archive.pending_artifact().is_some() {
                 let result = archive.append_pending();
                 if let Some(display) = self.display.as_ref() {
@@ -1573,6 +1895,54 @@ impl App {
         );
     }
 
+    fn request_presentation_output_capture(&mut self) {
+        #[cfg(all(windows, feature = "protocol-research"))]
+        {
+            let Some(archive) = self.display_artifact_archive.as_mut() else {
+                eprintln!(
+                    "presentation-output-disabled\tset {DISPLAY_JOURNAL_ENV} to a fresh path before startup"
+                );
+                return;
+            };
+            if archive.faulted {
+                eprintln!("presentation-output-disabled\tjournal requires explicit typed reopen");
+                return;
+            }
+            if self.display_artifact_capture_requested || archive.pending_artifact().is_some() {
+                eprintln!("presentation-output-request\tbusy=display-artifact");
+                return;
+            }
+            if archive.pending_presentation_output().is_some() {
+                let result = archive.append_pending_presentation_output();
+                if let Some(display) = self.display.as_ref() {
+                    report_presentation_output_result(
+                        &display.window,
+                        result.map_err(LivePresentationOutputFailure::Store),
+                    );
+                }
+                return;
+            }
+            if self.presentation_output_capture_requested {
+                eprintln!("presentation-output-request\tcoalesced");
+                return;
+            }
+            self.presentation_output_capture_requested = true;
+            eprintln!("presentation-output-request\tarmed-next-presentation");
+            if let Some(display) = self.display.as_ref() {
+                // A redraw services UI state but does not forge a frame, tick, or resubmit the
+                // current surface. The request stays armed until a normal presentation exists.
+                display
+                    .window
+                    .set_title(PRESENTATION_EVIDENCE_WAITING_TITLE);
+                display.window.request_redraw();
+            }
+        }
+        #[cfg(not(all(windows, feature = "protocol-research")))]
+        eprintln!(
+            "presentation-output-disabled\tF5 requires Windows and --features protocol-research"
+        );
+    }
+
     fn key(&mut self, code: KeyCode, pressed: bool) {
         match code {
             KeyCode::KeyW => self.inputs.forward = pressed,
@@ -1587,6 +1957,7 @@ impl App {
                 self.needs_sidebar_render = true;
             }
             KeyCode::F4 if pressed => self.request_display_artifact_capture(),
+            KeyCode::F5 if pressed => self.request_presentation_output_capture(),
             KeyCode::Escape if pressed => self.capture_mouse(false),
             _ => {}
         }
@@ -1664,7 +2035,7 @@ impl ApplicationHandler for App {
 
         #[cfg(all(windows, feature = "protocol-research"))]
         let title = if self.display_artifact_archive.is_some() {
-            "bitblock — F3 metrics · F4 archive"
+            RESEARCH_WINDOW_TITLE
         } else {
             "bitblock — F3 metrics"
         };
@@ -1755,7 +2126,7 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if let PhysicalKey::Code(code) = event.physical_key
-                    && !(event.repeat && code == KeyCode::F4)
+                    && !(event.repeat && matches!(code, KeyCode::F4 | KeyCode::F5))
                 {
                     self.key(code, event.state == ElementState::Pressed);
                 }
@@ -1919,6 +2290,131 @@ mod tests {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Err(error) => panic!("could not remove live display-journal test file: {error}"),
             }
+        }
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_qpc(value: i64) -> bitblock::presentation::QpcRead {
+        bitblock::presentation::QpcRead {
+            succeeded: true,
+            value,
+            error_code: 0,
+        }
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_qpc_bracket(before: i64, after: i64) -> bitblock::presentation::QpcBracket {
+        bitblock::presentation::QpcBracket {
+            before: test_qpc(before),
+            after: test_qpc(after),
+        }
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_timing(receipt: FrameReceiptV2) -> CompositionTimingEnvelope {
+        use bitblock::presentation::{
+            DwmFlushCall, DwmTimingCall, GdiFlushCall, PresenterEvidence, QpcFrequency,
+        };
+
+        let policy = bitblock::protocol::hash_canonical(
+            bitblock::protocol::TagKind::Policy,
+            b"bitblock/test-presenter-policy/v1",
+            0,
+            |_| {},
+        )
+        .unwrap();
+        CompositionTimingEnvelope::new(
+            receipt,
+            PresenterEvidence {
+                policy,
+                requested_scanlines: 1,
+                returned_scanlines: 1,
+                call_error_code: 0,
+                release_result: 1,
+                release_error_code: 0,
+            },
+            QpcFrequency {
+                succeeded: true,
+                counts_per_second: 10_000_000,
+                error_code: 0,
+            },
+            DwmTimingCall {
+                bracket: test_qpc_bracket(10, 11),
+                hresult: -1,
+                snapshot: None,
+            },
+            test_qpc_bracket(12, 13),
+            GdiFlushCall {
+                bracket: test_qpc_bracket(14, 15),
+                succeeded: true,
+            },
+            DwmFlushCall {
+                bracket: test_qpc_bracket(16, 17),
+                hresult: 0,
+            },
+            DwmTimingCall {
+                bracket: test_qpc_bracket(18, 19),
+                hresult: -1,
+                snapshot: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_unavailable_topology(
+        profile: u32,
+    ) -> bitblock::output_topology::OutputTopologyObservation {
+        use bitblock::output_topology::{AcquisitionAttempt, AcquisitionFacts};
+
+        bitblock::output_topology::OutputTopologyObservation::new_unavailable(
+            AcquisitionFacts {
+                profile_code_raw: profile,
+                request_flags_raw: 0x52,
+                attempts: vec![AcquisitionAttempt {
+                    operation_code_raw: 1,
+                    profile_code_raw: profile,
+                    request_flags_raw: 0x52,
+                    retry_ordinal: 0,
+                    outcome_code_raw: 1,
+                    error_code: 1168,
+                    reported_path_capacity: 0,
+                    reported_mode_capacity: 0,
+                }],
+            },
+            1,
+            1168,
+        )
+        .unwrap()
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_complete_capture(expected: FrameRef<'_>) -> DisplayCapture {
+        let rect = bitblock::display::CaptureRect {
+            left: 0,
+            top: 0,
+            right: expected.width() as i32,
+            bottom: expected.height() as i32,
+        };
+        DisplayCapture {
+            facts: bitblock::display::DisplayCaptureFacts {
+                outcome: DisplayOutcome::Match,
+                stage: CaptureStage::Complete,
+                error_code: 0,
+                flush_before: true,
+                compositor_flush: true,
+                flush_after: true,
+                rect_before: rect,
+                rect_after: rect,
+                dpi: 96,
+                qpc_start: 100,
+                qpc_end: 120,
+                qpc_frequency: 10_000_000,
+                captured: Some(expected.observe()),
+                mismatch_count: 0,
+                first_mismatch: None,
+            },
+            pixels: Some(expected.pixels().to_vec()),
         }
     }
 
@@ -2508,6 +3004,295 @@ mod tests {
 
     #[cfg(all(windows, feature = "protocol-research"))]
     #[test]
+    fn f5_labels_wait_for_evidence_without_claiming_output_proof() {
+        for title in [RESEARCH_WINDOW_TITLE, PRESENTATION_EVIDENCE_WAITING_TITLE] {
+            let normalized = title.to_ascii_lowercase();
+            assert!(!normalized.contains("proof"));
+            assert!(!normalized.contains("scanout"));
+            assert!(!normalized.contains("displayed"));
+        }
+        assert!(RESEARCH_WINDOW_TITLE.contains("presentation evidence"));
+        assert!(PRESENTATION_EVIDENCE_WAITING_TITLE.contains("armed"));
+        assert!(PRESENTATION_EVIDENCE_WAITING_TITLE.contains("next changed presentation"));
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f5_arms_the_next_presentation_without_forging_tick_or_render_authority() {
+        let path = TempDisplayJournal::new("f5-authority");
+        let (journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let mut app = App::new();
+        assert!(app.fixed_tick());
+        app.display_artifact_archive = Some(LiveDisplayArtifactArchive::new(journal));
+
+        let before_world = world_tag(&app.world);
+        let before_history = app.history.head();
+        let before_history_len = app.history.receipts().len();
+        let before_camera = app.camera.clone();
+        let before_tick = app.tick;
+        let before_outcomes = app.tick_outcomes.clone();
+        let before_v1_game = app.frame_ledger.clone();
+        let before_v1_output = app.output_frame_ledger.clone();
+        let before_v2 = app.frame_ledgers_v2.clone();
+        let before_pending_game = app.pending_frame;
+        let before_pending_output = app.pending_output_frame;
+        let before_pending_sidebar = app.pending_sidebar_facts;
+        let before_render_flags = (
+            app.needs_render,
+            app.needs_sidebar_render,
+            app.needs_present,
+        );
+
+        app.key(KeyCode::F5, true);
+
+        assert!(app.presentation_output_capture_requested);
+        assert!(!app.display_artifact_capture_requested);
+        assert_eq!(world_tag(&app.world), before_world);
+        assert_eq!(app.history.head(), before_history);
+        assert_eq!(app.history.receipts().len(), before_history_len);
+        assert_eq!(app.camera, before_camera);
+        assert_eq!(app.tick, before_tick);
+        assert_eq!(app.tick_outcomes, before_outcomes);
+        assert_eq!(app.frame_ledger, before_v1_game);
+        assert_eq!(app.output_frame_ledger, before_v1_output);
+        assert_eq!(app.frame_ledgers_v2, before_v2);
+        assert_eq!(app.pending_frame, before_pending_game);
+        assert_eq!(app.pending_output_frame, before_pending_output);
+        assert_eq!(app.pending_sidebar_facts, before_pending_sidebar);
+        assert_eq!(
+            (
+                app.needs_render,
+                app.needs_sidebar_render,
+                app.needs_present,
+            ),
+            before_render_flags
+        );
+        let archive = app.display_artifact_archive.as_ref().unwrap();
+        assert!(archive.can_capture_new());
+        assert_eq!(archive.pending_artifact(), None);
+        assert_eq!(archive.pending_presentation_output(), None);
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f5_service_gate_and_observation_order_are_explicit() {
+        let path = TempDisplayJournal::new("f5-service-order");
+        let (journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let mut archive = LiveDisplayArtifactArchive::new(journal);
+
+        let mut app = App::new();
+        app.resize(PhysicalSize::new(3, 2));
+        assert!(app.fixed_tick());
+        let submitted = submit_live_frame_pair(
+            &app.tick_outcomes,
+            &mut app.frame_ledger,
+            &mut app.output_frame_ledger,
+            app.frame_ledgers_v2.as_mut().unwrap(),
+            Some(app.pending_frame.unwrap()),
+            app.pending_output_frame.unwrap(),
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let presented = submitted.output;
+        let receipt = presented.receipt_v2;
+        let expected = FrameRef::new(
+            app.compositor.width(),
+            app.compositor.height(),
+            app.compositor.pixels(),
+        )
+        .unwrap();
+        let composite_ledger = &app.frame_ledgers_v2.as_ref().unwrap().composite;
+
+        let invalid_pixels = [0_u32];
+        let invalid_frame = FrameRef::new(1, 1, &invalid_pixels).unwrap();
+        let invalid_calls = std::cell::Cell::new(0_u32);
+        let mut requested = true;
+        let invalid = service_presentation_output_request_with(
+            &mut requested,
+            &mut archive,
+            composite_ledger,
+            presented,
+            invalid_frame,
+            |_, _, _| {
+                invalid_calls.set(invalid_calls.get() + 1);
+                Err(LivePresentationOutputFailure::MissingTiming)
+            },
+        );
+        assert!(invalid.is_none());
+        assert!(requested);
+        assert_eq!(invalid_calls.get(), 0);
+
+        let valid_calls = std::cell::Cell::new(0_u32);
+        let consumed = service_presentation_output_request_with(
+            &mut requested,
+            &mut archive,
+            composite_ledger,
+            presented,
+            expected,
+            |_, _, _| {
+                valid_calls.set(valid_calls.get() + 1);
+                Err(LivePresentationOutputFailure::MissingTiming)
+            },
+        );
+        assert!(matches!(
+            consumed,
+            Some(Err(LivePresentationOutputFailure::MissingTiming))
+        ));
+        assert!(!requested);
+        assert_eq!(valid_calls.get(), 1);
+
+        let alternate_receipt = FrameReceiptV2::new(
+            Some(receipt.tag()),
+            receipt.stream(),
+            receipt.outcome(),
+            receipt.input(),
+            receipt.frame(),
+        )
+        .unwrap();
+        let mismatch_events = std::cell::RefCell::new(Vec::new());
+        let mismatch = attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(alternate_receipt),
+            |stage| {
+                mismatch_events.borrow_mut().push(stage);
+                Ok(test_unavailable_topology(1))
+            },
+            || {
+                mismatch_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            mismatch,
+            Err(LivePresentationOutputFailure::TimingReceiptMismatch { .. })
+        ));
+        assert!(mismatch_events.borrow().is_empty());
+
+        let pre_events = std::cell::RefCell::new(Vec::new());
+        let pre_failure = attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                pre_events.borrow_mut().push(stage);
+                Err(LivePresentationOutputFailure::Topology {
+                    stage,
+                    error: OutputTopologyError::DuplicateRoute,
+                })
+            },
+            || {
+                pre_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            pre_failure,
+            Err(LivePresentationOutputFailure::Topology {
+                stage: "before-capture",
+                ..
+            })
+        ));
+        assert_eq!(*pre_events.borrow(), ["before-capture"]);
+
+        let post_events = std::cell::RefCell::new(Vec::new());
+        let post_calls = std::cell::Cell::new(0_u32);
+        let post_failure = attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                post_events.borrow_mut().push(stage);
+                let call = post_calls.get();
+                post_calls.set(call + 1);
+                if call == 0 {
+                    Ok(test_unavailable_topology(1))
+                } else {
+                    Err(LivePresentationOutputFailure::Topology {
+                        stage,
+                        error: OutputTopologyError::DuplicateRoute,
+                    })
+                }
+            },
+            || {
+                post_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            post_failure,
+            Err(LivePresentationOutputFailure::Topology {
+                stage: "after-capture",
+                ..
+            })
+        ));
+        assert_eq!(
+            *post_events.borrow(),
+            ["before-capture", "capture", "after-capture"]
+        );
+        assert!(archive.journal.state().is_empty());
+
+        let success_events = std::cell::RefCell::new(Vec::new());
+        let success_calls = std::cell::Cell::new(0_u32);
+        let stored = match attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                success_events.borrow_mut().push(stage);
+                let call = success_calls.get();
+                success_calls.set(call + 1);
+                Ok(test_unavailable_topology(call + 1))
+            },
+            || {
+                success_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        ) {
+            Ok(stored) => stored,
+            Err(_) => panic!("complete injected presentation observation must store"),
+        };
+        assert_eq!(
+            *success_events.borrow(),
+            ["before-capture", "capture", "after-capture"]
+        );
+        assert_eq!(stored.artifact_count, 1);
+        assert_eq!(archive.journal.state().len(), 1);
+        assert!(archive.can_capture_new());
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f4_and_f5_requests_are_mutually_exclusive_without_state_conversion() {
+        let f5_path = TempDisplayJournal::new("f5-blocks-f4");
+        let (f5_journal, _) =
+            DisplayArtifactJournal::create_new(&f5_path.0, StorageLimits::DEFAULT).unwrap();
+        let mut f5_first = App::new();
+        f5_first.display_artifact_archive = Some(LiveDisplayArtifactArchive::new(f5_journal));
+        f5_first.key(KeyCode::F5, true);
+        f5_first.key(KeyCode::F4, true);
+        assert!(f5_first.presentation_output_capture_requested);
+        assert!(!f5_first.display_artifact_capture_requested);
+
+        let f4_path = TempDisplayJournal::new("f4-blocks-f5");
+        let (f4_journal, _) =
+            DisplayArtifactJournal::create_new(&f4_path.0, StorageLimits::DEFAULT).unwrap();
+        let mut f4_first = App::new();
+        f4_first.display_artifact_archive = Some(LiveDisplayArtifactArchive::new(f4_journal));
+        f4_first.key(KeyCode::F4, true);
+        f4_first.key(KeyCode::F5, true);
+        assert!(f4_first.display_artifact_capture_requested);
+        assert!(!f4_first.presentation_output_capture_requested);
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
     fn refused_append_retains_one_exact_artifact_for_retry_without_recapture() {
         let path = TempDisplayJournal::new("exact-retry");
         let default_limits = StorageLimits::DEFAULT;
@@ -2560,8 +3345,8 @@ mod tests {
                 rect_before: rect,
                 rect_after: rect,
                 dpi: 96,
-                qpc_start: 10,
-                qpc_end: 20,
+                qpc_start: 100,
+                qpc_end: 120,
                 qpc_frequency: 10_000_000,
                 captured: Some(expected.observe()),
                 mismatch_count: 0,
@@ -2582,6 +3367,97 @@ mod tests {
         assert!(!retry_failure.poisoned);
         assert_eq!(retry_failure.artifact, Some(retained));
         assert_eq!(archive.pending_artifact(), Some(retained));
+        assert!(!archive.faulted);
+        assert_eq!(archive.journal.carrier_valid_bytes(), 0);
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn refused_f5_append_retains_the_exact_full_wrapper_for_storage_only_retry() {
+        let path = TempDisplayJournal::new("f5-exact-retry");
+        let default_limits = StorageLimits::DEFAULT;
+        let zero_record_limits = StorageLimits::new(
+            default_limits.max_record_bytes(),
+            default_limits.max_schema_bytes(),
+            default_limits.max_payload_bytes(),
+            0,
+            default_limits.max_stream_bytes(),
+        )
+        .unwrap();
+        let (journal, _) = DisplayArtifactJournal::create_new(&path.0, zero_record_limits).unwrap();
+        let mut archive = LiveDisplayArtifactArchive::new(journal);
+
+        let mut app = App::new();
+        app.resize(PhysicalSize::new(3, 2));
+        assert!(app.fixed_tick());
+        let game = app.pending_frame.unwrap();
+        let output = app.pending_output_frame.unwrap();
+        let submitted = submit_live_frame_pair(
+            &app.tick_outcomes,
+            &mut app.frame_ledger,
+            &mut app.output_frame_ledger,
+            app.frame_ledgers_v2.as_mut().unwrap(),
+            Some(game),
+            output,
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let expected = FrameRef::new(
+            app.compositor.width(),
+            app.compositor.height(),
+            app.compositor.pixels(),
+        )
+        .unwrap();
+        let rect = bitblock::display::CaptureRect {
+            left: 0,
+            top: 0,
+            right: expected.width() as i32,
+            bottom: expected.height() as i32,
+        };
+        let capture = DisplayCapture {
+            facts: bitblock::display::DisplayCaptureFacts {
+                outcome: DisplayOutcome::Match,
+                stage: CaptureStage::Complete,
+                error_code: 0,
+                flush_before: true,
+                compositor_flush: true,
+                flush_after: true,
+                rect_before: rect,
+                rect_after: rect,
+                dpi: 96,
+                qpc_start: 100,
+                qpc_end: 120,
+                qpc_frequency: 10_000_000,
+                captured: Some(expected.observe()),
+                mismatch_count: 0,
+                first_mismatch: None,
+            },
+            pixels: Some(expected.pixels().to_vec()),
+        };
+        let receipt = submitted.output.receipt_v2;
+        let first_failure = archive
+            .prepare_and_append_presentation_output(
+                receipt,
+                expected,
+                &capture,
+                test_timing(receipt),
+                test_unavailable_topology(1),
+                test_unavailable_topology(2),
+            )
+            .unwrap_err();
+        assert!(!first_failure.poisoned);
+        assert_eq!(
+            first_failure.artifact,
+            archive.pending_presentation_output()
+        );
+        assert_eq!(archive.pending_artifact(), None);
+        let retained = archive.pending_presentation_output().unwrap();
+        drop(capture);
+
+        let retry_failure = archive.append_pending_presentation_output().unwrap_err();
+        assert!(!retry_failure.poisoned);
+        assert_eq!(retry_failure.artifact, Some(retained));
+        assert_eq!(archive.pending_presentation_output(), Some(retained));
         assert!(!archive.faulted);
         assert_eq!(archive.journal.carrier_valid_bytes(), 0);
     }

@@ -1118,7 +1118,10 @@ fn validate_route_members(routes: &[TargetRouteFacts]) -> Result<(), OutputTopol
 }
 
 fn reject_duplicate_routes(routes: &[TargetRouteFacts]) -> Result<(), OutputTopologyError> {
-    if routes.windows(2).any(|pair| pair[0] == pair[1]) {
+    if routes
+        .windows(2)
+        .any(|pair| pair[0].stable_cmp(&pair[1]).is_eq())
+    {
         return Err(OutputTopologyError::DuplicateRoute);
     }
     Ok(())
@@ -1670,6 +1673,35 @@ mod tests {
     }
 
     #[test]
+    fn friendly_annotations_cannot_create_distinct_routes() {
+        let first = route(
+            1,
+            RawRational {
+                numerator: 60,
+                denominator: 1,
+            },
+        );
+        let mut relabeled = first.clone();
+        let TargetIdentityObservation::Available {
+            friendly_annotation,
+            ..
+        } = &mut relabeled.identity
+        else {
+            panic!("route fixture must have an available target identity");
+        };
+        *friendly_annotation = Some(text(&[b'O' as u16, b't' as u16, b'h' as u16]));
+
+        assert_eq!(
+            OutputTopologyObservation::new_available(
+                acquisition(1),
+                source(),
+                vec![first, relabeled]
+            ),
+            Err(OutputTopologyError::DuplicateRoute)
+        );
+    }
+
+    #[test]
     fn exact_utf16_preserves_unpaired_surrogates_and_rejects_nul_ambiguity() {
         let exact = Utf16Text::new(vec![0xd800, 0xdc00, 0xdfff]).unwrap();
         assert_eq!(exact.units(), &[0xd800, 0xdc00, 0xdfff]);
@@ -1914,5 +1946,4 @@ mod tests {
             Err(OutputTopologyError::WrongPayloadLength { .. })
         ));
     }
-
 }

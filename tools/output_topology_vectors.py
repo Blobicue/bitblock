@@ -310,7 +310,10 @@ def encode_topology(facts: dict[str, Any]) -> bytes:
         routes = sorted(facts["routes"], key=canonical_route_key)
         if not 1 <= len(routes) <= MAX_ROUTES:
             raise ValueError("noncanonical route count")
-        if any(left == right for left, right in zip(routes, routes[1:])):
+        if any(
+            stable_route_key(left) == stable_route_key(right)
+            for left, right in zip(routes, routes[1:])
+        ):
             raise ValueError("duplicate route")
         payload_buffer = bytearray(u8(AVAILABLE))
         payload_buffer += encode_acquisition(facts["acquisition"])
@@ -506,6 +509,9 @@ def decode_topology(payload: bytes) -> dict[str, Any]:
         keys = [canonical_route_key(route) for route in routes]
         if any(left >= right for left, right in zip(keys, keys[1:])):
             raise ValueError("noncanonical route order")
+        stable_keys = [stable_route_key(route) for route in routes]
+        if any(left == right for left, right in zip(stable_keys, stable_keys[1:])):
+            raise ValueError("duplicate material route")
         result = {
             "outcome": "available",
             "acquisition": acquisition,
@@ -740,6 +746,14 @@ def expect_decode_reject(name: str, payload: bytes) -> None:
     raise AssertionError(f"negative control accepted: {name}")
 
 
+def expect_encode_reject(name: str, facts: dict[str, Any]) -> None:
+    try:
+        encode_topology(facts)
+    except ValueError:
+        return
+    raise AssertionError(f"negative encode control accepted: {name}")
+
+
 def main() -> None:
     if canonical_preimage(b"").hex() != EXPECTED_EMPTY_PAYLOAD_PREIMAGE_HEX:
         raise AssertionError("content-tag preimage framing drift")
@@ -865,7 +879,34 @@ def main() -> None:
         + available_payload[first_route_offset:first_route_end]
     )
     expect_decode_reject("noncanonical route order", swapped_routes)
-    print("negative-controls\t3\trejected")
+
+    first_duplicate = route(1, (60, 1))
+    relabeled_duplicate = copy.deepcopy(first_duplicate)
+    relabeled_duplicate["identity"]["friendly_annotation"] = (
+        ord("O"),
+        ord("t"),
+        ord("h"),
+    )
+    duplicate_facts = {
+        "outcome": "available",
+        "acquisition": acquisition(1),
+        "source": source(),
+        "routes": [first_duplicate, relabeled_duplicate],
+    }
+    expect_encode_reject("annotation-distinguished material duplicate", duplicate_facts)
+    duplicate_routes = sorted(duplicate_facts["routes"], key=canonical_route_key)
+    duplicate_payload_buffer = bytearray(u8(AVAILABLE))
+    duplicate_payload_buffer += encode_acquisition(duplicate_facts["acquisition"])
+    duplicate_payload_buffer += encode_source(duplicate_facts["source"])
+    duplicate_payload_buffer += u16(len(duplicate_routes))
+    for duplicate_route in duplicate_routes:
+        encoded_duplicate = encode_route(duplicate_route)
+        duplicate_payload_buffer += u32(len(encoded_duplicate)) + encoded_duplicate
+    expect_decode_reject(
+        "encoded annotation-distinguished material duplicate",
+        bytes(duplicate_payload_buffer),
+    )
+    print("negative-controls\t5\trejected")
 
 
 if __name__ == "__main__":

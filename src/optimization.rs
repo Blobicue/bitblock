@@ -2265,19 +2265,19 @@ mod tests {
         let actual_receipt = assay_optimization_equivalence(&case).unwrap();
         assert_eq!(
             actual_game_evidence.to_string(),
-            "#bb.receipt.sha256.qxwvrhf7qrqvpv2uqljlmojx5rlcrrpgsoby7daczln3dokynzhq"
+            "#bb.receipt.sha256.yr4vgqk3uz4slvbekyrsfmgf2qaspq252kcy2olqfqd6yporhhkq"
         );
         assert_eq!(
             actual_composite_evidence.to_string(),
-            "#bb.receipt.sha256.pth2dviss6z3d7k3f3rdw46qqje7sfnszxorm4xgyffw2zqtrjia"
+            "#bb.receipt.sha256.n5y3jp4ahvhadzw7qbjxm2sxbnh7lwu4cmydyhkhvij367fshjfa"
         );
         assert_eq!(
             actual_output.to_string(),
-            "#bb.receipt.sha256.o3gvshgcgzi3e3xrr5zhwstrrur2fqvr4jsayfoetfz4ywiknu3a"
+            "#bb.receipt.sha256.ta633j5g7y5zhrxht5qml6sejmbjcdrsvd37whc4ykn3hgwgbs5q"
         );
         assert_eq!(
             actual_receipt.tag().to_string(),
-            "#bb.receipt.sha256.qnnz2rhcoeybcdh7fhm63k2pslayiw3mmmeqlnghnndpffb4lrqq"
+            "#bb.receipt.sha256.haywsy6jofj3k6gehasulniebg2kvzpdzoxwpys7fejucsaujmpa"
         );
         let payload = [0x5a_u8; 290];
         let old_output = hash_canonical(

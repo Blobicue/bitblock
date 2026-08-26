@@ -121,11 +121,11 @@ pub const DISPLAYED_METRICS: &[MetricBinding] = &[
     ),
     binding!(
         "#bb.metric.hash.frame-provenance-receipt-digest",
-        "#bb.metric-definition.sha256.usv2hrln45vdwrgz4e4xraime7x53fjyjlv5mfkr6plukbzb5j4a"
+        "#bb.metric-definition.sha256.ntg7gxatkwreu2rhm7g72hunnpka7arngljoagz3bpdfozblrtma"
     ),
     binding!(
         "#bb.metric.visual.compositor-capture-comparison",
-        "#bb.metric-definition.sha256.jcciaxrmp7sjkxmqepxixydbhh5m77ufqgfyxeirjqiccwuf6pma"
+        "#bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq"
     ),
     binding!(
         "#bb.metric.sidebar.sidebar-visibility",
@@ -1600,11 +1600,11 @@ mod tests {
     fn sidebar_policies_match_independent_python_vectors() {
         assert_eq!(
             sidebar_policy_tag().to_string(),
-            "#bb.policy.sha256.64tvzqwugmd4ozi3ail36qnxgtqb22yffwmgis7uwcpvkwgsxe3q"
+            "#bb.policy.sha256.eg4egguiubrb5l45qbwvf76gwbkgtlb7pymc3zi4uq6jrqgl4b5q"
         );
         assert_eq!(
             composite_policy_tag().to_string(),
-            "#bb.policy.sha256.oplhffpxvhyz3t3a57ruelblclcosthaawz2o3rdemwz4k5ufdfa"
+            "#bb.policy.sha256.kyd57oandtrj4iuis54zozpv6pwgmcoy4hmsvlkp2fqvhy6noe5q"
         );
     }
 

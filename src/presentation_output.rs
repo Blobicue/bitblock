@@ -37,6 +37,7 @@ pub enum RouteStability {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PresentationOutputArtifact {
     tag: ContentTag,
+    encoded_len: usize,
     display: DisplayCaptureArtifact,
     timing: CompositionTimingEnvelope,
     pre_topology: OutputTopologyObservation,
@@ -52,6 +53,7 @@ impl PresentationOutputArtifact {
     ) -> Result<Self, PresentationOutputArtifactError> {
         let mut artifact = Self {
             tag: ContentTag::from_digest(TagKind::PresentationOutputArtifact, [0; 32]),
+            encoded_len: 0,
             display,
             timing,
             pre_topology,
@@ -59,6 +61,7 @@ impl PresentationOutputArtifact {
         };
         let parts = artifact.prepare_parts()?;
         artifact.tag = tag_parts(&parts)?;
+        artifact.encoded_len = parts.total_len;
         Ok(artifact)
     }
 
@@ -96,18 +99,7 @@ impl PresentationOutputArtifact {
     }
 
     pub fn encoded_len(&self) -> usize {
-        checked_payload_len(
-            self.display.encoded_len(),
-            self.pre_topology
-                .try_encode_canonical()
-                .expect("admitted pre-capture topology remains canonical")
-                .len(),
-            self.post_topology
-                .try_encode_canonical()
-                .expect("admitted post-capture topology remains canonical")
-                .len(),
-        )
-        .expect("admitted presentation-output artifact remains within its payload bound")
+        self.encoded_len
     }
 
     pub fn encode_canonical(&self) -> Result<Vec<u8>, PresentationOutputArtifactError> {
@@ -172,6 +164,9 @@ impl PresentationOutputArtifact {
         if self.tag != tag_parts(&parts)? {
             return Err(PresentationOutputArtifactError::ArtifactTagMismatch);
         }
+        if self.encoded_len != parts.total_len {
+            return Err(PresentationOutputArtifactError::NonCanonicalEncoding);
+        }
         Ok(())
     }
 
@@ -196,6 +191,23 @@ impl PresentationOutputArtifact {
                 display: display_receipt.tag(),
                 timing: timing_receipt.tag(),
             });
+        }
+        let capture = self.display.receipt().facts();
+        let timing_frequency = self.timing.qpc_frequency();
+        if timing_frequency.succeeded && capture.qpc_frequency > 0 {
+            if timing_frequency.counts_per_second != capture.qpc_frequency {
+                return Err(PresentationOutputArtifactError::QpcFrequencyMismatch {
+                    timing: timing_frequency.counts_per_second,
+                    capture: capture.qpc_frequency,
+                });
+            }
+            let timing_post = self.timing.post().bracket.after;
+            if timing_post.succeeded && capture.qpc_start < timing_post.value {
+                return Err(PresentationOutputArtifactError::CapturePrecedesTimingPost {
+                    timing_post: timing_post.value,
+                    capture_start: capture.qpc_start,
+                });
+            }
         }
 
         let pre_topology = self
@@ -353,6 +365,14 @@ pub enum PresentationOutputArtifactError {
         display: ContentTag,
         timing: ContentTag,
     },
+    QpcFrequencyMismatch {
+        timing: i64,
+        capture: i64,
+    },
+    CapturePrecedesTimingPost {
+        timing_post: i64,
+        capture_start: i64,
+    },
     WrongTagKind {
         actual: TagKind,
     },
@@ -402,6 +422,17 @@ impl fmt::Display for PresentationOutputArtifactError {
             Self::ReceiptMismatch { display, timing } => write!(
                 formatter,
                 "display expected receipt {display} differs from timing receipt {timing}"
+            ),
+            Self::QpcFrequencyMismatch { timing, capture } => write!(
+                formatter,
+                "composition timing uses QPC frequency {timing}, capture uses {capture}"
+            ),
+            Self::CapturePrecedesTimingPost {
+                timing_post,
+                capture_start,
+            } => write!(
+                formatter,
+                "capture QPC start {capture_start} precedes timing post-call QPC {timing_post}"
             ),
             Self::WrongTagKind { actual } => write!(
                 formatter,
@@ -454,6 +485,8 @@ impl std::error::Error for PresentationOutputArtifactError {
             Self::InvalidPreTopology(source) | Self::InvalidPostTopology(source) => Some(source),
             Self::Hash(source) => Some(source),
             Self::ReceiptMismatch { .. }
+            | Self::QpcFrequencyMismatch { .. }
+            | Self::CapturePrecedesTimingPost { .. }
             | Self::WrongTagKind { .. }
             | Self::PayloadTooLarge { .. }
             | Self::LengthOverflow
@@ -472,7 +505,9 @@ const _: () = assert!(PRESENTATION_OUTPUT_ARTIFACT_FIXED_BYTES == 972);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display::{CaptureStage, DisplayCaptureFacts, DisplayLedgerV2};
+    use crate::display::{
+        CaptureRect, CaptureStage, DisplayCaptureFacts, DisplayLedgerV2, DisplayOutcome,
+    };
     use crate::frame::FrameRef;
     use crate::frame_v2::{FrameReceiptV2, FrameStream};
     use crate::output_topology::{
@@ -520,6 +555,40 @@ mod tests {
             )
             .unwrap();
         DisplayCaptureArtifact::new(receipt, expected, None).unwrap()
+    }
+
+    fn complete_display_artifact(
+        frame_receipt: FrameReceiptV2,
+        qpc_frequency: i64,
+        qpc_start: i64,
+    ) -> DisplayCaptureArtifact {
+        let expected = FrameRef::new(2, 1, &SMALL_PIXELS).unwrap();
+        let rect = CaptureRect {
+            left: 0,
+            top: 0,
+            right: 2,
+            bottom: 1,
+        };
+        let facts = DisplayCaptureFacts {
+            outcome: DisplayOutcome::Match,
+            stage: CaptureStage::Complete,
+            error_code: 0,
+            flush_before: true,
+            compositor_flush: true,
+            flush_after: true,
+            rect_before: rect,
+            rect_after: rect,
+            dpi: 96,
+            qpc_start,
+            qpc_end: qpc_start + 10,
+            qpc_frequency,
+            captured: Some(expected.observe()),
+            mismatch_count: 0,
+            first_mismatch: None,
+        };
+        let mut ledger = DisplayLedgerV2::default();
+        let receipt = *ledger.append(frame_receipt, 2, 1, facts).unwrap();
+        DisplayCaptureArtifact::new(receipt, expected, Some(expected)).unwrap()
     }
 
     fn qpc(value: i64) -> QpcRead {
@@ -809,6 +878,51 @@ mod tests {
                 timing: timing_receipt.tag(),
             }
         );
+    }
+
+    #[test]
+    fn capture_clock_must_match_and_follow_the_bound_timing_envelope() {
+        let frame = FrameRef::new(2, 1, &SMALL_PIXELS).unwrap();
+        let frequency_receipt = frame_receipt(frame, 50);
+        let frequency_error = PresentationOutputArtifact::new(
+            complete_display_artifact(frequency_receipt, 9_000_000, 100),
+            timing(frequency_receipt),
+            unavailable_topology(1),
+            unavailable_topology(2),
+        )
+        .unwrap_err();
+        assert_eq!(
+            frequency_error,
+            PresentationOutputArtifactError::QpcFrequencyMismatch {
+                timing: 10_000_000,
+                capture: 9_000_000,
+            }
+        );
+
+        let order_receipt = frame_receipt(frame, 60);
+        let order_error = PresentationOutputArtifact::new(
+            complete_display_artifact(order_receipt, 10_000_000, 18),
+            timing(order_receipt),
+            unavailable_topology(1),
+            unavailable_topology(2),
+        )
+        .unwrap_err();
+        assert_eq!(
+            order_error,
+            PresentationOutputArtifactError::CapturePrecedesTimingPost {
+                timing_post: 19,
+                capture_start: 18,
+            }
+        );
+
+        let admitted_receipt = frame_receipt(frame, 70);
+        PresentationOutputArtifact::new(
+            complete_display_artifact(admitted_receipt, 10_000_000, 20),
+            timing(admitted_receipt),
+            unavailable_topology(1),
+            unavailable_topology(2),
+        )
+        .unwrap();
     }
 
     #[test]

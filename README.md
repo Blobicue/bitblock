@@ -15,6 +15,9 @@ Bitblock is a binary coordinate space observed through a free camera.
 - A research-only Windows timing audit can bind that exact composite receipt to raw
   before/after DWM session timing, QPC brackets, and barrier outcomes. Its per-frame
   attribution is always `Unknown`; it does not claim displayed, dropped, scanout, or light.
+- A one-shot research bundle can additionally retain bounded active-output topology before and
+  after one OS screen-raster capture. Stable routes and matching pixels still do not prove
+  per-frame DWM attribution, scanout, or physical light.
 - One fixed 60 Hz tick consumes input, changes observer/world state, and produces changed frames;
   the window layer only presents pixels produced by that tick.
 - Scroll moves logarithmically between the one-pixel view and a block-filling view.
@@ -33,6 +36,9 @@ Bitblock is a binary coordinate space observed through a free camera.
 - `F3`: show or hide the metrics page without changing the simulation viewport
 - `F4`: with a fresh research display journal configured, archive one exact committed composite
   frame and one Windows desktop-raster observation without creating a simulation tick
+- `F5`: arm the next normally changed successful presentation, then archive its exact receipt,
+  composition timing, pre/post active-output topology, and one desktop-raster observation; an
+  idle request waits visibly and does not resubmit the old surface
 - `Escape`: release the mouse; click to capture it again
 
 ## Shared edit language
@@ -130,6 +136,18 @@ for an explicit F4 retry rather than resampling; an uncertain/poisoned append
 requires typed reopen. The default observer does not link this path, and no mode
 records continuously. Local sync/reread is not sudden-power durability,
 latest-prefix authority, external custody, scanout, or physical-light evidence.
+
+The same journal can mix legacy display artifacts with `PresentationOutput` v1
+records. F5 waits for the next normal successful composite presentation and
+uses the timing envelope produced around that exact backend call even when the
+continuous timing logger is disabled. It then records bounded active-output
+topology, captures the visible client once, records topology again, and admits
+one outer object only when the nested display and timing receipts are exactly
+equal, their QPC frequencies agree, and capture did not begin before the timing
+post-call bracket. F4 and F5 are mutually exclusive. A nonpoisoning F5 storage
+refusal retains the exact whole wrapper for a storage-only retry; it never
+recaptures or resamples timing/topology. The live mode remains create-only, so a
+poisoned journal needs external typed recovery rather than an in-process retry.
 
 A separate stdlib-only Python oracle now checks a bounded renderer corpus without
 calling the Rust renderer: it intersects six cube-face planes per physical-pixel
@@ -254,9 +272,10 @@ cargo run --release -- examples/first.bb
 $env:BITBLOCK_DISPLAY_AUDIT = "1"
 cargo run
 
-# Create a fresh bounded display-artifact journal. The target must not exist,
+# Create a fresh bounded display-evidence journal. The target must not exist,
 # and this mode is mutually exclusive with BITBLOCK_DISPLAY_AUDIT. Press F4 to
-# archive the current committed composite occurrence without creating a tick.
+# archive the current committed composite occurrence, or press F5 and then make
+# one normal visual change (movement/edit/F3) to archive the next presentation.
 Remove-Item Env:BITBLOCK_DISPLAY_AUDIT -ErrorAction SilentlyContinue
 $env:BITBLOCK_DISPLAY_JOURNAL_NEW = "$PWD\display-session.bbj"
 cargo run --features protocol-research
@@ -288,3 +307,12 @@ unavailable, comparable without progress, comparable with progress, or
 discontinuous/reset. Modern Windows exposes this query at desktop-composition
 session scope rather than Bitblock-frame scope, so counter movement never changes
 the exact frame's fate from `Unknown`.
+
+F5 also queries the active route set before and after capture. The canonical
+observation retains exact UTF-16 source/target names, source/monitor geometry,
+mode and signal words, every clone target route, raw flags, and a bounded query
+attempt transcript, while excluding transient HWND/HMONITOR/LUID/source/target
+join identifiers. Query failure is explicit. The derived route result is
+`Stable`, `Changed`, or `Unavailable`; it is not encoded and does not by itself
+establish collection time or displayed-frame fate. ICC/HDR state, output bit
+depth, applied transform order, scanout, and panel light remain unobserved.
