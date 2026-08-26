@@ -9,6 +9,7 @@ pub mod frame_v2;
 pub mod history;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod history_store;
+pub mod interaction;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod journal;
 #[cfg(any(test, feature = "protocol-research"))]

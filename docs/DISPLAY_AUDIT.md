@@ -162,6 +162,75 @@ facts, and mismatch witnesses enter an append-only display-receipt chain.
    only `Unknown` frame attribution. Session counter movement can never be
    rewritten as proof that this frame displayed or dropped.
 
+10. **Canonical active-output topology and F5 evidence bundle.** The
+    feature-gated Windows collector now maps the live HWND to its monitor/GDI
+    source and queries the active source-to-target route set. The primary query
+    profile is `0x52`; only `ERROR_INVALID_PARAMETER` selects the single `0x12`
+    fallback. `ERROR_INSUFFICIENT_BUFFER` alone retries, with four total
+    size/query cycles and preallocation caps of 1,024 paths and 3,072 modes.
+    Every matched clone target is retained. Exact UTF-16, raw flags/enums,
+    source geometry/mode, target identity/signal/path/desktop-image facts, and
+    the acquisition attempt transcript enter OutputTopology v1. Transient
+    HWND, HMONITOR, LUID, source/target IDs, clone IDs, and mode indices do not.
+    Target-name failure is explicit and nonfatal; materially duplicate routes
+    are rejected even if their friendly annotations differ.
+
+    The independent available and unavailable topology vectors are:
+
+    ```text
+    #bb.output-topology.sha256.jbfwsd34kns7uwofvkj6w3u7tq7nlsbqdfw5b725pxpcg44c2h2q
+    #bb.output-topology.sha256.fw2l66z7jd2eu6suedannr77x5yrugb6sot7y3ojduamdiuemtpq
+    ```
+
+    F5 waits for the next normal successful composite presentation. It neither
+    advances a tick nor fabricates a render/resubmission. The same exact timing
+    envelope produced around that backend call is combined with one
+    pre-topology observation, one GDI client capture, and one post-topology
+    observation under `bitblock/presentation-output-artifact/v1`. Its canonical
+    layout is a length-prefixed DisplayArtifact, the fixed 948-byte timing
+    envelope, then two length-prefixed topology objects: 972 fixed outer bytes
+    beyond the three variable nested objects. Admission requires full nested
+    `FrameReceiptV2` equality, equal successful QPC frequencies, and capture
+    start at or after the timing post-call QPC. The independent outer vector is:
+
+    ```text
+    #bb.presentation-output-artifact.sha256.fhc42zlstxtkh5mzyhpyjtlpuwo5dna5ryklwjithph577okripa
+    ```
+
+    `Stable`, `Changed`, or `Unavailable` route stability is derived and not
+    encoded. Pre/post placement expresses workflow order, not an independent
+    topology timestamp. The typed journal replays legacy artifacts and wrappers
+    through one storage-parent and one display-receipt-parent chain. A
+    nonpoisoning refusal retains the exact wrapper for a storage-only retry.
+    Injected tests power invalid-frame, receipt-mismatch, pre-query failure,
+    post-query failure, call-order, and successful-store boundaries. This
+    A fresh live F5 assay then armed the next presentation and used F3 to cause
+    an ordinary sidebar recomposition. The immediate snapshot still showed the
+    waiting title while observation was in flight; a new observation 1.5
+    seconds later showed `presentation output stored 1`. The retained result
+    was:
+
+    ```text
+    output          #bb.presentation-output-artifact.sha256.ylodhhwp46a643xiuxd4wnwesgrmrkmiprjclucmfi2qrqnio62q
+    display         #bb.display-artifact.sha256.hcbzgr23hbk3y65uoevxnfcalbg5eqgkmr5ddu2rbrxvvd2pnria
+    timing          #bb.presentation-artifact.sha256.6m6xleoinmqxdxvfzbp3isk2czftvvn5t32ulr3uda7nrfxcxipa
+    topology before #bb.output-topology.sha256.u7en2ajcy5cwiy2ugaozrhdjrko5e3i3apmlm6kafnpmq5s4ohca
+    topology after  #bb.output-topology.sha256.u7en2ajcy5cwiy2ugaozrhdjrko5e3i3apmlm6kafnpmq5s4ohca
+    stability       Stable
+    storage record  #bb.storage-record.sha256.6zf3y3jxcwelftieje7toltjpeyv4kxpmgpb6svmvxcnlfcbqa2q
+    range/count      [0, 3850988) / 1
+    ```
+
+    The timing relation was `ComparableAdvanced`, with attribution `Unknown`,
+    successful QPF, both DWM calls at `S_OK`, and successful GDI/DWM barriers.
+    After process stop, the synchronized journal was 3,850,988 bytes with file
+    SHA-256
+    `5617A4B05B698E874E8DAF37226B5B4FF4967D54F41779B5979A1BDACF7622CF`.
+    The append path reread the exact record and called `sync_all`; this run did
+    not perform an anchored reopen or sudden-power assay. Equal topology tags
+    establish equality of the two sampled route facts, not continuous route
+    stability, compositor attribution, scanout, or physical light.
+
 The historical failures and passes arose in separate in-memory runs; their tags
 commit to their exact local fields, but the captured artifacts were not durably
 retained. They are evidence for this checkpoint, not replayable external

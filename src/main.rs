@@ -24,7 +24,9 @@ use bitblock::frame_v2::{
     FrameReceiptV2AdmissionError, FrameReceiptV2Error, FrameStream, admit_frame_pair_derived,
 };
 use bitblock::history::{History, world_tag};
+use bitblock::interaction::{AcceptedAction, InteractionTape, MoveControl};
 use bitblock::program::{Edit as WorldEdit, Operation, Program, TickBatch};
+use bitblock::protocol::ContentTag;
 use bitblock::render::{
     Renderer, bounds_aabb, coord_containing, crosshair_overlay_input, raycast,
     renderer_profile_tag, sweep_point,
@@ -81,6 +83,7 @@ const MAX_FRAME_GAP: Duration = Duration::from_millis(250);
 const MAX_TICKS_PER_FRAME: usize = 15;
 const BLOCK_FILL_DISTANCE: f64 = 0.25;
 const OBSERVER_COLLISION_CLEARANCE: f64 = 1.0e-6;
+const HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS: u64 = 16_777_216;
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
 #[cfg(all(windows, feature = "protocol-research"))]
 const PRESENTATION_AUDIT_ENV: &str = "BITBLOCK_PRESENTATION_AUDIT";
@@ -91,13 +94,25 @@ const PRESENTATION_EVIDENCE_WAITING_TITLE: &str =
     "bitblock — F5 armed · waiting for next changed presentation";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let program = load_startup_program()?;
-    let mut app = App::with_program(program);
-    configure_display_artifact_journal(&mut app)?;
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(ControlFlow::Wait);
-    event_loop.run_app(&mut app)?;
+    match load_startup_mode()? {
+        StartupMode::Observe(program) => {
+            let mut app = App::with_program(program);
+            configure_display_artifact_journal(&mut app)?;
+            let event_loop = EventLoop::new()?;
+            event_loop.set_control_flow(ControlFlow::Wait);
+            event_loop.run_app(&mut app)?;
+        }
+        StartupMode::Simulate(tape) => {
+            let summary = simulate_interaction_tape(&tape)?;
+            print_headless_summary(&summary);
+        }
+    }
     Ok(())
+}
+
+enum StartupMode {
+    Observe(Program),
+    Simulate(InteractionTape),
 }
 
 #[cfg(all(windows, feature = "protocol-research"))]
@@ -148,25 +163,56 @@ fn configure_display_artifact_journal(_app: &mut App) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-fn load_startup_program() -> Result<Program, Box<dyn Error>> {
+fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
     let mut arguments = std::env::args_os().skip(1);
-    let Some(path) = arguments.next().map(PathBuf::from) else {
-        return Ok(Program::new());
+    let Some(first) = arguments.next() else {
+        return Ok(StartupMode::Observe(Program::new()));
     };
+
+    if first == "--simulate-actions" {
+        let Some(path) = arguments.next().map(PathBuf::from) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: bitblock --simulate-actions <interaction.tape>",
+            )
+            .into());
+        };
+        if arguments.next().is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: bitblock --simulate-actions <interaction.tape>",
+            )
+            .into());
+        }
+        let source = std::fs::read_to_string(&path)?;
+        let tape = InteractionTape::parse(&source).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: {error}", path.display()),
+            )
+        })?;
+        return Ok(StartupMode::Simulate(tape));
+    }
+
+    let path = PathBuf::from(first);
     if arguments.next().is_some() {
-        return Err(
-            io::Error::new(io::ErrorKind::InvalidInput, "usage: bitblock [program.bb]").into(),
-        );
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "usage: bitblock [program.bb] | bitblock --simulate-actions <interaction.tape>",
+        )
+        .into());
     }
 
     let source = std::fs::read_to_string(&path)?;
-    Program::parse(&source).map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("{}: {error}", path.display()),
-        )
-        .into()
-    })
+    Program::parse(&source)
+        .map(StartupMode::Observe)
+        .map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: {error}", path.display()),
+            )
+            .into()
+        })
 }
 
 #[cfg(windows)]
@@ -1020,6 +1066,35 @@ struct App {
     presentation_audit_enabled: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HeadlessTickSummary {
+    ordinal: u64,
+    outcome: ContentTag,
+    post_world: ContentTag,
+    post_history: ContentTag,
+    camera_bits: [u64; 10],
+    game_input: Option<ContentTag>,
+    game_frame: Option<ContentTag>,
+    composite_input: Option<ContentTag>,
+    composite_frame: Option<ContentTag>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HeadlessSimulationSummary {
+    tape: ContentTag,
+    action_count: usize,
+    ticks: Vec<HeadlessTickSummary>,
+    final_world: ContentTag,
+    final_history: ContentTag,
+    final_camera_bits: [u64; 10],
+    on_bits: usize,
+    coordinate_receipts: usize,
+    game_admissions: usize,
+    composite_admissions: usize,
+    game_receipt_head: Option<ContentTag>,
+    composite_receipt_head: Option<ContentTag>,
+}
+
 impl App {
     #[cfg(test)]
     fn new() -> Self {
@@ -1080,6 +1155,49 @@ impl App {
         }
     }
 
+    /// Applies one normalized action that has already passed the platform adapter.
+    ///
+    /// Live winit input and headless tapes both enter through this method. Raw device routing,
+    /// mouse-grab success, synthetic-event filtering, redraw, and all display observations stay
+    /// outside this accepted-action boundary.
+    fn apply_accepted_action(&mut self, action: AcceptedAction) {
+        match action {
+            AcceptedAction::MoveEdge(control, pressed) => match control {
+                MoveControl::Forward => self.inputs.forward = pressed,
+                MoveControl::Backward => self.inputs.backward = pressed,
+                MoveControl::Left => self.inputs.left = pressed,
+                MoveControl::Right => self.inputs.right = pressed,
+                MoveControl::Up => self.inputs.up = pressed,
+                MoveControl::Down => self.inputs.down = pressed,
+            },
+            AcceptedAction::LookDelta(x, y) => {
+                self.inputs.mouse_x += x;
+                self.inputs.mouse_y += y;
+            }
+            AcceptedAction::WheelLines(lines) => {
+                self.inputs.wheel = (self.inputs.wheel + lines).clamp(-64.0, 64.0);
+            }
+            AcceptedAction::AimDelete => {
+                self.inputs.edits.push(PendingEdit::Aim(AimEdit::Delete));
+            }
+            AcceptedAction::AimPlace => {
+                self.inputs.edits.push(PendingEdit::Aim(AimEdit::Place));
+            }
+            AcceptedAction::ExactEdit(edit) => {
+                self.inputs.edits.push(PendingEdit::Exact(edit));
+            }
+            AcceptedAction::FitWorld => self.inputs.fit_world = true,
+            AcceptedAction::ToggleSidebar => {
+                self.sidebar_visible = !self.sidebar_visible;
+                self.needs_sidebar_render = true;
+            }
+            AcceptedAction::Resize(width, height) => {
+                self.resize(PhysicalSize::new(width, height));
+            }
+            AcceptedAction::ClearMotion => self.inputs.clear_motion(),
+        }
+    }
+
     fn capture_mouse(&mut self, capture: bool) {
         let Some(display) = self.display.as_ref() else {
             return;
@@ -1097,7 +1215,7 @@ impl App {
             let _ = display.window.set_cursor_grab(CursorGrabMode::None);
             display.window.set_cursor_visible(true);
             self.mouse_captured = false;
-            self.inputs.clear_motion();
+            self.apply_accepted_action(AcceptedAction::ClearMotion);
         }
     }
 
@@ -1114,7 +1232,7 @@ impl App {
         if !self.mouse_captured && self.pointer_in_sidebar() {
             return;
         }
-        self.inputs.wheel = (self.inputs.wheel + lines).clamp(-64.0, 64.0);
+        self.apply_accepted_action(AcceptedAction::WheelLines(lines));
     }
 
     fn resize(&mut self, size: PhysicalSize<u32>) {
@@ -1945,16 +2063,29 @@ impl App {
 
     fn key(&mut self, code: KeyCode, pressed: bool) {
         match code {
-            KeyCode::KeyW => self.inputs.forward = pressed,
-            KeyCode::KeyS => self.inputs.backward = pressed,
-            KeyCode::KeyA => self.inputs.left = pressed,
-            KeyCode::KeyD => self.inputs.right = pressed,
-            KeyCode::Space => self.inputs.up = pressed,
-            KeyCode::ShiftLeft | KeyCode::ShiftRight => self.inputs.down = pressed,
-            KeyCode::KeyF if pressed => self.inputs.fit_world = true,
+            KeyCode::KeyW => {
+                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Forward, pressed))
+            }
+            KeyCode::KeyS => {
+                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Backward, pressed))
+            }
+            KeyCode::KeyA => {
+                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Left, pressed))
+            }
+            KeyCode::KeyD => {
+                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Right, pressed))
+            }
+            KeyCode::Space => {
+                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Up, pressed))
+            }
+            KeyCode::ShiftLeft | KeyCode::ShiftRight => {
+                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Down, pressed))
+            }
+            KeyCode::KeyF if pressed => {
+                self.apply_accepted_action(AcceptedAction::FitWorld);
+            }
             KeyCode::F3 if pressed => {
-                self.sidebar_visible = !self.sidebar_visible;
-                self.needs_sidebar_render = true;
+                self.apply_accepted_action(AcceptedAction::ToggleSidebar);
             }
             KeyCode::F4 if pressed => self.request_display_artifact_capture(),
             KeyCode::F5 if pressed => self.request_presentation_output_capture(),
@@ -1962,6 +2093,157 @@ impl App {
             _ => {}
         }
     }
+}
+
+fn validate_headless_action(action: AcceptedAction) -> Result<(), io::Error> {
+    let AcceptedAction::Resize(width, height) = action else {
+        return Ok(());
+    };
+    if width == 0 || height == 0 {
+        return Ok(());
+    }
+    let pixels = u64::from(width)
+        .checked_mul(u64::from(height))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "resize pixel count overflow"))?;
+    if pixels > HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "headless resize {width}x{height} requires {pixels} output pixels; policy limit is {HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn simulate_interaction_tape(
+    tape: &InteractionTape,
+) -> Result<HeadlessSimulationSummary, io::Error> {
+    let mut app = App::with_program(Program::new());
+    let mut ticks = Vec::new();
+    ticks.try_reserve(tape.len()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            "could not reserve headless tick summaries",
+        )
+    })?;
+
+    for record in tape.records() {
+        for &action in record.actions() {
+            validate_headless_action(action)?;
+            app.apply_accepted_action(action);
+        }
+        app.fixed_tick();
+        let outcome = app
+            .tick_outcomes
+            .last()
+            .expect("one interaction-tape record must emit exactly one fixed-tick outcome");
+        assert_eq!(
+            outcome.tick(),
+            record.ordinal(),
+            "interaction-tape ordinal diverged from the fixed-tick fold"
+        );
+        let game = outcome.game();
+        let composite = outcome.composite();
+        ticks.push(HeadlessTickSummary {
+            ordinal: outcome.tick(),
+            outcome: outcome.tag(),
+            post_world: outcome.post_world(),
+            post_history: outcome.post_history(),
+            camera_bits: outcome.post_camera().bits(),
+            game_input: game.map(TickFrameCommitment::input),
+            game_frame: game.map(TickFrameCommitment::frame),
+            composite_input: composite.map(TickFrameCommitment::input),
+            composite_frame: composite.map(TickFrameCommitment::frame),
+        });
+    }
+
+    let (game_admissions, composite_admissions, game_receipt_head, composite_receipt_head) = app
+        .frame_ledgers_v2
+        .as_ref()
+        .map_or((0, 0, None, None), |ledgers| {
+            (
+                ledgers.game.admissions().len(),
+                ledgers.composite.admissions().len(),
+                ledgers.game.head(),
+                ledgers.composite.head(),
+            )
+        });
+    if game_admissions != 0
+        || composite_admissions != 0
+        || game_receipt_head.is_some()
+        || composite_receipt_head.is_some()
+        || !app.frame_ledger.is_empty()
+        || !app.output_frame_ledger.is_empty()
+    {
+        return Err(io::Error::other(
+            "headless interaction fold unexpectedly published a frame receipt",
+        ));
+    }
+
+    Ok(HeadlessSimulationSummary {
+        tape: tape.content_tag(),
+        action_count: tape.total_actions(),
+        ticks,
+        final_world: world_tag(&app.world),
+        final_history: app.history.head(),
+        final_camera_bits: TickCameraState::capture(&app.camera).bits(),
+        on_bits: app.world.len(),
+        coordinate_receipts: app.history.receipts().len(),
+        game_admissions,
+        composite_admissions,
+        game_receipt_head,
+        composite_receipt_head,
+    })
+}
+
+fn optional_tag(tag: Option<ContentTag>) -> String {
+    tag.map_or_else(|| "none".to_owned(), |tag| tag.to_string())
+}
+
+fn camera_bits_text(bits: [u64; 10]) -> String {
+    bits.into_iter()
+        .map(|bits| format!("{bits:016x}"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn print_headless_summary(summary: &HeadlessSimulationSummary) {
+    println!(
+        "interaction-simulation\ttape={}\tticks={}\tactions={}\tauthority=fixed-tick-only",
+        summary.tape,
+        summary.ticks.len(),
+        summary.action_count,
+    );
+    for tick in &summary.ticks {
+        println!(
+            "interaction-tick\tordinal={}\toutcome={}\tworld={}\thistory={}\tgame_input={}\tgame_frame={}\tcomposite_input={}\tcomposite_frame={}\tcamera_bits={}",
+            tick.ordinal,
+            tick.outcome,
+            tick.post_world,
+            tick.post_history,
+            optional_tag(tick.game_input),
+            optional_tag(tick.game_frame),
+            optional_tag(tick.composite_input),
+            optional_tag(tick.composite_frame),
+            camera_bits_text(tick.camera_bits),
+        );
+    }
+    println!(
+        "interaction-final\tworld={}\thistory={}\ton_bits={}\tcoordinate_receipts={}\tcamera_bits={}",
+        summary.final_world,
+        summary.final_history,
+        summary.on_bits,
+        summary.coordinate_receipts,
+        camera_bits_text(summary.final_camera_bits),
+    );
+    println!(
+        "interaction-boundary\tgame_admissions={}\tcomposite_admissions={}\tgame_receipt_head={}\tcomposite_receipt_head={}\tdisplay_evidence=unavailable-without-window",
+        summary.game_admissions,
+        summary.composite_admissions,
+        optional_tag(summary.game_receipt_head),
+        optional_tag(summary.composite_receipt_head),
+    );
 }
 
 #[cfg(windows)]
@@ -2118,7 +2400,9 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => self.resize(size),
+            WindowEvent::Resized(size) => {
+                self.apply_accepted_action(AcceptedAction::Resize(size.width, size.height))
+            }
             WindowEvent::Focused(false) => self.capture_mouse(false),
             WindowEvent::KeyboardInput {
                 event,
@@ -2152,12 +2436,8 @@ impl ApplicationHandler for App {
                     }
                 } else {
                     match button {
-                        MouseButton::Left => {
-                            self.inputs.edits.push(PendingEdit::Aim(AimEdit::Delete))
-                        }
-                        MouseButton::Right => {
-                            self.inputs.edits.push(PendingEdit::Aim(AimEdit::Place))
-                        }
+                        MouseButton::Left => self.apply_accepted_action(AcceptedAction::AimDelete),
+                        MouseButton::Right => self.apply_accepted_action(AcceptedAction::AimPlace),
                         _ => {}
                     }
                 }
@@ -2193,8 +2473,7 @@ impl ApplicationHandler for App {
             return;
         }
         if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
-            self.inputs.mouse_x += x;
-            self.inputs.mouse_y += y;
+            self.apply_accepted_action(AcceptedAction::LookDelta(x, y));
         }
     }
 }
@@ -3780,5 +4059,108 @@ mod tests {
         for pair in app.tick_outcomes.windows(2) {
             verify_successor(Some(&pair[0]), &pair[1]).unwrap();
         }
+    }
+
+    #[test]
+    fn parsed_interaction_tape_drives_the_same_fixed_fold_as_accepted_actions() {
+        let tape = InteractionTape::parse(
+            "\
+tick
+move forward down
+look 1.5 -0.25
+wheel -3
+tick
+move forward up
+place
+sidebar
+tick
+exact on 7 -8 9
+fit
+",
+        )
+        .unwrap();
+        let summary = simulate_interaction_tape(&tape).unwrap();
+
+        let mut direct = App::new();
+        let mut direct_tags = Vec::new();
+        for record in tape.records() {
+            for &action in record.actions() {
+                direct.apply_accepted_action(action);
+            }
+            direct.fixed_tick();
+            direct_tags.push(direct.tick_outcomes.last().unwrap().tag());
+        }
+
+        assert_eq!(
+            summary
+                .ticks
+                .iter()
+                .map(|tick| tick.outcome)
+                .collect::<Vec<_>>(),
+            direct_tags
+        );
+        assert_eq!(summary.final_world, world_tag(&direct.world));
+        assert_eq!(summary.final_history, direct.history.head());
+        assert_eq!(
+            summary.final_camera_bits,
+            TickCameraState::capture(&direct.camera).bits()
+        );
+    }
+
+    #[test]
+    fn physical_w_key_adapter_and_normalized_tape_map_to_the_same_action() {
+        let mut live_adapter = App::new();
+        live_adapter.key(KeyCode::KeyW, true);
+        live_adapter.fixed_tick();
+
+        let tape = InteractionTape::parse("tick\nmove forward down\n").unwrap();
+        let simulated = simulate_interaction_tape(&tape).unwrap();
+
+        assert_eq!(simulated.ticks.len(), 1);
+        assert_eq!(
+            simulated.ticks[0].outcome,
+            live_adapter.tick_outcomes[0].tag()
+        );
+        assert_eq!(
+            simulated.final_camera_bits,
+            TickCameraState::capture(&live_adapter.camera).bits()
+        );
+    }
+
+    #[test]
+    fn tape_preserves_per_event_wheel_clamping_instead_of_summing_first() {
+        let ordered = InteractionTape::parse("tick\nwheel 100\nwheel -100\n").unwrap();
+        let collapsed = InteractionTape::parse("tick\nwheel 0\n").unwrap();
+
+        let ordered = simulate_interaction_tape(&ordered).unwrap();
+        let collapsed = simulate_interaction_tape(&collapsed).unwrap();
+
+        assert_ne!(ordered.ticks[0].outcome, collapsed.ticks[0].outcome);
+        assert_ne!(ordered.final_camera_bits, collapsed.final_camera_bits);
+    }
+
+    #[test]
+    fn headless_tape_emits_tick_and_frame_commitments_but_no_frame_receipts() {
+        let tape = InteractionTape::parse("tick\ntick\nsidebar\n").unwrap();
+        let summary = simulate_interaction_tape(&tape).unwrap();
+
+        assert_eq!(summary.ticks.len(), 2);
+        assert!(summary.ticks[0].game_frame.is_some());
+        assert!(summary.ticks[0].composite_frame.is_some());
+        assert!(summary.ticks[1].game_frame.is_none());
+        assert!(summary.ticks[1].composite_frame.is_some());
+        assert_eq!(summary.game_admissions, 0);
+        assert_eq!(summary.composite_admissions, 0);
+        assert_eq!(summary.game_receipt_head, None);
+        assert_eq!(summary.composite_receipt_head, None);
+    }
+
+    #[test]
+    fn headless_resize_policy_refuses_before_allocating_the_requested_surface() {
+        let tape = InteractionTape::parse("tick\nresize 4294967295 4294967295\n").unwrap();
+        let error = simulate_interaction_tape(&tape).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("policy limit"));
     }
 }

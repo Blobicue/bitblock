@@ -1947,10 +1947,12 @@ as `Unknown`; it may not promote counter movement into displayed/dropped fate.
 
 - Canonical registry-patch and key codecs; durable decoders for the currently
   implemented world, frame-input, metric-snapshot, composite-input, overlay,
-  frame-receipt, and display-receipt-v1 encodings. DisplayReceipt v2 and
-  DisplayArtifact v1 have strict research codecs and a typed local
-  sync/reread/reopen journal, but no canonical journal-receipt codec,
-  sudden-power assay, external custody, or latest-prefix authority.
+  frame-receipt, and display-receipt-v1 encodings. DisplayReceipt v2,
+  DisplayArtifact v1, OutputTopology v1, and PresentationOutput v1 have strict
+  research codecs. The typed local journal now replays mixed legacy display
+  artifacts and presentation-output wrappers through one physical chain and
+  one embedded display-receipt chain, but has no canonical journal-receipt
+  codec, sudden-power assay, external custody, or latest-prefix authority.
 - Executable edit semantics and a compiler/refinement proof for the current
   representation-only Edit-to-LadderLang bridge; all other object kinds remain
   refused.
@@ -2131,3 +2133,190 @@ image, PE virtual-size deltas are `.text +18,800`, `.rdata +2,816`, `.pdata
 `.bss`. These are linked-file facts, not runtime latency, energy, or residency
 measurements; the runtime queries execute only when the explicit audit variable
 is enabled.
+
+## Active-output topology and presentation-output checkpoint
+
+This checkpoint adds no metric family. The exact registry remains 1,112
+readable, uniquely tagged families: 489 system, 339 view, and 284 world. Active
+route count, acquisition-attempt count, retry rate, last topology error, route
+stability, and the new object digests are projections, labels, or carrier
+identities for observables already owned by the display-pipeline,
+compositor-capture, presentation-fate, provenance, and recovery families.
+
+### OutputTopology v1
+
+`src/output_topology.rs` defines the readable kind `output-topology` and schema
+`bitblock/output-topology-observation/v1`. The object has explicit `Available`
+and `Unavailable` forms. An available observation retains:
+
+- client, monitor, and work-area rectangles plus the exact GDI source name;
+- source position, dimensions, pixel format, status flags, and optional mode;
+- every matched target route, including exact target identity availability,
+  output technology, rotation, scaling, refresh/signal/scanline facts, path
+  flags, and optional desktop-image facts; and
+- the ordered acquisition-attempt transcript, including query profile,
+  outcome, error, and reported capacities.
+
+Windows UTF-16 code units are preserved exactly. Routes are canonically sorted,
+and two materially identical routes are refused even when only their friendly
+annotations differ. The payload is capped at 65,536 bytes, each retained UTF-16
+field at 8,192 code units, and both routes and attempts at 256. Transient HWND,
+HMONITOR, adapter LUID, source/target numeric IDs, clone-group IDs, and mode
+indices are deliberately absent; they are query-time joins rather than durable
+identity.
+
+`src/windows_topology.rs` maps the owned HWND to its monitor and GDI source, then
+uses `QueryDisplayConfig`. It first requests profile `0x52` and falls back once
+to `0x12` only for `ERROR_INVALID_PARAMETER`. Only
+`ERROR_INSUFFICIENT_BUFFER` can retry, with four total size/query cycles and
+allocation caps of 1,024 paths and 3,072 modes. The source-name join is exact,
+all active clone-target routes are retained, and target-name failure is an
+explicit route fact rather than silent omission. Production and fake-API paths
+apply the same material-duplicate refusal.
+
+The independent Rust/Python vectors agree on:
+
+```text
+available    #bb.output-topology.sha256.jbfwsd34kns7uwofvkj6w3u7tq7nlsbqdfw5b725pxpcg44c2h2q
+unavailable  #bb.output-topology.sha256.fw2l66z7jd2eu6suedannr77x5yrugb6sot7y3ojduamdiuemtpq
+```
+
+The independent oracle also refuses annotation-only material duplicates. A
+powered Rust subject control weakened the production comparator to ordinary
+struct equality; the annotation-only duplicate test then failed. Restoring the
+material comparator returned the test to green.
+
+### PresentationOutput v1 and mixed replay
+
+`src/presentation_output.rs` defines kind `presentation-output-artifact` and
+schema `bitblock/presentation-output-artifact/v1`. Its canonical layout is:
+
+```text
+u64 display_len | DisplayArtifact
+948-byte CompositionTimingEnvelope
+u64 topology_before_len | OutputTopology before
+u64 topology_after_len  | OutputTopology after
+```
+
+The fixed outer overhead is 972 bytes. Admission requires exact equality of the
+complete nested `FrameReceiptV2`, equal successful timing/capture QPC
+frequencies, and a capture start QPC no earlier than the timing envelope's
+post-presentation call bracket. `Stable`, `Changed`, and `Unavailable` route
+stability are derived by comparing the two topology observations and are not
+encoded. The before/after positions record workflow order; without their own
+timestamps they do not prove the physical time at which topology changed.
+
+The independent outer vector is:
+
+```text
+#bb.presentation-output-artifact.sha256.fhc42zlstxtkh5mzyhpyjtlpuwo5dna5ryklwjithph577okripa
+```
+
+Twelve negative controls cover truncation/trailing bytes, nested kind and
+receipt substitution, timing/capture QPC-frequency mismatch, capture before the
+timing post-call, and malformed nested objects. `src/display_store.rs` now
+dispatches strictly by kind and schema and replays every adjacent transition:
+legacy-to-legacy, legacy-to-wrapper, wrapper-to-legacy, and wrapper-to-wrapper.
+The physical storage-parent chain remains separate from the unified embedded
+display-receipt-parent chain. Replay inventories the stored outer object plus
+its display, timing, topology, and derived-stability tags. It does not supply
+the referenced TickOutcome, FrameInput, or policy objects and therefore is not
+transitive content-reference closure.
+
+### F5 authority order and live assay
+
+F5 arms one observation of the next normally produced successful composite
+presentation. Arming requests a redraw only to service UI state; it does not
+advance a tick, render a new authoritative frame, or resubmit the current
+surface. An invalid or uncommitted frame leaves the request armed. A valid
+presentation consumes it exactly once in this order:
+
+```text
+checked presentation and committed composite receipt
+same-call CompositionTimingEnvelope
+OutputTopology before capture
+one visible-client GDI capture
+OutputTopology after capture
+canonical wrapper admission and synchronized journal append
+```
+
+A nonpoisoning storage refusal retains the exact already-observed wrapper for a
+storage-only F5 retry; it does not resample timing, topology, or pixels. F4 and
+F5 are mutually exclusive while either request or retained object is pending.
+
+A fresh live Windows run used
+`target/live-f5-assay-20260826-02.bbj`. F5 first changed the title to
+`waiting for next changed presentation`; F3 then caused an ordinary sidebar
+recomposition. The immediate UI snapshot still carried the waiting title while
+the asynchronous observation was in flight. A new observation 1.5 seconds
+later read `presentation output stored 1`. The terminal and synchronized
+journal reported:
+
+```text
+timing             #bb.presentation-artifact.sha256.6m6xleoinmqxdxvfzbp3isk2czftvvn5t32ulr3uda7nrfxcxipa
+progress           ComparableAdvanced
+attribution        Unknown
+qpf                true
+pre_hr/post_hr     0 / 0
+gdi_flush          true
+dwm_flush_hr       0
+output             #bb.presentation-output-artifact.sha256.ylodhhwp46a643xiuxd4wnwesgrmrkmiprjclucmfi2qrqnio62q
+display            #bb.display-artifact.sha256.hcbzgr23hbk3y65uoevxnfcalbg5eqgkmr5ddu2rbrxvvd2pnria
+topology_before    #bb.output-topology.sha256.u7en2ajcy5cwiy2ugaozrhdjrko5e3i3apmlm6kafnpmq5s4ohca
+topology_after     #bb.output-topology.sha256.u7en2ajcy5cwiy2ugaozrhdjrko5e3i3apmlm6kafnpmq5s4ohca
+route_stability    Stable
+storage_record     #bb.storage-record.sha256.6zf3y3jxcwelftieje7toltjpeyv4kxpmgpb6svmvxcnlfcbqa2q
+record_range       [0, 3850988)
+artifact_count     1
+```
+
+After the process was stopped, the journal was 3,850,988 bytes with file
+SHA-256 `5617A4B05B698E874E8DAF37226B5B4FF4967D54F41779B5979A1BDACF7622CF`.
+The live append path synchronously reread its record and called `sync_all`; this
+run did not perform a separate anchored reopen or sudden-power interruption.
+Identical topology tags establish equality of the two retained route facts for
+this sample only. They do not establish continuous stability between samples.
+The null-HWND DWM relation remains session scoped, so exact-frame fate is still
+`Unknown`. The OS raster, compositor attribution, scanout, cable/panel state,
+and emitted light remain separate evidence boundaries.
+
+### Metric remint, policies, and final gates
+
+Nine existing definitions changed; none is a new family:
+
+```text
+compositor capture comparison       #bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq
+display pipeline state vector       #bb.metric-definition.sha256.ni5niivvuvoqwmextlvad3lhfjvvr7fztoknle64pdrobq7x3jfq
+presentation fate relation          #bb.metric-definition.sha256.onmlgqlhezpgwer7pm5jpzumrfsoyhfre2k6cmmemvyt74jryxbq
+domain-separation identity          #bb.metric-definition.sha256.wovhqsufn54kbz6shech57fypqmxmu2u6aobwm2an6hyis3z7k5q
+encoding round-trip check            #bb.metric-definition.sha256.x4ujkhufvitc42umdgovwg3g26wmilsd5q4rnwgzhzymi7gxre4q
+frame-provenance receipt digest      #bb.metric-definition.sha256.ntg7gxatkwreu2rhm7g72hunnpka7arngljoagz3bpdfozblrtma
+known-answer vector verdict          #bb.metric-definition.sha256.blkun3cnmr5xmsvcxqcir27vd2ygnw5z7vkoqgptnqr66z33wy2q
+cross-implementation digest parity   #bb.metric-definition.sha256.ijbtjkk6p7cgum2yirvqh62wcp4hymmsfrv2vjsxrtl2srdf3bcq
+store recovery outcome               #bb.metric-definition.sha256.ma25hfuvb7h64lips6tvha72wdjdb36ioiq4bxwcnpm2ixw6jx7a
+```
+
+The derived sidebar and composite policies are respectively
+`#bb.policy.sha256.eg4egguiubrb5l45qbwvf76gwbkgtlb7pymc3zi4uq6jrqgl4b5q`
+and
+`#bb.policy.sha256.kyd57oandtrj4iuis54zozpv6pwgmcoy4hmsvlkp2fqvhy6noe5q`.
+The remint was propagated through the optimization-v3 game, composite-input,
+composite-evidence, display-receipt, output, and equivalence known-answer
+chain; no stale predecessor tag remains in the exact registry or vector suite.
+
+The final verification passes 290 tests in the default all-target build (261
+library, 29 application), 317 across all research targets (281 library, 36
+application), every zero-test example target, strict Clippy for both feature
+sets, formatting, all fifteen independent Python vector programs, the exact
+1,112-definition registry audit, and `lake build` (6 jobs).
+
+The fresh default executable is
+`target/presentation-output-default/release/bitblock.exe`, 1,031,168 bytes,
+SHA-256
+`6F6C320445FD4E4FD5337BE834C17DB0FC58E7760B1ABFF7474761EEAD71B70A`.
+The research executable is
+`target/presentation-output-research/release/bitblock.exe`, 1,277,952 bytes,
+SHA-256
+`963EF42F22A75C6DA7666A7A3FC3BAD72049C8BAA607A3365C76FAF20C7233A8`.
+It is 246,784 bytes larger than the same-source default. These are linked-file
+size and digest facts, not runtime latency, energy, or memory measurements.
