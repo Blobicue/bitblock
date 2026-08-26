@@ -15,6 +15,8 @@ pub mod journal;
 pub mod ladder_bridge;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod optimization;
+#[cfg(any(test, feature = "protocol-research"))]
+pub mod presentation;
 pub mod program;
 pub mod protocol;
 pub mod render;
@@ -26,4 +28,6 @@ pub mod storage;
 pub mod tick;
 #[cfg(windows)]
 pub mod windows_present;
+#[cfg(all(windows, feature = "protocol-research"))]
+pub mod windows_timing;
 pub mod world;

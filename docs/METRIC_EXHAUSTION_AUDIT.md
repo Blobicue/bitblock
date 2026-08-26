@@ -1,9 +1,10 @@
 # Metric-exhaustion audit — 2026-08-26
 
 This checkpoint applied the uniqueness rule in [`METRICS.md`](../METRICS.md)
-again after the live TickOutcome/FrameReceipt-v2, typed DisplayReceipt-v2, and
-bounded independent RGB/depth renderer-oracle and explicit one-shot live
-display-artifact checkpoints. It admitted **zero new metric families**. The authoritative catalog
+again after the live TickOutcome/FrameReceipt-v2, typed DisplayReceipt-v2,
+bounded independent RGB/depth renderer oracle, explicit one-shot live
+display artifact, and checked Win32 submission checkpoints. It admitted
+**zero new metric families**. The authoritative catalog
 therefore remains 1,112 families: 489 system, 339 view, and 284 world.
 
 This is a bounded closure result. It covers the current Rust source plus the

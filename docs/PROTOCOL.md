@@ -1849,6 +1849,100 @@ bytes. A read-only string assay finds `bitblock/display-capture-artifact/v1` in
 the feature image and not in the default. These are linked-size facts, not a
 runtime memory, latency, sync-duration, or durability measurement.
 
+## Checked Win32 pixel-submission checkpoint
+
+Read-only inspection of the pinned Softbuffer 0.4.8 Windows backend exposed a
+proof seam: its internal `BitBlt` Boolean was discarded before the wrapper
+returned `Ok(())`. The frame protocol already described that return as backend
+acceptance, not monitor output, but there was no way to distinguish a failed
+underlying GDI call from a successful one.
+
+Windows now uses a project-owned top-down `0x00RRGGBB` buffer and one direct
+`SetDIBitsToDevice` occurrence. The buffer is fully allocated before replacing
+the prior resize state. Each present acquires the window DC, submits exactly the
+current width and height, captures the returned scanline count and Win32 error,
+releases the DC, and admits the frame pair only when the returned count equals
+the complete requested height. Zero, partial, and over-reported row counts are
+all refusal states. A failed `ReleaseDC` remains a separately reported cleanup
+fact after a full-row return, because rewriting an already accepted pixel call
+as non-submission would be false history.
+
+The checked policy is independently reconstructed by
+`tools/windows_present_vectors.py`:
+
+```text
+#bb.policy.sha256.opgpybj32tw72pep2xusit4lzzgsiozs5f5reppq67iiejueetvq
+```
+
+The Windows dependency graph is now `bitblock -> windows-sys + winit`; it has no
+Softbuffer node. Non-Windows targets retain Softbuffer as a target-specific
+backend. This changed the evidence status of two existing metric families but
+admitted no new family:
+
+```text
+backend submission event
+  #bb.metric-definition.sha256.ip6vniaztq3chlyhj6w5fdysj3fi3y7evaiaah3pt65xdoak2ufa
+mapped-surface copy mismatch vector
+  #bb.metric-definition.sha256.yl4hegsrqnqx2a26j53h6tpp6duv4ozof43eyc5xm2as2k4af3uq
+```
+
+The first live checked-backend assay retained a partial external-raster failure
+with 516,522 mismatches, first `(565,0)`. A second run retained a whole-client
+external-raster failure with 962,001 mismatches, then produced complete
+full-client passes in the same process. The first preserved exact pass was:
+
+```text
+#bb.display-receipt.sha256.2swl7ga2lqxiswavxqt4mznrxku4u7hcqfsxccvpjytt2hwfz2taq
+stage=Complete mismatches=0 first=None
+```
+
+A later minimized occurrence was explicitly unavailable rather than counted as
+a match. Exact failure and minimized receipts are preserved in
+`docs/DISPLAY_AUDIT.md`. The sequence establishes checked GDI acceptance plus a
+separate exact OS screen-raster sample for those occurrences. It does not settle
+the mechanism of the preceding external rasters and does not prove compositor
+attribution, scanout, cable/panel behavior, or emitted light.
+
+Two powered subject controls were observed failing before restoration:
+
+1. replacing complete-row equality with `actual >= 0` made the zero-row control
+   fail;
+2. changing the Rust policy revision changed its tag and made the independent
+   known-answer assertion fail.
+
+The complete gate passes 227 library and 29 application tests in the default
+all-target build, 227 library and 31 application tests with all research
+features, zero-test example targets, strict Clippy, formatting, all twelve
+independent Python vector programs, the exact 1,112-definition registry audit,
+and `lake build` (6 jobs). The deliberately failing powered controls are not
+counted as passes.
+
+The default executable is
+`target/checked-windows-present-default/release/bitblock.exe`, 1,031,168 bytes,
+SHA-256
+`4BC8528A5C9CA11D2F8EB6CB57F1D81BABA9819A56BA451834B294CF12D8D71A`.
+It is 89,600 bytes smaller than the preceding 1,120,768-byte default. Read-only
+PE comparison attributes the largest virtual-size reductions to `.text`
+(-71,456), `.xdata` (-8,696), `.rdata` (-6,256), and `.pdata` (-2,436), with
+smaller `.data` (-176) and `.reloc` (-276) reductions and `.idata` +4 bytes.
+The presenter policy and `SetDIBitsToDevice` strings are present; `softbuffer`
+and the research display-artifact schema are absent.
+
+The research executable is
+`target/checked-windows-present-research/release/bitblock.exe`, 1,122,304 bytes,
+SHA-256
+`6306D0158BE5C8D2C202B91CB0C2455B3D95E4948FE0F564409DEADF05633B47`.
+It is 88,576 bytes smaller than the preceding research image and 91,136 bytes
+larger than the same-source default. The display-artifact schema and checked
+presenter policy are both present. These are linked file/section facts, not
+runtime latency, energy, residency, or compositor evidence.
+
+`DwmGetCompositionTimingInfo` remains a possible diagnostic envelope, not the
+next pixel proof. Microsoft requires a null HWND on Windows 8.1 and later, so
+its timing/counter vector is compositor-session scoped and cannot name the
+Bitblock window or frame. Any future before/after pair must preserve attribution
+as `Unknown`; it may not promote counter movement into displayed/dropped fate.
+
 ## Open proof obligations
 
 - Canonical registry-patch and key codecs; durable decoders for the currently
@@ -1899,9 +1993,10 @@ runtime memory, latency, sync-duration, or durability measurement.
   aggregate, subpixel-point, inside-bit, near-plane, arbitrary yaw/pitch/FOV,
   boundary-sensitive, larger corpus, and universal or theorem-backed raster
   semantics remain open.
-- Manual live Match/Mismatch/Unavailable sampling plus an intentional occluder
-  control across supported Windows display configurations; the feature-gated
-  observer path exists but has not been exercised in this checkpoint.
+- Repeated live Match/Mismatch/Unavailable sampling with intentional occluder,
+  display-mode, DPI, HDR, multi-monitor, and remote-session controls. The current
+  local assays cover exact pass, external-raster mismatch, and minimized
+  unavailable outcomes on one configuration only.
 - Calibrated scanout or physical-display instrumentation; GDI screen capture
   does not settle this boundary.
 - External head custody for rollback detection.

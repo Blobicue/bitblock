@@ -33,6 +33,8 @@ pub enum TagKind {
     MetricDefinition,
     MetricSnapshot,
     Policy,
+    #[cfg(any(test, feature = "protocol-research"))]
+    PresentationArtifact,
     Receipt,
     Registry,
     SequentialHistory,
@@ -64,6 +66,8 @@ impl TagKind {
             Self::MetricDefinition => "metric-definition",
             Self::MetricSnapshot => "metric-snapshot",
             Self::Policy => "policy",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::PresentationArtifact => "presentation-artifact",
             Self::Receipt => "receipt",
             Self::Registry => "registry",
             Self::SequentialHistory => "sequential-history",
@@ -96,6 +100,8 @@ impl TagKind {
             b"metric-definition" => Self::MetricDefinition,
             b"metric-snapshot" => Self::MetricSnapshot,
             b"policy" => Self::Policy,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"presentation-artifact" => Self::PresentationArtifact,
             b"receipt" => Self::Receipt,
             b"registry" => Self::Registry,
             b"sequential-history" => Self::SequentialHistory,
@@ -416,6 +422,7 @@ mod tests {
             TagKind::MetricDefinition,
             TagKind::MetricSnapshot,
             TagKind::Policy,
+            TagKind::PresentationArtifact,
             TagKind::Receipt,
             TagKind::Registry,
             TagKind::SequentialHistory,

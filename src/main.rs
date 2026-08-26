@@ -38,6 +38,8 @@ use bitblock::tick::{
 };
 #[cfg(windows)]
 use bitblock::windows_present::WindowsPixelSurface;
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::windows_timing::observe_checked_present;
 #[cfg(test)]
 use bitblock::world::BEDROCK_COORD;
 use bitblock::world::World;
@@ -71,6 +73,8 @@ const MAX_TICKS_PER_FRAME: usize = 15;
 const BLOCK_FILL_DISTANCE: f64 = 0.25;
 const OBSERVER_COLLISION_CLEARANCE: f64 = 1.0e-6;
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
+#[cfg(all(windows, feature = "protocol-research"))]
+const PRESENTATION_AUDIT_ENV: &str = "BITBLOCK_PRESENTATION_AUDIT";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let program = load_startup_program()?;
@@ -718,6 +722,8 @@ struct App {
     display_artifact_archive: Option<LiveDisplayArtifactArchive>,
     #[cfg(all(windows, feature = "protocol-research"))]
     display_artifact_capture_requested: bool,
+    #[cfg(all(windows, feature = "protocol-research"))]
+    presentation_audit_enabled: bool,
 }
 
 impl App {
@@ -773,6 +779,8 @@ impl App {
             display_artifact_archive: None,
             #[cfg(all(windows, feature = "protocol-research"))]
             display_artifact_capture_requested: false,
+            #[cfg(all(windows, feature = "protocol-research"))]
+            presentation_audit_enabled: presentation_audit_enabled(),
         }
     }
 
@@ -1373,6 +1381,10 @@ impl App {
         #[cfg(not(windows))]
         copy_exact(&mut buffer, frame).expect("surface does not match framebuffer shape");
 
+        #[cfg(all(windows, feature = "protocol-research"))]
+        let presentation_audit_enabled = self.presentation_audit_enabled;
+        #[cfg(all(windows, feature = "protocol-research"))]
+        let mut presentation_timing = None;
         #[cfg(windows)]
         let submitted = submit_live_frame_pair(
             &self.tick_outcomes,
@@ -1383,7 +1395,20 @@ impl App {
                 .expect("v2 frame ledgers cannot disappear during one presentation"),
             game_pending,
             output_pending,
-            |_| {
+            |_receipts| {
+                #[cfg(feature = "protocol-research")]
+                if presentation_audit_enabled {
+                    let observation = observe_checked_present(|| display.surface.present())?;
+                    if !observation.presenter.release_succeeded() {
+                        eprintln!(
+                            "windows-present-release\tresult={}\terror={}",
+                            observation.presenter.release_result,
+                            observation.presenter.release_error_code
+                        );
+                    }
+                    presentation_timing = Some(observation.bind(_receipts.composite()));
+                    return Ok(());
+                }
                 display.surface.present().map(|facts| {
                     if !facts.release_succeeded() {
                         eprintln!(
@@ -1414,6 +1439,29 @@ impl App {
         } = submitted;
         debug_assert_eq!(game_pending.is_some(), presented_game.is_some());
         debug_assert_eq!(presented_output.receipt_v2.stream(), FrameStream::Composite);
+        #[cfg(all(windows, feature = "protocol-research"))]
+        if let Some(timing) = presentation_timing {
+            match timing {
+                Ok(envelope) => {
+                    debug_assert_eq!(envelope.receipt(), presented_output.receipt_v2);
+                    eprintln!(
+                        "composition-timing\tartifact={}\tpolicy={}\tprogress={:?}\tattribution={:?}\tqpf={}\tpre_hr={}\tgdi_flush={}\tdwm_flush_hr={}\tpost_hr={}",
+                        envelope.tag(),
+                        envelope.timing_policy(),
+                        envelope.progress(),
+                        envelope.frame_attribution(),
+                        envelope.qpc_frequency().succeeded,
+                        envelope.pre().hresult,
+                        envelope.gdi_flush().succeeded,
+                        envelope.dwm_flush().hresult,
+                        envelope.post().hresult,
+                    );
+                }
+                Err(error) => {
+                    eprintln!("composition-timing-refused\t{error}");
+                }
+            }
+        }
 
         // Presentation authority is already committed. Publish that state and clear the pending
         // submission before any observational capture or filesystem work can refuse afterward.
@@ -1548,6 +1596,13 @@ impl App {
 #[cfg(windows)]
 fn display_audit_enabled() -> bool {
     std::env::var("BITBLOCK_DISPLAY_AUDIT").is_ok_and(|value| {
+        value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("on")
+    })
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn presentation_audit_enabled() -> bool {
+    std::env::var(PRESENTATION_AUDIT_ENV).is_ok_and(|value| {
         value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("on")
     })
 }
