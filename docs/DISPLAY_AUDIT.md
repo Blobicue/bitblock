@@ -126,6 +126,42 @@ facts, and mismatch witnesses enter an append-only display-receipt chain.
    were caused by occlusion, window visibility, or compositor scheduling, and
    it does not promote GDI acceptance or screen-DC equality into scanout proof.
 
+9. **Canonical composition-timing envelope.** The research-only
+   `BITBLOCK_PRESENTATION_AUDIT=1` path now observes each checked presentation
+   with QPC-bracketed null-HWND `DwmGetCompositionTimingInfo` calls before and
+   after it, followed by separately bracketed `GdiFlush` and `DwmFlush` calls.
+   Every raw field of `DWM_TIMING_INFO` except caller-owned `cbSize` enters a
+   fixed 948-byte presentation artifact together with the exact composite
+   `FrameReceiptV2` and checked presenter facts. The policy identity is
+   `#bb.policy.sha256.t2zuewerksnmvhhjyaaplmlmfb2poptubqxpc6czwvmuwufpanrq`;
+   the Rust/Python known-answer artifact is
+   `#bb.presentation-artifact.sha256.sw2i52veohfmc3lqe74tzd72n6ppwxxshejxmazclwikgniqx2sq`.
+
+   Observation failures are retained and make the derived timing relation
+   unavailable; they do not roll back a successful checked pixel submission.
+   Only presenter failure prevents the frame occurrence. A powered subject
+   control removed the required GDI barrier verdict and made the dedicated
+   test report `ComparableAdvanced` instead of `Unavailable`; restoring the
+   production condition returned the test to green.
+
+   One live HWND run then emitted:
+
+   ```text
+   #bb.presentation-artifact.sha256.pmvfnxmzcjnz5ag26wmpdkdhbpoiofv4grxmwigofifjxj57kgya
+   progress=ComparableAdvanced attribution=Unknown qpf=true
+   pre_hr=0 gdi_flush=true dwm_flush_hr=0 post_hr=0
+   ```
+
+   The session-owned diagnostic process was stopped with Ctrl+C after that
+   occurrence. Its full 948-byte payload was not written to the typed journal,
+   so the tag and selected terminal fields are retained here but the raw object
+   is not independently replayable custody.
+
+   Modern Windows requires a null HWND for the timing API, making its counters
+   desktop-composition-session scoped. The encoded artifact therefore exposes
+   only `Unknown` frame attribution. Session counter movement can never be
+   rewritten as proof that this frame displayed or dropped.
+
 The historical failures and passes arose in separate in-memory runs; their tags
 commit to their exact local fields, but the captured artifacts were not durably
 retained. They are evidence for this checkpoint, not replayable external

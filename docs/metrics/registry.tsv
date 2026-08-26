@@ -615,9 +615,9 @@
 #bb.metric.visual.sampled-raster-depth-residual-vector	#bb.metric-definition.sha256.5o4zsqxwf6bwdqvooysfyqzuyqejceo232vgqfgzbwmsi2uzo5da	view	Sampled raster depth residual vector
 #bb.metric.visual.raster-representation-invariance-vector	#bb.metric-definition.sha256.4oor37kcshpse77ke26uf2sbfbepb6qrmofjkgghvbm6uy42bxfa	view	Raster representation invariance vector
 #bb.metric.visual.render-input-output-binding-verdict	#bb.metric-definition.sha256.5vy4oiee7e75bxnwbsowhnrlimerw7amu5ffiwqdoptkkny5vaja	view	Render input/output binding verdict
-#bb.metric.visual.display-pipeline-state-vector	#bb.metric-definition.sha256.xamh5sj5wyi6bzsj47wa2vgqwkbrpki4se6m6hno5e4nktdfwt2q	view	Display pipeline state vector
+#bb.metric.visual.display-pipeline-state-vector	#bb.metric-definition.sha256.ptv77nvnpcousi7k5dbv426xfo3ap6x5ypusdbq4cudatrxhfgkq	view	Display pipeline state vector
 #bb.metric.visual.raycast-traversal-permutation-divergence	#bb.metric-definition.sha256.3obyp24stbcdwhmxdeflv5e2lv3kldhcl2vsedpjrzfrgjlkrjnq	view	Raycast traversal permutation divergence
-#bb.metric.visual.presentation-fate-relation	#bb.metric-definition.sha256.mfeta3tyqvaovhc2x2gpvadwdjg5t347yfaaupui6oq4tp4ihvma	view	Presentation fate relation
+#bb.metric.visual.presentation-fate-relation	#bb.metric-definition.sha256.zt5psfzfpfyjdhaz3lenuwab363purdwj5ivm4bqfmw7scyavi3a	view	Presentation fate relation
 #bb.metric.visual.scanout-composition-witness-vector	#bb.metric-definition.sha256.p5s4hs2ucw5fhrdyl66cerntolhjqg6igishnjg7nabxsj3kk6ya	view	Scanout composition witness vector
 #bb.metric.visual.display-transform-provenance-relation	#bb.metric-definition.sha256.dxechflewjnmqyilex3hlxgkremu7em2cm6rqcxjp6zmb7i4fsna	view	Display transform provenance relation
 #bb.metric.visual.interaction-to-display-causal-path	#bb.metric-definition.sha256.bhcrnpyc6tafwpgvxq3nute6yzpzc3iwbxd4fhqf4f3psowmxflq	view	Interaction-to-display causal path
@@ -784,7 +784,7 @@
 #bb.metric.proof.declaration-dependency-relation	#bb.metric-definition.sha256.sxunwwsisqxsfa5xdur5cbpkvwavre5rqeoxfvja6dnqmiftw5cq	system	Declaration dependency relation
 #bb.metric.hash.canonical-encoding-version	#bb.metric-definition.sha256.ykhjevyp423wvwohyv7omxf63uebslqq7xou4wo5gv2llu7dntia	system	Canonical encoding version
 #bb.metric.hash.algorithm-identity	#bb.metric-definition.sha256.jvd5t3b4u5qv5pi7h3twttztksqakht6dxlgzn3dezrhogt5xojq	system	Algorithm identity
-#bb.metric.hash.domain-separation-identity	#bb.metric-definition.sha256.p7dtcjvcxdhernlypv27dsnoczzktp2dcpcrpo63exhv3ltmgkza	system	Domain-separation identity
+#bb.metric.hash.domain-separation-identity	#bb.metric-definition.sha256.ihlgxhjgwamgu57eostm6m2w54gxlssazapkm5r6i5j77uk6m4pa	system	Domain-separation identity
 #bb.metric.hash.canonical-world-encoding-bytes	#bb.metric-definition.sha256.eeplo5vye5hr27tdyvurbqobxpiggg6hmpfmup7bujrrh2xajexa	system	Canonical world encoding bytes
 #bb.metric.hash.per-chunk-content-digest	#bb.metric-definition.sha256.dvcbhp2p4evq6p3hc5swvxa3ovsvaay5jwubwstpcr3y6eifflea	system	Per-chunk content digest
 #bb.metric.hash.canonical-world-state-root	#bb.metric-definition.sha256.2wqnpxvk7usvvnwjhj4gm47zggllqguklkcexkt4sgpiwgbmhmca	system	Canonical world-state root
@@ -819,7 +819,7 @@
 #bb.metric.hash.avalanche-event	#bb.metric-definition.sha256.zes3mt7ch36y33ake75fzap4o4xlc5pwhmvrmx3rmnc7orn36qeq	system	Avalanche event
 #bb.metric.hash.avalanche-trial-identity-count	#bb.metric-definition.sha256.ifyqx5uyf45pmj5etdcm3wq7o46r3xvajku4kybqxx4euzf2h7tq	system	Avalanche trial identity/count
 #bb.metric.hash.empirical-collision-vector	#bb.metric-definition.sha256.ypaft7g2dqaejyiz5jzfoielaa52u2caefzq7ehyj4s7yna4rw3q	system	Empirical collision vector
-#bb.metric.hash.encoding-round-trip-check	#bb.metric-definition.sha256.7serkvxp6umyrruavnizzar7kngxdbpdg4stp5y2edhaqhk4rpzq	system	Encoding round-trip check
+#bb.metric.hash.encoding-round-trip-check	#bb.metric-definition.sha256.jyxxeqpzmsteqxuquyhlkagnqmjdmxaqxhfg4lyjb4p6erl3llya	system	Encoding round-trip check
 #bb.metric.hash.domain-separation-collision-vector	#bb.metric-definition.sha256.ahfq4evw3nud5emusncd5ijntzedhgf5knoneyhmufs4jqi2a4ra	system	Domain-separation collision vector
 #bb.metric.hash.receipt-signature-vector	#bb.metric-definition.sha256.vujymfxaikflcawcwry5wzmdlbphxix4w65uwfnzojqvfsjvb2ca	system	Receipt signature vector
 #bb.metric.hash.verified-signer-count	#bb.metric-definition.sha256.h66yzeep6pyvt35c724bihvyvtfh4y3il3szygpgedwtvaaalyja	system	Verified signer count
@@ -829,8 +829,8 @@
 #bb.metric.hash.canonical-render-input-digest	#bb.metric-definition.sha256.jkyz4xxly7x5jcx3lxyik6rxufc2ytyozma2nlomndnabaifpy7a	system	Canonical render-input digest
 #bb.metric.hash.final-framebuffer-digest	#bb.metric-definition.sha256.ixlwaw2kirujvbr37yphwkyw62h2kvujlpy4pnvi3gwdhcilkhnq	system	Final framebuffer digest
 #bb.metric.hash.frame-provenance-receipt-digest	#bb.metric-definition.sha256.usv2hrln45vdwrgz4e4xraime7x53fjyjlv5mfkr6plukbzb5j4a	system	Frame-provenance receipt digest
-#bb.metric.hash.known-answer-vector-verdict	#bb.metric-definition.sha256.otvsq65p24hcmev5qeefmisee74kb2waspi3sz5ffyzeprnutkaq	system	Known-answer-vector verdict
-#bb.metric.hash.cross-implementation-digest-parity	#bb.metric-definition.sha256.wmmga7w3kg254myf3r4arktvczb4lnrjp7vcon3n77smmptwdldq	system	Cross-implementation digest parity
+#bb.metric.hash.known-answer-vector-verdict	#bb.metric-definition.sha256.mymmhhznsxbc5zctdsyn6hx74bzfw3ofgbl6pc4li6lm6mt4twdq	system	Known-answer-vector verdict
+#bb.metric.hash.cross-implementation-digest-parity	#bb.metric-definition.sha256.jkedpqcfxrjvyq7xvzbnxvsexznxeprbvnw2eq76h7jnuyslucbq	system	Cross-implementation digest parity
 #bb.metric.hash.representation-substrate-inventory	#bb.metric-definition.sha256.k2yta4hcdc5rikxvsg6ehok65fwhnsk2rlthv5arupcruzlnheiq	system	Representation-substrate inventory
 #bb.metric.hash.declared-parameter-liveness-vector	#bb.metric-definition.sha256.cqh735mertznhz7s4qbku65rumeeqicdrmkxtaxxy2z4nvewtmdq	system	Declared-parameter liveness vector
 #bb.metric.hash.round-map-image-cardinality	#bb.metric-definition.sha256.xa3z27fxdiezfzifllujbonidyp2fdarkn23pfqwrosgny7kkq2q	system	Round-map image cardinality

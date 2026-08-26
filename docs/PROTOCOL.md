@@ -2005,3 +2005,129 @@ as `Unknown`; it may not promote counter movement into displayed/dropped fate.
 
 An unavailable obligation is reported as `N/A` or open. It is never inferred
 from a hash, a metric, or a successful local run.
+
+## Composition-timing envelope checkpoint
+
+`src/presentation.rs` adds a feature-gated, platform-neutral canonical object
+for raw Windows composition timing around one checked presentation. Its readable
+kind is `presentation-artifact`, its schema is
+`bitblock/composition-timing-envelope/v1`, and its payload is exactly 948
+big-endian bytes:
+
+| bytes | committed field |
+|---:|---|
+| 32 | composition-timing policy digest |
+| 130 | complete composite `FrameReceiptV2` canonical payload |
+| 52 | checked presenter policy and result facts |
+| 13 | QPC-frequency result |
+| 319 | pre-presentation DWM call, bracket, and optional snapshot |
+| 26 | checked-presenter QPC bracket |
+| 27 | `GdiFlush` result and QPC bracket |
+| 30 | `DwmFlush` HRESULT and QPC bracket |
+| 319 | post-presentation DWM call, bracket, and optional snapshot |
+
+Each successful DWM call stores all 288 bytes of documented timing fields in
+API order after omitting caller-owned `cbSize`. The codec encodes every integer
+explicitly; it never copies the packed Windows ABI struct. Failed calls retain
+their HRESULT, use an absent marker, and require zero canonical snapshot
+padding. Boolean markers, nested tag kinds, the composite stream selector,
+presenter row completeness, padding, payload length, and the cached outer tag
+all fail closed.
+
+`src/windows_timing.rs` is linked only by `protocol-research`. With
+`BITBLOCK_PRESENTATION_AUDIT=1`, the live Windows path executes this order:
+
+```text
+QPF
+{QPC, DwmGetCompositionTimingInfo(NULL), QPC}
+{QPC, checked SetDIBitsToDevice presenter, QPC}
+{QPC, GdiFlush, QPC}
+{QPC, DwmFlush, QPC}
+{QPC, DwmGetCompositionTimingInfo(NULL), QPC}
+```
+
+All post-presentation observation boundaries still run when another timing or
+barrier observation fails. Only failure of the checked presenter prevents frame
+admission. If construction of the observational envelope were unexpectedly
+refused after presenter success, the frame receipt remains published and the
+observation refusal is reported separately; an instrument may not roll back
+the event it observed.
+
+The derived session relation has only four values:
+
+- `Unavailable`: a missing/failed required observation, barrier failure, or
+  incomplete/nonmonotonic QPC interval;
+- `DiscontinuityOrReset`: both complete snapshots exist but configured timing
+  rates differ or a declared sequence lane regresses;
+- `ComparableNoProgress`: a complete stable pair contains no admitted progress;
+- `ComparableAdvanced`: a complete stable pair contains a sequence advance or
+  documented second-call interval activity.
+
+The exact-frame attribution type deliberately has only `Unknown`. Microsoft
+requires a null HWND on Windows 8.1 and later, so these counters describe the
+desktop composition session rather than the Bitblock window or receipt.
+Movement cannot be promoted into displayed, dropped, duplicated, scanout, or
+physical-light claims. The official API boundary is documented by
+[`DwmGetCompositionTimingInfo`](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmgetcompositiontiminginfo)
+and [`DWM_TIMING_INFO`](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ns-dwmapi-dwm_timing_info).
+
+`tools/composition_timing_vectors.py` independently reconstructs the full
+layout, Windows presenter policy, nested receipt payload, and content-tag
+framing. Rust and Python agree on:
+
+```text
+policy    #bb.policy.sha256.t2zuewerksnmvhhjyaaplmlmfb2poptubqxpc6czwvmuwufpanrq
+artifact  #bb.presentation-artifact.sha256.sw2i52veohfmc3lqe74tzd72n6ppwxxshejxmazclwikgniqx2sq
+```
+
+One powered subject control removed the GDI-barrier requirement from the
+derived comparison. The dedicated test failed with `ComparableAdvanced`
+instead of `Unavailable`; the exact production condition was restored and the
+test passed. A session-owned live run then emitted the content tag
+`#bb.presentation-artifact.sha256.pmvfnxmzcjnz5ag26wmpdkdhbpoiofv4grxmwigofifjxj57kgya`
+with QPF success, both DWM calls at `S_OK`, successful GDI/DWM barriers, derived
+`ComparableAdvanced`, and exact-frame attribution still `Unknown`. The process
+was stopped with Ctrl+C after the occurrence. Its raw 948-byte payload was not
+journaled, so this terminal receipt is not replayable object custody. This
+checkpoint does not yet query active-output topology, persist timing artifacts
+in the display journal, attribute a frame inside DWM, or observe scanout/light.
+
+The changed definitions remint these existing families without adding a new
+metric family:
+
+```text
+display pipeline state vector       #bb.metric-definition.sha256.ptv77nvnpcousi7k5dbv426xfo3ap6x5ypusdbq4cudatrxhfgkq
+presentation fate relation          #bb.metric-definition.sha256.zt5psfzfpfyjdhaz3lenuwab363purdwj5ivm4bqfmw7scyavi3a
+domain-separation identity           #bb.metric-definition.sha256.ihlgxhjgwamgu57eostm6m2w54gxlssazapkm5r6i5j77uk6m4pa
+encoding round-trip check            #bb.metric-definition.sha256.jyxxeqpzmsteqxuquyhlkagnqmjdmxaqxhfg4lyjb4p6erl3llya
+known-answer vector verdict          #bb.metric-definition.sha256.mymmhhznsxbc5zctdsyn6hx74bzfw3ofgbl6pc4li6lm6mt4twdq
+cross-implementation digest parity   #bb.metric-definition.sha256.jkedpqcfxrjvyq7xvzbnxvsexznxeprbvnw2eq76h7jnuyslucbq
+```
+
+The final gate passes 237 library and 29 application tests in the default
+build, 240 library and 31 application tests across all research targets, all
+zero-test example targets, strict Clippy for both feature sets, formatting,
+all thirteen independent Python vector programs, the exact 1,112-definition
+registry audit, and `lake build` (6 jobs). The deliberately failing powered
+control is not counted as a pass.
+
+The fresh default executable is
+`target/composition-timing-default/release/bitblock.exe`, 1,031,168 bytes,
+SHA-256
+`A4122AFA24BC56EA888A18B261160B8B00D73D150A53E44C9977A2DF4724C980`.
+It is exactly the same file size as the preceding checked-presenter default.
+The feature-gated timing implementation is absent, but reminted metric
+definition strings deliberately change `.rdata`; therefore equal size is not
+reported as byte identity.
+
+The research executable is
+`target/composition-timing-research/release/bitblock.exe`, 1,144,320 bytes,
+SHA-256
+`392968151D1BC114B91452588FDD1A533BD3A7CB4D77259D046226678B36739E`.
+It is 22,016 bytes larger than the preceding research artifact and 113,152
+bytes larger than the same-source default. Relative to the prior research
+image, PE virtual-size deltas are `.text +18,800`, `.rdata +2,816`, `.pdata
++120`, `.xdata +240`, `.idata +52`, `.reloc +80`, and zero for `.data` and
+`.bss`. These are linked-file facts, not runtime latency, energy, or residency
+measurements; the runtime queries execute only when the explicit audit variable
+is enabled.

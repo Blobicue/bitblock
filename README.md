@@ -12,6 +12,9 @@ Bitblock is a binary coordinate space observed through a free camera.
 - On Windows, the app owns that XRGB slice and admits a submission only when
   `SetDIBitsToDevice` reports every requested scanline; this is checked GDI acceptance,
   not compositor or monitor proof.
+- A research-only Windows timing audit can bind that exact composite receipt to raw
+  before/after DWM session timing, QPC brackets, and barrier outcomes. Its per-frame
+  attribution is always `Unknown`; it does not claim displayed, dropped, scanout, or light.
 - One fixed 60 Hz tick consumes input, changes observer/world state, and produces changed frames;
   the window layer only presents pixels produced by that tick.
 - Scroll moves logarithmically between the one-pixel view and a block-filling view.
@@ -257,6 +260,11 @@ cargo run
 Remove-Item Env:BITBLOCK_DISPLAY_AUDIT -ErrorAction SilentlyContinue
 $env:BITBLOCK_DISPLAY_JOURNAL_NEW = "$PWD\display-session.bbj"
 cargo run --features protocol-research
+
+# Opt in to one raw composition-timing envelope around every checked presentation.
+# This writes content-tagged observations to stderr; the cheap default does not link it.
+$env:BITBLOCK_PRESENTATION_AUDIT = "1"
+cargo run --features protocol-research
 ```
 
 The audit compares every visible client pixel after the checked Windows
@@ -271,3 +279,12 @@ create-only: it performs the same bounded GDI/DWM observation, constructs the
 canonical artifact, synchronizes one typed record, and rereads it before
 reporting `display-artifact-stored`. It does not silently reopen, rotate,
 truncate, or overwrite a prior journal.
+
+The presentation-timing audit calls `DwmGetCompositionTimingInfo(NULL, ...)`
+before and after the checked presenter, with every API occurrence bracketed by
+`QueryPerformanceCounter`. It also retains `GdiFlush` and `DwmFlush` outcomes.
+The resulting fixed 948-byte artifact can classify only session-level timing as
+unavailable, comparable without progress, comparable with progress, or
+discontinuous/reset. Modern Windows exposes this query at desktop-composition
+session scope rather than Bitblock-frame scope, so counter movement never changes
+the exact frame's fate from `Unknown`.

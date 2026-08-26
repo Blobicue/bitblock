@@ -32,9 +32,13 @@ pub enum TagKind {
     LadderTerm,
     MetricDefinition,
     MetricSnapshot,
+    #[cfg(any(test, feature = "protocol-research"))]
+    OutputTopology,
     Policy,
     #[cfg(any(test, feature = "protocol-research"))]
     PresentationArtifact,
+    #[cfg(any(test, feature = "protocol-research"))]
+    PresentationOutputArtifact,
     Receipt,
     Registry,
     SequentialHistory,
@@ -65,9 +69,13 @@ impl TagKind {
             Self::LadderTerm => "ladder-term",
             Self::MetricDefinition => "metric-definition",
             Self::MetricSnapshot => "metric-snapshot",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::OutputTopology => "output-topology",
             Self::Policy => "policy",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::PresentationArtifact => "presentation-artifact",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::PresentationOutputArtifact => "presentation-output-artifact",
             Self::Receipt => "receipt",
             Self::Registry => "registry",
             Self::SequentialHistory => "sequential-history",
@@ -99,9 +107,13 @@ impl TagKind {
             b"ladder-term" => Self::LadderTerm,
             b"metric-definition" => Self::MetricDefinition,
             b"metric-snapshot" => Self::MetricSnapshot,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"output-topology" => Self::OutputTopology,
             b"policy" => Self::Policy,
             #[cfg(any(test, feature = "protocol-research"))]
             b"presentation-artifact" => Self::PresentationArtifact,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"presentation-output-artifact" => Self::PresentationOutputArtifact,
             b"receipt" => Self::Receipt,
             b"registry" => Self::Registry,
             b"sequential-history" => Self::SequentialHistory,
@@ -421,8 +433,10 @@ mod tests {
             TagKind::LadderTerm,
             TagKind::MetricDefinition,
             TagKind::MetricSnapshot,
+            TagKind::OutputTopology,
             TagKind::Policy,
             TagKind::PresentationArtifact,
+            TagKind::PresentationOutputArtifact,
             TagKind::Receipt,
             TagKind::Registry,
             TagKind::SequentialHistory,

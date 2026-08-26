@@ -16,7 +16,11 @@ pub mod ladder_bridge;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod optimization;
 #[cfg(any(test, feature = "protocol-research"))]
+pub mod output_topology;
+#[cfg(any(test, feature = "protocol-research"))]
 pub mod presentation;
+#[cfg(any(test, feature = "protocol-research"))]
+pub mod presentation_output;
 pub mod program;
 pub mod protocol;
 pub mod render;
@@ -30,4 +34,6 @@ pub mod tick;
 pub mod windows_present;
 #[cfg(all(windows, feature = "protocol-research"))]
 pub mod windows_timing;
+#[cfg(all(windows, feature = "protocol-research"))]
+pub mod windows_topology;
 pub mod world;
