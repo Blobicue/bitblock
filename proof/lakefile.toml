@@ -1,0 +1,6 @@
+name = "bitblock-proof"
+version = "0.1.0"
+defaultTargets = ["BitblockProof"]
+
+[[lean_lib]]
+name = "BitblockProof"

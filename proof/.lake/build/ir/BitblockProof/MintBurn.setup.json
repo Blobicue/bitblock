@@ -1,0 +1,9 @@
+{"plugins": [],
+ "package": "bitblock-proof",
+ "options": {},
+ "name": "BitblockProof.MintBurn",
+ "isModule": false,
+ "importArts":
+ {"BitblockProof.World":
+  [["C:\\Users\\Owen\\bitblock\\proof\\.lake\\build\\lib\\lean\\BitblockProof\\World.olean"]]},
+ "dynlibs": []}

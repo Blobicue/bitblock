@@ -1,0 +1,75 @@
+# Metric-exhaustion audit — 2026-08-26
+
+This checkpoint applied the uniqueness rule in [`METRICS.md`](../METRICS.md)
+again after the live TickOutcome/FrameReceipt-v2, typed DisplayReceipt-v2, and
+bounded independent RGB/depth renderer-oracle and explicit one-shot live
+display-artifact checkpoints. It admitted **zero new metric families**. The authoritative catalog
+therefore remains 1,112 families: 489 system, 339 view, and 284 world.
+
+This is a bounded closure result. It covers the current Rust source plus the
+declared future language, proof, storage, synchronization, Proof-of-History,
+Proof-of-Stake, Layer-1, renderer, scanout, and physical-display surfaces already
+named by the catalog. A genuinely new subsystem or observable can reopen the
+audit. Unit changes, statistical summaries, labels, carrier versions, and new
+collectors for an existing observable cannot.
+
+## Checks
+
+- Every `src/*.rs` state field, event, branch, error, counter, receipt field, and
+  protocol boundary was compared against the three owning catalogs.
+- The renderer-to-physical-display path was traced separately through the CPU
+  framebuffer, composite buffer, mapped surface, backend submission, Windows
+  screen raster, compositor/output state, scanout fate, and external sensor.
+- Every candidate was compared to the closest admitted family. A candidate was
+  rejected when it was derivable from that family, merely another closed label
+  or carrier/schema version, or a missing collector for an already named value.
+- `python tools/metric_registry.py audit` reported 1,112 records, 1,112 readable
+  names, 1,112 unique definition tags, zero legacy numeric identifiers, zero
+  unresolved references, and exact manifest agreement.
+
+## Pixel and presentation closure
+
+| Observable boundary | Existing family or authority object | Remaining evidence gap |
+|---|---|---|
+| Complete post-overlay CPU XRGB slice and world-pass depth | `#bb.metric.render.final-framebuffer-storage-contract`, `#bb.metric.hash.final-framebuffer-digest`, `#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector` | A stdlib-only Python six-face oracle independently matches every XRGB word and depth class in two named direct-cube frames, with retained finite-depth bit residuals bounded to four ULP. The 934-pixel corpus excludes aggregate, point, inside-bit, near-plane, arbitrary-orientation/FOV, and cross-platform cases; it is not universal equivalence. |
+| Game/sidebar composition | `#bb.metric.visual.render-input-output-binding-verdict`, `#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector` | A bounded two-arm harness distinguishes the strided production compositor from the frozen two-buffer storage reference, but both compositor arms still share sidebar painter semantics. The independent six-face oracle covers world rendering and the fixed crosshair, not sidebar glyph semantics. |
+| Mapped backend surface before submission | `#bb.metric.visual.mapped-surface-copy-mismatch-vector` | Windows now owns the complete copy target, but mismatch witnesses and non-Windows internals remain separate instrumentation; the copy says nothing about later compositor behavior. |
+| Backend submission attempt/result | `#bb.metric.render.backend-submission-event` | Windows now checks the exact requested/returned `SetDIBitsToDevice` scanline count and error boundary before receipt publication. A durable event relation and other platform internals remain unimplemented. |
+| OS-exposed client raster | `#bb.metric.visual.compositor-capture-comparison` | The feature-gated F4 path now validates the current committed composite occurrence, constructs DisplayArtifact v1 from one Windows GDI/DWM sample, and locally syncs/rereads it through the typed journal. This checkpoint did not run that manual HWND assay, and any finite sample remains OS desktop-raster evidence rather than guaranteed scanout. |
+| DPI/ICC/HDR/output configuration and transforms | `#bb.metric.visual.display-pipeline-state-vector`, `#bb.metric.visual.display-transform-provenance-relation` | Configuration queries do not prove the transform actually emitted. |
+| Drop/duplicate/partial/mixed-frame scanout | `#bb.metric.visual.presentation-fate-relation`, `#bb.metric.visual.scanout-composition-witness-vector` | Requires independent compositor or high-speed capture evidence. |
+| Panel RGB/luminance or emitted light | `#bb.metric.visual.physical-display-sensor-comparison` | `N/A` without a calibrated external instrument. |
+| Durable availability of referenced expected/captured pixels | `#bb.metric.store.receipt-object-persistence-inventory`, `#bb.metric.hash.content-reference-closure` | The explicit live path can locally sync/reread the artifact's embedded receipt and pixel bytes, but referenced policy, TickOutcome, and FrameInput objects are not supplied. No manual live sample or sudden-power assay was run here; transitive closure, external custody, and latest-prefix authority remain open. |
+
+The tempting name `literal-displayed-pixels` was rejected because it conflates
+three distinct observations: an OS screen raster, scanout composition, and
+physical panel output. Those boundaries must remain separate.
+
+## Rejected source-shaped candidates
+
+| Candidate shape | Why it is not a new family |
+|---|---|
+| FrameReceipt-v2 digest per stream | The stream is a closed label inside `#bb.metric.hash.frame-provenance-receipt-digest`. |
+| Successor-path length, skipped outcomes, or skipped attempts | Scalar projections of `#bb.metric.replay.receipt-tick-gap-evidence-relation`; verification cost is a view of the work vector. |
+| Paired-publication atomicity counter | The prepare/reserve/backend/publication outcome is already part of frame provenance plus `#bb.metric.render.backend-submission-event`. |
+| Frame/display ledger head or length per epoch | Head and length are projections of the ordered receipt relation; schema version is provenance, not a new observation. |
+| DisplayReceipt-v2 digest as a standalone metric | It is the content-addressed carrier for compositor comparison and presentation fate. |
+| Display mismatch count, first index, bounds, rate, stage, or capture duration | Counts, extrema, labels, bounds, and timestamp arithmetic are views of the complete compositor comparison. |
+| Frame RGB means, ratios, popcount, or nonblack ratio | Deterministic summaries of the exact final palette/pixel distribution; invalid high bytes already have their own witness vector. |
+| One metric per protocol/storage/display error variant | Error kind is a dimension of the relevant admission or failure relation. |
+| One metric per optimization mismatch field | A reason label inside candidate/reference equivalence and framebuffer mismatch. |
+| World bounds volume under another integer width | Derived from coordinate bounds/axis extents; inability to represent it is already the bounds-volume guard. |
+| Sidebar current-frame display proof | Causally cyclic. The predecessor-only rule is already measured by `#bb.metric.visual.frame-provenance-dependency-cycle-vector`. |
+
+## Stopping result
+
+The catalog is exhausted for this reviewed scope when all three statements hold:
+
+1. the exact registry audit is green;
+2. independent source and pixel-boundary reviews produce no irreducible
+   observable absent from the registry; and
+3. every rejected candidate has a named owner or a stated invalidity mechanism.
+
+All three hold at this checkpoint. Missing implementation, collection,
+durability, independent verification, or external instrumentation remains real
+work, but does not authorize inventing another name for an existing metric.
