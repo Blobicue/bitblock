@@ -31,7 +31,9 @@ jobs:
         run: |
           set -e
           for t in tools/*.py; do
-            case "$t" in tools/metric_registry.py) continue ;; esac
+            # metric_registry wants a subcommand; mirror_timeline1 needs the local
+            # timeline-1 source directory - neither is a bare validator.
+            case "$t" in tools/metric_registry.py|tools/mirror_timeline1.py) continue ;; esac
             echo "== $t"
             python3 "$t" > /dev/null
           done

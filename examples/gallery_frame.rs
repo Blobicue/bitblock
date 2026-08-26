@@ -13,20 +13,29 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use bitblock::camera::{Camera, Vec3, DEFAULT_VERTICAL_FOV_RADIANS};
+use bitblock::camera::{Camera, DEFAULT_VERTICAL_FOV_RADIANS, Vec3};
 use bitblock::program::Program;
-use bitblock::render::{bounds_aabb, Renderer};
+use bitblock::render::{Renderer, bounds_aabb};
 use bitblock::world::World;
 
 const SIZE: u32 = 801;
 
 fn main() {
     let mut args = env::args().skip(1);
-    let program_path =
-        args.next().expect("usage: gallery_frame <program.bb> <out.png> [yaw-deg] [pitch-deg]");
-    let out_path = args.next().expect("usage: gallery_frame <program.bb> <out.png> [yaw-deg] [pitch-deg]");
-    let yaw_deg: f64 = args.next().map(|s| s.parse().expect("yaw degrees")).unwrap_or(35.0);
-    let pitch_deg: f64 = args.next().map(|s| s.parse().expect("pitch degrees")).unwrap_or(-22.0);
+    let program_path = args
+        .next()
+        .expect("usage: gallery_frame <program.bb> <out.png> [yaw-deg] [pitch-deg]");
+    let out_path = args
+        .next()
+        .expect("usage: gallery_frame <program.bb> <out.png> [yaw-deg] [pitch-deg]");
+    let yaw_deg: f64 = args
+        .next()
+        .map(|s| s.parse().expect("yaw degrees"))
+        .unwrap_or(35.0);
+    let pitch_deg: f64 = args
+        .next()
+        .map(|s| s.parse().expect("pitch degrees"))
+        .unwrap_or(-22.0);
 
     let source = fs::read_to_string(&program_path).expect("read program");
     let program = Program::parse(&source).expect("parse program");
