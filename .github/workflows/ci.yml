@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main, timeline-2]
+  pull_request:
+
+jobs:
+  rust:
+    name: rust (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml pins 1.96.0; rustup honors it on first cargo invocation.
+      - name: format
+        run: cargo fmt --check
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: test
+        run: cargo test
+
+  python-tools:
+    name: python vector tools (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: standalone vector tools
+        run: |
+          set -e
+          for t in tools/*.py; do
+            case "$t" in tools/metric_registry.py) continue ;; esac
+            echo "== $t"
+            python3 "$t" > /dev/null
+          done
+      - name: metric registry audit
+        run: python3 tools/metric_registry.py audit
+
+  lean:
+    name: lean proof capsule (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          auto-config: false
+          build: true
+          test: false
+          use-github-cache: true
+        # The capsule lives in proof/; lean-action builds the lake root it finds.
+        # LadderLangQuotedByteParity.lean is deliberately outside this target
+        # (it needs the separately pinned LadderLang checkout) and is not CI'd.
+      - name: build proof capsule
+        run: lake build
+        working-directory: proof
