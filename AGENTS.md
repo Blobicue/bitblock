@@ -169,14 +169,21 @@ each coined in their own tests, and it was fusing them into a shared subsystem.
 ## Proving a change did not break anything
 
 ```bash
-python tools/bbverify.py quick     # 11s, per edit
-python tools/bbverify.py full      # 40s, per commit
+python tools/bbverify.py quick     # 3.7s, per edit
+python tools/bbverify.py full      # 8s, per commit
 ```
 
 "Nothing broke" means something specific in this repository: **no canonical byte
 moved**. 101 literal content tags are asserted across the Rust tests, and 24
 Python suites rebuild those same payloads without importing any Rust, so a moved
 byte fails both from opposite directions.
+
+Both tiers build once and then run everything at once. `cargo test` compiles
+three test binaries and walks them one after another -- 2.5s + 2.6s + 2.3s of
+mostly idle CPU -- while `cargo test --no-run` costs 0.4s warm and reports where
+those binaries are. Running them concurrently, with clippy and the rest
+alongside, makes a tier cost its slowest single job instead of the sum: 10.7s to
+3.7s for quick, 39.6s to 8s for full.
 
 The two tiers split by what each detects, not by thoroughness. `quick` is
 `cargo test` plus clippy -- the literal tag assertions live inside the Rust
@@ -193,7 +200,7 @@ literal tag until both were added, with each side asserting the same digest.
 ### How sensitive it actually is
 
 ```bash
-python tools/bbmutate.py           # 25 modules, ~2.5 minutes
+python tools/bbmutate.py           # 25 modules, a few minutes
 python tools/bbmutate.py frame     # before refactoring one module
 ```
 

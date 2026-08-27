@@ -85,6 +85,7 @@ RE_HEADING = re.compile(r"^(#{1,6}) +(.+?)\s*$", re.M)
 RE_METRIC_REF = re.compile(r"#bb\.metric\.[a-z0-9-]+\.[a-z0-9-]+")
 RE_TAG_KIND = re.compile(r"#bb\.([a-z0-9-]+)\.")
 RE_SRC_CITE = re.compile(r"`?(src/[a-z0-9_]+\.rs)`?")
+RE_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 RE_LEAN_DECL = re.compile(r"^(theorem|lemma|def|structure|inductive) ([^\s:]+)", re.M)
 
 STOP = {
@@ -680,6 +681,19 @@ def duplication(modules: list[dict], window: int = 8) -> dict:
     that pair's overlap is fixtures and its production overlap is a third the
     size.
     """
+    # Each distinct normalised line becomes an integer, so a window is a tuple of
+    # ints rather than a joined string. Comparing and hashing those is what makes
+    # this stage cheap: joining eight lines at all ~47,000 positions cost 17.6s
+    # of the index's 18, and interning takes the same work to well under a second
+    # for an identical result.
+    interned: dict[str, int] = {}
+
+    def line_id(text: str) -> int:
+        got = interned.get(text)
+        if got is None:
+            got = interned[text] = len(interned)
+        return got
+
     scopes: dict[str, dict] = {"production": {}, "test": {}}
     for mod in modules:
         text = read(ROOT / mod["path"])
@@ -689,19 +703,20 @@ def duplication(modules: list[dict], window: int = 8) -> dict:
             ("production", lines[:edge], 0),
             ("test", lines[edge:], edge),
         ):
-            scopes[scope][mod["name"]] = [
-                (i + 1 + offset, normalise(l))
-                for i, l in enumerate(block)
-                if normalise(l)
-            ]
+            kept = []
+            for i, raw in enumerate(block):
+                shape = normalise(raw)
+                if shape is not None:
+                    kept.append((i + 1 + offset, line_id(shape)))
+            scopes[scope][mod["name"]] = kept
 
     out: dict[str, dict] = {}
     for scope, corpus in scopes.items():
-        seeds: dict[str, list] = {}
+        seeds: dict[tuple, list] = {}
         for name, kept in corpus.items():
-            for i in range(len(kept) - window + 1):
-                key = "\n".join(x for _, x in kept[i:i + window])
-                seeds.setdefault(key, []).append((name, i))
+            shapes = [x for _, x in kept]
+            for i in range(len(shapes) - window + 1):
+                seeds.setdefault(tuple(shapes[i:i + window]), []).append((name, i))
         claimed: set = set()
         regions = []
         for occurrences in seeds.values():
@@ -747,7 +762,12 @@ def dead_surface(modules: list[dict]) -> dict:
     acting on it, because a name can also be reached through a trait impl or a
     macro, which this scan does not model.
     """
-    corpus = {}
+    # Count identifiers once per file instead of running one `\bitem\b` regex per
+    # item across every file. That was 561 items x 40 files of scanning and cost
+    # 21.7s of the index's 22; tallying tokens up front is the same answer in a
+    # fraction of a second. Rust identifiers are exactly `\w+` runs, so a token
+    # tally and a word-boundary search agree by construction.
+    corpus: dict[str, tuple] = {}
     for path in (
         sorted(SRC.glob("*.rs"))
         + sorted(EXAMPLES.glob("*.rs"))
@@ -756,7 +776,10 @@ def dead_surface(modules: list[dict]) -> dict:
         text = read(path)
         lines = text.splitlines()
         edge = min(test_scope_line(text), len(lines))
-        corpus[path.stem] = ("\n".join(lines[:edge]), "\n".join(lines[edge:]))
+        corpus[path.stem] = (
+            tally(RE_IDENT.findall("\n".join(lines[:edge]))),
+            tally(RE_IDENT.findall("\n".join(lines[edge:]))),
+        )
 
     owners: dict[str, set] = {}
     for mod in modules:
@@ -765,15 +788,14 @@ def dead_surface(modules: list[dict]) -> dict:
 
     unreferenced, module_only = [], []
     for item in sorted(owners):
-        word = re.compile(r"\b%s\b" % re.escape(item))
         own = other = tests = 0
         for name, (prod, test) in corpus.items():
-            here = len(word.findall(prod))
+            here = prod.get(item, 0)
             if name in owners[item]:
                 own += max(here - 1, 0)  # discount the declaration itself
             else:
                 other += here
-            tests += len(word.findall(test))
+            tests += test.get(item, 0)
         if other or tests:
             continue
         row = {"item": item, "modules": sorted(owners[item])}
