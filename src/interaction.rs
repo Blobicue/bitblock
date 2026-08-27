@@ -572,14 +572,12 @@ impl FromStr for InteractionTape {
             }
             let action = parse_action(instruction, line, command)?;
             debug_assert!(action.is_canonical());
-            actions.try_reserve_exact(1).map_err(|_| {
-                InteractionTapeParseError::new(
-                    line,
-                    InteractionTapeParseErrorKind::AllocationRefused {
-                        subject: "accepted actions",
-                    },
-                )
-            })?;
+            reserve_parse_push(
+                actions,
+                MAX_INTERACTION_ACTIONS_PER_RECORD,
+                line,
+                "accepted actions",
+            )?;
             actions.push(action);
             total_actions += 1;
         }
@@ -611,19 +609,47 @@ fn push_parsed_record(
     actions: Vec<AcceptedAction>,
     line: usize,
 ) -> Result<(), InteractionTapeParseError> {
-    records.try_reserve_exact(1).map_err(|_| {
-        InteractionTapeParseError::new(
-            line,
-            InteractionTapeParseErrorKind::AllocationRefused {
-                subject: "tick records",
-            },
-        )
-    })?;
+    reserve_parse_push(records, MAX_INTERACTION_TAPE_RECORDS, line, "tick records")?;
     records.push(TickRecord {
         ordinal: records.len() as u64,
         actions,
     });
     Ok(())
+}
+
+fn reserve_parse_push<T>(
+    values: &mut Vec<T>,
+    maximum: usize,
+    line: usize,
+    subject: &'static str,
+) -> Result<(), InteractionTapeParseError> {
+    if values.len() < values.capacity() {
+        return Ok(());
+    }
+
+    let target_capacity = next_parse_capacity(values.capacity(), maximum);
+    let additional = target_capacity.checked_sub(values.len()).ok_or_else(|| {
+        InteractionTapeParseError::new(
+            line,
+            InteractionTapeParseErrorKind::AllocationRefused { subject },
+        )
+    })?;
+    if additional == 0 {
+        return Err(InteractionTapeParseError::new(
+            line,
+            InteractionTapeParseErrorKind::AllocationRefused { subject },
+        ));
+    }
+    values.try_reserve_exact(additional).map_err(|_| {
+        InteractionTapeParseError::new(
+            line,
+            InteractionTapeParseErrorKind::AllocationRefused { subject },
+        )
+    })
+}
+
+fn next_parse_capacity(current: usize, maximum: usize) -> usize {
+    current.saturating_mul(2).max(1).min(maximum)
 }
 
 fn is_action_command(command: &str) -> bool {
@@ -1313,6 +1339,25 @@ impl std::error::Error for InteractionTapeCodecError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parser_capacity_schedule_is_geometric_and_capped() {
+        fn growth_steps(maximum: usize) -> usize {
+            let mut capacity = 0;
+            let mut steps = 0;
+            while capacity < maximum {
+                let next = next_parse_capacity(capacity, maximum);
+                assert!(next > capacity);
+                capacity = next;
+                steps += 1;
+            }
+            steps
+        }
+
+        assert_eq!(growth_steps(MAX_INTERACTION_ACTIONS_PER_RECORD), 17);
+        assert_eq!(growth_steps(MAX_INTERACTION_TAPE_RECORDS), 15);
+        assert_eq!(next_parse_capacity(9, 10), 10);
+    }
 
     fn all_variants_source() -> &'static str {
         "# comments and blank lines do not enter the tape\n\

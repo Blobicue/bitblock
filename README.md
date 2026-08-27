@@ -102,7 +102,8 @@ accepted-action reducer and fixed-tick function.
 Headless runs always start from the empty program, permanent bedrock, observer spawn, visible
 sidebar, and the default 1201 x 801 output. Before state is constructed, a pure shadow interpreter
 checks the complete tape against payload/action limits and cumulative resize, composition, raster,
-and world-scan work budgets. Invalid finite accumulation and over-budget work fail closed.
+world-coordinate, sparse-chunk-word, edit, and canonical-ordering work budgets. Invalid finite
+accumulation and over-budget work fail closed.
 
 The report contains the tape tag, per-tick outcome/world/history/camera and CPU-frame commitments,
 and the final state. Those lines are reproducible projections, not yet one canonical run receipt

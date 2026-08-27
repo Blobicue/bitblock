@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::io::{self, Read};
 use std::num::NonZeroU32;
@@ -51,7 +51,7 @@ use bitblock::windows_present::WindowsPixelSurface;
 use bitblock::windows_timing::observe_checked_present;
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::windows_topology::observe_active_output;
-use bitblock::world::{BEDROCK_COORD, World};
+use bitblock::world::{BEDROCK_COORD, CHUNK_SIDE, CHUNK_WORDS, Coord, World};
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::{display_artifact::DisplayCaptureArtifact, storage::StorageLimits};
 #[cfg(all(windows, feature = "protocol-research"))]
@@ -93,7 +93,9 @@ const HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS: u128 = 268_435_456;
 const HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS: u128 = 1_073_741_824;
 const HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS: u128 = 268_435_456;
 const HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS: u128 = 1_073_741_824;
 const HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS: u128 = 1_073_741_824;
+const HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS: u128 = 65_536;
 const HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND: u128 = 12;
 const HEADLESS_SIMULATION_MAX_SOURCE_BYTES: usize = MAX_INTERACTION_TAPE_PAYLOAD_BYTES;
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
@@ -2298,6 +2300,78 @@ fn headless_possible_world_bits(
         })
 }
 
+type HeadlessChunkKey = (i64, i64, i64);
+
+fn headless_chunk_key(coord: Coord) -> HeadlessChunkKey {
+    (
+        coord.x.div_euclid(CHUNK_SIDE),
+        coord.y.div_euclid(CHUNK_SIDE),
+        coord.z.div_euclid(CHUNK_SIDE),
+    )
+}
+
+fn headless_insert_possible_exact(
+    possible_exact_bits: &mut HashSet<Coord>,
+    possible_exact_chunk_counts: &mut HashMap<HeadlessChunkKey, usize>,
+    coord: Coord,
+) -> Result<(), io::Error> {
+    if possible_exact_bits.insert(coord) {
+        let count = possible_exact_chunk_counts
+            .entry(headless_chunk_key(coord))
+            .or_default();
+        *count = count.checked_add(1).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "possible exact chunk population overflow",
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn headless_remove_possible_exact(
+    possible_exact_bits: &mut HashSet<Coord>,
+    possible_exact_chunk_counts: &mut HashMap<HeadlessChunkKey, usize>,
+    coord: Coord,
+) {
+    if !possible_exact_bits.remove(&coord) {
+        return;
+    }
+    let key = headless_chunk_key(coord);
+    let remove_chunk = {
+        let count = possible_exact_chunk_counts
+            .get_mut(&key)
+            .expect("a possible exact bit must retain its chunk count");
+        *count = count
+            .checked_sub(1)
+            .expect("a possible exact chunk count must be positive");
+        *count == 0
+    };
+    if remove_chunk {
+        possible_exact_chunk_counts.remove(&key);
+    }
+}
+
+fn headless_possible_chunk_count(
+    possible_exact_chunks: usize,
+    unresolved_aim_place_bits: u128,
+) -> Result<u128, io::Error> {
+    (possible_exact_chunks as u128)
+        .checked_add(unresolved_aim_place_bits)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "possible chunk population overflow",
+            )
+        })
+}
+
+fn headless_chunk_word_units(possible_chunks: u128) -> Result<u128, io::Error> {
+    possible_chunks
+        .checked_mul(CHUNK_WORDS as u128)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "chunk-word charge overflow"))
+}
+
 fn headless_world_ordering_units(population: u128) -> Result<u128, io::Error> {
     let levels = if population <= 1 {
         1
@@ -2320,6 +2394,8 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
     let mut width = INITIAL_OUTPUT_WIDTH;
     let mut height = INITIAL_VIEWPORT;
     let mut possible_exact_bits = HashSet::from([BEDROCK_COORD]);
+    let mut possible_exact_chunk_counts =
+        HashMap::from([(headless_chunk_key(BEDROCK_COORD), 1_usize)]);
     let mut definite_exact_bits = HashSet::from([BEDROCK_COORD]);
     let mut unresolved_aim_place_bits = 0_u128;
     let mut movement = [false; 6];
@@ -2328,11 +2404,16 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
     let mut raster_sample_tests = 0_u128;
     let mut world_coordinate_tests = 0_u128;
     let mut edit_coordinate_tests = 0_u128;
+    let mut chunk_word_tests = 0_u128;
     let mut world_ordering_units = 0_u128;
 
     for record in tape.records() {
         let mut record_peak_possible_bits =
             headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+        let mut record_peak_possible_chunks = headless_possible_chunk_count(
+            possible_exact_chunk_counts.len(),
+            unresolved_aim_place_bits,
+        )?;
         let mut aim_actions = 0_u128;
         let mut wheel = 0.0_f64;
         let mut look_x = 0.0_f64;
@@ -2429,6 +2510,10 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
                         possible_exact_bits.len(),
                         unresolved_aim_place_bits,
                     )?;
+                    let possible_chunks_before = headless_possible_chunk_count(
+                        possible_exact_chunk_counts.len(),
+                        unresolved_aim_place_bits,
+                    )?;
                     if matches!(edit.operation, Operation::Off | Operation::Toggle) {
                         checked_headless_charge(
                             &mut edit_coordinate_tests,
@@ -2437,21 +2522,44 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
                             "edit-coordinate-test",
                             record.ordinal(),
                         )?;
+                        checked_headless_charge(
+                            &mut chunk_word_tests,
+                            headless_chunk_word_units(possible_chunks_before)?,
+                            HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+                            "chunk-word-test",
+                            record.ordinal(),
+                        )?;
                     }
                     if edit.coord != BEDROCK_COORD {
                         match edit.operation {
                             Operation::On => {
-                                possible_exact_bits.insert(edit.coord);
+                                headless_insert_possible_exact(
+                                    &mut possible_exact_bits,
+                                    &mut possible_exact_chunk_counts,
+                                    edit.coord,
+                                )?;
                             }
                             Operation::Off => {
-                                possible_exact_bits.remove(&edit.coord);
+                                headless_remove_possible_exact(
+                                    &mut possible_exact_bits,
+                                    &mut possible_exact_chunk_counts,
+                                    edit.coord,
+                                );
                                 definite_exact_bits.remove(&edit.coord);
                             }
                             Operation::Toggle => {
                                 if definite_exact_bits.remove(&edit.coord) {
-                                    possible_exact_bits.remove(&edit.coord);
+                                    headless_remove_possible_exact(
+                                        &mut possible_exact_bits,
+                                        &mut possible_exact_chunk_counts,
+                                        edit.coord,
+                                    );
                                 } else {
-                                    possible_exact_bits.insert(edit.coord);
+                                    headless_insert_possible_exact(
+                                        &mut possible_exact_bits,
+                                        &mut possible_exact_chunk_counts,
+                                        edit.coord,
+                                    )?;
                                 }
                             }
                         }
@@ -2474,6 +2582,20 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
             record_peak_possible_bits = record_peak_possible_bits.max(
                 headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?,
             );
+            let possible_chunks = headless_possible_chunk_count(
+                possible_exact_chunk_counts.len(),
+                unresolved_aim_place_bits,
+            )?;
+            if possible_chunks > HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "headless possible-chunk-count policy exceeded at tick {}: required {possible_chunks}, limit {HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS}",
+                        record.ordinal()
+                    ),
+                ));
+            }
+            record_peak_possible_chunks = record_peak_possible_chunks.max(possible_chunks);
         }
 
         let possible_world_bits =
@@ -2545,6 +2667,18 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
             "world-coordinate-test",
             record.ordinal(),
         )?;
+        let tick_chunk_word_tests = headless_chunk_word_units(record_peak_possible_chunks)?
+            .checked_mul(world_scans)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "chunk-word charge overflow")
+            })?;
+        checked_headless_charge(
+            &mut chunk_word_tests,
+            tick_chunk_word_tests,
+            HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+            "chunk-word-test",
+            record.ordinal(),
+        )?;
         let world_tag_scans = 2_u128
             .checked_add(u128::from(has_edit_action))
             .and_then(|scans| scans.checked_add(u128::from(game_dirty)))
@@ -2567,11 +2701,22 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
     let final_tick = tape.records().last().map_or(0, |record| record.ordinal());
     let possible_world_bits =
         headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+    let possible_chunks = headless_possible_chunk_count(
+        possible_exact_chunk_counts.len(),
+        unresolved_aim_place_bits,
+    )?;
     checked_headless_charge(
         &mut world_coordinate_tests,
         possible_world_bits,
         HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
         "world-coordinate-test",
+        final_tick,
+    )?;
+    checked_headless_charge(
+        &mut chunk_word_tests,
+        headless_chunk_word_units(possible_chunks)?,
+        HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+        "chunk-word-test",
         final_tick,
     )?;
     checked_headless_charge(
@@ -2955,10 +3100,10 @@ impl ApplicationHandler for App {
         if !self.mouse_captured {
             return;
         }
-        if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
-            if let Err(error) = self.apply_accepted_action(AcceptedAction::LookDelta(x, y)) {
-                eprintln!("accepted-action-refused\t{error}");
-            }
+        if let DeviceEvent::MouseMotion { delta: (x, y) } = event
+            && let Err(error) = self.apply_accepted_action(AcceptedAction::LookDelta(x, y))
+        {
+            eprintln!("accepted-action-refused\t{error}");
         }
     }
 }
@@ -4701,6 +4846,16 @@ fit
     }
 
     #[test]
+    fn headless_preflight_refuses_the_possible_chunk_boundary_directly() {
+        let source = format!("tick\n{}", "place\n".repeat(65_536));
+        let tape = InteractionTape::parse(&source).unwrap();
+        let error = preflight_headless_tape(&tape).unwrap_err();
+
+        assert!(error.to_string().contains("possible-chunk-count"));
+        assert!(error.to_string().contains("required 65537, limit 65536"));
+    }
+
+    #[test]
     fn headless_preflight_bounds_composition_raster_and_world_scan_lanes() {
         let composition_source =
             format!("tick\nresize 4096 4096\n{}", "tick\nsidebar\n".repeat(16));
@@ -4713,7 +4868,7 @@ fit
         );
 
         let raster_source = "tick\nresize 4096 4096\nexact on 1 0 0\nexact on 2 0 0\nexact on 3 0 0\nexact on 4 0 0\nexact on 5 0 0\n";
-        let raster = InteractionTape::parse(&raster_source).unwrap();
+        let raster = InteractionTape::parse(raster_source).unwrap();
         assert!(
             preflight_headless_tape(&raster)
                 .unwrap_err()
@@ -4738,13 +4893,28 @@ fit
                 .contains("world-coordinate-test")
         );
 
-        let ascending = (1..=25_000)
-            .map(|x| format!("exact on {x} 0 0\n"))
+        let packed_coord = |index: i64| {
+            let chunk = index.div_euclid(16 * 16 * 16);
+            let local = index.rem_euclid(16 * 16 * 16);
+            (
+                chunk * CHUNK_SIDE + local.rem_euclid(CHUNK_SIDE),
+                local.div_euclid(CHUNK_SIDE).rem_euclid(CHUNK_SIDE),
+                local.div_euclid(CHUNK_SIDE * CHUNK_SIDE),
+            )
+        };
+        let ascending = (1_i64..=25_000)
+            .map(|index| {
+                let (x, y, z) = packed_coord(index);
+                format!("exact on {x} {y} {z}\n")
+            })
             .collect::<Vec<_>>()
             .concat();
-        let descending = (1..=25_000)
+        let descending = (1_i64..=25_000)
             .rev()
-            .map(|x| format!("exact off {x} 0 0\n"))
+            .map(|index| {
+                let (x, y, z) = packed_coord(index);
+                format!("exact off {x} {y} {z}\n")
+            })
             .collect::<Vec<_>>()
             .concat();
         let edit_scan_source = format!("tick\nresize 1 1\n{ascending}{descending}");
@@ -4770,6 +4940,22 @@ fit
                 .unwrap_err()
                 .to_string()
                 .contains("world-ordering")
+        );
+
+        let sparse_chunks = (1..=10_000)
+            .map(|x| format!("exact on {} 0 0\n", i64::from(x) * CHUNK_SIDE))
+            .collect::<Vec<_>>()
+            .concat();
+        let chunk_scan_source = format!(
+            "tick\nresize 1 1\n{sparse_chunks}{}",
+            "tick\n".repeat(1_000)
+        );
+        let chunk_scan = InteractionTape::parse(&chunk_scan_source).unwrap();
+        assert!(
+            preflight_headless_tape(&chunk_scan)
+                .unwrap_err()
+                .to_string()
+                .contains("chunk-word-test")
         );
     }
 }

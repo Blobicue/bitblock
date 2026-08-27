@@ -2282,17 +2282,19 @@ and emitted light remain separate evidence boundaries.
 
 ### Metric remint, policies, and final gates
 
-Nine existing definitions changed; none is a new family:
+Nine existing definitions changed at that checkpoint; none was a new family.
+Four live registry pointers in this historical list were advanced again by the
+later InteractionTape checkpoint:
 
 ```text
 compositor capture comparison       #bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq
-display pipeline state vector       #bb.metric-definition.sha256.ni5niivvuvoqwmextlvad3lhfjvvr7fztoknle64pdrobq7x3jfq
+display pipeline state vector       #bb.metric-definition.sha256.hs534mepahw52fx5ehpa2wuc365usry7akwnimknuavkc3gljyoa
 presentation fate relation          #bb.metric-definition.sha256.onmlgqlhezpgwer7pm5jpzumrfsoyhfre2k6cmmemvyt74jryxbq
-domain-separation identity          #bb.metric-definition.sha256.wovhqsufn54kbz6shech57fypqmxmu2u6aobwm2an6hyis3z7k5q
-encoding round-trip check            #bb.metric-definition.sha256.x4ujkhufvitc42umdgovwg3g26wmilsd5q4rnwgzhzymi7gxre4q
+domain-separation identity          #bb.metric-definition.sha256.b2uxj4hkepxslna7wlktcoe4thlszcxfqs43ze6judtsawi2ym6q
+encoding round-trip check            #bb.metric-definition.sha256.2npmiwjtmvulaeodwxgpk4wx2pzpzvvlbbnd4jjn7iozkwnzsv2a
 frame-provenance receipt digest      #bb.metric-definition.sha256.ntg7gxatkwreu2rhm7g72hunnpka7arngljoagz3bpdfozblrtma
-known-answer vector verdict          #bb.metric-definition.sha256.blkun3cnmr5xmsvcxqcir27vd2ygnw5z7vkoqgptnqr66z33wy2q
-cross-implementation digest parity   #bb.metric-definition.sha256.ijbtjkk6p7cgum2yirvqh62wcp4hymmsfrv2vjsxrtl2srdf3bcq
+known-answer vector verdict          #bb.metric-definition.sha256.hgtisylvm66vgwhxo76austomilhsuntnigkrljhxqnok4tgpapa
+cross-implementation digest parity   #bb.metric-definition.sha256.e3twhjvyxiudc4mdldvvxkfh3ljog3gcltfarzxw7pknpnseisoa
 store recovery outcome               #bb.metric-definition.sha256.ma25hfuvb7h64lips6tvha72wdjdb36ioiq4bxwcnpm2ixw6jx7a
 ```
 
@@ -2320,3 +2322,231 @@ SHA-256
 `963EF42F22A75C6DA7666A7A3FC3BAD72049C8BAA607A3365C76FAF20C7233A8`.
 It is 246,784 bytes larger than the same-source default. These are linked-file
 size and digest facts, not runtime latency, energy, or memory measurements.
+
+## Accepted-action InteractionTape and headless-fold checkpoint
+
+This checkpoint adds no metric family. The registry remains exactly 1,112
+readable aliases with 1,112 unique definition tags: 489 system, 339 view, and
+284 world. Tape identity, tick/action counts, opcodes, result tags, empty frame
+heads, and resource-refusal labels are carriers, projections, or closed labels
+owned by existing replay, input, hash, render, provenance, and deterministic
+resource-admission families.
+
+### InteractionTape v1
+
+`src/interaction.rs` defines schema `bitblock/interaction-tape/v1` under the
+existing readable `intent` kind. It records normalized actions already accepted
+by the application, not raw platform events. The canonical big-endian payload
+is:
+
+```text
+u64 record_count
+u64 total_action_count
+repeat record_count:
+    u64 ordinal
+    u32 action_count
+    repeat action_count:
+        u8 opcode | opcode payload
+```
+
+Ordinals must be exactly `0..record_count`; explicit empty records preserve idle
+ticks. Opcodes 0 through 9 are respectively move edge, look delta, wheel lines,
+aim delete, aim place, exact Edit, fit world, toggle sidebar, resize, and clear
+motion. Movement stores one closed control byte plus a canonical Boolean. Look
+and wheel store finite IEEE-754 `f64` bits, including signed zero, and resize
+stores two `u32` lanes. Exact Edit embeds the existing fixed 25-byte encoding.
+The decoder refuses undefined opcodes/controls, noncanonical Booleans,
+nonfinite floats, noncontiguous ordinals, impossible/truncated counts, trailing
+bytes, and any payload whose strict re-encoding differs.
+
+The text form begins every record with `tick`; subsequent source lines preserve
+accepted-action order until the next `tick`. Its commands are `move`, `look`,
+`wheel`, `delete`, `place`, `exact`, `fit`, `sidebar`, `resize`, and
+`clear-motion`. The `exact` command is explicitly a scripted Edit-channel lane;
+no current winit mouse or keyboard adapter emits it. F4/F5, presentation,
+topology, capture, and storage operations have no tape opcode.
+
+The closed codec caps are 16 MiB canonical payload, 16,384 records, 65,536
+actions per record, and 262,144 total actions. The CLI also bounds source reads
+to 16 MiB before UTF-8 decoding, so an oversized source is not first loaded
+without limit. Text parsing uses explicit fallible geometric capacity growth
+rather than requesting an exact one-element extension for every push. A
+maximum-sized action vector therefore has 17 bounded growth steps and the
+record vector has 15; a powered schedule test freezes both counts.
+
+The independent Rust/Python canonical vector fixes a 93-byte payload and tag:
+
+```text
+#bb.intent.sha256.zhqcq35tj65fukzzkpix6lo45nxsyfrqhzlun2ktpqsegsthiuwa
+```
+
+The Python oracle rejects 15/15 malformed controls spanning header/count,
+ordinal, opcode, control, Boolean, float, nested Edit, truncation, and trailing
+byte faults. An initially debug-only command-token consumption accidentally
+disappeared in optimized builds because it lived inside `debug_assert_eq!`.
+The parser now consumes the token unconditionally and only asserts its value;
+the release parser and release headless CLI are separately exercised.
+
+### Shared reducer and headless execution boundary
+
+Live winit adapters and the tape call one `App::apply_accepted_action` reducer.
+Every tape record then calls the production `fixed_tick` exactly once. The
+headless constructor pins the sidebar predecessor to `(none, 0, AuditDisabled)`
+and never consults `BITBLOCK_DISPLAY_AUDIT`; this removes machine/platform audit
+state from composite and TickOutcome tags. A child-process control runs the same
+tape with the environment absent and set to `1` and requires byte-identical
+stdout.
+
+The accepted-action boundary deliberately excludes device/window identity,
+focus and cursor-grab success, synthetic/repeat filtering, pixel-to-line wheel
+conversion, raw timestamps, click capture routing, redraw scheduling, and
+display evidence requests. It therefore simulates the sequence *after* those
+platform decisions, not the physical peripherals. A powered subject control
+temporarily mapped physical `W` to backward while the normalized tape retained
+forward; the adapter-equivalence test failed with divergent TickOutcome tags.
+Restoring the forward mapping returned it to green.
+
+Finite look lanes can still overflow when several individually finite deltas
+are accumulated. Both preflight and the shared reducer now use the same checked
+finite accumulator; a same-record pair of maximum finite deltas is refused with
+its tick/action address before `fixed_tick` can panic.
+
+The report exposes the tape tag, each tick's outcome/world/history/camera and
+optional game/composite CPU-frame commitments, then final world/history/camera
+state. It explicitly reports zero game/composite admissions, empty frame-receipt
+heads, and unavailable display evidence. The first line labels these values as
+`scope=fixed-tick-projection` and `run_receipt=unavailable`: stdout juxtaposition
+is not a canonical carrier binding tape, genesis, rules/build/policy, and result
+chain. TickOutcome also retains accumulated non-edit controls rather than the
+complete ordered non-edit action stream. An authoritative replay result remains
+open.
+
+No backend call, OS raster observation, compositor attribution, scanout witness,
+or physical-light measurement occurs. CPU framebuffer tags name produced
+headless frames only. Exact host-`f64` bits are retained, but bitwise result
+agreement across architectures, compilers, or floating-point environments has
+not been established.
+
+On Windows, the ordinary optimized observer remains a GUI-subsystem executable.
+Automation that needs captured optimized stdout uses:
+
+```powershell
+cargo run --release --features headless-console -- --simulate-actions examples/observer_walk.tape
+```
+
+### Pre-mutation resource admission
+
+The entire tape is interpreted by a pure shadow before `App` construction. It
+tracks movement edges, look/wheel accumulation, clear-motion, dirty game/sidebar
+lanes, dimensions, possible/definite exact coordinates, exact sparse chunks,
+and monotone unresolved aimed placements. The possible/definite abstraction is
+required because an exact On/Toggle can be rejected when it would enclose the
+observer; it never lets possible population fall below a real continuation.
+Exact Off/Toggle also charges the current possible world before changing the
+abstract state, covering `World::recompute_bounds` amplification.
+
+The local fail-closed policy is:
+
+```text
+peak output pixels                 16,777,216
+cumulative resize pixel writes   268,435,456
+cumulative output pixel ticks    268,435,456
+cumulative raster sample bound 1,073,741,824  (12 cube triangles per possible bit)
+cumulative world coordinates     268,435,456
+cumulative edit coordinates      268,435,456
+cumulative sparse chunk words  1,073,741,824  (64 u64 words per possible chunk/scan)
+cumulative world ordering units 1,073,741,824  (N * ceil(log2 N) per world tag)
+peak possible sparse chunks           65,536
+```
+
+Every nonzero resize is charged even if a later action shrinks before the tick.
+Only dirty lanes are charged for raster/composition, so the full 16,384-record
+idle-tape allowance remains admissible. World scans use record-peak possible
+population and possible chunk count; world tags additionally charge a
+conservative ordering factor. Controls refuse repeated large resize, raster,
+aim/world-scan, bounds-recompute, repeated canonical-sort, and widely sparse
+chunk-word amplification before allocating the requested runtime state. These
+are untagged host-local policy limits, not consensus or Layer-1 authority.
+A direct boundary control supplies 65,536 unresolved placements: permanent
+bedrock makes the possible chunk count 65,537, and preflight refuses it against
+the 65,536 cap.
+
+### Example projection and metric remint
+
+The current live-input-reachable `examples/observer_walk.tape` has five records
+and seven actions. A release headless run reported:
+
+```text
+tape             #bb.intent.sha256.kq7nusohkdquulz4s3rvc3sopcpoewrdxtozzjkyoe2z7hlts7yq
+final world      #bb.world.sha256.vy2bmytgqk6a2gx2f33ne4r2zlty53dcg543xbcfewszp5lcmuwa
+final history    #bb.receipt.sha256.pjchsuc7isnai5ewfolrps763l235uo5y2jbdgo6ckpxi7y3yztq
+on bits          2
+history receipts 1
+game admissions  0
+composite admits 0
+receipt heads    none / none
+display evidence unavailable without window
+```
+
+Thirteen existing definitions advanced; no sidebar-selected definition changed,
+so sidebar/composite policy tags did not remint:
+
+```text
+parse outcome                            #bb.metric-definition.sha256.fbspkmipmdtshettyqhufncsrcosr6pevkdtuggaaxutqo7lnxhq
+rejected field payload                   #bb.metric-definition.sha256.pmcwz2dihdfybefqjtw376hgm4ocj5wkur3r3to3c5tqsafr4vaa
+parse/display round trip                 #bb.metric-definition.sha256.sc5b2rs5dmlpaccdnujkrws6gbf7n6dpl5uzegzkbsjuyifhazra
+canonical replay bytes                   #bb.metric-definition.sha256.e3ugirbax7epzvwgqiekws23w73lowmoezfshl3sn4lrnuu6bhiq
+domain-separation identity               #bb.metric-definition.sha256.b2uxj4hkepxslna7wlktcoe4thlszcxfqs43ze6judtsawi2ym6q
+hash input bytes                         #bb.metric-definition.sha256.ngktv3ej6seazabywg7rd637ynpwhjzsbiq7nzgp6c2fu3g6gnga
+encoding round-trip check                #bb.metric-definition.sha256.2npmiwjtmvulaeodwxgpk4wx2pzpzvvlbbnd4jjn7iozkwnzsv2a
+final framebuffer digest                 #bb.metric-definition.sha256.xrpzaixabwbivwbv2njwcc6br5pg6y7ugooqzfntp5rvlsiucsga
+known-answer vector verdict              #bb.metric-definition.sha256.hgtisylvm66vgwhxo76austomilhsuntnigkrljhxqnok4tgpapa
+cross-implementation digest parity       #bb.metric-definition.sha256.e3twhjvyxiudc4mdldvvxkfh3ljog3gcltfarzxw7pknpnseisoa
+deterministic resource admission         #bb.metric-definition.sha256.tolccwjudoe3vtikeycfrvgqzi4vrpe3x6iaj3civwj3qk7xlejq
+produced-frame disposition               #bb.metric-definition.sha256.wu26gvn6psqy6kha322wdl7z6md3undvaj5fh5pk25nvixtgrcgq
+interaction-to-display causal path       #bb.metric-definition.sha256.iz2hk6s5zejuemox72rs4l4dp4gup5az53e4i2le232qpm2un6nq
+```
+
+### Final verification and release artifacts
+
+The final all-target default pass runs 314 tests (273 library, 40 application,
+and one direct CLI integration test). The all-feature pass runs 341 tests (293
+library, 47 application, and the same integration test). Both feature sets pass
+strict Clippy; formatting is clean. All sixteen independent Python vector
+programs pass, including 15/15 malformed InteractionTape controls. The exact
+metric audit remains 1,112 definitions with no unresolved or malformed rows,
+and `lake build` completes all 6 proof jobs.
+
+Optimized InteractionTape parsing passes all 12 release interaction tests, and
+the optimized tape-to-fixed-tick equivalence test passes separately. The direct
+release CLI integration test also passes. Running the retained headless release
+with `BITBLOCK_DISPLAY_AUDIT` absent and then set to `1` produces byte-identical
+captured text: 8 lines and 4,557 UTF-8 bytes under the PowerShell comparison,
+with SHA-256
+`84276214A256D808D046C8EB8D31D72288533266B87BBC6F34C1C32964AEB9EB`.
+That digest is a test-observation of captured report text, not the missing
+canonical run receipt.
+
+The retained same-source Windows release artifacts are:
+
+```text
+default observer
+  target/interaction-tape-default/release/bitblock.exe
+  1,111,552 bytes
+  SHA-256 C845E6A130AA6B9722E4FF4D38274D36FE24080EDCE4BA5E2EC4A9948B3CCE87
+
+protocol-research observer
+  target/interaction-tape-research/release/bitblock.exe
+  1,357,824 bytes
+  SHA-256 95662D2465617E7738612FE5A4D4139FD74A01E165D3C3278DA85D69C1950150
+
+headless-console observer/simulator
+  target/interaction-tape-headless-console/release/bitblock.exe
+  1,111,552 bytes
+  SHA-256 B49C5390E2C330BC3799F6E3DE69372C530C48AA4F0814DDFEE5059E446C6EEF
+```
+
+Equal file length between the default and headless-console executables is not
+binary equality; their hashes differ because the latter retains a Windows
+console subsystem for captured optimized reports. File sizes and hashes do not
+measure runtime speed, memory, or energy.

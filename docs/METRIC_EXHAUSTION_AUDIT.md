@@ -4,7 +4,8 @@ This checkpoint applied the uniqueness rule in [`METRICS.md`](../METRICS.md)
 again after the live TickOutcome/FrameReceipt-v2, typed DisplayReceipt-v2,
 bounded independent RGB/depth renderer oracle, explicit one-shot live
 display artifact, checked Win32 submission, canonical active-output topology,
-PresentationOutput wrapper, mixed display journal, and F5 service checkpoints. It admitted
+PresentationOutput wrapper, mixed display journal, F5 service, and canonical
+InteractionTape-v1 headless replay checkpoints. It admitted
 **zero new metric families**. The authoritative catalog
 therefore remains 1,112 families: 489 system, 339 view, and 284 world.
 
@@ -23,6 +24,10 @@ collectors for an existing observable cannot.
   framebuffer, composite buffer, mapped surface, backend submission, Windows
   screen raster, bounded source/target route topology, compositor/output state,
   scanout fate, and external sensor.
+- The input path was split at the normalized accepted-action boundary. Raw OS
+  routing/acceptance, tick-indexed tape bytes, fixed-tick outcomes, produced
+  CPU frames, backend receipts, and display observations were reviewed as
+  distinct evidence lanes.
 - Every candidate was compared to the closest admitted family. A candidate was
   rejected when it was derivable from that family, merely another closed label
   or carrier/schema version, or a missing collector for an already named value.
@@ -58,6 +63,10 @@ physical panel output. Those boundaries must remain separate.
 | Frame/display ledger head or length per epoch | Head and length are projections of the ordered receipt relation; schema version is provenance, not a new observation. |
 | DisplayReceipt-v2 digest as a standalone metric | It is the content-addressed carrier for compositor comparison and presentation fate. |
 | OutputTopology or PresentationOutput digest as a standalone metric | Each is a content-addressed carrier for already named pipeline, capture, provenance, and recovery observables. |
+| InteractionTape tag, payload bytes, tick/action/opcode counts, or first/last ordinal as standalone families | The tag/payload are the current accepted-action carrier for canonical replay bytes and hash-input/domain identity; counts and ordinals are projections of existing replay coverage, retained-batch, and input families. |
+| Headless simulation/result digest as a new family | Current stdout juxtaposes existing tape, outcome, world, history, camera, render-input, and framebuffer tags but is not a canonical binding. A future run carrier belongs to the existing replay/provenance/hash families rather than creating a new observable. |
+| Headless frame/admission/receipt counts | Produced CPU frames use final-framebuffer and produced-frame-disposition families; zero admissions and empty heads are projections of the existing frame-provenance relation, not display evidence. |
+| One metric per interaction opcode, parser refusal, or preflight budget lane | Opcodes are closed input labels, parser reasons belong to parse outcome/rejected payload, and resize/composition/raster/world/chunk/order charges are dimensions of deterministic resource admission. |
 | Active route count, topology retry count/rate, or last topology error | Counts, rates, extrema, and labels are projections of the complete `#bb.metric.visual.display-pipeline-state-vector` acquisition/route observation. |
 | Stable/changed/unavailable route result | Derived comparison of two pipeline-state vectors; it is intentionally not encoded as an independent observation. |
 | Before/after topology pair | Two pipeline observations inside the existing compositor-capture comparison and presentation-fate relation, not a new semantic dimension. |

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-const CHUNK_SIDE: i64 = 16;
-const CHUNK_WORDS: usize = 64;
+/// Number of coordinates along each axis of one sparse chunk.
+pub const CHUNK_SIDE: i64 = 16;
+/// Number of `u64` words traversed by one allocated chunk iteration.
+pub const CHUNK_WORDS: usize = 64;
 
 /// The integer coordinate of one bit in the world.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
