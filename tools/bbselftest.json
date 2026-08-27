@@ -1,0 +1,145 @@
+{
+    "$comment": "What 'the index works' means, in a file rather than in someone's memory. `bbgraph.py selftest` runs it and exits non-zero on any mismatch. Expectations are about the leading MODULE for code questions, because that is the file an agent opens. When a source change legitimately moves an answer, update the expectation in the same commit and say why -- an unexplained edit here is how a ranking bug gets ratified.",
+
+    "queries": [
+        {
+            "q": "canonical framebuffer bytes",
+            "top": "frame",
+            "note": "Regression guard for structural rank deciding rather than ordering. `protocol` is reached by 28 of 33 modules; with an unconditional load-bearing multiplier it won this query outright, which is the download-count failure the method exists to avoid."
+        },
+        {
+            "q": "display capture audit",
+            "top": "display"
+        },
+        {
+            "q": "tick outcome",
+            "top": "tick"
+        },
+        {
+            "q": "interaction tape",
+            "top": "interaction"
+        },
+        {
+            "q": "sparse chunk world",
+            "top": "world",
+            "note": "None of these three words is a module name; this passes on module doc-comment vocabulary."
+        },
+        {
+            "q": "windows present",
+            "top": "windows_present",
+            "note": "Compound-name lookup. Returned `presentation` while a name match required the whole underscored string to appear as one query token."
+        },
+        {
+            "q": "storage record envelope",
+            "top": "storage"
+        },
+        {
+            "q": "journal append only",
+            "top": "journal"
+        },
+        {
+            "q": "camera projection",
+            "top": "camera"
+        },
+        {
+            "q": "optimization equivalence",
+            "top": "optimization"
+        },
+        {
+            "q": "physical sensor",
+            "top": "physical_sensor"
+        },
+        {
+            "q": "coordinate history",
+            "top": "history",
+            "note": "Not history_store: the store is the persistence layer, the history is the object."
+        }
+    ],
+
+    "no_match": [
+        {
+            "q": "quantum flux capacitor",
+            "max_score": 0.5,
+            "note": "Must return nothing rather than dress a guess as a ranking."
+        },
+        {
+            "q": "frobnicate the widget",
+            "max_score": 0.5
+        }
+    ],
+
+    "confidence": [
+        {
+            "q": "tick outcome",
+            "expect": "high"
+        },
+        {
+            "q": "physical sensor",
+            "expect": "high"
+        },
+        {
+            "q": "canonical framebuffer bytes",
+            "expect": "LOW",
+            "note": "Right answer, low confidence, and that is correct. No subsystem matched this wording, so the ranking is term overlap. Weak-but-right and weak-and-wrong are not separable here, and answering nonsense confidently is the worse failure."
+        },
+        {
+            "q": "garbage collection JVM heap",
+            "expect": "LOW",
+            "note": "Out of scope. One token lands on host heap metrics; a partial match is not confidence in the query."
+        },
+        {
+            "q": "something fast",
+            "expect": "LOW",
+            "note": "Vague."
+        },
+        {
+            "q": "quantum flux capacitor",
+            "expect": "LOW"
+        }
+    ],
+
+    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem.",
+    "counts": {
+        "modules": 33,
+        "schemas": 58,
+        "schemas_fixtures": 23,
+        "schemas_vectored": 42,
+        "metrics": 1112,
+        "metrics_claimed_by_doc": 1112
+    },
+
+    "structure": [
+        {
+            "module": "protocol",
+            "dependents": 29,
+            "note": "The most load-bearing module in the crate: everything but camera, lib and world reaches it. That is exactly why its structural rank must never be allowed to decide a query. Was 28 while the dep scan matched only `crate::` and missed the binary, which reaches the library as `bitblock::`."
+        },
+        {
+            "module": "world",
+            "dependents": 23,
+            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Was 22 before main.rs's `bitblock::` imports were counted as edges."
+        },
+        {
+            "module": "coordinate_episode",
+            "dependents": 0,
+            "note": "A leaf: research-only, nothing depends on it. Safe to change in isolation."
+        }
+    ],
+
+    "schemas": [
+        {
+            "schema": "bitblock/frame/xrgb8888-row-major/v1",
+            "vectored": true,
+            "note": "The canonical framebuffer domain. An independent Python reconstruction must keep agreeing with it."
+        },
+        {
+            "schema": "bitblock/tick-outcome/v2",
+            "vectored": true
+        },
+        {
+            "schema": "bitblock/overlay-policy/crosshair/v1",
+            "vectored": false,
+            "note": "Recorded as uncovered on purpose. 16 of 58 protocol objects have no independent vectors, and pretending otherwise would make the coverage number meaningless. If someone writes vectors for this, flip it here in the same commit."
+        }
+    ]
+}

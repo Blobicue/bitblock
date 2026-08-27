@@ -1,0 +1,35 @@
+{
+    "$comment": "Schemas that tools/*.py declares and src/*.rs deliberately does not. This is the one hand-authored file in the index, so bbindex.py resolves every entry against the tree on each run: an entry no tool declares any more fails as stale, and an entry marked must_not_exist_in_rust fails if it ever appears in src/. Without that second check the allowlist would quietly absorb the loss of the very independence it records. Anything a tool declares that is not listed here fails the schema gate -- that is how a rename landing in one language and not the other gets caught.",
+    "local": [
+        {
+            "schema": "bitblock/metric-definition/markdown-v1",
+            "tool": "metric_registry",
+            "must_not_exist_in_rust": false,
+            "why": "The definition-tag domain for the metric registry. The registry is generated from Markdown by Python and consumed as docs/metrics/registry.tsv; the Rust crate never hashes a metric definition, so there is nothing for it to declare."
+        },
+        {
+            "schema": "bitblock/output-topology-observation/v2",
+            "tool": "output_topology_vectors",
+            "must_not_exist_in_rust": true,
+            "why": "A negative control, held in MUTATED_SCHEMA. The vector suite re-encodes an observation under a schema the decoder must reject, proving the schema tag is inside the hashed domain rather than decoration. If this ever appears in src/ the control has stopped being wrong and stops testing anything."
+        },
+        {
+            "schema": "bitblock/output-color-vector-parent/v1",
+            "tool": "output_color_vectors",
+            "must_not_exist_in_rust": false,
+            "why": "A synthetic parent digest that roots the vector chain, so the fixtures do not depend on a real prior receipt. It is test scaffolding, not a protocol object."
+        },
+        {
+            "schema": "bitblock/reference-renderer/analytic-six-face/v1",
+            "tool": "reference_renderer_vectors",
+            "must_not_exist_in_rust": true,
+            "why": "The independent renderer oracle. PROTOCOL.md's semantic-renderer level requires an independent specification to agree at every pixel, and re-running the same implementation is not independent verification. A Rust declaration of this schema would mean the oracle had been folded into the implementation it is supposed to check."
+        },
+        {
+            "schema": "bitblock/reference-depth-buffer/analytic-six-face/v1",
+            "tool": "reference_renderer_vectors",
+            "must_not_exist_in_rust": true,
+            "why": "The oracle's depth buffer, independent for the same reason as the renderer profile above."
+        }
+    ]
+}

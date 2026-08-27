@@ -31,14 +31,35 @@ jobs:
         run: |
           set -e
           for t in tools/*.py; do
-            # metric_registry wants a subcommand; mirror_timeline1 needs the local
-            # timeline-1 source directory - neither is a bare validator.
-            case "$t" in tools/metric_registry.py|tools/mirror_timeline1.py) continue ;; esac
+            # Not bare validators: metric_registry wants a subcommand;
+            # mirror_timeline1 needs the local timeline-1 source directory;
+            # simulate_sequence takes a scenario argument; bbindex writes
+            # index/ and bbgraph queries it, and both are gated by the
+            # dedicated index job below instead.
+            case "$t" in               tools/metric_registry.py|tools/mirror_timeline1.py|               tools/simulate_sequence.py|tools/bbindex.py|tools/bbgraph.py) continue ;;             esac
             echo "== $t"
             python3 "$t" > /dev/null
           done
       - name: metric registry audit
         run: python3 tools/metric_registry.py audit
+
+  index:
+    name: generated index (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The tree is the only source of truth for index/. Regenerating must be a
+      # no-op on a clean checkout; a diff means the index is older than the tree.
+      # This is the staleness gate, and it is the reason index/ can be trusted
+      # without anyone re-deriving it by hand.
+      - name: regenerate and check for drift
+        run: |
+          python3 tools/bbindex.py
+          git diff --exit-code -- index/
+      # bbselftest.json records what the query surface must answer. A ranking
+      # change nobody intended fails here rather than being discovered later.
+      - name: selftest
+        run: python3 tools/bbgraph.py selftest
 
   lean:
     name: lean proof capsule (ubuntu-latest)

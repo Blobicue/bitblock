@@ -1,0 +1,282 @@
+{
+ "adjacency": {
+  "camera": [],
+  "coordinate_episode": [
+   "history",
+   "history_store",
+   "program",
+   "protocol",
+   "world"
+  ],
+  "display": [
+   "frame",
+   "frame_v2",
+   "protocol"
+  ],
+  "display_artifact": [
+   "display",
+   "frame",
+   "frame_v2",
+   "protocol",
+   "storage"
+  ],
+  "display_store": [
+   "display",
+   "display_artifact",
+   "frame",
+   "frame_v2",
+   "journal",
+   "output_color",
+   "output_topology",
+   "presentation",
+   "presentation_output",
+   "presentation_output_v2",
+   "protocol",
+   "storage"
+  ],
+  "frame": [
+   "camera",
+   "protocol",
+   "render"
+  ],
+  "frame_v2": [
+   "frame",
+   "protocol",
+   "tick"
+  ],
+  "history": [
+   "program",
+   "protocol",
+   "world"
+  ],
+  "history_store": [
+   "history",
+   "journal",
+   "program",
+   "protocol",
+   "storage",
+   "world"
+  ],
+  "interaction": [
+   "program",
+   "protocol",
+   "world"
+  ],
+  "journal": [
+   "protocol",
+   "storage"
+  ],
+  "ladder_bridge": [
+   "program",
+   "protocol",
+   "world"
+  ],
+  "lib": [],
+  "main": [
+   "camera",
+   "display",
+   "display_store",
+   "frame",
+   "frame_v2",
+   "history",
+   "interaction",
+   "journal",
+   "output_color",
+   "output_topology",
+   "presentation",
+   "presentation_output_v2",
+   "program",
+   "protocol",
+   "render",
+   "replay_evidence",
+   "sidebar",
+   "tick",
+   "windows_present",
+   "windows_timing",
+   "windows_topology",
+   "world"
+  ],
+  "optimization": [
+   "camera",
+   "display",
+   "frame",
+   "frame_v2",
+   "history",
+   "program",
+   "protocol",
+   "render",
+   "sidebar",
+   "tick",
+   "world"
+  ],
+  "output_color": [
+   "output_topology",
+   "protocol"
+  ],
+  "output_topology": [
+   "protocol"
+  ],
+  "physical_sensor": [
+   "display",
+   "display_artifact",
+   "frame",
+   "frame_v2",
+   "output_topology",
+   "presentation",
+   "presentation_output",
+   "protocol",
+   "storage"
+  ],
+  "presentation": [
+   "frame_v2",
+   "protocol"
+  ],
+  "presentation_output": [
+   "display",
+   "display_artifact",
+   "frame",
+   "frame_v2",
+   "output_topology",
+   "presentation",
+   "protocol",
+   "storage"
+  ],
+  "presentation_output_v2": [
+   "display",
+   "display_artifact",
+   "frame",
+   "frame_v2",
+   "output_color",
+   "output_topology",
+   "presentation",
+   "presentation_output",
+   "protocol",
+   "storage"
+  ],
+  "program": [
+   "protocol",
+   "world"
+  ],
+  "protocol": [],
+  "render": [
+   "camera",
+   "frame",
+   "protocol",
+   "world"
+  ],
+  "replay_evidence": [
+   "interaction",
+   "protocol"
+  ],
+  "sequential": [
+   "history",
+   "history_store",
+   "program",
+   "protocol",
+   "world"
+  ],
+  "sidebar": [
+   "camera",
+   "frame",
+   "history",
+   "protocol",
+   "render",
+   "world"
+  ],
+  "storage": [
+   "protocol"
+  ],
+  "tick": [
+   "camera",
+   "frame",
+   "program",
+   "protocol",
+   "world"
+  ],
+  "windows_present": [
+   "protocol"
+  ],
+  "windows_timing": [
+   "frame_v2",
+   "presentation",
+   "protocol",
+   "windows_present"
+  ],
+  "windows_topology": [
+   "output_color",
+   "output_topology"
+  ],
+  "world": []
+ },
+ "edges": 145,
+ "stratum": {
+  "camera": 0,
+  "coordinate_episode": 4,
+  "display": 5,
+  "display_artifact": 6,
+  "display_store": 9,
+  "frame": 2,
+  "frame_v2": 4,
+  "history": 2,
+  "history_store": 3,
+  "interaction": 2,
+  "journal": 2,
+  "ladder_bridge": 2,
+  "lib": 0,
+  "main": 10,
+  "optimization": 6,
+  "output_color": 2,
+  "output_topology": 1,
+  "physical_sensor": 8,
+  "presentation": 5,
+  "presentation_output": 7,
+  "presentation_output_v2": 8,
+  "program": 1,
+  "protocol": 0,
+  "render": 1,
+  "replay_evidence": 3,
+  "sequential": 4,
+  "sidebar": 3,
+  "storage": 1,
+  "tick": 3,
+  "windows_present": 1,
+  "windows_timing": 6,
+  "windows_topology": 3,
+  "world": 0
+ },
+ "transitive_dependents": {
+  "camera": 15,
+  "coordinate_episode": 0,
+  "display": 7,
+  "display_artifact": 5,
+  "display_store": 1,
+  "frame": 15,
+  "frame_v2": 10,
+  "history": 6,
+  "history_store": 2,
+  "interaction": 2,
+  "journal": 5,
+  "ladder_bridge": 0,
+  "lib": 0,
+  "main": 0,
+  "optimization": 0,
+  "output_color": 4,
+  "output_topology": 7,
+  "physical_sensor": 0,
+  "presentation": 6,
+  "presentation_output": 4,
+  "presentation_output_v2": 2,
+  "program": 20,
+  "protocol": 29,
+  "render": 15,
+  "replay_evidence": 1,
+  "sequential": 0,
+  "sidebar": 2,
+  "storage": 10,
+  "tick": 11,
+  "windows_present": 2,
+  "windows_timing": 1,
+  "windows_topology": 1,
+  "world": 23
+ }
+}

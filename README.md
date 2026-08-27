@@ -6,6 +6,21 @@ For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md), then read
 [`docs/SEMANTICS.md`](docs/SEMANTICS.md) and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md)
 before changing the simulation boundary.
 
+Rather than reading 52,000 lines of Rust, query the generated index:
+
+```powershell
+python tools/bbgraph.py ask "canonical framebuffer bytes"
+python tools/bbgraph.py node frame
+python tools/bbgraph.py dag
+```
+
+Stdlib Python only, no network and no build. Every line of output cites a path, so
+any claim it makes can be checked against the source that produced it. It reports two
+things the tree cannot state about itself: which modules are load-bearing (`protocol`
+is reached by 29 of 33; `world` by 23), and which protocol objects have no independent
+reimplementation checking them (16 of 58). Both are derived rather than authored.
+[`AGENTS.md`](AGENTS.md) documents the index, its three gates, and its limits.
+
 The forward-looking security architecture is documented in
 [`docs/LAYER1_DESIGN_PAPER.md`](docs/LAYER1_DESIGN_PAPER.md). It separates the implemented
 local deterministic world from the proposed identity, ownership, replication, consensus,

@@ -33,6 +33,17 @@ Read in this order:
 5. `docs/LAYER1_DESIGN_AUDIT.md` (paper gap findings and residual repository obligations)
 6. `README.md` (controls, commands, and feature boundaries)
 7. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+8. `AGENTS.md` (the generated index, and how to query this tree instead of scanning it)
+
+Rather than reading the tree, query it:
+
+```powershell
+python tools/bbgraph.py ask "canonical framebuffer bytes"
+python tools/bbgraph.py node frame
+python tools/bbgraph.py dag
+```
+
+Stdlib Python only, no network, no build. Every line of output cites a path.
 
 ## What is implemented
 

@@ -1,0 +1,5 @@
+# Generated index artifacts are written with LF and compared byte-for-byte by
+# the staleness gate. Without this, autocrlf rewrites them on checkout and every
+# regeneration shows a whole-file diff.
+/index/*.json text eol=lf
+/index/*.jsonl text eol=lf
