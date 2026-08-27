@@ -4,7 +4,6 @@
   "coordinate_episode": [
    "history",
    "history_store",
-   "program",
    "protocol",
    "world"
   ],
@@ -16,7 +15,6 @@
   "display_artifact": [
    "display",
    "frame",
-   "frame_v2",
    "protocol",
    "storage"
   ],
@@ -26,9 +24,6 @@
    "frame",
    "frame_v2",
    "journal",
-   "output_color",
-   "output_topology",
-   "presentation",
    "presentation_output",
    "presentation_output_v2",
    "protocol",
@@ -36,8 +31,7 @@
   ],
   "frame": [
    "camera",
-   "protocol",
-   "render"
+   "protocol"
   ],
   "frame_v2": [
    "frame",
@@ -68,8 +62,7 @@
   ],
   "ladder_bridge": [
    "program",
-   "protocol",
-   "world"
+   "protocol"
   ],
   "lib": [],
   "main": [
@@ -81,10 +74,7 @@
    "history",
    "interaction",
    "journal",
-   "output_color",
    "output_topology",
-   "presentation",
-   "presentation_output_v2",
    "program",
    "protocol",
    "render",
@@ -97,14 +87,11 @@
    "world"
   ],
   "optimization": [
-   "camera",
    "display",
    "frame",
    "frame_v2",
    "history",
-   "program",
    "protocol",
-   "render",
    "sidebar",
    "tick",
    "world"
@@ -118,11 +105,6 @@
   ],
   "physical_sensor": [
    "display",
-   "display_artifact",
-   "frame",
-   "frame_v2",
-   "output_topology",
-   "presentation",
    "presentation_output",
    "protocol",
    "storage"
@@ -132,23 +114,14 @@
    "protocol"
   ],
   "presentation_output": [
-   "display",
    "display_artifact",
-   "frame",
-   "frame_v2",
    "output_topology",
    "presentation",
    "protocol",
    "storage"
   ],
   "presentation_output_v2": [
-   "display",
-   "display_artifact",
-   "frame",
-   "frame_v2",
    "output_color",
-   "output_topology",
-   "presentation",
    "presentation_output",
    "protocol",
    "storage"
@@ -171,14 +144,12 @@
   "sequential": [
    "history",
    "history_store",
-   "program",
    "protocol",
    "world"
   ],
   "sidebar": [
    "camera",
    "frame",
-   "history",
    "protocol",
    "render",
    "world"
@@ -190,8 +161,7 @@
    "camera",
    "frame",
    "program",
-   "protocol",
-   "world"
+   "protocol"
   ],
   "windows_present": [
    "protocol"
@@ -199,7 +169,6 @@
   "windows_timing": [
    "frame_v2",
    "presentation",
-   "protocol",
    "windows_present"
   ],
   "windows_topology": [
@@ -208,39 +177,39 @@
   ],
   "world": []
  },
- "edges": 145,
+ "edges": 114,
  "stratum": {
   "camera": 0,
   "coordinate_episode": 4,
-  "display": 5,
-  "display_artifact": 6,
-  "display_store": 9,
-  "frame": 2,
-  "frame_v2": 4,
+  "display": 4,
+  "display_artifact": 5,
+  "display_store": 8,
+  "frame": 1,
+  "frame_v2": 3,
   "history": 2,
   "history_store": 3,
   "interaction": 2,
   "journal": 2,
   "ladder_bridge": 2,
   "lib": 0,
-  "main": 10,
-  "optimization": 6,
+  "main": 9,
+  "optimization": 5,
   "output_color": 2,
   "output_topology": 1,
-  "physical_sensor": 8,
-  "presentation": 5,
-  "presentation_output": 7,
-  "presentation_output_v2": 8,
+  "physical_sensor": 7,
+  "presentation": 4,
+  "presentation_output": 6,
+  "presentation_output_v2": 7,
   "program": 1,
   "protocol": 0,
-  "render": 1,
+  "render": 2,
   "replay_evidence": 3,
   "sequential": 4,
   "sidebar": 3,
   "storage": 1,
-  "tick": 3,
+  "tick": 2,
   "windows_present": 1,
-  "windows_timing": 6,
+  "windows_timing": 5,
   "windows_topology": 3,
   "world": 0
  },
@@ -250,9 +219,9 @@
   "display": 7,
   "display_artifact": 5,
   "display_store": 1,
-  "frame": 15,
+  "frame": 14,
   "frame_v2": 10,
-  "history": 6,
+  "history": 5,
   "history_store": 2,
   "interaction": 2,
   "journal": 5,
@@ -266,9 +235,9 @@
   "presentation": 6,
   "presentation_output": 4,
   "presentation_output_v2": 2,
-  "program": 20,
+  "program": 19,
   "protocol": 29,
-  "render": 15,
+  "render": 3,
   "replay_evidence": 1,
   "sequential": 0,
   "sidebar": 2,
@@ -277,6 +246,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 23
+  "world": 22
  }
 }

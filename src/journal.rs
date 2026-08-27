@@ -1674,6 +1674,20 @@ mod tests {
         ));
     }
 
+    /// Cross-check against tools/journal_rejected_tail_vectors.py, which derives this
+    /// tag from the schema without importing any Rust. A literal here is the only thing
+    /// that makes that suite a guard rather than a program agreeing with itself: if the
+    /// canonical payload ever changes shape, exactly one of the two moves and they stop
+    /// matching.
+    #[test]
+    fn rejected_tail_tag_matches_the_independent_vector() {
+        let tag = rejected_tail_tag(96, 103, b"partial").unwrap();
+        assert_eq!(
+            tag.to_string(),
+            "#bb.journal-rejected-tail.sha256.px6rabjqxut62k5t52k25b5557vhb7shxqwbjhmixitcvl4frdya"
+        );
+    }
+
     #[test]
     fn rejected_tail_tag_binds_offsets_and_exact_suffix() {
         let base = chain(&[b"base"]);

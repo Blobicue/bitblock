@@ -650,7 +650,7 @@
    ]
   },
   "test": {
-   "code_lines": 17821,
+   "code_lines": 17842,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -716,7 +716,7 @@
     {
      "left": "journal:1238",
      "lines": 10,
-     "right": "storage:960"
+     "right": "storage:962"
     },
     {
      "left": "presentation:1090",
@@ -731,7 +731,7 @@
     {
      "left": "display_store:1489",
      "lines": 8,
-     "right": "journal:1778"
+     "right": "journal:1792"
     },
     {
      "left": "display_store:1627",
@@ -751,7 +751,7 @@
     {
      "left": "history_store:2060",
      "lines": 8,
-     "right": "journal:1776"
+     "right": "journal:1790"
     },
     {
      "left": "physical_sensor:1652",

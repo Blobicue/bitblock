@@ -94,12 +94,12 @@
             "expect": "LOW"
         }
     ],
-    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem.",
+    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion.",
     "counts": {
         "modules": 33,
         "schemas": 58,
         "schemas_fixtures": 23,
-        "schemas_vectored": 42,
+        "schemas_vectored": 44,
         "metrics": 1112,
         "metrics_claimed_by_doc": 1112
     },
@@ -111,8 +111,8 @@
         },
         {
             "module": "world",
-            "dependents": 23,
-            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Was 22 before main.rs's `bitblock::` imports were counted as edges."
+            "dependents": 22,
+            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Counted over production scope only: 31 of 145 dependency edges were `use crate::x` inside `mod tests`, which is a real import but not a coupling that constrains where shared code may live."
         },
         {
             "module": "coordinate_episode",
@@ -134,6 +134,16 @@
             "schema": "bitblock/overlay-policy/crosshair/v1",
             "vectored": false,
             "note": "Recorded as uncovered on purpose. 16 of 58 protocol objects have no independent vectors, and pretending otherwise would make the coverage number meaningless. If someone writes vectors for this, flip it here in the same commit."
+        },
+        {
+            "schema": "bitblock/journal/rejected-tail/v1",
+            "vectored": true,
+            "note": "Was one of the two objects nothing independently checked. The vector varies offset and suffix separately, because the tag exists to bind both."
+        },
+        {
+            "schema": "bitblock/storage-record/envelope/v1",
+            "vectored": true,
+            "note": "The outermost envelope. Its vector rebuilds magic, version, declared length, parent flag, kind name, object digest, schema and payload, and both sides assert the same literal record tag over the `on 0 0 0` edit from edit_vectors.py."
         }
     ],
     "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested.",

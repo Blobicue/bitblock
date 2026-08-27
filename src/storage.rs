@@ -952,6 +952,8 @@ impl<'a> Cursor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::program::{EDIT_SCHEMA, Edit, Operation};
+    use crate::world::Coord;
 
     const OBJECT_SCHEMA: &[u8] = b"bitblock/test-object/v1";
 
@@ -973,6 +975,23 @@ mod tests {
         let footer = encoded.len() - FOOTER_BYTES;
         let tag = tag_prefix(&encoded[..footer]).unwrap();
         encoded[footer..].copy_from_slice(&tag.digest());
+    }
+
+    /// Cross-check against tools/storage_record_vectors.py, which rebuilds the whole
+    /// envelope -- magic, version, declared length, parent flag, kind name, object digest,
+    /// schema, payload, and the record-tag footer -- without importing any Rust. The inner
+    /// object is the `on 0 0 0` edit from tools/edit_vectors.py, so the two suites compose
+    /// rather than each inventing a payload.
+    #[test]
+    fn envelope_tag_matches_the_independent_vector() {
+        let edit = Edit::new(Operation::On, Coord::new(0, 0, 0));
+        let record =
+            StorageRecord::new(None, TagKind::Edit, EDIT_SCHEMA, &edit.encode_canonical()).unwrap();
+        assert_eq!(
+            record.record_tag().to_string(),
+            "#bb.storage-record.sha256.3rmsngivykmpjsnfcz2gn7p6mtqvqiygjvxbpcjjnvmxsdbf6uiq"
+        );
+        assert_eq!(record.encode().len(), 153);
     }
 
     #[test]

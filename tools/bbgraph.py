@@ -655,9 +655,22 @@ def cmd_dup(scope: str) -> int:
         a, b = mods.get(left), mods.get(right)
         if not (a and b):
             continue
-        common = reachable(dag, left) & reachable(dag, right)
         weakest = min(gate_rank(a["gate"]), gate_rank(b["gate"]))
-        homes = [c for c in common if gate_rank(mods[c]["gate"]) <= weakest]
+        # If one side already depends on the other, the depended-upon side is
+        # the home: the dependent reaches it for free and no edge is added.
+        # Taking only the intersection of what BOTH reach misses this and sends
+        # the pair to a distant common ancestor -- output_color depends on
+        # output_topology, so their shared code belongs in output_topology, but
+        # the intersection surfaces `protocol`, which would drag research-gated
+        # helpers into every default build.
+        if left in reachable(dag, right):
+            homes = [left]
+        elif right in reachable(dag, left):
+            homes = [right]
+        else:
+            common = reachable(dag, left) & reachable(dag, right)
+            homes = [c for c in common if gate_rank(mods[c]["gate"]) <= weakest]
+        homes = [h for h in homes if gate_rank(mods[h]["gate"]) <= weakest]
         homes.sort(key=lambda m: (-dag["stratum"].get(m, 0), m))
         print("             home: %s" % (", ".join(homes[:2]) if homes
                                          else "none shared -- a new module would be needed"))

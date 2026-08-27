@@ -222,7 +222,19 @@ def extract_modules() -> list[dict]:
         name = path.stem
         text = read(path)
         summary, doc = summarize_doc_comment(text)
-        deps = sorted({d for d in RE_CRATE_DEP.findall(text) if d != name})
+        # Dependencies are read from PRODUCTION scope only. A `use crate::world::Coord`
+        # inside `mod tests` is a real import but not a real coupling: it does not
+        # constrain where shared code may live, and counting it lets a test fixture
+        # move a module's stratum and its load-bearing rank. Adding one such import to
+        # storage.rs's tests moved `world` from 23 transitive dependents to 25.
+        lines = text.splitlines()
+        edge = min(test_scope_line(text), len(lines))
+        production = "\n".join(lines[:edge])
+        behind_tests = "\n".join(lines[edge:])
+        deps = sorted({d for d in RE_CRATE_DEP.findall(production) if d != name})
+        test_deps = sorted(
+            {d for d in RE_CRATE_DEP.findall(behind_tests) if d != name} - set(deps)
+        )
         pub_items = sorted(set(RE_PUB_ITEM.findall(text)))
         schemas = schema_declarations(text, path)
         if name == "lib":
@@ -252,6 +264,7 @@ def extract_modules() -> list[dict]:
                 "tests": len(RE_TEST.findall(text)),
                 "gate": gate,
                 "deps": deps,
+                "test_deps": test_deps,
                 "declares": [s["schema"] for s in schemas],
                 "declared_at": {s["schema"]: s["at"] for s in schemas},
                 "test_scope": sorted(s["schema"] for s in schemas if s["in_tests"]),

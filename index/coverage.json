@@ -43,7 +43,6 @@
   "bitblock/frame-receipt/v1",
   "bitblock/history-mode/open-local/v1",
   "bitblock/history-mode/sequential-history/v1",
-  "bitblock/journal/rejected-tail/v1",
   "bitblock/local-replay-admission-policy/headless-v1",
   "bitblock/local-replay-build/executable-sha256/v1",
   "bitblock/local-replay-genesis/headless-v1",
@@ -52,11 +51,10 @@
   "bitblock/overlay-input/v1",
   "bitblock/overlay-policy/crosshair/v1",
   "bitblock/renderer-profile/host-f64/v1",
-  "bitblock/sidebar/composite-frame-input/v1",
-  "bitblock/storage-record/envelope/v1"
+  "bitblock/sidebar/composite-frame-input/v1"
  ],
- "schemas_vectored": 42,
- "source_lines": 51735,
- "tests": 393,
- "tools": 25
+ "schemas_vectored": 44,
+ "source_lines": 51768,
+ "tests": 395,
+ "tools": 28
 }
