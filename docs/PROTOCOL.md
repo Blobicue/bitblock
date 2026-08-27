@@ -1313,6 +1313,80 @@ occluded need not be rasterised, and skipping it writes nothing different. That
 needs a coarse depth structure, and traversal reordering is already permitted
 above.
 
+### Accepted: front-to-back traversal and a per-bit hidden test
+
+The idea above, without the coarse structure. The depth buffer already is one.
+
+Bits are traversed nearest first, keyed by view depth. That is legal precisely
+because of the deterministic-renderer clause: `plot` resolves equal depths by
+the lower RGB word, so a frame is a per-pixel minimum over the bits and no
+order can change it. The order is a counting pass over 1,024 linear depth
+buckets, not a comparison sort — `sort_unstable_by` on 12,699 keys cost 0.94ms,
+more than a third of what the ordering saved, and the order only has to be
+approximate because it is a heuristic and not a semantic.
+
+The near surfaces are then in the depth buffer before the bits they hide reach
+`draw_bit`, which reads the retained depth across the bit's own screen box. If
+every pixel there is already strictly nearer than anything the bit could write,
+rasterising it would lose every comparison in `plot`, so skipping it writes
+nothing different. The scan stops at the first pixel that is not — an untouched
+pixel holds infinity — so a visible bit usually pays one word, and only a bit
+that really is hidden pays for the whole box, which it then does not rasterise.
+
+The bound has to be a bound, not an estimate. A fragment's depth is
+`1.0 / (wa/za + wb/zb + wc/zc)`; dropping the negative terms makes that at
+least the nearest projected vertex divided by the sum of the positive weights.
+That sum is exactly one in real arithmetic, because the three `edge` numerators
+sum to the shared `area` denominator, so what remains is the admitted
+barycentric epsilon plus rounding — and rounding is bounded by the coordinate
+span divided by the smallest `area` the bit's own triangles will use. A sliver
+triangle widens the bound rather than escaping it; a span too large to represent
+collapses the bound and the bit is rasterised. A bit whose box falls outside the
+viewport entirely is now rejected before its faces are set up.
+
+Raster time only, medians of nine interleaved A/B rounds alternating the same
+two binaries:
+
+| bits | current | hidden-bit test | change |
+|---:|---:|---:|---:|
+| 1 | 1.06ms | 0.85ms | within noise |
+| 99 | 3.24ms | 1.35ms | -58% |
+| 2,649 | 4.98ms | 1.70ms | -66% |
+| 12,699 | 7.88ms | 2.52ms | -68% |
+
+The one-bit row moved both ways across two runs of the same experiment; one bit
+hides nothing and there is nothing to gain there. Ordering shows up in the
+probe's `project` column rather than `raster`, because it also runs in the
+away-facing control: +0.14ms at 12,699 bits, and neutral or better below that,
+where iterating a flat vector of coordinates repays the keying. A whole frame
+of the largest world falls from 8.88ms to 3.65ms, from 53% of the 60Hz budget
+to 22%.
+
+Every canonical byte held: 399 tests including all 101 literal content tags,
+the independent analytic ray oracle, the 24 Python vector suites, and
+`bbmutate render` still killed. `renderer_profile_tag` is deliberately
+unchanged — the new constants bound the inner loop's arithmetic rather than
+describing the frame, and no declared constant or ordering rule moved.
+
+Two fixtures were added, because every existing frame vector uses four bits or
+fewer and none of them reaches this path. Both compare the ordered traversal
+against the unordered one with the test disabled, pixel for pixel and depth bit
+for depth bit, and both also rasterise every skipped bit into a copy of the
+buffers and require that nothing moved: whole-frame agreement alone would let a
+later bit write over a wrong skip and hide it. One fixture is a shell and a
+solid block from five views; the other is a seeded corpus of 320 dense random
+worlds and cameras, which is where the sliver, near-plane and off-viewport
+cases come from. Both were watched failing against a renderer that skips every
+covered bit unconditionally.
+
+Worth recording as a limit of that evidence: neither fixture can distinguish
+the bound's margin. Inflating the test's depth limit by 5%, or even to the
+bit's farthest vertex instead of its nearest, still produces no wrong pixel
+anywhere in the corpus, because in front-to-back order a bit whose box is fully
+covered has so far always been genuinely hidden by a wide margin. The fixtures
+enforce that the test exists and is sound in kind; the margin rests on the
+derivation above, which is why it is written out rather than tuned.
+
 The first receipt-gated release optimization changed the crosshair policy
 assertion to debug-only. It removed two redundant SHA-256 policy computations
 from every release crosshair draw and reduced the Windows release executable

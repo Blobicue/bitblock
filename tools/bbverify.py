@@ -108,7 +108,7 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 #
 # Raise it when tests are added. If it ever needs lowering, that is a deletion
 # and it belongs in the commit message.
-EXPECTED_TESTS = {"quick": 386, "full": 397}
+EXPECTED_TESTS = {"quick": 388, "full": 399}
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s

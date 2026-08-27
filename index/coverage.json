@@ -1,5 +1,5 @@
 {
- "docs": 217,
+ "docs": 218,
  "examples": 13,
  "gates": {
   "metric_accounting": true,
@@ -52,7 +52,7 @@
   "bitblock/sidebar/composite-frame-input/v1"
  ],
  "schemas_vectored": 44,
- "source_lines": 52307,
+ "source_lines": 52310,
  "tests": 398,
  "tools": 30
 }

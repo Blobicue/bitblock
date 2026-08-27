@@ -108,7 +108,10 @@ fn main() {
         SIZE * SIZE,
         SIZE * SIZE * 12
     );
-    println!("Raster includes overdraw: a hidden bit still rasterises and loses the depth test.");
+    println!(
+        "Raster is what survives the hidden-bit test; ordering the bits lands in project, \n\
+         because the away-facing control orders them too."
+    );
 }
 
 fn time(repeats: u32, mut body: impl FnMut()) -> f64 {
