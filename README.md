@@ -8,7 +8,7 @@ Bitblock is a binary coordinate space observed through a free camera.
 - The observer is camera state, not an entity.
 - There is no gravity, body, terrain, inventory, or autonomous simulation.
 - The observer is a point that cannot enter or tunnel through an on block.
-- The framebuffer is written as physical pixels.
+- The CPU renderer writes an XRGB client raster.
 - Each final game frame also receives a CPU-side exact RGB palette-membership audit after the
   crosshair is drawn. It checks renderer output only; it is not evidence of OS composition,
   scanout, monitor light, or observer perception.
@@ -22,16 +22,16 @@ Bitblock is a binary coordinate space observed through a free camera.
   after one OS screen-raster capture. Stable routes and matching pixels still do not prove
   per-frame DWM attribution, scanout, or physical light.
 - A feature-gated physical-sensor carrier can retain a full presentation tag, declared integer
-  RGB tolerance profile, ordered XRGB challenge positions, and reported RGB16 samples. It has no
-  device collector or physical observation yet: `N/A`, unavailable, and unbound states remain
-  first-class, and a synthetic codec test is not a monitor-light result.
+  RGB tolerance profile, ordered XRGB challenge positions, and caller-supplied RGB16 values. It
+  has no device collector, source attestation, or physical observation yet: `N/A`, unavailable,
+  and unbound states remain first-class, and a synthetic codec test is not a monitor-light result.
 - One fixed 60 Hz tick consumes input, changes observer/world state, and produces changed frames;
   the window layer only presents pixels produced by that tick.
 - Scroll moves logarithmically between the one-pixel view and a block-filling view.
 
 ## Controls
 
-- Crosshair: the hollow center is the exact aimed physical pixel
+- Crosshair: the hollow center is the exact aimed client-raster pixel
 - Mouse: look
 - `W A S D`: move
 - `Space` / `Left Shift`: move up / down
@@ -222,7 +222,7 @@ recaptures or resamples timing/topology. The live mode remains create-only, so a
 poisoned journal needs external typed recovery rather than an in-process retry.
 
 A separate stdlib-only Python oracle now checks a bounded renderer corpus without
-calling the Rust renderer: it intersects six cube-face planes per physical-pixel
+calling the Rust renderer: it intersects six cube-face planes per client-raster-pixel
 ray, while production projects faces and rasterizes triangles. Rust reconstructs
 the oracle's complete implicit background/infinite-depth complement and compares
 all 934 post-overlay XRGB words, every depth class, and every finite depth-bit
@@ -246,7 +246,7 @@ later pages and offline analysis. This checkpoint does not pretend to collect
 all 1,112 values at runtime. Expensive metrics remain explicitly separated from
 values safe to snapshot only when a changed composite is needed.
 
-The initial client is 1201 x 801 physical pixels: the original 801 x 801 game
+The initial client raster is 1201 x 801 XRGB pixels: the original 801 x 801 game
 frame is copied exactly into the left region and the sidebar is rasterized
 directly into the right 400-pixel strided region of the same final buffer,
 without a second sidebar scratch buffer. Camera projection and the crosshair
@@ -262,7 +262,7 @@ canonical framebuffer bytes, semantic content tags and name registries,
 mint/burn provenance, the bounded storage envelope, the Windows
 exclusive-writer/recovery journal, typed coordinate-history admission and
 publication gating, receipt modes, the verifier-first
-Edit-to-LadderLang/iota-cost bridge, and the
+representation-only Edit-to-LadderLang/static-iotaUpper bridge, and the
 requirements that remain open before any Proof-of-History, Proof-of-Stake,
 currency, or Layer 1 claim would be truthful.
 
@@ -279,6 +279,22 @@ cannot alias distinct histories. This proves only that those local bytes replay 
 it does not prove elapsed time, an unavoidable sequential lower bound, the
 latest branch, Proof of History, stake, consensus, or Layer 1 status. The
 closed mode boundary always refuses a stake-consensus request.
+
+The same opt-in surface now materializes the existing issuance-provenance
+episode metric as `CoordinateEpisodeEvidence` v1. Each post-genesis mutable
+placement is named by its existing `#bb.event.sha256...` mint tag; a deletion
+records the exact consumed mint tag, and a re-placement receives a distinct
+tag. The carrier binds a derivation-policy tag plus verified history genesis,
+head, final-world, and receipt-ordered episodes—there are no numeric episode
+identifiers, balances, owners, transfers, or asset tags. Initially occupied
+mutable coordinates remain separately genesis-provenanced rather than being
+rewritten as new issuance. This is local history evidence only, not a currency,
+Proof-of-History, Proof-of-Stake, consensus, or Layer 1. Its independent
+canonical vector is:
+
+```powershell
+python -B tools/coordinate_episode_vectors.py
+```
 
 The storage, journal, and LadderLang bridge modules are research/proof surfaces,
 not hot render-path dependencies. The sequential transcript follows the same
@@ -298,10 +314,11 @@ coordinates. It proves the one-bedrock initial state, bedrock preservation over
 every instruction and replay, the universal membership meaning of every
 instruction, on/off idempotence, toggle involution, finite support, and ordered
 replay composition. A separate representation theorem proves the exact S/K/I,
-atom, iota, and tick formulas for every finite quoted byte list, with powered
+atom, iotaUpper, and derived tick-count formulas for every finite quoted byte list, with powered
 association and bit-order mutants. `proof/LadderLangQuotedByteParity.lean`
-additionally runs against the pinned LadderLang checkout's own
-`Lam.costChecked`.
+additionally runs the complete frozen 112-byte quote against the pinned
+LadderLang checkout's own `Lam.costChecked`, including an off-by-one rejection
+control.
 
 `proof/ladderlang-transition-v1/` is a separate frozen two-source executable
 capsule. It copies and SHA-256 verifies only the pinned `Ladderlang.Core` and
@@ -354,7 +371,8 @@ cargo run -- --simulate-actions examples/observer_walk.tape
 cargo run --release --features headless-console -- --simulate-actions examples/observer_walk.tape
 
 # Replay one UI-reachable place/delete cycle without opening a window.
-# It ends with only the protected origin on: one mint and one burn.
+# It ends with only the protected origin on: one local occupancy-on (Mint) event and one
+# local occupancy-off (Burn) event.
 cargo run --release --features headless-console -- --simulate-actions examples/observer_place_delete.tape
 
 # Opt in to an expensive full-client OS screen-raster audit on each changed frame.
@@ -435,7 +453,7 @@ It does not contain a self-declared “pass.”
 A separate `verify_against(parent)` call can return `BoundSampleMatch` only when the caller
 supplies the exact named presentation artifact, that artifact structurally verifies and records
 an exact complete OS desktop-raster match, every challenge XRGB word equals the artifact's
-expected framebuffer word, and every reported RGB16 channel is within its declared integer
+expected framebuffer word, and every caller-supplied RGB16 channel is within its declared integer
 tolerance of `channel8 * 257`. Missing/wrong parents, unavailable GDI captures, bad challenges,
 and residuals outside the bound stay `Unbound`, `ChallengeMismatch`, or `SampleMismatch`.
 

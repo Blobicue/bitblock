@@ -19,6 +19,8 @@ pub mod ladder_bridge;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod optimization;
 #[cfg(any(test, feature = "protocol-research"))]
+pub mod output_color;
+#[cfg(any(test, feature = "protocol-research"))]
 pub mod output_topology;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod physical_sensor;

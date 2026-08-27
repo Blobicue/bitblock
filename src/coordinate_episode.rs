@@ -113,88 +113,7 @@ impl CoordinateEpisodeEvidence {
             });
         }
 
-        let capacity = verified.usage().total_edits;
-        if capacity > MAX_COORDINATE_EPISODES {
-            return Err(CoordinateEpisodeError::TooManyEpisodes {
-                actual: capacity,
-                maximum: MAX_COORDINATE_EPISODES,
-            });
-        }
-        let mut episodes = Vec::new();
-        episodes.try_reserve_exact(capacity).map_err(|_| {
-            CoordinateEpisodeError::AllocationFailed {
-                requested: capacity,
-            }
-        })?;
-        let mut open_by_mint = HashMap::new();
-        open_by_mint.try_reserve(capacity).map_err(|_| {
-            CoordinateEpisodeError::AllocationFailed {
-                requested: capacity,
-            }
-        })?;
-
-        for receipt in history.receipts() {
-            for effect in receipt.effects() {
-                match *effect {
-                    TransitionEffect::Mint { coord, event } => {
-                        if open_by_mint.contains_key(&event) {
-                            return Err(CoordinateEpisodeError::DuplicateMintEvent { event });
-                        }
-                        let index = episodes.len();
-                        episodes.push(CoordinateEpisode {
-                            coord,
-                            mint: event,
-                            consuming_burn: None,
-                        });
-                        open_by_mint.insert(event, index);
-                    }
-                    TransitionEffect::Burn {
-                        coord,
-                        event,
-                        consumed_mint,
-                    } => {
-                        // Mutable coordinates already on at genesis are deliberately not issued
-                        // by this post-genesis relation. Their separate provenance is the genesis
-                        // tag, so a burn of one closes no coordinate-episode here.
-                        if consumed_mint == history.genesis() {
-                            continue;
-                        }
-                        let Some(index) = open_by_mint.remove(&consumed_mint) else {
-                            return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
-                                burn: event,
-                                consumed_mint,
-                            });
-                        };
-                        let episode = episodes.get_mut(index).expect(
-                            "the open-mint map contains only indices of locally pushed episodes",
-                        );
-                        if episode.coord != coord || episode.mint != consumed_mint {
-                            return Err(CoordinateEpisodeError::BurnProvenanceMismatch {
-                                burn: event,
-                                consumed_mint,
-                                expected_coord: episode.coord,
-                                actual_coord: coord,
-                            });
-                        }
-                        if episode.consuming_burn.replace(event).is_some() {
-                            return Err(CoordinateEpisodeError::BurnedEpisodeWasAlreadyClosed {
-                                mint: consumed_mint,
-                            });
-                        }
-                    }
-                    TransitionEffect::NoOp { .. } => {}
-                }
-            }
-        }
-
-        for episode in &episodes {
-            if episode.is_active() && history.active_mint(episode.coord) != Some(episode.mint) {
-                return Err(CoordinateEpisodeError::ActiveProvenanceMismatch {
-                    coord: episode.coord,
-                    mint: episode.mint,
-                });
-            }
-        }
+        let episodes = derive_episodes(history, MAX_COORDINATE_EPISODES)?;
 
         Self::from_fields(
             coordinate_episode_derivation_policy_tag(),
@@ -401,6 +320,97 @@ pub fn coordinate_episode_derivation_policy_tag() -> ContentTag {
     .expect("coordinate-episode policy has an empty payload")
 }
 
+/// Builds only the relation that is actually serialized. The caller's replay policy bounds source
+/// work separately; this bound applies to emitted episodes, so arbitrarily many valid no-ops do
+/// not consume episode capacity or force an equivalent allocation.
+fn derive_episodes(
+    history: &History,
+    maximum: usize,
+) -> Result<Vec<CoordinateEpisode>, CoordinateEpisodeError> {
+    let mut episodes = Vec::new();
+    let mut open_by_mint = HashMap::new();
+
+    for receipt in history.receipts() {
+        for effect in receipt.effects() {
+            match *effect {
+                TransitionEffect::Mint { coord, event } => {
+                    if open_by_mint.contains_key(&event) {
+                        return Err(CoordinateEpisodeError::DuplicateMintEvent { event });
+                    }
+                    let requested = episodes
+                        .len()
+                        .checked_add(1)
+                        .ok_or(CoordinateEpisodeError::LengthOverflow)?;
+                    if requested > maximum {
+                        return Err(CoordinateEpisodeError::TooManyEpisodes {
+                            actual: requested,
+                            maximum,
+                        });
+                    }
+                    episodes
+                        .try_reserve(1)
+                        .map_err(|_| CoordinateEpisodeError::AllocationFailed { requested })?;
+                    open_by_mint
+                        .try_reserve(1)
+                        .map_err(|_| CoordinateEpisodeError::AllocationFailed { requested })?;
+                    let index = episodes.len();
+                    episodes.push(CoordinateEpisode {
+                        coord,
+                        mint: event,
+                        consuming_burn: None,
+                    });
+                    open_by_mint.insert(event, index);
+                }
+                TransitionEffect::Burn {
+                    coord,
+                    event,
+                    consumed_mint,
+                } => {
+                    // Mutable coordinates already on at genesis are deliberately not issued by
+                    // this post-genesis relation. Their separate provenance is the genesis tag,
+                    // so a burn of one closes no coordinate-episode here.
+                    if consumed_mint == history.genesis() {
+                        continue;
+                    }
+                    let Some(index) = open_by_mint.remove(&consumed_mint) else {
+                        return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
+                            burn: event,
+                            consumed_mint,
+                        });
+                    };
+                    let episode = episodes.get_mut(index).expect(
+                        "the open-mint map contains only indices of locally pushed episodes",
+                    );
+                    if episode.coord != coord || episode.mint != consumed_mint {
+                        return Err(CoordinateEpisodeError::BurnProvenanceMismatch {
+                            burn: event,
+                            consumed_mint,
+                            expected_coord: episode.coord,
+                            actual_coord: coord,
+                        });
+                    }
+                    if episode.consuming_burn.replace(event).is_some() {
+                        return Err(CoordinateEpisodeError::BurnedEpisodeWasAlreadyClosed {
+                            mint: consumed_mint,
+                        });
+                    }
+                }
+                TransitionEffect::NoOp { .. } => {}
+            }
+        }
+    }
+
+    for episode in &episodes {
+        if episode.is_active() && history.active_mint(episode.coord) != Some(episode.mint) {
+            return Err(CoordinateEpisodeError::ActiveProvenanceMismatch {
+                coord: episode.coord,
+                mint: episode.mint,
+            });
+        }
+    }
+    Ok(episodes)
+}
+
 fn encoded_len(episodes: &[CoordinateEpisode]) -> Result<usize, CoordinateEpisodeError> {
     if episodes.len() > MAX_COORDINATE_EPISODES {
         return Err(CoordinateEpisodeError::TooManyEpisodes {
@@ -441,6 +451,9 @@ fn validate_fields(
     episodes: &[CoordinateEpisode],
 ) -> Result<(), CoordinateEpisodeError> {
     require_kind("derivation policy", policy, TagKind::Policy)?;
+    if policy != coordinate_episode_derivation_policy_tag() {
+        return Err(CoordinateEpisodeError::PolicyTagMismatch { actual: policy });
+    }
     require_kind("history genesis", history_genesis, TagKind::Receipt)?;
     require_kind("history head", history_head, TagKind::Receipt)?;
     require_kind("final world", final_world, TagKind::World)?;
@@ -604,6 +617,9 @@ pub enum CoordinateEpisodeError {
         expected: TagKind,
         actual: TagKind,
     },
+    PolicyTagMismatch {
+        actual: ContentTag,
+    },
     WrongEvidenceTagKind {
         actual: TagKind,
     },
@@ -689,6 +705,10 @@ impl fmt::Display for CoordinateEpisodeError {
                 "coordinate-episode {field} must be {}, received {}",
                 expected.name(),
                 actual.name()
+            ),
+            Self::PolicyTagMismatch { actual } => write!(
+                formatter,
+                "coordinate-episode derivation policy {actual} is not the v1 policy"
             ),
             Self::WrongEvidenceTagKind { actual } => write!(
                 formatter,
@@ -864,13 +884,7 @@ mod tests {
     fn noops_do_not_create_episodes_but_still_change_the_evidence_head() {
         let (initial, mut history) = episode_history();
         let before = CoordinateEpisodeEvidence::derive(&initial, &history).unwrap();
-        let mut world = initial.clone();
-        history.verify(&initial).unwrap();
-        for receipt in history.receipts() {
-            for &edit in receipt.edits() {
-                edit.apply(&mut world);
-            }
-        }
+        let mut world = history.verify(&initial).unwrap();
         apply_tick(
             &mut history,
             &mut world,
@@ -896,6 +910,21 @@ mod tests {
         let decoded = CoordinateEpisodeEvidence::decode_canonical(&bytes).unwrap();
         assert_eq!(decoded, evidence);
 
+        let mut wrong_policy = bytes.clone();
+        wrong_policy[0] ^= 1;
+        assert!(matches!(
+            CoordinateEpisodeEvidence::decode_canonical(&wrong_policy),
+            Err(CoordinateEpisodeError::PolicyTagMismatch { .. })
+        ));
+
+        let mut self_consistent_wrong_policy = evidence.clone();
+        self_consistent_wrong_policy.policy = ContentTag::from_digest(TagKind::Policy, [0xa5; 32]);
+        self_consistent_wrong_policy.tag = self_consistent_wrong_policy.recompute_tag().unwrap();
+        assert!(matches!(
+            self_consistent_wrong_policy.verify(),
+            Err(CoordinateEpisodeError::PolicyTagMismatch { .. })
+        ));
+
         let mut reordered = decoded.clone();
         reordered.episodes.swap(0, 1);
         reordered.tag = reordered.recompute_tag().unwrap();
@@ -912,12 +941,56 @@ mod tests {
             Err(CoordinateEpisodeError::DerivationMismatch)
         );
 
+        let mut duplicate_event = bytes.clone();
+        let mint_start = HEADER_BYTES + 24;
+        let burn_start = mint_start + 32 + 1;
+        let mint = duplicate_event[mint_start..mint_start + 32].to_vec();
+        duplicate_event[burn_start..burn_start + 32].copy_from_slice(&mint);
+        assert!(matches!(
+            CoordinateEpisodeEvidence::decode_canonical(&duplicate_event),
+            Err(CoordinateEpisodeError::DuplicateEpisodeEvent { index: 0, .. })
+        ));
+
         let mut malformed = bytes;
         malformed[HEADER_BYTES + 24 + 32] = 9;
         assert!(matches!(
             CoordinateEpisodeEvidence::decode_canonical(&malformed),
             Err(CoordinateEpisodeError::UnknownEpisodeState { marker: 9, .. })
         ));
+    }
+
+    #[test]
+    fn episode_limit_counts_emitted_mints_not_source_noops() {
+        let initial = World::new_with_origin();
+        let mut world = initial.clone();
+        let mut history = History::new(&world);
+        apply_tick(
+            &mut history,
+            &mut world,
+            1,
+            &[
+                Edit::new(Operation::Off, Coord::new(20, 21, 22)),
+                Edit::new(Operation::Off, Coord::new(23, 24, 25)),
+            ],
+        );
+        assert!(derive_episodes(&history, 1).unwrap().is_empty());
+
+        apply_tick(
+            &mut history,
+            &mut world,
+            2,
+            &[
+                Edit::new(Operation::On, Coord::new(20, 21, 22)),
+                Edit::new(Operation::On, Coord::new(23, 24, 25)),
+            ],
+        );
+        assert_eq!(
+            derive_episodes(&history, 1),
+            Err(CoordinateEpisodeError::TooManyEpisodes {
+                actual: 2,
+                maximum: 1,
+            })
+        );
     }
 
     #[test]

@@ -120,8 +120,9 @@ Frame validity is layered:
 6. **OS-exposed desktop raster:** the opt-in GDI screen-DC audit checks its own
    API results and compares the complete visible client rectangle. This is one
    sampled OS raster, including occlusion; it is not guaranteed scanout.
-7. **Physical display:** a calibrated external sensor agrees within declared
-   uncertainty. Without that instrument this layer is `N/A`, not pass.
+7. **Physical display (future / currently N/A):** a physical-display claim would require a
+   separately retained, calibrated external instrument whose samples agree under a declared
+   uncertainty model. No such record is currently admitted, so this layer is `N/A`, not pass.
 
 The process cannot prove photons on the monitor from its own framebuffer. OS
 composition, scaling, color management, occlusion, cable, and panel behavior
@@ -750,8 +751,9 @@ maintaining a second spelling.
 
 Toggle is classified by its actual pre/post transition. A re-mint after a burn
 creates a new occurrence tag. The old mint and consuming burn remain in
-history. Circulating coordinate supply is `|W|-1 = |M|`; duplicate placement
-cannot inflate it and deletion of empty space cannot reduce it.
+history. The active mutable-coordinate count is `|W|-1`, equal to the cardinality
+of the active-mint map; duplicate placement cannot increase it and deletion of
+an empty coordinate cannot reduce it.
 
 The implemented unsigned coordinate receipt uses this exact canonical object:
 
@@ -774,7 +776,7 @@ only their full 32-byte digests are stored in this payload. The strict decoder
 checks the declared count, exact total length, nonzero count, every embedded
 edit, both zero reserved flags, and canonical re-encoding before admission. The
 parent supplies prestate. Replay derives state-change classification,
-mint/burn provenance, supply, final event, poststate, and the receipt tag; those
+mint/burn provenance, active-coordinate count, final event, poststate, and the receipt tag; those
 facts are not redundantly trusted as effects. Exact per-edit occurrence tags
 chain from the parent and prior edit, so repeated identical edit content still
 has distinct historical identity.
@@ -1107,11 +1109,12 @@ fork-choice, finality, and network machinery named; there is no admitted stake
 variant and a valid sequential transcript cannot satisfy that request. The
 refusal is unconditional and precedes history replay.
 
-Freely placeable blocks cannot safely be voting stake or scarce currency.
-Infinite coordinates and costless placement give one actor unlimited stake;
-unrestricted deletion permits third-party burns. Coordinate mints can be
-non-economic provenance tokens, or placement can consume/bond a separately
-scarce owner-authorized asset. A public Layer 1 claim additionally requires
+The current local history has neither actors nor authorization. Freely placeable
+coordinates therefore cannot represent voting stake or scarce currency: any
+process allowed to submit unconstrained edits can create and clear mutable
+occupancy without bound. “Mint” and “burn” remain local occupancy-event labels.
+Mapping placement to a separately scarce owner-authorized asset would require
+the missing ownership and authorization machinery. A public Layer 1 claim additionally requires
 independent nodes, networking, resource limits, ownership and transfers,
 replay protection, finality, availability, synchronization, key lifecycle,
 upgrade governance, and an explicit threat model.
@@ -1119,7 +1122,60 @@ upgrade governance, and an explicit threat model.
 Until those exist, the truthful name is **local content-addressed coordinate
 history protocol**, not cryptocurrency or Layer 1.
 
-## LadderLang and iota cost
+### CoordinateEpisodeEvidence v1
+
+The opt-in research module `src/coordinate_episode.rs` materializes the
+existing `#bb.metric.dyn.issuance-provenance-episode-relation` as one bounded,
+in-memory, canonical carrier. It first calls
+`verify_in_memory_history_with_limits(initial_world, history, limits)` and
+refuses before deriving anything if that replay does not reconstruct the full
+history genesis, effects, receipt/head, final world, and active mint
+provenance. Its policy tag is
+`bitblock/coordinate-episode-derivation-policy/v1`; the receipt-kind outer tag
+uses the distinct `bitblock/coordinate-episode-evidence/v1` schema. Decode,
+encode, and local verification admit only that exact static policy tag, not an
+arbitrary tag of the same kind.
+
+The canonical payload is:
+
+```text
+derivation-policy tag digest [32]
+history-genesis receipt tag digest [32]
+history-head receipt tag digest [32]
+verified final-world tag digest [32]
+episode count u64
+repeat receipt/effect order:
+    coordinate i64 × 3
+    mint event tag digest [32]
+    active marker | closed marker + consuming burn event tag digest [32]
+```
+
+The mint event tag is the episode identity. Codec counts, traversal positions,
+and signed coordinate lanes frame or locate bytes; they are not substitute
+asset IDs. A post-genesis `Mint` opens one episode; a `Burn` must consume that
+same open mint tag at the same coordinate and closes it. No-op edits create no
+episode. A mutable coordinate present at genesis maps to the history genesis
+tag, so deleting it closes no post-genesis episode; a later re-mint opens a
+new event-tagged episode. `verify_against` first checks the carrier tag, then
+derives the full relation again from a bounded verified history and requires
+exact equality. The 262,144 cap and allocation budget apply to emitted episodes,
+not raw history edits; replay has its own separately declared source-work bounds.
+
+The module is deliberately excluded from the default game binary. The Rust
+tests cover same-tick mint/burn/re-mint ordering, genesis separation, no-op
+head divergence, policy substitution, duplicate event tags, malformed codec
+states, source-field mutations, and replay limits. The stdlib-only known-answer
+check is:
+
+```powershell
+python -B tools/coordinate_episode_vectors.py
+```
+
+This records local provenance only. It does not create balances, ownership,
+transfers, scarcity, signatures, custody, stake, elapsed time, consensus,
+Proof-of-History, Proof-of-Stake, cryptocurrency, or Layer 1 authority.
+
+## LadderLang and static encoding upper bounds
 
 LadderLang's live definition is:
 
@@ -1142,10 +1198,12 @@ preimage, prefixes the nine ASCII bytes `bb-lam/v1`, and quotes all 112 bytes.
 The cost may rank already-valid equivalent representations; it may never trade
 away state or pixel validity.
 
-The audited bridge must call LadderLang's `Lam.costChecked`, which rejects open
-terms. It must not use the current tick-receipt token byte spelling because that
-spelling reduces variable indices modulo 256 and is non-injective. The frozen
-content-neutral policy instead uses two distinct equal-cost closed terms:
+The Rust bridge computes the stated closed-term formula after verifying the
+canonical source bytes; it does not link or execute LadderLang. The separate
+pinned parity assay calls LadderLang's `Lam.costChecked`, which rejects open
+terms. The bridge must not use the current tick-receipt token byte spelling
+because that spelling reduces variable indices modulo 256 and is non-injective.
+The frozen content-neutral policy instead uses two distinct equal-cost closed terms:
 
 ```text
 B0 = App I FALSE
@@ -1166,9 +1224,11 @@ ticks      = 736L + 5
 The standalone Lean capsule proves these formulas for every finite byte list
 and separates right/left PAIR, bit-order, and byte-list mutants. A second assay
 at pinned LadderLang commit `59042265167b8f40700a891d890fde8015bcade9`
-calls its own `Lam.costChecked`, reproduces primitive/byte/two-byte costs, and
-proves the powered open-term control is refused. Rust, Python, and an independent
-Node implementation agree on the Edit vector below:
+calls its own `Lam.costChecked`, reproduces primitive/byte/two-byte costs, runs
+the complete frozen 112-byte Edit quote at `20,722` atoms and `82,438` iota,
+rejects an off-by-one atom claim, and proves the powered open-term control is
+refused. Rust, Python, and an independent Node implementation agree on the Edit
+vector below:
 
 ```text
 source Edit tag      #bb.edit.sha256.l3qxygkk2tikiyma5zkvaznrgzvu46ulmtdse56c2tf4r24ugzdq
@@ -1206,7 +1266,7 @@ For each candidate change:
    proof over `i64^3` and floating-point views.
 4. Only after the correctness gate passes, compare source bytes, binary-section
    bytes, reachable tick/render code bytes, allocations, time, memory traffic,
-   energy, and iota cost.
+   energy, and the static iotaUpper encoding measure.
 5. Change one optimization at a time and retain the failing powered control that
    demonstrated the check could detect a real renderer defect.
 

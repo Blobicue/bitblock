@@ -1,4 +1,4 @@
-//! Bounded, local records for samples reported by an external display sensor.
+//! Bounded, local records for RGB samples claimed to come from an external display sensor.
 //!
 //! This module deliberately stops short of a physical-display proof. A carrier can state only
 //! that no sensor applied, that a sensor was unavailable, or that integer RGB samples were
@@ -629,7 +629,7 @@ fn rgb_delta(left: u32, right: u32) -> u16 {
     u16::try_from(red + green + blue).expect("three eight-bit RGB deltas fit u16")
 }
 
-/// One externally reported RGB code triplet in the declared profile's integer code space.
+/// One RGB code triplet supplied for a declared external-sensor report.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SensorRgbSample {
     pub red: u16,
@@ -678,7 +678,7 @@ impl PhysicalSensorObservation {
         .expect("the fixed not-applicable sensor observation is valid")
     }
 
-    /// Records an external-sensor attempt that did not supply comparable samples.
+    /// Records a claimed external-sensor attempt that did not supply comparable samples.
     pub fn unavailable(
         parent_presentation: ContentTag,
         profile: DeclaredSensorProfile,
@@ -695,7 +695,8 @@ impl PhysicalSensorObservation {
         )
     }
 
-    /// Records external numeric samples. This constructor never decides whether they match.
+    /// Records caller-supplied numeric samples claimed for an external-sensor report.
+    /// This constructor never decides whether they match.
     pub fn reported_samples(
         parent_presentation: ContentTag,
         profile: DeclaredSensorProfile,
@@ -938,7 +939,7 @@ impl PhysicalSensorObservation {
 
     /// Binds this local report to one supplied presentation-output artifact.
     ///
-    /// A successful return says only that all reported RGB16 values are within the declared
+    /// A successful return says only that all caller-supplied RGB16 values are within the declared
     /// integer tolerances of the named XRGB8 pixels after the supplied artifact has independently
     /// verified an exact OS-raster comparison. It never proves an external sensor made the report.
     pub fn verify_against(

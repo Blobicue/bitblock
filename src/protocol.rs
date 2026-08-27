@@ -35,6 +35,8 @@ pub enum TagKind {
     MetricDefinition,
     MetricSnapshot,
     #[cfg(any(test, feature = "protocol-research"))]
+    OutputColorObservation,
+    #[cfg(any(test, feature = "protocol-research"))]
     OutputTopology,
     #[cfg(any(test, feature = "protocol-research"))]
     PhysicalSensorObservation,
@@ -77,6 +79,8 @@ impl TagKind {
             Self::LadderTerm => "ladder-term",
             Self::MetricDefinition => "metric-definition",
             Self::MetricSnapshot => "metric-snapshot",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::OutputColorObservation => "output-color-observation",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::OutputTopology => "output-topology",
             #[cfg(any(test, feature = "protocol-research"))]
@@ -121,6 +125,8 @@ impl TagKind {
             b"ladder-term" => Self::LadderTerm,
             b"metric-definition" => Self::MetricDefinition,
             b"metric-snapshot" => Self::MetricSnapshot,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"output-color-observation" => Self::OutputColorObservation,
             #[cfg(any(test, feature = "protocol-research"))]
             b"output-topology" => Self::OutputTopology,
             #[cfg(any(test, feature = "protocol-research"))]
@@ -565,6 +571,7 @@ mod tests {
             TagKind::LadderTerm,
             TagKind::MetricDefinition,
             TagKind::MetricSnapshot,
+            TagKind::OutputColorObservation,
             TagKind::OutputTopology,
             TagKind::PhysicalSensorObservation,
             TagKind::Policy,

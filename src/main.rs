@@ -1971,12 +1971,14 @@ impl App {
         }
 
         let batch = TickBatch::new(self.tick, attempts, transaction.edits().iter().copied());
-        self.history.commit_tick(transaction, &self.world);
+        let post_world = match self.history.commit_tick(transaction, &self.world) {
+            Some(receipt) => receipt.post_world(),
+            None => pre_world,
+        };
         self.last_tick_batch = Some(batch);
-        let post_world = world_tag(&self.world);
-        assert_eq!(
+        debug_assert_eq!(
+            world_tag(&self.world),
             post_world,
-            self.history.current_world(),
             "live world diverged from coordinate-history identity after fixed-tick edits"
         );
 
@@ -4074,6 +4076,30 @@ mod tests {
         verify_successor(Some(&first), &second).unwrap();
         assert_eq!(app.tick_outcomes, [first, second]);
         assert_eq!(app.tick, 2);
+    }
+
+    #[test]
+    fn fixed_tick_reuses_the_history_world_root_for_idle_and_edit_ticks() {
+        let mut app = App::new();
+
+        assert!(app.fixed_tick());
+        let idle = app.tick_outcomes.last().cloned().unwrap();
+        assert_eq!(idle.pre_world(), idle.post_world());
+        assert_eq!(idle.post_world(), world_tag(&app.world));
+        assert_eq!(idle.post_world(), app.history.current_world());
+
+        let placed = WorldEdit::new(Operation::On, Coord::new(7, -8, 9));
+        app.apply_infallible_accepted_action(AcceptedAction::ExactEdit(placed));
+        assert!(app.fixed_tick());
+
+        let edited = app.tick_outcomes.last().cloned().unwrap();
+        assert_eq!(edited.pre_world(), idle.post_world());
+        assert_ne!(edited.post_world(), edited.pre_world());
+        assert_eq!(edited.post_world(), world_tag(&app.world));
+        assert_eq!(edited.post_world(), app.history.current_world());
+        assert_eq!(app.history.receipts().last().unwrap().post_world(), edited.post_world());
+        let replayed = app.history.verify(&World::new()).unwrap();
+        assert_eq!(world_tag(&replayed), world_tag(&app.world));
     }
 
     #[test]
