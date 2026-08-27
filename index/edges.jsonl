@@ -1443,6 +1443,10 @@
 {"from": "example:examples/gallery_frame.rs", "kind": "uses", "to": "module:render"}
 {"from": "example:examples/gallery_frame.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/policy_tag_alloc_probe.rs", "kind": "uses", "to": "module:sidebar"}
+{"from": "example:examples/render_time_probe.rs", "kind": "uses", "to": "module:camera"}
+{"from": "example:examples/render_time_probe.rs", "kind": "uses", "to": "module:frame"}
+{"from": "example:examples/render_time_probe.rs", "kind": "uses", "to": "module:render"}
+{"from": "example:examples/render_time_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:sidebar"}

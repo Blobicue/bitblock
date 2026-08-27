@@ -459,12 +459,6 @@
     "modules": [
      "output_topology"
     ]
-   },
-   {
-    "item": "set_observation_anchor",
-    "modules": [
-     "camera"
-    ]
    }
   ]
  },
