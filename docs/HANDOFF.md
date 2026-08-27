@@ -28,8 +28,9 @@ Read in this order:
 1. `docs/HANDOFF.md` (this file)
 2. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
 3. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-4. `README.md` (controls, commands, and feature boundaries)
-5. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+4. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
+5. `README.md` (controls, commands, and feature boundaries)
+6. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
 
 ## What is implemented
 

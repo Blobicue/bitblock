@@ -6,6 +6,11 @@ For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md), then read
 [`docs/SEMANTICS.md`](docs/SEMANTICS.md) and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md)
 before changing the simulation boundary.
 
+The forward-looking security architecture is documented in
+[`docs/LAYER1_DESIGN_PAPER.md`](docs/LAYER1_DESIGN_PAPER.md). It separates the implemented
+local deterministic world from the proposed identity, ownership, replication, consensus,
+availability, and Layer 1 requirements.
+
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
 - Every other unspecified coordinate is off.
