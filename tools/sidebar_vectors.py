@@ -18,6 +18,9 @@ COMPOSITE_SCHEMA = b"bitblock/sidebar/composite-policy/v1"
 SIDEBAR_WIDTH = 400
 COLORS = (0x00101318, 0x0038424D, 0x00F2C14E, 0x008DA2B8, 0x00E8EDF2)
 FONT_POLICY = b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1"
+# Both are now derived from their declared payloads by tools/render_policy_vectors.py rather
+# than taken on trust from the Rust side, so the composite policy below rests on two independent
+# reconstructions as well as its own.
 RENDERER_POLICY = "tsxgj54fonmrrlkoygcn5dtv65iu6neymvyee3x6hartgevwyynq"
 CROSSHAIR_POLICY = "pyj2osdlm4onqqyrhhlvy2qjfxxkfpfsg7flmjxeodoho55i4hta"
 

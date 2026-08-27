@@ -62,6 +62,8 @@ EXPECTED_TAGS = {
     "offset-occlusion-depth": "#bb.receipt.sha256.2r36dtvymqot5hjqb2zkz3ru7fe5ki6waqclvfhgtzg5ngmegcuq",
     "corpus": "#bb.receipt.sha256.x2m63bxhu5ayhccnnij3ohv6ux7x3uk3hgal2qy334qb2atkam5q",
 }
+# tools/render_policy_vectors.py rebuilds this profile from its declared constants, so the
+# candidate the corpus names is no longer an opaque digest copied from the Rust side.
 CANDIDATE_PROFILE_TAG = "#bb.policy.sha256.tsxgj54fonmrrlkoygcn5dtv65iu6neymvyee3x6hartgevwyynq"
 
 Vec3 = tuple[float, float, float]
