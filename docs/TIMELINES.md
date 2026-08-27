@@ -34,19 +34,33 @@ run is loud and visible. Enabling hard protection is a one-command change
 if the repository is later made public or the plan upgraded; that choice
 belongs to the owner, not the timeline.
 
-## The mirror
+## The mirror — retired 2026-08-27, the timelines have converged
 
-`mirror/timeline-1` records the observed states of the original
-directory, which has no version control of its own and is being actively
+The lines rejoined before either reached the question below. Timeline 1's
+content — including the generated `index/` and its query surface — is merged
+into `main`, `timeline-2` and the `codex/bitblock-progress-2026-08-26`
+continuation branch are deleted with their history preserved in `main`, and
+`main` is the repository's default branch and only line of development.
+
+`mirror/timeline-1` is kept as the record of the divergence, its final
+observation being `1ddbfa2` (2026-08-27 06:08 UTC). `tools/mirror_timeline1.py`
+now refuses to run: observing that folder again would commit noise about a
+directory nobody develops in. The original folder is left untouched as a
+historical artifact, exactly as this document always said it would be.
+
+What the mirror was, in the past tense.
+
+`mirror/timeline-1` recorded the observed states of the original
+directory, which had no version control of its own and was being actively
 worked by another agent toward a Layer-1 cryptocurrency design (blocks as
 mint, deletion as sink). `tools/mirror_timeline1.py` copies that tree
 read-only — same exclusions as the fork: `target/`, `__pycache__/`,
 `.lake/` — into a worktree and commits each observed state with a
 timestamp. The branch is rooted at `inherited-state`, so each mirror
 commit's diff is the other line's progress since the fork, and
-`git diff mirror/timeline-1 timeline-2` is the live divergence between
-the lines. An automation re-mirrors every 30 minutes and pushes; a state
-identical to the last observation commits nothing.
+`git diff mirror/timeline-1 main` is the divergence between the
+lines as it stood at convergence. An automation re-mirrored every 30 minutes
+and pushed; a state identical to the last observation committed nothing.
 
 One observation recorded at the mirror's creation, for whoever reads the
 divergence later: the other line's stated destination — creation as mint,
@@ -56,6 +70,9 @@ discriminator showed the sink question is load-bearing (whether a death
 burns its wallet or drops it as a pickup changed the ecology's fate
 outright). The two lines will meet at that question from opposite ends:
 this one designing the sink, that one having measured one.
+
+They merged before meeting it. The question is still open, and it is now one
+line's to answer.
 
 ## Commit honesty
 

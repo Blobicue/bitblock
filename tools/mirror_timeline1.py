@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Mirror the timeline-1 working tree into this repository as commits.
+"""RETIRED 2026-08-27. Mirrored the timeline-1 working tree here as commits.
 
-Timeline 1 is C:/Users/Owen/bitblock — the original directory, actively
-worked by another agent, with no version control of its own. This tool
+The timelines have converged: timeline-1's content is merged into `main`, and
+`mirror/timeline-1` is kept as the historical record of how the two lines
+diverged and rejoined. Nobody works in timeline 1 any more, so further
+observations would commit noise about a folder that is no longer a line of
+development. This tool now refuses to run; delete it once the record stops
+being interesting.
+
+What it did, for whoever reads the branch later. Timeline 1 was
+C:/Users/Owen/bitblock — the original directory, worked by another agent,
+with no version control of its own. This tool
 never writes inside timeline 1. It copies the source tree (minus build
 artifacts, using the same exclusions as the fork) into a git worktree on
 the `mirror/timeline-1` branch and commits the exact state with a
@@ -50,7 +58,19 @@ def git(*args: str, cwd: Path = REPO, check: bool = True) -> str:
     return r.stdout
 
 
+RETIRED = """mirror: retired 2026-08-27 — the timelines have converged.
+
+timeline-1's content is merged into main; the mirror/timeline-1 branch is kept
+as the record of the divergence. Observing that folder again would commit noise
+about a directory nobody develops in.
+
+If you genuinely need to resume mirroring a second line, delete this guard and
+say in the commit message which line you are observing and why."""
+
+
 def main() -> None:
+    sys.exit(RETIRED)
+
     if not SOURCE.is_dir():
         sys.exit(f"mirror: source {SOURCE} not found")
 
