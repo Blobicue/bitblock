@@ -84,6 +84,17 @@ SKIP_BARE = {
     "bbindex.py", "bbgraph.py", "bbverify.py", "bbmutate.py", "bbtime.py",
 }
 
+
+def vector_suites() -> list[Path]:
+    """Every bare validator in tools/, globbed rather than enumerated.
+
+    A suite dropped into tools/ is run without anyone remembering to register
+    it, and the count reported below cannot drift from the count that ran. The
+    label used to be a hand-written "32"; it stayed 32 when the thirty-third
+    arrived, which is the same silent-shrink failure EXPECTED_TESTS guards.
+    """
+    return [p for p in sorted((ROOT / "tools").glob("*.py")) if p.name not in SKIP_BARE]
+
 # What each kind of check reads. A check is skipped only when every path here is
 # byte-identical to the last run that passed it.
 RUST_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tests/**/*.rs",
@@ -222,7 +233,7 @@ def build_tests(features: list[str]) -> tuple[bool, list, str]:
 
 
 def run_vectors() -> tuple[bool, str]:
-    tools = [t for t in sorted((ROOT / "tools").glob("*.py")) if t.name not in SKIP_BARE]
+    tools = vector_suites()
     broken = []
     with ThreadPoolExecutor(max_workers=8) as pool:
         for tool, (ok, _detail) in zip(
@@ -247,7 +258,8 @@ EXTRA_CHECKS = {
     "cargo fmt": (RUST_INPUTS, lambda: run(["cargo", "fmt", "--check"]),
                   "formatting is a CI gate; rustfmt skips macro bodies"),
     "python vectors": (VECTOR_INPUTS, run_vectors,
-                       "32 independent reconstructions; they catch the two sides disagreeing"),
+                       "%d independent reconstructions; they catch the two sides disagreeing"
+                       % len(vector_suites())),
     "metric registry": (REGISTRY_INPUTS,
                         lambda: run([sys.executable, "-B", "tools/metric_registry.py", "audit"]),
                         "1,112 aliases must still resolve to their definition tags"),
