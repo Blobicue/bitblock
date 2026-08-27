@@ -11,6 +11,10 @@ The forward-looking security architecture is documented in
 local deterministic world from the proposed identity, ownership, replication, consensus,
 availability, and Layer 1 requirements.
 
+The paper's latest gap review is recorded in
+[`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md); it distinguishes prose fixes
+from repository obligations that remain unimplemented.
+
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
 - Every other unspecified coordinate is off.

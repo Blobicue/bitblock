@@ -9,7 +9,8 @@ semantic history.
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
-- Last published checkpoint: `6bc26ff` (`docs: reconcile Bitblock semantics with transcript`)
+- The prior published checkpoint was `c9a93f6` (`docs: specify Bitblock Layer 1 security path`);
+  this paper-audit revision supersedes it at the branch tip.
 - The branch contains the full non-build local checkpoint plus the semantic and transcript
   handoffs. Generated `target`, Lean `.lake`, and Python cache files are intentionally absent.
 - The original non-Git working folder was preserved separately; a new agent should clone the
@@ -29,8 +30,9 @@ Read in this order:
 2. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
 3. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
 4. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
-5. `README.md` (controls, commands, and feature boundaries)
-6. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+5. `docs/LAYER1_DESIGN_AUDIT.md` (paper gap findings and residual repository obligations)
+6. `README.md` (controls, commands, and feature boundaries)
+7. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
 
 ## What is implemented
 
