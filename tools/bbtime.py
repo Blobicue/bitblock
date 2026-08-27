@@ -150,13 +150,17 @@ def rebuild_cost(argv: list[str]) -> int:
     rows = []
     for name in modules:
         path = ROOT / "src" / ("%s.rs" % name)
-        original = path.read_text(encoding="utf-8")
+        # Bytes, not text. read_text translates CRLF to LF and write_text would
+        # put it back as LF, silently rewriting the line endings of every module
+        # probed. Nothing would break, but the working tree churns and
+        # bbverify's cache hashes file content -- so a probe would invalidate
+        # every check it touched.
+        original = path.read_bytes()
         try:
-            path.write_text(original + "\n// bbtime probe\n", encoding="utf-8",
-                            newline="\n")
+            path.write_bytes(original + b"\n// bbtime probe\n")
             cost = run()
         finally:
-            path.write_text(original, encoding="utf-8", newline="\n")
+            path.write_bytes(original)
             run()
         rows.append((cost, name, dependents.get(name, 0)))
         print("  %-24s %5.1fs   %2d dependents" % (name, cost, dependents.get(name, 0)))
