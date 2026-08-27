@@ -109,7 +109,7 @@ fn main() {
         SIZE * SIZE * 12
     );
     println!(
-        "Raster is what survives the hidden-bit test; ordering the bits lands in project, \n\
+        "Raster is what survives the hidden-bit test. Ordering the bits lands in project,\n\
          because the away-facing control orders them too."
     );
 }
