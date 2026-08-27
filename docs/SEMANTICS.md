@@ -4,6 +4,11 @@ This document records the meaning of the current Bitblock system. It is intentio
 separate from a feature list: a feature says what exists, while a semantic boundary says
 what a state, tick, receipt, or proof is allowed to mean.
 
+The chronological reconciliation of the design conversation is preserved in
+[`TRANSCRIPT_AUDIT.md`](TRANSCRIPT_AUDIT.md). That file separates user intent, implemented
+behavior, bounded evidence, and open questions so later checkpoints do not turn a hypothesis
+into a fact.
+
 ## The implemented model
 
 Bitblock is a sparse binary coordinate space observed through a camera.
@@ -31,16 +36,17 @@ The tick is the simulation clock and the semantic commit boundary.
 2. The accepted actions for one contiguous tick ordinal are applied in their exact order.
 3. The fixed tick reducer updates camera and world state, applies edit rules, and commits the
    resulting world/history identities.
-4. A tick outcome exposes the post-world, post-history, camera, and frame-input/frame-output
-   commitments that were derived from that fold.
+4. A tick outcome exposes the post-world, post-history, and camera state plus optional
+   frame-input/frame-output commitments when that fold dirtied a render surface.
 
 Empty ticks are real idle ticks. Wall-clock scheduling chooses when a tick is attempted; it is
 not a hidden input to the reducer. The same accepted action tape therefore has one deterministic
 simulation meaning when replayed with the same build and protocol limits.
 
 Rendering is a projection of the committed tick state. It does not create a second simulation
-clock. The current target is a fixed 60 Hz loop, with the window presenting the CPU-produced
-XRGB buffer after the tick has derived it.
+clock. The current target is a fixed 60 Hz loop. A dirty tick derives a CPU-produced XRGB buffer;
+an idle tick can advance the outcome chain without deriving a new frame, and the window presents
+the latest successfully prepared surface at a separate presentation boundary.
 
 ## Edit semantics
 
@@ -77,6 +83,10 @@ Scroll depth spans the one-pixel view through a block-filling view. Below the on
 saturation level, the current correctness-first renderer traverses every on bit and rasterizes
 its projected contribution. This preserves the intended projection semantics but is not yet a
 hierarchical near-infinite renderer: large worlds still cost real traversal time.
+
+The live app currently starts with `Camera::for_observer_spawn()` beside the origin at distance
+`1.0`. `Camera::for_single_pixel_voxel()` is an exact reusable constructor for the requested
+single-voxel one-pixel setup, but it is not the default live startup path at this checkpoint.
 
 `F` is a camera reframe to a safe view of the complete current bounds. It is not physical travel
 through every intervening coordinate. Camera values remain absolute `f64`; exact collision

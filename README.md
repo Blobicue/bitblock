@@ -27,8 +27,9 @@ Bitblock is a binary coordinate space observed through a free camera.
   RGB tolerance profile, ordered XRGB challenge positions, and caller-supplied RGB16 values. It
   has no device collector, source attestation, or physical observation yet: `N/A`, unavailable,
   and unbound states remain first-class, and a synthetic codec test is not a monitor-light result.
-- One fixed 60 Hz tick consumes input, changes observer/world state, and produces changed frames;
-  the window layer only presents pixels produced by that tick.
+- One fixed 60 Hz tick consumes accepted input and commits observer/world state. Dirty ticks
+  derive a new CPU frame; idle ticks still emit a tick outcome but may reuse the last raster.
+  Presentation is a separate window-boundary step.
 - Scroll moves logarithmically between the one-pixel view and a block-filling view.
 
 ## Controls
@@ -382,6 +383,12 @@ bedrock makes the world permanently non-empty. There is no artificial world edge
 but real memory and compute are finite. At this checkpoint, views below the one-pixel saturation
 level rasterize every on bit; a hierarchical renderer is intentionally left for a later checkpoint
 after this interaction model is judged.
+
+The live app currently boots with `Camera::for_observer_spawn()` beside the origin at an
+observation distance of `1.0`. The reusable `Camera::for_single_pixel_voxel()` constructor
+provides the exact one-pixel setup for a single voxel, and wheel-out or `F` can reach the
+one-pixel saturation view, but exact one-pixel startup is not the default live-app behavior at
+this checkpoint.
 
 Observer movement and wheel dolly use a complete swept-point test, so a large tick cannot tunnel
 through a voxel. Contact stops the whole movement vector; face sliding is not implemented yet.
