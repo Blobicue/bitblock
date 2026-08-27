@@ -9,6 +9,9 @@ Bitblock is a binary coordinate space observed through a free camera.
 - There is no gravity, body, terrain, inventory, or autonomous simulation.
 - The observer is a point that cannot enter or tunnel through an on block.
 - The framebuffer is written as physical pixels.
+- Each final game frame also receives a CPU-side exact RGB palette-membership audit after the
+  crosshair is drawn. It checks renderer output only; it is not evidence of OS composition,
+  scanout, monitor light, or observer perception.
 - On Windows, the app owns that XRGB slice and admits a submission only when
   `SetDIBitsToDevice` reports every requested scanline; this is checked GDI acceptance,
   not compositor or monitor proof.
@@ -435,6 +438,18 @@ an exact complete OS desktop-raster match, every challenge XRGB word equals the 
 expected framebuffer word, and every reported RGB16 channel is within its declared integer
 tolerance of `channel8 * 257`. Missing/wrong parents, unavailable GDI captures, bad challenges,
 and residuals outside the bound stay `Unbound`, `ChallengeMismatch`, or `SampleMismatch`.
+
+For a future finite sensor assay, `RgbGradientChallenge::from_exact_presentation(parent, k)`
+derives up to `k` canonical row-major positions from the already verified expected XRGB slice.
+It ranks each pixel by the sum of RGB8 absolute-difference scores to its existing right and lower
+neighbours, with score-descending then row/column tie breaking. This makes a small sensor sample
+more diagnostic of a wrong pixel mapping; it is not a continuous renderer gradient, a depth or
+light measurement, or extra evidence beyond the fully named parent raster. Its separate
+stdlib-only vector check is:
+
+```powershell
+python -B tools/rgb_gradient_challenge_vectors.py
+```
 
 That narrow result still proves neither that an external device produced the numbers nor that
 they came from the panel. Device identity, calibration custody, camera-to-panel geometry,

@@ -151,6 +151,14 @@ the numbers, an independently held/calibrated instrument, physical camera/panel 
 scanout, or photons. No external sensor record has been admitted, so the physical-display metric
 is still `N/A`.
 
+`RgbGradientChallenge::from_exact_presentation(parent, k)` is a deterministic optional selector
+for a future finite sample. It first requires the same verified `Match`/`Complete` parent, scans
+the parent expected XRGB pixels, scores each pixel from its existing right/lower RGB8 absolute
+differences, retains the top `k` with a declared stable tie rule, then emits the usual canonical
+row-major challenge points. The selector's policy and selected challenge both have full tags.
+It makes an eventual sample more discriminating for coordinate/color mismatches only; it does not
+measure a physical gradient, establish a sensor mapping, or strengthen the OS-raster boundary.
+
 The implemented frame chain separates input, output, and occurrence:
 
 ```text

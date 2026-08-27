@@ -115,10 +115,21 @@ impl<'a> FrameRef<'a> {
 
     /// Scans and tags every final pixel in one pass.
     pub fn observe(self) -> FrameObservation {
+        self.observe_with(|_, _| {})
+    }
+
+    /// Scans and tags every final pixel in one pass while exposing its canonical row-major words
+    /// to a caller-owned derived audit.
+    ///
+    /// The callback is a projection hook only: it cannot alter the hashed bytes, frame facts, or
+    /// tag. This avoids a second framebuffer walk for a renderer-specific metric while preserving
+    /// the ordinary [`Self::observe`] result exactly.
+    pub fn observe_with(self, mut inspect: impl FnMut(usize, u32)) -> FrameObservation {
         let mut facts = FrameFacts {
             pixel_count: self.xrgb.len() as u64,
             ..FrameFacts::default()
         };
+        let mut index = 0_usize;
         let tag = hash_canonical(
             TagKind::Frame,
             CANONICAL_FRAME_DOMAIN,
@@ -132,10 +143,13 @@ impl<'a> FrameRef<'a> {
                     facts.red_sum += u64::from((rgb >> 16) & 0xff);
                     facts.green_sum += u64::from((rgb >> 8) & 0xff);
                     facts.blue_sum += u64::from(rgb & 0xff);
+                    inspect(index, word);
+                    index += 1;
                 });
             },
         )
         .expect("validated frame canonical length must match its encoder");
+        debug_assert_eq!(index, self.xrgb.len());
         FrameObservation { facts, tag }
     }
 }
@@ -745,6 +759,25 @@ mod tests {
         assert_eq!(facts.red_sum, 0x12 + 0x01 + 0xff);
         assert_eq!(facts.green_sum, 0x34 + 0x02 + 0xff);
         assert_eq!(facts.blue_sum, 0x56 + 0x04 + 0xff);
+    }
+
+    #[test]
+    fn callback_observation_is_row_major_and_keeps_the_standard_frame_result() {
+        let pixels = [0x0000_0000, 0x0011_2233, 0x0044_5566, 0x0077_8899];
+        let frame = FrameRef::new(2, 2, &pixels).unwrap();
+        let mut seen = Vec::new();
+        let observed = frame.observe_with(|index, word| seen.push((index, word)));
+
+        assert_eq!(
+            seen,
+            [
+                (0, 0x0000_0000),
+                (1, 0x0011_2233),
+                (2, 0x0044_5566),
+                (3, 0x0077_8899),
+            ]
+        );
+        assert_eq!(observed, frame.observe());
     }
 
     #[test]

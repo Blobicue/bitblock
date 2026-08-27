@@ -8,6 +8,8 @@
 //! matching OS-raster artifact. It does not establish instrument identity, calibration custody,
 //! camera-to-panel geometry, timing, scanout, or emitted light.
 
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
 use std::fmt;
 
 use crate::display::{CaptureStage, DisplayOutcome};
@@ -21,6 +23,9 @@ pub const PHYSICAL_SENSOR_POLICY_SCHEMA: &[u8] = b"bitblock/physical-sensor-poli
 pub const DECLARED_SENSOR_PROFILE_SCHEMA: &[u8] = b"bitblock/declared-sensor-profile/v1";
 /// Schema bound into one ordered RGB challenge tag.
 pub const SENSOR_CHALLENGE_SCHEMA: &[u8] = b"bitblock/sensor-rgb-challenge/v1";
+/// Schema bound into the deterministic RGB-transition sampling policy.
+pub const RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA: &[u8] =
+    b"bitblock/sensor-rgb-gradient-challenge-policy/v1";
 /// Schema bound into a physical-sensor observation carrier.
 pub const PHYSICAL_SENSOR_OBSERVATION_SCHEMA: &[u8] = b"bitblock/physical-sensor-observation/v1";
 
@@ -39,6 +44,17 @@ const U16_BYTES: usize = 2;
 const U32_BYTES: usize = 4;
 const OPTIONAL_MARKER_NONE: u8 = 0;
 const OPTIONAL_MARKER_SOME: u8 = 1;
+const RGB_GRADIENT_CHALLENGE_POLICY_PAYLOAD: &[u8] = concat!(
+    "parent=verified-presentation-output-with-exact-desktop-raster;",
+    "pixels=expected-xrgb-row-major;",
+    "adjacency=right-and-down-existing-neighbours;",
+    "edge-score=sum-abs-rgb8-channel-deltas;",
+    "point-score=sum-existing-right-down-edge-scores;",
+    "rank=point-score-descending-then-y-ascending-then-x-ascending;",
+    "retain=top-requested-count;output=row-major;",
+    "purpose=diagnostic-sensor-challenge-selection-not-physical-proof"
+)
+.as_bytes();
 
 /// Returns the full typed hash tag for the fixed comparison policy.
 ///
@@ -46,6 +62,21 @@ const OPTIONAL_MARKER_SOME: u8 = 1;
 pub fn physical_sensor_policy_tag() -> ContentTag {
     hash_canonical(TagKind::Policy, PHYSICAL_SENSOR_POLICY_SCHEMA, 0, |_| {})
         .expect("the fixed physical-sensor policy payload has zero bytes")
+}
+
+/// Returns the full typed hash tag for the fixed RGB-transition challenge-selection policy.
+///
+/// This names only a deterministic way to choose diagnostic framebuffer positions. The source
+/// framebuffer remains fully named by its presentation artifact, and neither this policy nor its
+/// chosen points establishes a physical camera/panel mapping, depth, scanout, or emitted light.
+pub fn rgb_gradient_challenge_policy_tag() -> ContentTag {
+    hash_canonical(
+        TagKind::Policy,
+        RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA,
+        RGB_GRADIENT_CHALLENGE_POLICY_PAYLOAD.len() as u64,
+        |sink| sink(RGB_GRADIENT_CHALLENGE_POLICY_PAYLOAD),
+    )
+    .expect("the fixed RGB-gradient challenge policy payload length must match")
 }
 
 /// The only states a canonical carrier is allowed to serialize.
@@ -305,6 +336,297 @@ impl SensorChallenge {
         }
         Ok(())
     }
+}
+
+/// Exact RGB-transition facts computed while selecting a diagnostic challenge.
+///
+/// They are projections of the already named complete XRGB slice, not an additional display
+/// validity claim. Every adjacency is counted once: from each pixel to its existing right and
+/// lower neighbours.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RgbGradientFacts {
+    inspected_pixels: u64,
+    horizontal_adjacencies: u64,
+    vertical_adjacencies: u64,
+    nonzero_adjacencies: u64,
+    total_rgb_delta: u64,
+    maximum_adjacency_delta: u16,
+    maximum_point_score: u16,
+}
+
+impl RgbGradientFacts {
+    pub const fn inspected_pixels(self) -> u64 {
+        self.inspected_pixels
+    }
+
+    pub const fn horizontal_adjacencies(self) -> u64 {
+        self.horizontal_adjacencies
+    }
+
+    pub const fn vertical_adjacencies(self) -> u64 {
+        self.vertical_adjacencies
+    }
+
+    pub const fn nonzero_adjacencies(self) -> u64 {
+        self.nonzero_adjacencies
+    }
+
+    pub const fn total_rgb_delta(self) -> u64 {
+        self.total_rgb_delta
+    }
+
+    pub const fn maximum_adjacency_delta(self) -> u16 {
+        self.maximum_adjacency_delta
+    }
+
+    pub const fn maximum_point_score(self) -> u16 {
+        self.maximum_point_score
+    }
+
+    fn record_adjacency(&mut self, delta: u16) {
+        self.nonzero_adjacencies += u64::from(delta != 0);
+        self.total_rgb_delta += u64::from(delta);
+        self.maximum_adjacency_delta = self.maximum_adjacency_delta.max(delta);
+    }
+}
+
+/// A deterministic set of the most RGB-discriminating expected pixels in one exact presentation.
+///
+/// The selected points are suitable for asking a future external instrument a more informative
+/// finite question than arbitrary coordinates. They do not test the instrument themselves and do
+/// not replace the complete CPU/desktop-raster comparison that admits the parent artifact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RgbGradientChallenge {
+    parent: ContentTag,
+    point_budget: usize,
+    challenge: SensorChallenge,
+    facts: RgbGradientFacts,
+}
+
+impl RgbGradientChallenge {
+    /// Derives up to `point_budget` challenge points from an already matching desktop-raster
+    /// presentation artifact.
+    ///
+    /// Each pixel receives the sum of its right and lower RGB8 edge deltas. The strongest pixels
+    /// win; equal scores use row-major coordinates as a stable tie break. The returned challenge
+    /// itself is row-major because that is the canonical sensor-record ordering.
+    pub fn from_exact_presentation(
+        parent: &PresentationOutputArtifact,
+        point_budget: usize,
+    ) -> Result<Self, RgbGradientChallengeError> {
+        if point_budget == 0 || point_budget > MAX_SENSOR_CHALLENGE_POINTS {
+            return Err(RgbGradientChallengeError::PointBudget {
+                actual: point_budget,
+                maximum: MAX_SENSOR_CHALLENGE_POINTS,
+            });
+        }
+        if parent.verify().is_err() {
+            return Err(RgbGradientChallengeError::ParentInvalid);
+        }
+        let capture = parent.display().receipt().facts();
+        if capture.outcome != DisplayOutcome::Match || capture.stage != CaptureStage::Complete {
+            return Err(RgbGradientChallengeError::NoExactDesktopRaster);
+        }
+
+        let display = parent.display();
+        let (width, height) = display.receipt().expected_viewport();
+        let pixels = display.expected_pixels();
+        if pixels.is_empty() {
+            return Err(RgbGradientChallengeError::EmptyExpectedFrame);
+        }
+
+        let width = usize::try_from(width).expect("u32 width always fits usize");
+        let height = usize::try_from(height).expect("u32 height always fits usize");
+        debug_assert_eq!(pixels.len(), width * height);
+        let capacity = point_budget.min(pixels.len());
+        let mut selected = BinaryHeap::<Reverse<GradientCandidate>>::new();
+        selected.try_reserve(capacity).map_err(|_| {
+            RgbGradientChallengeError::AllocationFailed {
+                requested_points: capacity,
+            }
+        })?;
+
+        let mut facts = RgbGradientFacts {
+            inspected_pixels: pixels.len() as u64,
+            ..RgbGradientFacts::default()
+        };
+        for y in 0..height {
+            for x in 0..width {
+                let index = y * width + x;
+                let xrgb = pixels[index];
+                if xrgb & 0xff00_0000 != 0 {
+                    return Err(RgbGradientChallengeError::ParentXrgbHasHighByte {
+                        x: u32::try_from(x).expect("frame width is a u32"),
+                        y: u32::try_from(y).expect("frame height is a u32"),
+                        value: xrgb,
+                    });
+                }
+
+                let mut score = 0_u16;
+                if x + 1 < width {
+                    let delta = rgb_delta(xrgb, pixels[index + 1]);
+                    facts.horizontal_adjacencies += 1;
+                    facts.record_adjacency(delta);
+                    score += delta;
+                }
+                if y + 1 < height {
+                    let delta = rgb_delta(xrgb, pixels[index + width]);
+                    facts.vertical_adjacencies += 1;
+                    facts.record_adjacency(delta);
+                    score += delta;
+                }
+                facts.maximum_point_score = facts.maximum_point_score.max(score);
+
+                retain_gradient_candidate(
+                    &mut selected,
+                    GradientCandidate {
+                        score,
+                        x: u32::try_from(x).expect("frame width is a u32"),
+                        y: u32::try_from(y).expect("frame height is a u32"),
+                        xrgb,
+                    },
+                    point_budget,
+                );
+            }
+        }
+
+        let mut candidates = Vec::new();
+        candidates.try_reserve_exact(selected.len()).map_err(|_| {
+            RgbGradientChallengeError::AllocationFailed {
+                requested_points: selected.len(),
+            }
+        })?;
+        candidates.extend(selected.into_iter().map(|Reverse(candidate)| candidate));
+        candidates.sort_unstable_by_key(|candidate| (candidate.y, candidate.x));
+
+        let mut points = Vec::new();
+        points.try_reserve_exact(candidates.len()).map_err(|_| {
+            RgbGradientChallengeError::AllocationFailed {
+                requested_points: candidates.len(),
+            }
+        })?;
+        points.extend(
+            candidates.into_iter().map(|candidate| {
+                SensorChallengePoint::new(candidate.x, candidate.y, candidate.xrgb)
+            }),
+        );
+
+        Ok(Self {
+            parent: parent.tag(),
+            point_budget,
+            challenge: SensorChallenge::new(points)
+                .expect("selected exact XRGB points are nonempty and canonical"),
+            facts,
+        })
+    }
+
+    pub const fn parent_tag(&self) -> ContentTag {
+        self.parent
+    }
+
+    pub fn policy_tag(&self) -> ContentTag {
+        rgb_gradient_challenge_policy_tag()
+    }
+
+    pub const fn point_budget(&self) -> usize {
+        self.point_budget
+    }
+
+    pub fn challenge(&self) -> &SensorChallenge {
+        &self.challenge
+    }
+
+    pub fn into_challenge(self) -> SensorChallenge {
+        self.challenge
+    }
+
+    pub const fn facts(&self) -> RgbGradientFacts {
+        self.facts
+    }
+}
+
+/// Why a deterministic RGB-transition challenge could not be derived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RgbGradientChallengeError {
+    PointBudget { actual: usize, maximum: usize },
+    ParentInvalid,
+    NoExactDesktopRaster,
+    EmptyExpectedFrame,
+    ParentXrgbHasHighByte { x: u32, y: u32, value: u32 },
+    AllocationFailed { requested_points: usize },
+}
+
+impl fmt::Display for RgbGradientChallengeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::PointBudget { actual, maximum } => write!(
+                formatter,
+                "RGB-gradient challenge requests {actual} points outside 1..={maximum}"
+            ),
+            Self::ParentInvalid => formatter.write_str(
+                "RGB-gradient challenge parent does not verify as a presentation-output artifact",
+            ),
+            Self::NoExactDesktopRaster => formatter.write_str(
+                "RGB-gradient challenge requires a complete matching desktop-raster parent",
+            ),
+            Self::EmptyExpectedFrame => {
+                formatter.write_str("RGB-gradient challenge parent has no expected pixels")
+            }
+            Self::ParentXrgbHasHighByte { x, y, value } => write!(
+                formatter,
+                "RGB-gradient challenge parent pixel ({x}, {y}) has non-XRGB word {value:#010x}"
+            ),
+            Self::AllocationFailed { requested_points } => write!(
+                formatter,
+                "could not allocate RGB-gradient challenge storage for {requested_points} points"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RgbGradientChallengeError {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GradientCandidate {
+    score: u16,
+    x: u32,
+    y: u32,
+    xrgb: u32,
+}
+
+impl Ord for GradientCandidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.score
+            .cmp(&other.score)
+            .then_with(|| other.y.cmp(&self.y))
+            .then_with(|| other.x.cmp(&self.x))
+    }
+}
+
+impl PartialOrd for GradientCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn retain_gradient_candidate(
+    selected: &mut BinaryHeap<Reverse<GradientCandidate>>,
+    candidate: GradientCandidate,
+    point_budget: usize,
+) {
+    if selected.len() < point_budget {
+        selected.push(Reverse(candidate));
+    } else if candidate > selected.peek().expect("nonempty full selection heap").0 {
+        selected.pop();
+        selected.push(Reverse(candidate));
+    }
+}
+
+fn rgb_delta(left: u32, right: u32) -> u16 {
+    let red = ((left >> 16) & 0xff).abs_diff((right >> 16) & 0xff);
+    let green = ((left >> 8) & 0xff).abs_diff((right >> 8) & 0xff);
+    let blue = (left & 0xff).abs_diff(right & 0xff);
+    u16::try_from(red + green + blue).expect("three eight-bit RGB deltas fit u16")
 }
 
 /// One externally reported RGB code triplet in the declared profile's integer code space.
@@ -1316,13 +1638,13 @@ mod tests {
         }
     }
 
-    fn timing(receipt: FrameReceiptV2) -> CompositionTimingEnvelope {
+    fn timing(receipt: FrameReceiptV2, scanlines: u32) -> CompositionTimingEnvelope {
         CompositionTimingEnvelope::new(
             receipt,
             PresenterEvidence {
                 policy: test_tag(TagKind::Policy, 3),
-                requested_scanlines: 1,
-                returned_scanlines: 1,
+                requested_scanlines: scanlines,
+                returned_scanlines: i32::try_from(scanlines).unwrap(),
                 call_error_code: 0,
                 release_result: 1,
                 release_error_code: 0,
@@ -1373,13 +1695,22 @@ mod tests {
     }
 
     fn presentation(exact_capture: bool) -> PresentationOutputArtifact {
-        let expected = FrameRef::new(2, 1, &PIXELS).unwrap();
+        presentation_with_pixels(2, 1, &PIXELS, exact_capture)
+    }
+
+    fn presentation_with_pixels(
+        width: u32,
+        height: u32,
+        pixels: &[u32],
+        exact_capture: bool,
+    ) -> PresentationOutputArtifact {
+        let expected = FrameRef::new(width, height, pixels).unwrap();
         let receipt = frame_receipt(expected);
         let rect = CaptureRect {
             left: 0,
             top: 0,
-            right: 2,
-            bottom: 1,
+            right: i32::try_from(width).unwrap(),
+            bottom: i32::try_from(height).unwrap(),
         };
         let facts = if exact_capture {
             DisplayCaptureFacts {
@@ -1403,13 +1734,14 @@ mod tests {
             DisplayCaptureFacts::unavailable(CaptureStage::FlushBefore, 5)
         };
         let mut ledger = DisplayLedgerV2::default();
-        let display_receipt = *ledger.append(receipt, 2, 1, facts).unwrap();
+        let display_receipt = *ledger.append(receipt, width, height, facts).unwrap();
         let display = if exact_capture {
             DisplayCaptureArtifact::new(display_receipt, expected, Some(expected)).unwrap()
         } else {
             DisplayCaptureArtifact::new(display_receipt, expected, None).unwrap()
         };
-        PresentationOutputArtifact::new(display, timing(receipt), topology(1), topology(2)).unwrap()
+        PresentationOutputArtifact::new(display, timing(receipt, height), topology(1), topology(2))
+            .unwrap()
     }
 
     fn profile(tolerance: u16) -> DeclaredSensorProfile {
@@ -1666,6 +1998,63 @@ mod tests {
                 SensorChallengePoint::new(0, 0, PIXELS[0]),
             ]),
             Err(PhysicalSensorObservationError::NonCanonicalChallengeOrder { index: 1 })
+        ));
+    }
+
+    #[test]
+    fn rgb_transition_challenge_selects_canonical_highest_edges_and_requires_exact_parent() {
+        let pixels = [0x0000_0000, 0x0000_0000, 0x0000_0000, 0x00ff_ffff];
+        let parent = presentation_with_pixels(2, 2, &pixels, true);
+        let selected = RgbGradientChallenge::from_exact_presentation(&parent, 2).unwrap();
+
+        assert_eq!(selected.parent_tag(), parent.tag());
+        assert_eq!(
+            selected.policy_tag().to_string(),
+            "#bb.policy.sha256.3fhlsd4o5bd75gk2mdfuf2aerog44kqj3z6e5w6kzr24emxryltq"
+        );
+        assert_eq!(selected.point_budget(), 2);
+        assert_eq!(
+            selected.challenge().points(),
+            [
+                SensorChallengePoint::new(1, 0, pixels[1]),
+                SensorChallengePoint::new(0, 1, pixels[2]),
+            ]
+        );
+        assert_eq!(
+            selected.facts(),
+            RgbGradientFacts {
+                inspected_pixels: 4,
+                horizontal_adjacencies: 2,
+                vertical_adjacencies: 2,
+                nonzero_adjacencies: 2,
+                total_rgb_delta: 1_530,
+                maximum_adjacency_delta: 765,
+                maximum_point_score: 765,
+            }
+        );
+        assert_eq!(
+            selected.challenge().tag().to_string(),
+            "#bb.policy.sha256.n2v2w67sapkkqtrkuwgt5p4ksuug6rinjyklrimetjjxk3pptruq"
+        );
+
+        // Equal edge scores choose the earlier row before the earlier column, then output is
+        // canonical row-major order. A color or luminance-only ranking would not satisfy this.
+        let one = RgbGradientChallenge::from_exact_presentation(&parent, 1).unwrap();
+        assert_eq!(
+            one.challenge().points(),
+            [SensorChallengePoint::new(1, 0, pixels[1])]
+        );
+        assert_eq!(
+            one.challenge().tag().to_string(),
+            "#bb.policy.sha256.3spwnsqwiesp2d3zjl2el34r2mbcdroqdvdwebkwxpfxcyiqsgpq"
+        );
+        assert!(matches!(
+            RgbGradientChallenge::from_exact_presentation(&parent, 0),
+            Err(RgbGradientChallengeError::PointBudget { actual: 0, .. })
+        ));
+        assert!(matches!(
+            RgbGradientChallenge::from_exact_presentation(&presentation(false), 1),
+            Err(RgbGradientChallengeError::NoExactDesktopRaster)
         ));
     }
 

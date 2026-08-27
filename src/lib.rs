@@ -1,4 +1,6 @@
 pub mod camera;
+#[cfg(any(test, feature = "protocol-research"))]
+pub mod coordinate_episode;
 pub mod display;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod display_artifact;

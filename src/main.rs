@@ -2005,13 +2005,13 @@ impl App {
             .expect("renderer state must use canonical nested tag kinds");
             self.renderer.render(&self.world, &self.camera);
             self.renderer.draw_crosshair(overlay);
-            let game_frame = FrameRef::new(
-                self.renderer.width(),
-                self.renderer.height(),
-                self.renderer.pixels(),
-            )
-            .expect("renderer produced an invalid game-frame shape")
-            .observe();
+            let (game_frame, palette_audit) = self.renderer.observe_final_game_frame();
+            assert!(
+                palette_audit.is_valid(),
+                "renderer produced {} illegal final RGB colors; first={:?}",
+                palette_audit.illegal_rgb_count(),
+                palette_audit.first_illegal(),
+            );
             produced_game = Some((input.tag(), game_frame));
             produced_game_context = Some((renderer_profile, overlay_input));
         }

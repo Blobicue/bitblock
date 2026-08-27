@@ -158,13 +158,26 @@ impl DisplayCapture {
     }
 }
 
-/// Converts a complete top-down BI_RGB32 artifact to canonical XRGB and compares every pixel.
+/// One owned desktop readback after its pixels have been canonicalized and observed exactly once.
+///
+/// Keeping the pixels and their observation together prevents successful capture finalization
+/// from normalizing and hashing the same framebuffer a second time. Later failure stages retain
+/// this exact observation alongside the canonical pixels they already produced.
+struct CanonicalCapture {
+    pixels: Vec<u32>,
+    observation: FrameObservation,
+}
+
+/// Compares one already-canonicalized desktop readback against the expected XRGB frame.
 fn finalize_capture(
     expected: FrameRef<'_>,
-    mut pixels: Vec<u32>,
+    capture: CanonicalCapture,
     mut facts: DisplayCaptureFacts,
 ) -> DisplayCapture {
-    let captured = observe_captured(expected, &mut pixels);
+    let CanonicalCapture {
+        pixels,
+        observation,
+    } = capture;
     let mut mismatch_count = 0_u64;
     let mut first_mismatch = None;
     for (index, (&wanted, &seen)) in expected.pixels().iter().zip(&pixels).enumerate() {
@@ -179,7 +192,7 @@ fn finalize_capture(
         DisplayOutcome::Mismatch
     };
     facts.stage = CaptureStage::Complete;
-    facts.captured = Some(captured);
+    facts.captured = Some(observation);
     facts.mismatch_count = mismatch_count;
     facts.first_mismatch = first_mismatch;
     DisplayCapture {
@@ -188,13 +201,17 @@ fn finalize_capture(
     }
 }
 
-fn observe_captured(expected: FrameRef<'_>, pixels: &mut [u32]) -> FrameObservation {
+fn canonicalize_captured(expected: FrameRef<'_>, mut pixels: Vec<u32>) -> CanonicalCapture {
     for word in pixels.iter_mut() {
         *word &= RGB_MASK;
     }
-    FrameRef::new(expected.width(), expected.height(), pixels)
+    let observation = FrameRef::new(expected.width(), expected.height(), &pixels)
         .expect("capture allocation was dimension checked")
-        .observe()
+        .observe();
+    CanonicalCapture {
+        pixels,
+        observation,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1169,7 +1186,7 @@ pub mod windows {
 
     use super::{
         CaptureRect, CaptureStage, DisplayCapture, DisplayCaptureFacts, DisplayOutcome,
-        finalize_capture, observe_captured,
+        canonicalize_captured, finalize_capture,
     };
     use crate::frame::FrameRef;
 
@@ -1320,36 +1337,48 @@ pub mod windows {
         }
         facts.flush_after = true;
 
-        let mut pixels =
-            unsafe { std::slice::from_raw_parts(bits.cast::<u32>(), pixel_count) }.to_vec();
-        facts.captured = Some(observe_captured(expected, &mut pixels));
+        let capture = canonicalize_captured(
+            expected,
+            unsafe { std::slice::from_raw_parts(bits.cast::<u32>(), pixel_count) }.to_vec(),
+        );
+        facts.captured = Some(capture.observation);
 
         if unsafe { QueryPerformanceCounter(&mut facts.qpc_end) } == 0 {
             return failed(
                 facts,
                 CaptureStage::PerformanceClock,
                 last_error(),
-                Some(pixels),
+                Some(capture.pixels),
             );
         }
 
         let rect_after = match client_screen_rect(hwnd) {
             Ok(rect) => rect,
             Err(error) => {
-                return failed(facts, CaptureStage::GeometryAfter, error, Some(pixels));
+                return failed(
+                    facts,
+                    CaptureStage::GeometryAfter,
+                    error,
+                    Some(capture.pixels),
+                );
             }
         };
         facts.rect_after = rect_after;
         let dpi_after = unsafe { GetDpiForWindow(hwnd) };
         if rect_after != rect_before || dpi_after != dpi {
-            return failed(facts, CaptureStage::GeometryAfter, 0, Some(pixels));
+            return failed(facts, CaptureStage::GeometryAfter, 0, Some(capture.pixels));
         }
         if let Err(error) = require_single_monitor(rect_after) {
-            return failed(facts, CaptureStage::MonitorBoundary, error, Some(pixels));
+            return failed(
+                facts,
+                CaptureStage::MonitorBoundary,
+                error,
+                Some(capture.pixels),
+            );
         }
 
         facts.error_code = 0;
-        finalize_capture(expected, pixels, facts)
+        finalize_capture(expected, capture, facts)
     }
 
     fn failed(
@@ -1537,7 +1566,7 @@ mod tests {
         facts.qpc_start = 100;
         facts.qpc_end = 120;
         facts.qpc_frequency = 10_000_000;
-        finalize_capture(expected, pixels, facts)
+        finalize_capture(expected, canonicalize_captured(expected, pixels), facts)
     }
 
     fn frame_receipt_v2(stream: FrameStream, frame: ContentTag) -> FrameReceiptV2 {
@@ -1564,6 +1593,23 @@ mod tests {
         assert_eq!(mismatched.facts.outcome, DisplayOutcome::Mismatch);
         assert_eq!(mismatched.facts.mismatch_count, 1);
         assert_eq!(mismatched.facts.first_mismatch, Some(1));
+    }
+
+    #[test]
+    fn finalization_reuses_the_single_canonical_capture_observation() {
+        let expected_words = [0x0011_2233, 0x0044_5566];
+        let expected = FrameRef::new(2, 1, &expected_words).unwrap();
+        let canonical = canonicalize_captured(expected, vec![0xff11_2233, 0x0044_5566]);
+        let expected_observation = canonical.observation;
+        let finalized = finalize_capture(
+            expected,
+            canonical,
+            DisplayCaptureFacts::unavailable(CaptureStage::Shape, 0),
+        );
+
+        assert_eq!(finalized.pixels.as_deref(), Some(expected_words.as_slice()));
+        assert_eq!(finalized.facts.captured, Some(expected_observation));
+        assert_eq!(finalized.facts.outcome, DisplayOutcome::Match);
     }
 
     #[test]
