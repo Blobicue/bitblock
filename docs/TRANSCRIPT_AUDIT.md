@@ -11,7 +11,7 @@ planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronol
 that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md), the
 second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md), and the
 design-successor chronology through
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md).
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md).
 Those audits cover planning/proposed-protocol corrections only; none silently extends or reruns the
 checkpoint-0.3 paper audit. Changes to named source/proof files or this chronology stale the
 corresponding statements.
@@ -547,13 +547,11 @@ User intent: continue the same freeze-before-fix loop, challenge apparent closur
 accepting a smaller gap count, and start broad tests only after a complete successor sweep finds
 neither a new material gap nor a falsely closed residual.
 
-Current truth: the sixth correction is pinned at
-`62afdd24a8525704f5949584859bd7cbad300d4d`, Git tree
-`ee346fb3aa9bc54591f851dcb482fd92be9da84a`. The next complete read-only sweep is frozen in
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md) at
-first-addition commit `78d5494f930c7412c2d60162b44c0b72050f9f22`, whose Git tree is
-`07aa851e422a5da9453d4409f91b62ad9442a7d5`, with Git blob
-`dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2`. It records eight material findings: signatures still
+Current truth: the exact sixth-correction input and seventh-audit first-addition identity are
+carried once by the machine-checked `Loop7ProvenanceV1` projection in
+[`HANDOFF.md`](HANDOFF.md). The complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md).
+Its frozen finding set covers signatures still
 inside the allegedly unique accepted core; unsafe in-place recovery after compromise of a live
 authority-binding suite; an unbound consensus-evidence dependency for consensus-entailed
 availability; replay over plural wrappers instead of unique cores and a normalized evidence cutoff;
@@ -569,9 +567,10 @@ over one parent-ordered `AcceptedCoreReplayEntryV1` per height, carrying
 `NormalizedAcceptedEvidenceSnapshotV1` or `RetainedAcceptedEligibilityWitnessV1` under an explicit
 `ReplayEvidenceCutoffV1`.
 `PreventiveProfileOwnedCryptographicMigrationV1` remains available only while every authority
-binding is independently sound; an established collision/forgery in a live role safe-
-halts and can recover only through an independently anchored envelope precommitted before compromise
-or a separately trusted new genesis.
+binding is independently sound. This seventh-correction checkpoint still described an established
+live-role collision/forgery as choosing between a precommitted independent envelope and a separately
+trusted new genesis. Section 34 preserves the next audit's proof that the positive envelope branch
+was uninhabited and supersedes it with the current mandatory safe-halt/new-genesis disposition.
 
 The launch correction keeps the outer genesis bytes physically present and counted once, but gives
 `LaunchClosureExternalGenesisDependencyNodeV1` outgoing refs and a nonzero checked rank in the
@@ -591,8 +590,79 @@ no signature/evidence index, consensus or availability verifier, replay store, a
 recovery mechanism, launch/successor closure verifier, cryptographic primitive, networking,
 authenticated state, cryptocurrency, or Layer 1 execution. No broad Rust, Python-vector, headless,
 release, Lean, network, performance, or display test is attributed to this correction. A complete
-Loop 8 sweep must freeze zero new material gaps and zero falsely closed material residuals within
+successor sweep must freeze zero new material gaps and zero falsely closed material residuals within
 its declared lenses before those broad tests begin.
+
+### 34. Eighth bounded successor sweep and replay-authority closure
+
+User intent: keep repeating the same freeze-before-fix loop until an independently attacked sweep
+reaches diminishing returns, then begin broad implementation and proof tests. Diminishing returns
+still means a complete bounded sweep found neither a new material gap nor a falsely closed material
+residual; a smaller nonzero list does not qualify.
+
+Current truth: the exact seventh-correction input and eighth-audit first-addition identity are
+carried once by the machine-checked `Loop8ProvenanceV1` projection in
+[`HANDOFF.md`](HANDOFF.md). The complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md).
+Its frozen finding set covers successor release authority incorrectly inferred from an
+activation-purpose eligibility result; the replay archive root did not derive or prove one complete
+ordered evidence view; replay erased authority purpose, historical consumer, and consumption time;
+the required positive compromise-recovery control had no defined carrier; exact signature-free-core
+and collision-disposition guards accepted their own negations; and repeated provenance/count
+projections could drift from correct canonical Git and graph sources.
+
+The coordinated descendant proposal now uses a staged
+`VerifiedSuccessorPredecessorBaseContextV1` with separate release and activation references and
+eligibility results that share one unique parent core and governance source without erasing purpose,
+policy, predicate, or status. `VerifiedSuccessorReleaseAuthorityContextV1` is derived only after the
+release core ID, and `VerifiedSuccessorActivationAuthorityContextV1` only after the admitted release
+completes the bundle ID, so neither certificate depends on the object it helps authorize.
+It replaces a merely asserted replay root with typed evidence events, an authorized deterministic
+checkpoint transition, completeness/inclusion witnesses, one replay-wide evidence view, and a
+committed same-wrapper occurrence. Every normalized entry has one proof-free
+`NormalizedAcceptedAuthorityEntryCoreV1`, a domain-separated ID derived from that core, and a view
+root derived from sorted unique `(lookup_id, entry_id)` pairs; proof/view fields cannot define their
+own commitment, and retained projections currently carry the full core plus a deterministic trace.
+Purpose-scoped historical-use refs bind an already-authorized evidence checkpoint and its detached-
+authorization ID into the child header, release sign document, or activation sign document before
+its consumer ID is derived; an unsigned checkpoint-core ID alone cannot qualify.
+That intermediate correction still made the replay archive a live authority and was therefore
+replaced within the same correction pass. The current proposal instead admits one purpose-scoped
+`AcceptedConsensusNativeParentAuthorityCertificateV1` under parent-derived certificate,
+consensus, availability, position, status, and equivocation/liveness rules. A certificate-independent
+`ParentAuthorityCertificateConsumerContextV1` excludes historical refs and final consumer IDs. Its
+evidence commitment contains the complete `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1`
+plus component-total `AcceptedParentAuthorityWitnessReceiptCoverageV1`: every decoded credential,
+consensus, assessment, and dependency component, including conflict material, must enter the
+commitment/status computation. Consumer bytes bind the final
+admission ID. The authenticated authority-use event commits the full accepted-certificate bytes via
+`AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1`; an admission ID alone is
+insufficient. Replay later uses `ConsensusToReplayParentAuthorityCommitmentProofV1` to
+byte-match pinned raw wrapper occurrences and receipt IDs to that already accepted commitment; a
+later synthetic wrapper cannot repair admission. The archive checkpoint may postdate the consumer
+and never selects live authority. A separate replay-wide status projection may
+incorporate later evidence without altering the accepted certificate or rewriting history.
+
+The capability correction assigns live certificate issuance/admission to `CONSENSUS-1@base`,
+leaves `SYNC-1@base` as opaque bounded transport/retention, and introduces the post-consensus
+`SYNC-1@replay-authority` phase through `PD-06`; `TESTNET-1@base` consumes it through `PD-07`.
+This removes the hidden `SYNC-1 -> CONSENSUS-1 -> replay verification in SYNC-1` semantic cycle.
+
+Because no independent recovery-envelope schema is defined, every currently established live
+authority-binding compromise now follows the safe-halt/new-genesis control; a positive independent
+recovery path remains future-conditional until its carrier, authority, precommitment, last-safe
+selection, transition, and tests exist. The checker parses the exact signature-free core tuple and
+two-row collision disposition plus the ordered Loop 8 authority schemas/variants, rejects duplicate
+assignments and release/activation purpose collapse, guards capability ownership, derives structured
+audit provenance and planning-summary projections from Git/parser sources, pins the eighth audit,
+and extends the canonical inventory/read order.
+
+These remain proposed-protocol, planning, attribute-policy, and checker corrections. They implement
+no evidence archive, replay checkpoint, purpose-scoped authority verifier, recovery ceremony,
+cryptographic primitive, networking, authenticated state, cryptocurrency, or Layer 1 execution.
+No broad Rust, Python-vector, headless, release, Lean, network, performance, or display test is
+attributed to this correction. A later complete bounded sweep must first freeze zero new material
+gaps and zero falsely closed material residuals before broad tests begin.
 
 ## Semantic lessons that should survive future checkpoints
 

@@ -18,9 +18,10 @@ The current-source statements below were checked against source/proof snapshot
 [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). A change to a named source file, root/key contract,
 or this plan invalidates the corresponding statement rather than inheriting its “checked” status.
 The later network-integration boundary is reviewed through the frozen
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md); its
-proposal-credential/evidence, authority-binding compromise, replay, launch-DAG, successor-closure,
-and planning-projection corrections do not select or implement an authenticated-map candidate.
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md); its
+exact accepted-core/collision, dual-purpose successor-authority, authorized replay-archive,
+historical-authority, and established-compromise corrections do not select or implement an
+authenticated-map candidate.
 
 ## Outcome sought
 
@@ -195,10 +196,17 @@ parent, consensus, availability, replay, activation, and historical-verification
 authorize the transition remain independently sound. An established collision, forgery, or
 equivalent binding failure in a live object hash, proposal/vote signature, governance/release
 credential, proof/state, or other authority-bearing role is
-`ProfileOwnedAuthorityBindingCompromiseV1`. The affected lineage MUST safe-halt; absent a recovery
-envelope independently anchored and precommitted before compromise, restart requires a new
-independently trusted genesis. `ProtocolIdentityHashCompromiseV1` is the terminal case for loss of
-`ProfileIdHashV1`, whose compromised identities cannot name or authorize their own repair.
+`ProfileOwnedAuthorityBindingCompromiseV1`. `CurrentEstablishedAuthorityCompromiseDispositionV1`
+is exactly `SafeHaltAndSeparatelyTrustedNewGenesisV1`: the affected lineage MUST safe-halt, and current recovery
+always requires a new independently trusted genesis. The current proposal reserves
+`PrecommittedIndependentRecoveryEnvelopeV1 = ReservedFutureUninhabitedTypeV1`, so it has no
+positive in-place recovery value or test vector. A future `FutureIndependentRecoveryExtensionV1`
+remains conditional and `OPEN`; before it could become inhabited, later work would have to freeze
+its envelope schema and ID, independent genesis commitment and authority, signing domain,
+last-safe-parent rule, transition and availability contract, failed-role independence, and powered
+controls. This does not restrict preventive migration while the authority binding remains sound.
+`ProtocolIdentityHashCompromiseV1` is likewise terminal for the affected lineage and requires new
+genesis because compromised `ProfileIdHashV1` identities cannot name or authorize their own repair.
 
 ```text
 ProofPolicyDescriptorV1 {
@@ -833,12 +841,27 @@ implementation artifacts, and `SuccessorUpgradeEvidenceManifestV1`. The migratio
 `SuccessorActivationSignDocV1` bind the bundle/authorization IDs, exact target admission, migration
 specification, height, and old/new roots.
 
-Before bundle processing, the verifier resolves a typed `VerifiedSuccessorPredecessorContextV1`
-semantic input from the unique eligible predecessor. It includes the predecessor/launch/genesis,
-old-profile/root, governance-root, and purpose-tagged activation-authority projection, but is neither
-serialized nor counted in the bundle. The admitted successor release's separately purpose-tagged
-release-authority ref MUST resolve from the same unique core and governance root. The successor
-graph is an internal-only closure:
+Before bundle processing, the verifier resolves a typed
+`VerifiedSuccessorPredecessorBaseContextV1` semantic input from the unique eligible predecessor. It
+carries the shared predecessor lookup/core,
+launch/genesis, old-profile/root, and governance source plus two distinct purpose-scoped results:
+`release_parent_authority_ref`, `verified_release_parent_eligibility`, and
+`release_parent_authority_status` for `SuccessorReleaseAuthorityV1`; and
+`activation_parent_authority_ref`, `verified_activation_parent_eligibility`, and
+`activation_parent_authority_status` for `SuccessorActivationAuthorityV1`. Both results MUST resolve
+to the same unique parent lookup/core and governance root, while their use, policy, predicate,
+status and evidence remain separate. Neither purpose may be coerced into or substituted for the
+other. The base context is neither serialized nor counted in the bundle and contains no historical
+ref or certificate-derived ID. Verification is staged: derive and verify the release core ID; resolve
+`VerifiedSuccessorReleaseAuthorityContextV1` and its accepted release-purpose certificate; sign and
+verify `AdmittedReleaseRecordV1`; finish the internal DAG and derive the bundle ID; then resolve
+`VerifiedSuccessorActivationAuthorityContextV1` and its accepted activation-purpose certificate
+before signing activation. The embedded `AdmittedReleaseRecordV1` predecessor authority reference MUST byte-equal
+`release_parent_authority_ref` and the reference bound inside
+`verified_release_parent_eligibility`. The activation sign document's complete predecessor
+authority reference MUST byte-equal `activation_parent_authority_ref` and the reference bound inside
+`verified_activation_parent_eligibility`. No certificate is pre-resolved from an ID whose authorized
+object has not yet been derived. The successor graph is an internal-only closure:
 for the seven explicit successor artifacts `E_s`, supplementary artifacts `S_s`, and internal
 dependency nodes `D_s`, `Length(E_s) = 7`,
 `supplementary_internal_artifact_count_u32 = Length(S_s)`, and
@@ -852,10 +875,14 @@ core/evidence bytes,
 launch/genesis bytes, old state/context, bundle and authorization framing, counters, dependency-node
 encodings, and nested bytes already owned by a top-level preimage are excluded. An internal
 dependency ID may not name external context; each predecessor profile, launch/genesis, old-root,
-governance-root, and activation-authority projection in the candidate, upgrade evidence, migration
-context, and activation sign document MUST instead byte-equal the one verified semantic input. The
-admitted release's purpose-specific ref MUST resolve to that same core/governance source. Different
-qualifying evidence sets for the same accepted core do not change that context.
+and governance-root projection in the candidate, upgrade evidence, and migration context MUST
+byte-equal the shared context fields. Each release-authority projection in the admitted release MUST
+equal `release_parent_authority_ref` and the reference bound by
+`verified_release_parent_eligibility`; each activation-authority projection in the migration and
+activation sign document MUST equal `activation_parent_authority_ref` and the reference bound by
+`verified_activation_parent_eligibility`.
+Different qualifying evidence sets for the same accepted core do not change the shared predecessor
+identity, but they do not erase the two separate purpose predicates or statuses.
 
 A fresh verifier recomputes that complete context-relative internal closure under old-envelope
 bounds before migration execution or activation; an unavailable, omitted, substituted, external-ID-
@@ -896,9 +923,18 @@ bytes, checked fixed-width lengths, and shallow opaque header, availability-payl
 segments. An ordinary branch uses the protocol-frozen
 `AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id`, binding the chain/launch identity,
 envelope-owner profile, block-ID suite and type, and exact bounded parent digest. A unique local
-index must return exactly one byte-exact signature-free `AcceptedProposalCoreV1`, containing the
-authority reference, header, and availability payload; after retrieval the consumer recomputes the
-payload and lookup ID. Each credential is a `VerifiedProposalCredentialEntryV1` under a
+index must return exactly one byte-exact signature-free `AcceptedProposalCoreV1`.
+`AcceptedProposalCoreFieldManifestV1` fixes its ordered fields to
+`accepted_proposal_core_version_u16_be`, `accepted_parent_lookup_id`, `authority_ref_kind_u8`,
+`canonical_authority_ref_length_u32_be`, `canonical_proposal_header_length_u64_be`,
+`canonical_availability_payload_length_u64_be`, `canonical_authority_ref_bytes`,
+`canonical_proposal_header_bytes`, and `canonical_availability_payload_bytes`.
+`AcceptedProposalCoreExcludedFieldManifestV1` forbids the proposer-signature length/bytes, typed and
+raw proposal-credential IDs, canonical consensus-evidence bytes/ID, and canonical
+availability-assessment bytes/ID at any nested or flattened spelling. The exact core tuple also
+leaves every normalized credential/evidence set outside the core. After retrieval the consumer
+recomputes the payload and lookup ID. Each credential is a
+`VerifiedProposalCredentialEntryV1` under a
 `TypedProposalCredentialIdV1`; the bounded `AcceptedProposalCredentialSetV1` is sorted and
 deduplicated by that ID. At least one qualifying credential is required, but multiplicity has no
 extra weight and cannot alter the unsigned core. Verified consensus and availability evidence are
@@ -906,8 +942,14 @@ separately typed `VerifiedAcceptedEvidenceEntryV1` values in a sorted, deduplica
 `AcceptedEvidenceSetV1` and may contain several valid objects for that core. The admitted-profile-owned,
 purpose-specific `ParentAuthorityEligibilityV1` defines evidence identity and conflict handling and
 is monotone: adding qualifying evidence cannot invalidate an already eligible core. Nonqualifying/
-conflicting evidence cannot create eligibility, while two distinct cores under one lookup ID reject
-as a true collision. It returns semantic `VerifiedEligibleAcceptedParentRefV1` for canonical,
+conflicting evidence cannot create eligibility. `AcceptedParentCollisionDispositionV1` fixes the
+two collision rows after every lookup projection is reconstructed: two different
+`AcceptedParentLookupPayloadV1` preimages under one `ProfileIdHashV1` output enter
+`ProtocolIdentityHashCompromiseV1`; one byte-identical lookup payload, including the old-profile
+`block_id`, with two distinct otherwise-valid signature-free cores enters
+`ProfileOwnedAuthorityBindingCompromiseV1`. An invalid core projection is simply invalid and is not
+collision evidence. Neither row selects a core, and both take the current safe-halt/new-genesis
+disposition above. Eligibility returns semantic `VerifiedEligibleAcceptedParentRefV1` for canonical,
 purpose-tagged `AcceptedParentAuthorityRefV1`; release and successor-activation sign documents carry
 that as `predecessor_accepted_parent_authority_ref` rather than one evidence-wrapper occurrence.
 The first-record launch lookup instead verifies the complete launch closure and detached launch
@@ -917,16 +959,91 @@ accepted parent and never satisfies that status predicate by coercion.
 For `ConsensusEntailedAvailabilityV1`, `consensus_evidence_id` MUST byte-equal the consensus
 evidence carried in that same `AcceptedRecordOuterV1`. The verifier validates the consensus segment
 first and constructs `VerifiedConsensusEntailedAvailabilityDeltaV1`, atomically inserting the pair
-or neither; no assessment can borrow an evidence dependency from another wrapper. Its
-`SameWrapperConsensusDependencyWitnessV1` preserves the dependency bytes and ID. Detached evidence
-stays on its separately typed path. Wrappers are bounded ingestion/archive carriers, not replay
-ledger records. Independent replay consumes a parent-ordered sequence of exactly one
-`AcceptedCoreReplayEntryV1` per height, pairing every unique core with
-`NormalizedAcceptedEvidenceSnapshotV1` or
-`RetainedAcceptedEligibilityWitnessV1` under an explicit `ReplayEvidenceCutoffV1`. Wrapper
-permutations, split evidence, duplicates,
-and later status upgrades cannot add a second record at one height or make transition execution
-arrival-order dependent.
+or neither; no assessment can borrow an evidence dependency from another wrapper. The live
+`SameWrapperConsensusDependencyWitnessV1` preserves the exact consensus-evidence ID, length, and
+bytes used by that atomic insertion. Independent replay additionally carries a
+`SameWrapperAcceptedRecordOccurrenceWitnessV1` through
+`ReplayEvidenceNormalizedEntryProofV1`; it binds the exact `AcceptedRecordOuterOccurrenceV1` and
+`accepted_record_outer_occurrence_id`, so replay cannot synthesize the consensus-evidence/assessment
+pair from different wrappers. Detached evidence stays on its separately typed path. Wrappers are
+bounded ingestion/archive carriers, not replay ledger records.
+
+The proposed evidence archive canonicalizes every bounded typed occurrence or normalized evidence
+change as `ReplayEvidenceEventV1` with a recomputed `replay_evidence_event_id` and deterministic
+event order. `ReplayEvidenceArchiveCheckpointCoreV1` and
+`replay_evidence_archive_checkpoint_id` bind the prior checkpoint, exact event range, archive root,
+normalization policy, and chain/launch/profile context. The detached
+`ReplayEvidenceArchiveCheckpointSignDocV1` and
+`ReplayEvidenceArchiveCheckpointAuthorizationV1` produce the authorized
+`ReplayEvidenceArchiveCheckpointV1`; candidate event bytes or a bare asserted root cannot select
+that authority. `ReplayEvidenceEventInclusionProofV1` proves included events,
+`ReplayEvidencePrefixCompletenessProofV1` proves the complete authorized prefix/range rather than
+only a chosen subset. `NormalizedAcceptedAuthorityEntryCoreV1` is a proof-free canonical preimage
+containing the unique lookup/core, complete verified credential/evidence sets, dependency closure,
+and purpose-scoped status cores. Its domain-separated `normalized_authority_entry_id` is recomputed
+before `normalized_authority_view_root` is recomputed from sorted unique `(lookup_id, entry_id)`
+pairs; view/checkpoint/membership/occurrence proofs are excluded from that core.
+`ReplayEvidenceNormalizedEntryProofV1` binds this recomputed pair to the event history. A retained
+subset is valid only through `ReplayEvidenceRetentionProjectionProofV1`, currently inhabited by the
+same full core plus a deterministic retention trace rather than an unproved smaller commitment. One
+outer `ReplayEvidenceViewV1`, identified through
+`ReplayEvidenceViewCoreV1` and `replay_evidence_view_id`, is shared by the complete replay package.
+Every entry, snapshot, retained witness, and bootstrap reference MUST use that one checkpoint,
+authorization, cutoff, archive root, and normalization policy; per-entry mixed views are invalid.
+
+Independent replay still consumes a parent-ordered sequence of exactly one
+`AcceptedCoreReplayEntryV1` per height. Historical authorization is represented separately from a
+later status report: every envelope, release, or activation authority actually consumed by the
+replayed sequence has one `HistoricalAcceptedParentAuthorityUseWitnessV1` in the canonical
+`HistoricalAcceptedParentAuthorityUseWitnessSetV1`. Each witness binds the unique parent
+lookup/core, exact purpose, policy, predicate, attained status, exact
+`AcceptedParentAuthorityConsumerRefV1`, and one
+`ConsensusNativeParentAuthorityCertificateRefV1`. Before live use,
+`ResolveConsensusNativeParentAuthorityCertificatePolicyV1` derives the required certificate
+position, codec/crypto/consensus/availability policies, bounds, status, and equivocation/liveness
+rules from the verified parent profile and a certificate-independent
+`ParentAuthorityCertificateConsumerContextV1` derived before any historical ref or final consumer
+ID. A certificate becomes consumable only
+through `ConsensusNativeParentAuthorityCertificateAdmissionV1`: its authorization, exact evidence
+commitment with a complete `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1` and exact
+`AcceptedParentAuthorityWitnessReceiptCoverageV1`, consensus evidence, availability assessment,
+canonical position, and attained status all verify. Receipt verification total-decodes each wrapper
+and requires exact set equality for its credential, consensus, assessment, and dependency components;
+valid nonqualifying or conflicting components cannot be omitted from status evaluation. Its final
+admission ID is derived afterward. The child header, release sign document,
+or activation sign document binds that exact accepted admission; the replay archive is not a live
+authority or liveness dependency.
+
+The replay witness carries the exact accepted certificate and admission, and the authenticated
+authority-use event commits their complete canonical bytes through
+`AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1`; an admission ID alone is
+insufficient.
+`ConsensusToReplayParentAuthorityCommitmentProofV1` reconstructs the certificate's exact committed
+credential/evidence preimages from byte-exact raw wrapper-occurrence events in one complete
+authorized archive prefix, byte-equals every outer preimage and receipt ID to the receipt set already
+inside the accepted commitment, and recomputes same-wrapper dependencies, dependency closure,
+purpose, and status. Those raw occurrences are replay-retention pins; a later synthetic wrapper
+cannot repair admission, and later normalized-witness replacement cannot erase them. The archive
+checkpoint may be created later; its append-consistency proof protects
+replay custody only. Candidate evidence subsets may create different certificate IDs, but the
+consensus rule accepts exactly one per parent/purpose/required position and only that admission may
+enter a consumer. Coverage is exact, with no missing or duplicate use. A later named view may
+separately emit
+`ReplayParentAuthorityStatusProjectionV1` values in
+`ReplayParentAuthorityStatusProjectionSetV1`; later evidence may update that projection but cannot
+alter the already accepted certificate or retroactively authorize the earlier action.
+
+Capability ownership follows that direction. `CONSENSUS-1@base` owns live certificate
+issuance/admission and consumer chronology without consulting replay. `SYNC-1@base` only
+transports/retains bounded opaque bytes; phase dependency `PD-06` unlocks
+`SYNC-1@replay-authority` only after consensus, and `PD-07` makes `TESTNET-1@base` consume that
+independent historical reconstruction.
+
+Wrapper permutations,
+split evidence, duplicates, or later status upgrades cannot add a second height or make transition
+execution arrival-order dependent. These archive, checkpoint-authorization, retention, and replay
+types remain proposed and unimplemented; their concrete codecs, limits, storage durability, and
+deployment authority remain under their existing `OPEN`/`LOCKED` capability boundaries.
 
 Only that tagged result selects the envelope owner, active codecs, and
 `AuthorityOwnedParseAndWorkLimitsV1`. Before materializing, hashing, decompressing, canonically
