@@ -1157,11 +1157,14 @@ mod tests {
         fn compose(
             &mut self,
             game_pixels: &[u32],
+            game_frame: ContentTag,
             snapshot: &SidebarSnapshot,
         ) -> SidebarRasterFacts {
             match self {
                 Self::Reference(compositor) => compositor.compose(game_pixels, snapshot),
-                Self::Candidate(compositor) => compositor.compose(game_pixels, snapshot),
+                Self::Candidate(compositor) => {
+                    compositor.compose(game_pixels, game_frame, snapshot)
+                }
             }
         }
 
@@ -1311,7 +1314,7 @@ mod tests {
                 },
             );
             snapshots[index] = snapshot.tag();
-            facts[index] = compositor.compose(&game_pixels, &snapshot);
+            facts[index] = compositor.compose(&game_pixels, game_observation.tag, &snapshot);
             let composite_pixels = compositor.pixels().to_vec();
             composite_frames[index] = composite_pixels.clone();
             let composite_observation = FrameRef::new(

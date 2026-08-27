@@ -17,7 +17,8 @@ use bitblock::display::{CaptureStage, DisplayCapture, DisplayLedgerV2, DisplayOu
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::display_store::{
     DisplayArtifactAppendReceipt, DisplayArtifactJournal, DisplayArtifactStoreError,
-    PresentationOutputAppendReceipt,
+    PresentationOutputAppendReceipt, ReadOnlyDisplayArtifactInspection,
+    inspect_display_artifact_bytes,
 };
 use bitblock::frame::{
     FrameInput, FrameLedger, FrameObservation, FrameProtocolError, FrameReceipt, FrameRef,
@@ -31,8 +32,12 @@ use bitblock::history::{History, world_tag};
 use bitblock::interaction::{
     AcceptedAction, InteractionTape, MAX_INTERACTION_TAPE_PAYLOAD_BYTES, MoveControl,
 };
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::journal::AnchorPolicy;
 use bitblock::program::{Edit as WorldEdit, Operation, Program, TickBatch};
 use bitblock::protocol::ContentTag;
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::protocol::TagKind;
 use bitblock::render::{
     Renderer, bounds_aabb, coord_containing, crosshair_overlay_input, raycast,
     renderer_profile_tag, sweep_point,
@@ -120,6 +125,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let summary = simulate_interaction_tape(&tape)?;
             print_headless_summary(&summary);
         }
+        #[cfg(all(windows, feature = "protocol-research"))]
+        StartupMode::VerifyDisplayJournal {
+            path,
+            required_ancestor,
+        } => verify_display_journal(&path, required_ancestor)?,
     }
     Ok(())
 }
@@ -127,6 +137,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 enum StartupMode {
     Observe(Program),
     Simulate(InteractionTape),
+    #[cfg(all(windows, feature = "protocol-research"))]
+    VerifyDisplayJournal {
+        path: PathBuf,
+        required_ancestor: ContentTag,
+    },
 }
 
 #[cfg(all(windows, feature = "protocol-research"))]
@@ -183,6 +198,67 @@ fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
         return Ok(StartupMode::Observe(Program::new()));
     };
 
+    if first == "--verify-display-journal" {
+        #[cfg(all(windows, feature = "protocol-research"))]
+        {
+            let Some(path) = arguments.next().map(PathBuf::from) else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+                )
+                .into());
+            };
+            let Some(required_text) = arguments.next() else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+                )
+                .into());
+            };
+            if arguments.next().is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+                )
+                .into());
+            }
+            let required_text = required_text.to_str().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "the required storage-record tag must be UTF-8",
+                )
+            })?;
+            let required_ancestor = ContentTag::parse_full(required_text).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("invalid required storage-record tag: {error}"),
+                )
+            })?;
+            if required_ancestor.kind() != TagKind::StorageRecord {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "required journal anchor must be a storage-record tag, received {}",
+                        required_ancestor.kind().name()
+                    ),
+                )
+                .into());
+            }
+            return Ok(StartupMode::VerifyDisplayJournal {
+                path,
+                required_ancestor,
+            });
+        }
+        #[cfg(not(all(windows, feature = "protocol-research")))]
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "--verify-display-journal requires Windows and --features protocol-research",
+            )
+            .into());
+        }
+    }
+
     if first == "--simulate-actions" {
         let Some(path) = arguments.next().map(PathBuf::from) else {
             return Err(io::Error::new(
@@ -211,8 +287,8 @@ fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
     let path = PathBuf::from(first);
     if arguments.next().is_some() {
         return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "usage: bitblock [program.bb] | bitblock --simulate-actions <interaction.tape>",
+                io::ErrorKind::InvalidInput,
+                "usage: bitblock [program.bb] | bitblock --simulate-actions <interaction.tape> | bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
         )
         .into());
     }
@@ -249,6 +325,187 @@ fn read_bounded_utf8(path: &std::path::Path, maximum: usize) -> Result<String, i
             format!("interaction source is not UTF-8: {error}"),
         )
     })
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn verify_display_journal(
+    path: &std::path::Path,
+    required_ancestor: ContentTag,
+) -> Result<(), Box<dyn Error>> {
+    let bytes = read_bounded_display_journal(path, StorageLimits::DEFAULT.max_stream_bytes())?;
+    let inspection = inspect_display_artifact_bytes(
+        &bytes,
+        StorageLimits::DEFAULT,
+        AnchorPolicy::RequireAncestor(required_ancestor),
+    );
+    match inspection {
+        Ok(ReadOnlyDisplayArtifactInspection::Clean { carrier, state }) => {
+            print_display_journal_verification(&carrier, &state, required_ancestor);
+            Ok(())
+        }
+        Ok(ReadOnlyDisplayArtifactInspection::NeedsRecovery { carrier, state }) => {
+            print_display_journal_recovery(&carrier, &state, required_ancestor);
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "display journal has an unverified suffix; no complete verification claim was emitted",
+            )
+            .into())
+        }
+        Err(DisplayArtifactStoreError::Journal(
+            bitblock::journal::JournalError::RequiredAncestorMissing { observed_head, .. },
+        )) => {
+            println!(
+                "display-journal-verification\tstatus=missing-required-ancestor\tscope=typed-local-replay\tcausal_ancestry=references-only\trequired_ancestor={}\tobserved_head={}",
+                required_ancestor,
+                optional_tag(observed_head),
+            );
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the supplied required storage-record ancestor is absent from the admitted journal prefix",
+            )
+            .into())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn read_bounded_display_journal(
+    path: &std::path::Path,
+    maximum: usize,
+) -> Result<Vec<u8>, io::Error> {
+    let mut file = std::fs::File::open(path)?;
+    let before = file.metadata()?;
+    if !before.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "display journal input must be a regular file",
+        ));
+    }
+    let before_len = before.len();
+    let maximum_u64 = u64::try_from(maximum).expect("storage byte cap fits u64");
+    if before_len > maximum_u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("display journal exceeds the bounded {maximum}-byte input policy"),
+        ));
+    }
+    let expected_len = usize::try_from(before_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "display journal length is not addressable on this host",
+        )
+    })?;
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(expected_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            format!("could not reserve {expected_len} display-journal bytes"),
+        )
+    })?;
+    let limit = maximum_u64
+        .checked_add(1)
+        .expect("storage byte cap has one-byte headroom");
+    (&mut file).take(limit).read_to_end(&mut bytes)?;
+    if bytes.len() > maximum {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("display journal exceeds the bounded {maximum}-byte input policy"),
+        ));
+    }
+    let after_len = file.metadata()?.len();
+    if after_len != before_len || bytes.len() as u64 != before_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "display journal length changed during read: before {before_len}, bytes {}, after {after_len}",
+                bytes.len()
+            ),
+        ));
+    }
+    Ok(bytes)
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn print_display_journal_verification(
+    carrier: &bitblock::journal::ScanReport,
+    state: &bitblock::display_store::ReplayedDisplayArtifacts,
+    required_ancestor: ContentTag,
+) {
+    println!("{}", display_journal_verification_header(required_ancestor));
+    println!(
+        "display-journal-inventory\tfile_bytes={}\tvalid_bytes={}\tobjects={}\tlogical_payload_bytes={}\tphysical_record_bytes={}\tstorage_head={}\tdisplay_head={}\tartifact_head={}\tstored_object_head={}",
+        carrier.file_bytes,
+        carrier.valid_prefix_bytes,
+        carrier.valid_record_count,
+        state.logical_payload_bytes(),
+        state.physical_record_bytes(),
+        optional_tag(state.storage_head()),
+        optional_tag(state.display_receipt_head()),
+        optional_tag(state.artifact_head()),
+        optional_tag(state.stored_object_head()),
+    );
+    for entry in state.entries() {
+        println!(
+            "display-journal-evidence\tstorage={}\tobject={}\tartifact={}\tdisplay_receipt={}\tframe_receipt={}\ttick_outcome={}\tframe_input={}\texpected_frame={}\tcaptured_frame={}\tpolicy={}\tcapture_outcome={:?}\tcapture_stage={:?}\tmismatches={}\tfirst_mismatch={}\tcaptured_form={:?}\ttiming={}\ttopology_before={}\ttopology_after={}\troute_stability={:?}",
+            entry.storage_record,
+            entry.stored_object,
+            entry.artifact,
+            entry.display_receipt,
+            entry.frame_receipt,
+            entry.tick_outcome,
+            entry.frame_input,
+            entry.expected_frame,
+            optional_tag(entry.captured_frame),
+            entry.policy,
+            entry.capture_outcome,
+            entry.capture_stage,
+            entry.mismatch_count,
+            optional_u64(entry.first_mismatch),
+            entry.captured_form,
+            optional_tag(entry.timing_artifact),
+            optional_tag(entry.topology_before),
+            optional_tag(entry.topology_after),
+            entry.route_stability,
+        );
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn display_journal_verification_header(required_ancestor: ContentTag) -> String {
+    format!(
+        "display-journal-verification\tstatus=clean\tscope=typed-local-replay\tpixel_evidence=retained-capture-claim-per-entry\tcausal_ancestry=references-only\tscanout=unobserved\tphysical_light=unobserved\tcustody=local-only\tconsensus=none\trequired_ancestor={required_ancestor}"
+    )
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn print_display_journal_recovery(
+    carrier: &bitblock::journal::RecoveryReport,
+    state: &bitblock::display_store::ReplayedDisplayArtifacts,
+    required_ancestor: ContentTag,
+) {
+    println!(
+        "display-journal-verification\tstatus=needs-recovery\tscope=typed-valid-prefix-only\tpixel_evidence=unverified-suffix-excluded\tcausal_ancestry=references-only\trequired_ancestor={}\tvalid_bytes={}\trejected_tail_bytes={}\trejected_tail={}\trejection_class={:?}\tvalid_head={}",
+        required_ancestor,
+        carrier.valid_prefix_bytes,
+        carrier.rejected_tail_bytes,
+        carrier.rejected_tail_tag,
+        carrier.rejection_class,
+        optional_tag(carrier.valid_head),
+    );
+    println!(
+        "display-journal-prefix\tobjects={}\tstorage_head={}\tdisplay_head={}\tartifact_head={}\tstored_object_head={}",
+        state.len(),
+        optional_tag(state.storage_head()),
+        optional_tag(state.display_receipt_head()),
+        optional_tag(state.artifact_head()),
+        optional_tag(state.stored_object_head()),
+    );
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn optional_u64(value: Option<u64>) -> String {
+    value.map_or_else(|| "none".to_owned(), |value| value.to_string())
 }
 
 #[cfg(windows)]
@@ -1751,7 +2008,12 @@ impl App {
                 self.compositor.width(),
                 self.compositor.height(),
             );
-            let sidebar_facts = self.compositor.compose(self.renderer.pixels(), &snapshot);
+            let sidebar_facts = if game_rendered {
+                self.compositor
+                    .compose(self.renderer.pixels(), game.1.tag, &snapshot)
+            } else {
+                self.compositor.compose_sidebar_only(game.1.tag, &snapshot)
+            };
             let output_frame = FrameRef::new(
                 self.compositor.width(),
                 self.compositor.height(),
@@ -4397,6 +4659,16 @@ mod tests {
         assert!(app.fixed_tick());
 
         assert!(app.pending_frame.is_none());
+        assert_eq!(app.compositor.last_game_prefix_copy_words(), 0);
+        let simulation_width = app.renderer.width() as usize;
+        let output_width = app.compositor.width() as usize;
+        for row in 0..app.renderer.height() as usize {
+            assert_eq!(
+                &app.compositor.pixels()[row * output_width..row * output_width + simulation_width],
+                &app.renderer.pixels()[row * simulation_width..(row + 1) * simulation_width],
+                "sidebar-only recomposition changed the cached game prefix in row {row}"
+            );
+        }
         let outcome = app.tick_outcomes.last().unwrap();
         assert!(outcome.input().flags().sidebar_dirty());
         assert_eq!(outcome.game(), None);
@@ -4738,6 +5010,24 @@ fit
     }
 
     #[test]
+    fn ui_reachable_place_delete_example_returns_to_bedrock_only() {
+        let tape =
+            InteractionTape::parse(include_str!("../examples/observer_place_delete.tape")).unwrap();
+        assert_eq!(tape.len(), 2);
+        assert_eq!(
+            tape.records()[0].actions(),
+            &[AcceptedAction::WheelLines(-10.0), AcceptedAction::AimPlace]
+        );
+        assert_eq!(tape.records()[1].actions(), &[AcceptedAction::AimDelete]);
+
+        let summary = simulate_interaction_tape(&tape).unwrap();
+        let origin_only = App::for_headless_simulation();
+        assert_eq!(summary.on_bits, 1);
+        assert_eq!(summary.coordinate_receipts, 2);
+        assert_eq!(summary.final_world, world_tag(&origin_only.world));
+    }
+
+    #[test]
     fn physical_w_key_adapter_and_normalized_tape_map_to_the_same_action() {
         let mut live_adapter = App::for_headless_simulation();
         live_adapter.key(KeyCode::KeyW, true);
@@ -4957,5 +5247,21 @@ fit
                 .to_string()
                 .contains("chunk-word-test")
         );
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn clean_display_journal_report_does_not_promote_capture_or_causal_references() {
+        let required = ContentTag::parse_full(
+            "#bb.storage-record.sha256.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        .unwrap();
+        let report = display_journal_verification_header(required);
+
+        assert!(report.contains("status=clean"));
+        assert!(report.contains("pixel_evidence=retained-capture-claim-per-entry"));
+        assert!(report.contains("causal_ancestry=references-only"));
+        assert!(!report.contains("os-desktop-raster-sample"));
+        assert!(report.contains(&format!("required_ancestor={required}")));
     }
 }

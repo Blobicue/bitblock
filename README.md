@@ -314,6 +314,10 @@ cargo run -- --simulate-actions examples/observer_walk.tape
 # Windows release builds need the console feature for a reliable captured report
 cargo run --release --features headless-console -- --simulate-actions examples/observer_walk.tape
 
+# Replay one UI-reachable place/delete cycle without opening a window.
+# It ends with only the protected origin on: one mint and one burn.
+cargo run --release --features headless-console -- --simulate-actions examples/observer_place_delete.tape
+
 # Opt in to an expensive full-client OS screen-raster audit on each changed frame.
 # Use a debug run to retain the detailed terminal receipt; the window title also
 # reports Match, Mismatch, or Unavailable.
@@ -327,6 +331,10 @@ cargo run
 Remove-Item Env:BITBLOCK_DISPLAY_AUDIT -ErrorAction SilentlyContinue
 $env:BITBLOCK_DISPLAY_JOURNAL_NEW = "$PWD\display-session.bbj"
 cargo run --features protocol-research
+
+# Re-read a retained F4/F5 journal without opening the observer window. Quote the
+# complete storage-record tag printed by the original archive report.
+cargo run --release --features protocol-research,headless-console -- --verify-display-journal "$PWD\display-session.bbj" '#bb.storage-record.sha256...'
 
 # Opt in to one raw composition-timing envelope around every checked presentation.
 # This writes content-tagged observations to stderr; the cheap default does not link it.
@@ -346,6 +354,17 @@ create-only: it performs the same bounded GDI/DWM observation, constructs the
 canonical artifact, synchronizes one typed record, and rereads it before
 reporting `display-artifact-stored`. It does not silently reopen, rotate,
 truncate, or overwrite a prior journal.
+
+`--verify-display-journal` is a separate, read-only replay of retained F4/F5
+bytes. It requires a full, prior `storage-record` tag as an anchor, rechecks the
+complete typed parent-linked carrier and embedded artifact semantics, and prints
+the complete retained inventory only for a clean supplied file. A damaged suffix
+returns nonzero and any reported valid prefix excludes that suffix. This is local
+retained-byte verification only: it
+does not prove the file is newest, externally held, compositor-attributed,
+scanned out, or visible as physical light. The printed tick-outcome and
+frame-input tags are retained references, not a replay of an interaction tape,
+world history, or renderer.
 
 The presentation-timing audit calls `DwmGetCompositionTimingInfo(NULL, ...)`
 before and after the checked presenter, with every API occurrence bracketed by

@@ -161,12 +161,15 @@ CompositeFrameReceipt v1 = parent composite receipt | nil
                            || canonical full-client Frame tag
 ```
 
-At the initial size, the compositor copies every row of the 801 x 801 game
+At the initial size, a full composition copies every row of the 801 x 801 game
 frame exactly to `x=0..800` and draws the 400 x 801 sidebar only at
-`x=801..1200`. The simulation renderer, camera projection, crosshair, and inner
-game-frame tag never receive the sidebar width. A separate powered test checks
-every copied word. One sidebar-pixel mutation changes the composite tag while
-leaving the inner game-frame tag unchanged.
+`x=801..1200`. A sidebar-only recomposition reuses that prefix only when its
+selected game-frame tag equals the compositor's cached full-composition tag;
+otherwise it fails closed. The simulation renderer, camera projection,
+crosshair, and inner game-frame tag never receive the sidebar width. Separate
+powered tests check every copied word, exact reuse against a frozen full-copy
+reference, stale-tag refusal, and resize invalidation. One sidebar-pixel mutation
+changes the composite tag while leaving the inner game-frame tag unchanged.
 
 Only a changed inner game frame whose composite backend submission returned
 success enters the inner chain. Sidebar-only F3 recomposition advances only the
@@ -2506,6 +2509,92 @@ deterministic resource admission         #bb.metric-definition.sha256.tolccwjudo
 produced-frame disposition               #bb.metric-definition.sha256.wu26gvn6psqy6kha322wdl7z6md3undvaj5fh5pk25nvixtgrcgq
 interaction-to-display causal path       #bb.metric-definition.sha256.iz2hk6s5zejuemox72rs4l4dp4gup5az53e4i2le232qpm2un6nq
 ```
+
+### Tag-bound sidebar-only compositor reuse
+
+The compositor now separates a full composition from a sidebar-only
+recomposition. A full composition copies the complete inner game prefix, then
+records the already-observed inner game-frame tag only after sidebar raster
+completion. A sidebar-only composition requires that exact cached tag; a stale
+selected tag, the absence of a completed full composition, or any resize is a
+refusal rather than permission to retain an arbitrary buffer prefix.
+
+At the default 801 x 801 simulation viewport, each skipped F3-only game-prefix
+copy is exactly 641,601 `u32` words: 2,566,404 payload bytes read and the same
+number written, or 5,132,808 logical source-plus-destination byte events. The
+new `#bb.metric.perf.work-unit-vector` definition is
+`#bb.metric-definition.sha256.quistqq47z3lx57jlupj6rgtjcby2otxjkdmjzvgd3uykbi5imda`.
+It counts logical work in the compositor; it is not a measurement of hardware
+memory traffic, elapsed time, energy, scanout, or physical display output.
+
+The complete 1,201 x 801 composite remains hashed and later copied for
+presentation, so this does not claim a full-render or executable-byte
+reduction. The candidate/reference mismatch definition advanced to
+`#bb.metric-definition.sha256.sa4ylbjoqg5setnvlqk2qhmxofagznkqtqlbey5chagbjfsg2yfa`:
+the powered assay compares every XRGB word, sidebar facts, and `FrameRef`
+observation from a full-then-same-game sidebar-only sequence against the frozen
+full-copy reference. Separate controls reject reuse before a full composition,
+for a distinct same-shape game tag, and after resize. The live F3 reducer test
+also checks that its game prefix remains word-identical to the renderer while
+the copy-work counter is zero.
+
+The existing five-tick, seven-action `observer_walk.tape` traverses that F3
+case headlessly. Two release replays produced byte-identical eight-line
+projections with tape tag
+`#bb.intent.sha256.kq7nusohkdquulz4s3rvc3sopcpoewrdxtozzjkyoe2z7hlts7yq`.
+This establishes repeatability of the accepted-action-to-fixed-tick projection
+on that build and host; it does not simulate raw peripherals, a window,
+backend submission, or display evidence.
+
+### Read-only retained display-journal verification
+
+The Windows research CLI now accepts:
+
+```powershell
+cargo run --release --features protocol-research,headless-console -- --verify-display-journal <display-session.bbj> '<#bb.storage-record.sha256...>'
+```
+
+It is intentionally a separate startup mode: it never opens an observer
+window, starts no simulation tick, submits no frame, requests no desktop capture,
+and opens no writable journal handle. The full lower-case canonical tag is parsed
+as a `storage-record` anchor, not a shortened hash or a readable alias. The
+regular input file is bounded by `StorageLimits`, has its length observed before
+and after the read, and is typed-replayed from supplied bytes.
+
+For a clean carrier, the verifier checks the caller-supplied anchor in the
+storage-parent chain, reconstructs every admitted `DisplayCaptureArtifact` or
+`PresentationOutputArtifact`, and emits its exact receipt, frame, policy,
+timing/topology, comparison-outcome, mismatch-count, and retained-head tags.
+Its printed `TickOutcome` and `FrameInput` values are references carried by the
+display artifact; this mode does not receive an InteractionTape, replay world
+history, or re-run the renderer.
+For a damaged carrier, it returns nonzero and reports only the typed valid
+prefix; the rejected suffix is explicitly excluded. A missing anchor also
+returns nonzero. It neither repairs nor truncates a file.
+
+This is a local typed-byte replay, not a current-branch or custody proof. A clean
+result says nothing about an unseen later prefix, external replication,
+independent DWM attribution, scanout, or physical light. It adds no metric
+family: it is an additional bounded readout for existing compositor-capture,
+pipeline-state, and presentation-fate definitions.
+
+The retained local F5 artifact
+`target/live-f5-assay-20260826-02.bbj`, anchored at
+`#bb.storage-record.sha256.6zf3y3jxcwelftieje7toltjpeyv4kxpmgpb6svmvxcnlfcbqa2q`,
+was read in this mode as one clean 3,850,988-byte typed record. Its stored
+observation reports `capture_outcome=Match`, `capture_stage=Complete`, zero
+mismatches, and an unchanged before/after route. Those facts remain one local
+OS desktop-raster sample, not scanout or light evidence.
+
+The current verifier checkpoint passed `cargo fmt --all`, 316 default
+all-target tests (275 library, 40 application, one integration), 344 all-feature
+all-target tests (295 library, 48 application, one integration), and strict
+default/all-feature Clippy. All sixteen independent Python vector programs
+passed; the metric registry audit remained 1,112 exact definitions; and
+`lake build` completed six proof jobs. The release Windows research CLI also
+cleanly replayed the retained F5 carrier above, while a different syntactically
+valid storage-record tag emitted `status=missing-required-ancestor` and exited
+nonzero.
 
 ### Final verification and release artifacts
 

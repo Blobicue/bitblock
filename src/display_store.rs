@@ -15,7 +15,10 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::display::{DisplayCapture, DisplayCaptureFacts, DisplayProtocolError, DisplayReceiptV2};
+use crate::display::{
+    CaptureStage, DisplayCapture, DisplayCaptureFacts, DisplayOutcome, DisplayProtocolError,
+    DisplayReceiptV2,
+};
 use crate::display_artifact::{
     CapturedPixelForm, DISPLAY_CAPTURE_ARTIFACT_SCHEMA, DisplayArtifactError,
     DisplayCaptureArtifact,
@@ -23,15 +26,15 @@ use crate::display_artifact::{
 use crate::frame::FrameRef;
 use crate::frame_v2::FrameReceiptV2;
 use crate::journal::{
-    AnchorPolicy, AppendSyncReceipt, CreateReceipt, Journal, JournalError, OpenJournal,
-    RecoveryJournal, RecoveryReport, ScanReport, TailDiscardReceipt,
+    AnchorPolicy, AppendSyncReceipt, ByteScan, CreateReceipt, Journal, JournalError, OpenJournal,
+    RecoveryJournal, RecoveryReport, ScanReport, TailDiscardReceipt, inspect_bytes,
 };
 use crate::presentation_output::{
     PRESENTATION_OUTPUT_ARTIFACT_SCHEMA, PresentationOutputArtifact,
     PresentationOutputArtifactError, RouteStability,
 };
 use crate::protocol::{ContentTag, TagKind};
-use crate::storage::{StorageError, StorageLimits, StorageRecord};
+use crate::storage::{StorageChain, StorageError, StorageLimits, StorageRecord};
 
 /// One semantically verified artifact and the hash-addressed references it carries.
 ///
@@ -61,6 +64,10 @@ pub struct DisplayArtifactInventoryEntry {
     pub expected_frame: ContentTag,
     pub captured_frame: Option<ContentTag>,
     pub policy: ContentTag,
+    pub capture_outcome: DisplayOutcome,
+    pub capture_stage: CaptureStage,
+    pub mismatch_count: u64,
+    pub first_mismatch: Option<u64>,
     pub captured_form: CapturedPixelForm,
     pub logical_payload_bytes: u64,
     pub physical_record_bytes: u64,
@@ -138,6 +145,36 @@ pub enum OpenDisplayArtifactJournal {
     NeedsRecovery {
         journal: Box<DisplayArtifactRecoveryJournal>,
     },
+}
+
+/// Read-only typed reconstruction of supplied display-journal bytes.
+///
+/// `Clean` means every supplied byte formed one canonical parent-linked carrier and every stored
+/// object replayed through the display-artifact semantics. `NeedsRecovery` retains only the typed
+/// valid prefix; the rejected suffix has not been verified and must never be presented as display
+/// evidence. This inspection neither opens nor changes a journal file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReadOnlyDisplayArtifactInspection {
+    Clean {
+        carrier: ScanReport,
+        state: ReplayedDisplayArtifacts,
+    },
+    NeedsRecovery {
+        carrier: RecoveryReport,
+        state: ReplayedDisplayArtifacts,
+    },
+}
+
+impl ReadOnlyDisplayArtifactInspection {
+    pub const fn state(&self) -> &ReplayedDisplayArtifacts {
+        match self {
+            Self::Clean { state, .. } | Self::NeedsRecovery { state, .. } => state,
+        }
+    }
+
+    pub const fn is_clean(&self) -> bool {
+        matches!(self, Self::Clean { .. })
+    }
 }
 
 /// Evidence returned after one artifact was synchronized, reread, decoded, and published.
@@ -411,6 +448,63 @@ impl From<DisplayArtifactSemanticError> for DisplayArtifactStoreError {
     fn from(source: DisplayArtifactSemanticError) -> Self {
         Self::Semantic(source)
     }
+}
+
+/// Replays bounded journal bytes without opening a file or publishing a writable handle.
+///
+/// The supplied anchor is checked against the typed storage-record chain. A clean result has no
+/// hidden suffix. A recovery result describes only the replayed prefix and keeps the rejected
+/// bytes outside the returned evidence state.
+pub fn inspect_display_artifact_bytes(
+    bytes: &[u8],
+    limits: StorageLimits,
+    anchor: AnchorPolicy,
+) -> Result<ReadOnlyDisplayArtifactInspection, DisplayArtifactStoreError> {
+    match inspect_bytes(bytes, limits, anchor)? {
+        ByteScan::Clean(carrier) => {
+            let state = replay_display_artifact_prefix(bytes, carrier.valid_prefix_bytes, limits)?;
+            Ok(ReadOnlyDisplayArtifactInspection::Clean { carrier, state })
+        }
+        ByteScan::NeedsRecovery(carrier) => {
+            if let AnchorPolicy::RequireAncestor(required) = anchor
+                && !carrier.required_ancestor_seen
+            {
+                return Err(JournalError::RequiredAncestorMissing {
+                    required,
+                    observed_head: carrier.valid_head,
+                }
+                .into());
+            }
+            let state = replay_display_artifact_prefix(bytes, carrier.valid_prefix_bytes, limits)?;
+            Ok(ReadOnlyDisplayArtifactInspection::NeedsRecovery { carrier, state })
+        }
+    }
+}
+
+fn replay_display_artifact_prefix(
+    bytes: &[u8],
+    prefix_bytes: u64,
+    limits: StorageLimits,
+) -> Result<ReplayedDisplayArtifacts, DisplayArtifactStoreError> {
+    let prefix_len = usize::try_from(prefix_bytes).map_err(|_| {
+        DisplayArtifactSemanticError::LengthOverflow {
+            field: "valid prefix bytes",
+        }
+    })?;
+    let prefix = bytes
+        .get(..prefix_len)
+        .ok_or(DisplayArtifactSemanticError::LengthOverflow {
+            field: "valid prefix bytes",
+        })?;
+    let chain = StorageChain::decode_with_limits(prefix, limits)
+        .map_err(DisplayArtifactStoreError::StoragePreflight)?;
+    let state = replay_display_artifact_records(chain.records())?;
+    if state.physical_record_bytes() != prefix_bytes {
+        return Err(DisplayArtifactStoreError::PostAppendInvariant {
+            field: "read-only replayed physical length",
+        });
+    }
+    Ok(state)
 }
 
 impl DisplayArtifactJournal {
@@ -1032,6 +1126,7 @@ fn inventory_entry(
         });
     }
     let frame_receipt = display_receipt.expected_receipt();
+    let capture_facts = display_receipt.facts();
     let logical_payload_bytes = u64::try_from(record.payload().len()).map_err(|_| {
         DisplayArtifactSemanticError::LengthOverflow {
             field: "logical payload bytes",
@@ -1064,11 +1159,12 @@ fn inventory_entry(
         tick_outcome: frame_receipt.outcome(),
         frame_input: frame_receipt.input(),
         expected_frame: frame_receipt.frame(),
-        captured_frame: display_receipt
-            .facts()
-            .captured
-            .map(|observation| observation.tag),
+        captured_frame: capture_facts.captured.map(|observation| observation.tag),
         policy: display_receipt.policy(),
+        capture_outcome: capture_facts.outcome,
+        capture_stage: capture_facts.stage,
+        mismatch_count: capture_facts.mismatch_count,
+        first_mismatch: capture_facts.first_mismatch,
         captured_form,
         logical_payload_bytes,
         physical_record_bytes,
@@ -1468,6 +1564,107 @@ mod tests {
     }
 
     #[test]
+    fn read_only_inspection_replays_an_anchored_clean_chain_and_never_admits_a_tail() {
+        let (first, second) = artifact_pair();
+        let mut carrier = StorageChain::new();
+        let first_payload = first.encode_canonical().unwrap();
+        carrier
+            .append(
+                TagKind::DisplayArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &first_payload,
+            )
+            .unwrap();
+        let second_payload = second.encode_canonical().unwrap();
+        carrier
+            .append(
+                TagKind::DisplayArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &second_payload,
+            )
+            .unwrap();
+        let required = carrier.head().unwrap();
+        let bytes = carrier.encode();
+
+        let clean = inspect_display_artifact_bytes(
+            &bytes,
+            StorageLimits::DEFAULT,
+            AnchorPolicy::RequireAncestor(required),
+        )
+        .unwrap();
+        assert!(clean.is_clean());
+        assert_eq!(clean.state().len(), 2);
+        assert_eq!(clean.state().storage_head(), Some(required));
+        assert_eq!(clean.state().artifact_head(), Some(second.tag()));
+        assert_eq!(
+            clean.state().entries()[0].capture_outcome,
+            DisplayOutcome::Match
+        );
+        assert_eq!(
+            clean.state().entries()[1].capture_outcome,
+            DisplayOutcome::Mismatch
+        );
+        assert_eq!(clean.state().entries()[1].mismatch_count, 1);
+        assert!(matches!(
+            clean,
+            ReadOnlyDisplayArtifactInspection::Clean {
+                ref carrier,
+                ..
+            } if carrier.valid_prefix_bytes == bytes.len() as u64
+                && carrier.required_ancestor_seen
+        ));
+
+        let missing = tag(TagKind::StorageRecord, b"missing-anchor");
+        assert!(matches!(
+            inspect_display_artifact_bytes(
+                &bytes,
+                StorageLimits::DEFAULT,
+                AnchorPolicy::RequireAncestor(missing),
+            ),
+            Err(DisplayArtifactStoreError::Journal(JournalError::RequiredAncestorMissing {
+                required: observed_required,
+                observed_head: Some(actual),
+            })) if observed_required == missing && actual == required
+        ));
+
+        let mut tailed = bytes.clone();
+        tailed.push(0xff);
+        let recovery = inspect_display_artifact_bytes(
+            &tailed,
+            StorageLimits::DEFAULT,
+            AnchorPolicy::RequireAncestor(required),
+        )
+        .unwrap();
+        assert!(!recovery.is_clean());
+        assert_eq!(recovery.state().storage_head(), Some(required));
+        assert!(matches!(
+            recovery,
+            ReadOnlyDisplayArtifactInspection::NeedsRecovery {
+                ref carrier,
+                ..
+            } if carrier.valid_prefix_bytes == bytes.len() as u64
+                && carrier.rejected_tail_bytes == 1
+                && carrier.required_ancestor_seen
+        ));
+
+        let mut corrupt_required_record = bytes.clone();
+        *corrupt_required_record
+            .last_mut()
+            .expect("the two-record carrier is nonempty") ^= 0x01;
+        assert!(matches!(
+            inspect_display_artifact_bytes(
+                &corrupt_required_record,
+                StorageLimits::DEFAULT,
+                AnchorPolicy::RequireAncestor(required),
+            ),
+            Err(DisplayArtifactStoreError::Journal(JournalError::RequiredAncestorMissing {
+                required: observed_required,
+                ..
+            })) if observed_required == required
+        ));
+    }
+
+    #[test]
     fn synced_artifacts_reopen_with_distinct_physical_and_display_parent_chains() {
         let path = TempJournalPath::new("reopen");
         let (first, second) = artifact_pair();
@@ -1623,7 +1820,29 @@ mod tests {
         assert_eq!(entry.frame_input, frame_receipt.input());
         assert_eq!(entry.policy, display_receipt.policy());
         assert_eq!(entry.captured_frame, None);
+        assert_eq!(entry.capture_outcome, DisplayOutcome::Unavailable);
         assert_eq!(entry.captured_form, CapturedPixelForm::Absent);
+
+        let mut carrier = StorageChain::new();
+        carrier
+            .append(
+                TagKind::DisplayArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &artifact.encode_canonical().unwrap(),
+            )
+            .unwrap();
+        let required = carrier.head().unwrap();
+        let inspection = inspect_display_artifact_bytes(
+            &carrier.encode(),
+            StorageLimits::DEFAULT,
+            AnchorPolicy::RequireAncestor(required),
+        )
+        .unwrap();
+        assert!(inspection.is_clean());
+        assert_eq!(
+            inspection.state().entries()[0].capture_outcome,
+            DisplayOutcome::Unavailable
+        );
     }
 
     #[test]

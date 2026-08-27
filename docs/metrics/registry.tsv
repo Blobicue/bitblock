@@ -605,7 +605,7 @@
 #bb.metric.visual.mapped-surface-copy-mismatch-vector	#bb.metric-definition.sha256.yl4hegsrqnqx2a26j53h6tpp6duv4ozof43eyc5xm2as2k4af3uq	view	Mapped-surface copy mismatch vector
 #bb.metric.visual.compositor-capture-comparison	#bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq	view	Compositor-capture comparison
 #bb.metric.visual.physical-display-sensor-comparison	#bb.metric-definition.sha256.qwli27qiflba7t4gnems2qdjenswmnlxgwwys7vrplvhxaim5ufa	view	Physical-display sensor comparison
-#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector	#bb.metric-definition.sha256.ndpg6puukse3voujhfdxlk4s34pu5bhsz5yg3g4bdwp7f2b4zzra	view	Candidate/reference framebuffer mismatch vector
+#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector	#bb.metric-definition.sha256.sa4ylbjoqg5setnvlqk2qhmxofagznkqtqlbey5chagbjfsg2yfa	view	Candidate/reference framebuffer mismatch vector
 #bb.metric.visual.frame-provenance-dependency-cycle-vector	#bb.metric-definition.sha256.hywo5xn6tp2ub4kx2pisi4wngalg2y4f6t4opme42q4xmppsnxna	view	Frame-provenance dependency-cycle vector
 #bb.metric.visual.invalid-xrgb-unused-byte-vector	#bb.metric-definition.sha256.htayjq76cefnwuqrknknnn3usmseemasxps342rtgrfl52x2fbda	view	Invalid XRGB unused-byte vector
 #bb.metric.visual.canonical-frame-encoder-parity-vector	#bb.metric-definition.sha256.lraern7kyphlxquutuyykdkbrvej4grlmzeratwpr7h5tngnq52q	view	Canonical frame encoder parity vector
@@ -911,7 +911,7 @@
 #bb.metric.perf.phase-wall-duration-event	#bb.metric-definition.sha256.bkrgvgnbvfvdurt2fbe3tcwmaywinsmbhvkwyn22nejegiu3phpa	system	Phase wall duration event
 #bb.metric.perf.phase-cpu-duration-event	#bb.metric-definition.sha256.webooud3bmaytu62m6brywnu22ea4kvqudswkpk6ktbx3gitwiea	system	Phase CPU duration event
 #bb.metric.perf.tick-overrun-event	#bb.metric-definition.sha256.ckfisjn7ovza2c7rcjwbvd5rl5oyopja2zcnhajmq5xfsmpkb4ka	system	Tick overrun event
-#bb.metric.perf.work-unit-vector	#bb.metric-definition.sha256.fufciylehcrf3ioxl3krr35rskm6xut3nbw3srsn74xf3cucoa7a	system	Work-unit vector
+#bb.metric.perf.work-unit-vector	#bb.metric-definition.sha256.quistqq47z3lx57jlupj6rgtjcby2otxjkdmjzvgd3uykbi5imda	system	Work-unit vector
 #bb.metric.perf.phase-allocation-vector	#bb.metric-definition.sha256.4azkoo46htffllyitg5x5giemno5gmaymzgc7t2np6fkv27meviq	system	Phase allocation vector
 #bb.metric.perf.temporary-phase-peak-bytes	#bb.metric-definition.sha256.aiq2szyug2kbhajb5on5ofxmwq5gwocjb3oxbixrwtfpbaumovoa	system	Temporary phase peak bytes
 #bb.metric.perf.startup-milestone-timestamps	#bb.metric-definition.sha256.ecxpr4fobxfhxrui4ypcjtqbjadnxmpdo74jdxuki7tde6uuqena	system	Startup milestone timestamps
