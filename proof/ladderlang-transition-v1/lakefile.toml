@@ -1,0 +1,9 @@
+name = "bitblock-ladderlang-transition-v1"
+version = "0.1.0"
+defaultTargets = ["BitblockLadderTransition"]
+
+[[lean_lib]]
+name = "Ladderlang"
+
+[[lean_lib]]
+name = "BitblockLadderTransition"

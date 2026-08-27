@@ -99,6 +99,17 @@ window identity, focus/capture success, synthetic/repeat filtering, pixel-wheel 
 timestamps, redraw scheduling, or F4/F5 evidence capture. Live input and tapes do share the same
 accepted-action reducer and fixed-tick function.
 
+For a smaller source-semantics check, run:
+
+```powershell
+python -B tools/semantic_batch_vectors.py
+```
+
+It independently reconstructs eight bounded one-coordinate history cases (mint, burn, no-op,
+bedrock, same-tick reuse, and coordinate extremes) without importing or launching Bitblock. The
+Rust history test compares the same frozen known-answer tags. This is evidence for those finite
+cases only; it is not a general proof, an executed LadderLang bridge, or a blockchain claim.
+
 Headless runs always start from the empty program, permanent bedrock, observer spawn, visible
 sidebar, and the default 1201 x 801 output. Before state is constructed, a pure shadow interpreter
 checks the complete tape against payload/action limits and cumulative resize, composition, raster,
