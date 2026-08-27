@@ -111,7 +111,7 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # 386 -> 389 / 397 -> 400: three literal-tag tests, one each in sequential.rs,
 # replay_evidence.rs and optimization.rs, pinning the seven newly vectored
 # schemas against their independent Python reconstructions.
-EXPECTED_TESTS = {"quick": 392, "full": 403}
+EXPECTED_TESTS = {"quick": 394, "full": 405}
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s

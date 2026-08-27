@@ -1,5 +1,5 @@
 {
- "docs": 217,
+ "docs": 219,
  "examples": 13,
  "gates": {
   "metric_accounting": true,
@@ -39,7 +39,7 @@
  ],
  "schemas_uncovered": [],
  "schemas_vectored": 58,
- "source_lines": 52285,
- "tests": 402,
+ "source_lines": 52776,
+ "tests": 404,
  "tools": 38
 }

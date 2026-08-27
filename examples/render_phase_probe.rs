@@ -26,6 +26,11 @@
 //! cargo run --release --example render_phase_probe
 //! ```
 //!
+//! The larger worlds are here because they decided a merge. Two occlusion
+//! implementations cross over: a tiled coarse-depth grid is ~6% ahead at 99 and
+//! 2,649 bits, and 32% behind at 149,787. Stopping at 12,699 would have picked
+//! the wrong one.
+//!
 //! Local wall-clock samples on one machine in one build profile. Not a
 //! benchmark, not a cross-machine claim.
 
@@ -50,7 +55,7 @@ fn main() {
     let mut renderer = Renderer::new(SIZE, SIZE);
     let mut samples = Vec::new();
 
-    for target in [1_i64, 100, 10_000, 100_000] {
+    for target in [1_i64, 100, 10_000, 100_000, 1_000_000, 4_000_000] {
         let world = shell(target);
         let bits = world.iter_on().count();
         let (min, max) = bounds_aabb(world.bounds().expect("bedrock keeps bounds nonempty"));
@@ -108,7 +113,10 @@ fn main() {
         SIZE * SIZE,
         SIZE * SIZE * 12
     );
-    println!("Raster includes overdraw: a hidden bit still rasterises and loses the depth test.");
+    println!(
+        "Raster is what survives the hidden-bit test. Ordering the bits lands in project,\n\
+         because the away-facing control orders them too."
+    );
 }
 
 fn time(repeats: u32, mut body: impl FnMut()) -> f64 {
