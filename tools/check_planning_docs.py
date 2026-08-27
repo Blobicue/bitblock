@@ -26,6 +26,8 @@ SUCCESSOR_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md"
 SUCCESSOR_AUDIT_GIT_BLOB = "e8bd912f171d64c345b6fa71413bd9503e12f5f3"
 THIRD_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md"
 THIRD_AUDIT_GIT_BLOB = "fbee935d27617f47f913617ca2d8e19aba618c6e"
+FOURTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md"
+FOURTH_AUDIT_GIT_BLOB = "350d1af6279d7f441f45fba2689481c0dbea79a5"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
 DESIGN_RECEIPT_GIT_BLOB = "c3005e7fc98971a7747ab125f1624d08aff31199"
 DESIGN_RECEIPT_CANONICAL_SHA256 = "38731565d149bedfc9a9e7570db0ca0a1478e4e7aa3cdeef0aa1a4e5a5888acb"
@@ -36,6 +38,7 @@ FROZEN_TEXT_FILES = (
     DESIGN_AUDIT,
     SUCCESSOR_AUDIT,
     THIRD_AUDIT,
+    FOURTH_AUDIT,
     DESIGN_RECEIPT,
 )
 EXPECTED_FROZEN_TEXT_PATHS = frozenset(
@@ -43,6 +46,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/design-source-receipt-v1.json",
@@ -55,6 +59,7 @@ PLANNING_FILES = (
     DESIGN_AUDIT,
     SUCCESSOR_AUDIT,
     THIRD_AUDIT,
+    FOURTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -76,6 +81,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -89,7 +95,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "1e4ea0376a774f4400f0905ccb10b608c8d499ae75df2ebaf7af29ce6eb4bbfe"
+    "91413d5a9ea19fd6c82a4b693cd8ee2f3a4632ffdf0face8daa5fe16315017df"
 )
 NODE_ID = r"[A-Z][A-Z0-9-]*"
 DETAIL_HEADING = re.compile(rf"^### `({NODE_ID})`(?:\s|$)")
@@ -99,6 +105,7 @@ DEPENDENCY = re.compile(rf"`({NODE_ID})`")
 FOUNDATION_ROW = re.compile(rf"^\| `({NODE_ID})` \| \*\*([^|]+)\*\* \| ([^|]+) \|")
 CONDITIONAL_ROW = re.compile(
     rf"^\| (CE-[0-9]{{2}}) \| ({NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
+    rf"(launch-profile|target-profile) \| "
     rf"([a-z0-9]+(?:-[a-z0-9]+)*) \| ({NODE_ID}) \| "
     rf"([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
 )
@@ -111,7 +118,7 @@ HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 
 EXPECTED_NODE_IDS = frozenset(
     """
-    ACCOUNT-1 ASSET-1 ASSET-D1 AUTH-COMMIT-1 BOUNDS-1 CLIENT-1 CODEC-1 COMMIT-1
+    ACCOUNT-1 ASSET-1 ASSET-D1 AUTH-COMMIT-1 BOUNDS-1 CHAIN-LAUNCH-1 CLIENT-1 CODEC-1 COMMIT-1
     COMMIT-R1 CONSENSUS-1 CONSENSUS-D1 COST-1 CRYPTO-1 CRYPTO-D1 DOC-0
     ECONOMIC-STATE-1 EMERGENCE-R1 EXECUTION-ROOT-1 EXECUTOR-1 GENESIS-D1
     GENESIS-ROOT-PARITY-1 GOVERNANCE-1 GOVERNANCE-D1 HASH-R1 HASH-SOURCE-R1 IDENTITY-1
@@ -124,11 +131,55 @@ EXPECTED_NODE_IDS = frozenset(
     VALIDATOR-SCHEDULE-1 VALUE-1 VERKLE-R1 VM-1 VM-D1 WORLD-0
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "61f447102b3c6134d74338b05c6a6e1648d48cd2f9254d1e6a822349bab45dc3"
+EXPECTED_STATUS_DIGEST = "519decd4a56c2be0e987ce8da9da0f506b72c33c7d0c6ec184d9f1a9b7f96759"
 EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 44))
-EXPECTED_CONDITIONAL_DIGEST = "b19b9b0e83222f89e7db4da8224f7455148b77baeaf158bb9b2a006e3e2b200c"
-EXPECTED_PREDICATE_ENTAILMENT_IDS = frozenset(f"PE-{number:02d}" for number in range(1, 12))
-EXPECTED_PREDICATE_ENTAILMENT_DIGEST = "68d76604c6370932c8dcaab229ed1ed495922d0eac3e7ef741abe80b17534e85"
+EXPECTED_CONDITIONAL_DIGEST = "f9c8a083cf07071c4b71e245c4c3287453e465f565eda9d11dc6334f4e9213a7"
+EXPECTED_PREDICATE_CONTEXTS = frozenset({"launch-profile", "target-profile"})
+EXPECTED_LAUNCH_CONTEXT_EDGE_IDS = frozenset(
+    {"CE-06", "CE-07", "CE-08", "CE-09", "CE-22", "CE-23", "CE-24"}
+)
+EXPECTED_PREDICATE_ENTAILMENT_IDS = frozenset(f"PE-{number:02d}" for number in range(1, 11))
+EXPECTED_PREDICATE_ENTAILMENT_DIGEST = "388678b7dad8bced1ac9bab7c81b2b022f26864fd8345c79afb4a60b1216c91c"
+EXPECTED_CHAIN_LAUNCH_DEPENDENCIES = frozenset(
+    {
+        "PROFILE-SCOPE-D0",
+        "GENESIS-D1",
+        "PROTOCOL-ID-1",
+        "PROFILE-D1",
+        "TRANSITION-SPEC-1",
+        "PROFILE-1",
+        "EXECUTION-ROOT-1",
+        "GENESIS-ROOT-PARITY-1",
+        "RELEASE-1",
+        "IDENTITY-D1",
+        "GOVERNANCE-D1",
+        "CRYPTO-D1",
+        "CRYPTO-1",
+        "CODEC-1",
+    }
+)
+EXPECTED_CHAIN_LAUNCH_ARTIFACT_FRAGMENTS = (
+    "`CHAIN-LAUNCH-1@chain-launch-manifest-id`",
+    "`LaunchClosureBundleV1`",
+    "`launch_closure_bundle_id`",
+    "`chain_launch_package`",
+    "genesis package/payload and ID",
+    "`ProfileScopeV1`",
+    "`DomainRegistryV1`",
+    "`CandidateProfileV1`",
+    "`TransitionSpecAtProfileV1`",
+    "`ProfileAdmissionManifestV1`",
+    "`GenesisRootParityRecordV1`",
+    "initial typed execution-root reference",
+    "`RELEASE-1` record and ID",
+    "`ChainLaunchManifestV1` and ID",
+    "`ChainLaunchAuthorizationV1`",
+    "mandatory retrieval location or embedded canonical bytes",
+)
+EXPECTED_TESTNET_LAUNCH_ARTIFACT_FRAGMENTS = (
+    "exact authorized `CHAIN-LAUNCH-1` package and closure bundle",
+    "same launch-manifest and closure-bundle identities",
+)
 
 
 class PlanningError(ValueError):
@@ -148,6 +199,7 @@ class ConditionalEdge:
     edge_id: str
     owner_base: str
     owner_role: str
+    evaluation_context: str
     predicate: str
     dependency_base: str
     dependency_role: str
@@ -228,6 +280,7 @@ def _field_blocks(lines: list[str], start: int, end: int, node_id: str) -> dict[
 def parse_capability(text: str) -> dict[str, Node]:
     lines = text.splitlines()
     nodes: dict[str, Node] = {}
+    detail_fields: dict[str, dict[str, str]] = {}
 
     for number, line in enumerate(lines, 1):
         match = FOUNDATION_ROW.match(line)
@@ -257,6 +310,7 @@ def parse_capability(text: str) -> dict[str, Node]:
             len(lines),
         )
         fields = _field_blocks(lines, start + 1, end, node_id)
+        detail_fields[node_id] = fields
         dependency_text = fields["Depends on"]
         dependencies = tuple(DEPENDENCY.findall(dependency_text))
         if not dependencies and "none" not in dependency_text.lower():
@@ -295,6 +349,31 @@ def parse_capability(text: str) -> dict[str, Node]:
         if unknown:
             raise PlanningError(f"{node.node_id}: undefined dependencies: {', '.join(unknown)}")
 
+    chain_launch = nodes["CHAIN-LAUNCH-1"]
+    actual_chain_launch_dependencies = frozenset(chain_launch.dependencies)
+    if actual_chain_launch_dependencies != EXPECTED_CHAIN_LAUNCH_DEPENDENCIES:
+        missing = sorted(EXPECTED_CHAIN_LAUNCH_DEPENDENCIES - actual_chain_launch_dependencies)
+        extra = sorted(actual_chain_launch_dependencies - EXPECTED_CHAIN_LAUNCH_DEPENDENCIES)
+        raise PlanningError(
+            "CHAIN-LAUNCH-1 prerequisite closure changed: "
+            f"missing={missing}, extra={extra}"
+        )
+    if "CHAIN-LAUNCH-1" not in nodes["TESTNET-1"].dependencies:
+        raise PlanningError("TESTNET-1 does not directly consume CHAIN-LAUNCH-1")
+
+    chain_launch_artifact = detail_fields["CHAIN-LAUNCH-1"]["Artifact"]
+    for required_fragment in EXPECTED_CHAIN_LAUNCH_ARTIFACT_FRAGMENTS:
+        if required_fragment not in chain_launch_artifact:
+            raise PlanningError(
+                f"CHAIN-LAUNCH-1 artifact omits {required_fragment}"
+            )
+    testnet_artifact = detail_fields["TESTNET-1"]["Artifact"]
+    for required_fragment in EXPECTED_TESTNET_LAUNCH_ARTIFACT_FRAGMENTS:
+        if required_fragment not in testnet_artifact:
+            raise PlanningError(
+                f"TESTNET-1 artifact omits {required_fragment}"
+            )
+
     _assert_acyclic(
         {node_id: node.dependencies for node_id, node in nodes.items()},
         "base dependency",
@@ -332,12 +411,32 @@ def parse_conditional_edges(
     if not edges:
         raise PlanningError("no structured conditional-instance edges parsed")
 
+    actual_contexts = frozenset(edge.evaluation_context for edge in edges)
+    if actual_contexts != EXPECTED_PREDICATE_CONTEXTS:
+        missing = sorted(EXPECTED_PREDICATE_CONTEXTS - actual_contexts)
+        extra = sorted(actual_contexts - EXPECTED_PREDICATE_CONTEXTS)
+        raise PlanningError(
+            "conditional predicate-context inventory changed: "
+            f"missing={missing}, extra={extra}"
+        )
+    actual_launch_context_edges = frozenset(
+        edge.edge_id for edge in edges if edge.evaluation_context == "launch-profile"
+    )
+    if actual_launch_context_edges != EXPECTED_LAUNCH_CONTEXT_EDGE_IDS:
+        missing = sorted(EXPECTED_LAUNCH_CONTEXT_EDGE_IDS - actual_launch_context_edges)
+        extra = sorted(actual_launch_context_edges - EXPECTED_LAUNCH_CONTEXT_EDGE_IDS)
+        raise PlanningError(
+            "launch-profile conditional edge set changed: "
+            f"missing={missing}, extra={extra}"
+        )
+
     canonical = "\n".join(
         "|".join(
             (
                 edge.edge_id,
                 edge.owner_base,
                 edge.owner_role,
+                edge.evaluation_context,
                 edge.predicate,
                 edge.dependency_base,
                 edge.dependency_role,
@@ -477,6 +576,39 @@ def expand_predicates(
                 expanded.add(entailment.consequent)
                 changed = True
     return frozenset(expanded)
+
+
+def active_conditional_edges(
+    conditional_edges: tuple[ConditionalEdge, ...],
+    entailments: tuple[PredicateEntailment, ...],
+    predicate_environment: dict[str, set[str]],
+) -> tuple[ConditionalEdge, ...]:
+    actual_contexts = frozenset(predicate_environment)
+    if actual_contexts != EXPECTED_PREDICATE_CONTEXTS:
+        missing = sorted(EXPECTED_PREDICATE_CONTEXTS - actual_contexts)
+        extra = sorted(actual_contexts - EXPECTED_PREDICATE_CONTEXTS)
+        raise PlanningError(
+            "predicate environment changed: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    known_predicates = {edge.predicate for edge in conditional_edges}
+    closures: dict[str, frozenset[str]] = {}
+    for context in EXPECTED_PREDICATE_CONTEXTS:
+        seeds = set(predicate_environment[context])
+        unknown = sorted(seeds - known_predicates)
+        if unknown:
+            raise PlanningError(
+                f"{context}: undefined predicate seeds: {', '.join(unknown)}"
+            )
+        seeds.add("always")
+        closures[context] = expand_predicates(seeds, entailments)
+
+    return tuple(
+        edge
+        for edge in conditional_edges
+        if edge.predicate in closures[edge.evaluation_context]
+    )
 
 
 def heading_slug(text: str) -> str:
@@ -745,6 +877,16 @@ def check_frozen_third_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_fourth_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != FOURTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md changed after its frozen first "
+            f"addition: expected Git blob {FOURTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
 def check_frozen_design_receipt_bytes(data: bytes) -> None:
     header = f"blob {len(data)}\0".encode("ascii")
     actual = hashlib.sha1(header + data).hexdigest()
@@ -860,12 +1002,40 @@ def check_design_source_receipt(text: str, receipt: dict[str, object]) -> None:
             )
 
 
-def expect_failure(label: str, text: str) -> None:
+def expect_failure(
+    label: str,
+    text: str,
+    *,
+    expected_message: str | None = None,
+) -> None:
     try:
         parse_capability(text)
-    except PlanningError:
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
         return
     raise PlanningError(f"negative control did not fail: {label}")
+
+
+def replace_detail_section_fragment(
+    text: str,
+    node_id: str,
+    fragment: str,
+    replacement: str,
+) -> str:
+    section = re.search(
+        rf"^### `{re.escape(node_id)}`.*?(?=^### |^## )",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if section is None or fragment not in section.group(0):
+        raise PlanningError(
+            f"self-test fixture drift: {node_id} section fragment {fragment}"
+        )
+    mutated_section = section.group(0).replace(fragment, replacement, 1)
+    return text[: section.start()] + mutated_section + text[section.end() :]
 
 
 def expect_markdown_failure(
@@ -917,6 +1087,14 @@ def expect_frozen_successor_audit_failure(label: str, data: bytes) -> None:
 def expect_frozen_third_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_third_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_fourth_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_fourth_audit(data)
     except PlanningError:
         return
     raise PlanningError(f"negative control did not fail: {label}")
@@ -1030,6 +1208,7 @@ def run_self_tests(
     design_audit_bytes: bytes,
     successor_audit_bytes: bytes,
     third_audit_bytes: bytes,
+    fourth_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
     design_receipt: dict[str, object],
@@ -1037,7 +1216,7 @@ def run_self_tests(
     frozen_eol_policy: dict[str, dict[str, str]],
 ) -> None:
     reduced_inventory = tuple(
-        path for path in PLANNING_FILES if repository_relative_path(path) != "docs/PROTOCOL.md"
+        path for path in PLANNING_FILES if path != FOURTH_AUDIT
     )
     if len(reduced_inventory) != len(PLANNING_FILES) - 1:
         raise PlanningError("self-test fixture drift: planning authority inventory")
@@ -1049,14 +1228,14 @@ def run_self_tests(
     wrong_eol_policy = {
         path: dict(attributes) for path, attributes in frozen_eol_policy.items()
     }
-    eol_probe_path = repository_relative_path(THIRD_AUDIT)
+    eol_probe_path = repository_relative_path(FOURTH_AUDIT)
     wrong_eol_policy[eol_probe_path]["eol"] = "crlf"
     expect_frozen_text_eol_policy_failure(
         "fresh-checkout EOL policy changed from LF",
         wrong_eol_policy,
     )
     missing_eol_policy = dict(frozen_eol_policy)
-    missing_eol_policy.pop(repository_relative_path(DESIGN_RECEIPT))
+    missing_eol_policy.pop(repository_relative_path(FOURTH_AUDIT))
     expect_frozen_text_eol_policy_failure(
         "frozen artifact missing from EOL policy",
         missing_eol_policy,
@@ -1124,46 +1303,223 @@ def run_self_tests(
         raise PlanningError("self-test fixture drift: post-node section boundary")
     parse_capability(boundary_probe)
 
+    missing_chain_codec = text.replace(
+        "  `IDENTITY-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`, `CRYPTO-1`, `CODEC-1`.",
+        "  `IDENTITY-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`, `CRYPTO-1`.",
+        1,
+    )
+    if missing_chain_codec == text:
+        raise PlanningError("self-test fixture drift: CHAIN-LAUNCH-1 dependency closure")
+    expect_failure(
+        "launch closure loses one typed prerequisite",
+        missing_chain_codec,
+        expected_message="CHAIN-LAUNCH-1 prerequisite closure changed:",
+    )
+
+    testnet_without_chain_launch = text.replace(
+        "  `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `CHAIN-LAUNCH-1`, `GOVERNANCE-1`, `CRYPTO-1`,",
+        "  `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `GOVERNANCE-1`, `CRYPTO-1`,",
+        1,
+    )
+    if testnet_without_chain_launch == text:
+        raise PlanningError("self-test fixture drift: TESTNET-1 launch dependency")
+    expect_failure(
+        "testnet bypasses authorized launch closure",
+        testnet_without_chain_launch,
+        expected_message="TESTNET-1 does not directly consume CHAIN-LAUNCH-1",
+    )
+
+    for index, fragment in enumerate(EXPECTED_CHAIN_LAUNCH_ARTIFACT_FRAGMENTS, 1):
+        missing_launch_artifact = replace_detail_section_fragment(
+            text,
+            "CHAIN-LAUNCH-1",
+            fragment,
+            f"mutated-launch-artifact-{index}",
+        )
+        expect_failure(
+            f"launch closure loses required artifact fragment {index}",
+            missing_launch_artifact,
+            expected_message=f"CHAIN-LAUNCH-1 artifact omits {fragment}",
+        )
+
+    for index, fragment in enumerate(EXPECTED_TESTNET_LAUNCH_ARTIFACT_FRAGMENTS, 1):
+        wrong_testnet_launch_artifact = replace_detail_section_fragment(
+            text,
+            "TESTNET-1",
+            fragment,
+            f"mutated-testnet-launch-reference-{index}",
+        )
+        expect_failure(
+            f"testnet loses exact launch-artifact reference {index}",
+            wrong_testnet_launch_artifact,
+            expected_message=f"TESTNET-1 artifact omits {fragment}",
+        )
+
     nodes = parse_capability(text)
     conditional_edges = parse_conditional_edges(text, nodes)
     predicate_entailments = parse_predicate_entailments(text, conditional_edges)
-    verkle_closure = expand_predicates({"verkle-prototype"}, predicate_entailments)
-    if "verkle-selected" not in verkle_closure:
-        raise PlanningError(
-            "predicate closure did not carry verkle-prototype to verkle-selected"
+
+    successor_active = frozenset(
+        edge.edge_id
+        for edge in active_conditional_edges(
+            conditional_edges,
+            predicate_entailments,
+            {
+                "launch-profile": set(),
+                "target-profile": {"post-genesis-program"},
+            },
         )
+    )
+    expected_successor_active = frozenset(
+        {
+            "CE-02", "CE-05", "CE-11", "CE-17", "CE-20", "CE-26",
+            "CE-29", "CE-30", "CE-31", "CE-32", "CE-43",
+        }
+    )
+    if successor_active != expected_successor_active:
+        raise PlanningError(
+            "successor predicate-context assay changed: "
+            f"expected={sorted(expected_successor_active)}, got={sorted(successor_active)}"
+        )
+
+    collapsed_context_active = frozenset(
+        edge.edge_id
+        for edge in active_conditional_edges(
+            conditional_edges,
+            predicate_entailments,
+            {
+                "launch-profile": {"post-genesis-program"},
+                "target-profile": {"post-genesis-program"},
+            },
+        )
+    )
+    if not {"CE-07", "CE-23"}.issubset(collapsed_context_active):
+        raise PlanningError(
+            "self-test fixture drift: collapsed successor contexts no longer falsely activate "
+            "launch-only program edges"
+        )
+
+    initial_active = frozenset(
+        edge.edge_id
+        for edge in active_conditional_edges(
+            conditional_edges,
+            predicate_entailments,
+            {
+                "launch-profile": {"program-active"},
+                "target-profile": {"program-active"},
+            },
+        )
+    )
+    expected_initial_active = frozenset(
+        {
+            "CE-02", "CE-05", "CE-07", "CE-11", "CE-17",
+            "CE-20", "CE-23", "CE-26", "CE-43",
+        }
+    )
+    if initial_active != expected_initial_active:
+        raise PlanningError(
+            "initial predicate-context assay changed: "
+            f"expected={sorted(expected_initial_active)}, got={sorted(initial_active)}"
+        )
+
+    verkle_active = frozenset(
+        edge.edge_id
+        for edge in active_conditional_edges(
+            conditional_edges,
+            predicate_entailments,
+            {
+                "launch-profile": set(),
+                "target-profile": {"verkle-selected"},
+            },
+        )
+    )
+    expected_verkle_active = frozenset(
+        {*(f"CE-{number:02d}" for number in range(35, 43)), "CE-43"}
+    )
+    if verkle_active != expected_verkle_active:
+        raise PlanningError(
+            "selected-Verkle closure assay changed: "
+            f"expected={sorted(expected_verkle_active)}, got={sorted(verkle_active)}"
+        )
+
     missing_conditional = text.replace(
-        "| CE-01 | PROFILE-SCOPE-D0 | candidate-scope | asset-active | ASSET-D1 | design |\n",
+        "| CE-01 | PROFILE-SCOPE-D0 | candidate-scope | target-profile | asset-active | ASSET-D1 | design |\n",
         "",
         1,
     )
     if missing_conditional == text:
         raise PlanningError("self-test fixture drift: CE-01")
-    expect_conditional_failure("missing conditional edge", missing_conditional, nodes)
-
-    wrong_polarity = text.replace(
-        "| CE-30 | UPGRADE-1 | migration | migration-profile | PROFILE-1 | old-admitted-profile |",
-        "| CE-30 | UPGRADE-1 | migration | migration-profile | PROFILE-1 | new-candidate-profile |",
-        1,
-    )
-    if wrong_polarity == text:
-        raise PlanningError("self-test fixture drift: upgrade polarity")
-    expect_conditional_failure("changed old/new profile polarity", wrong_polarity, nodes)
-
-    ce42 = "| CE-42 | PROFILE-1 | new-admission | verkle-selected | VERKLE-R1 | prototype |"
-    missing_verkle_admission = text.replace(ce42 + "\n", "", 1)
-    if missing_verkle_admission == text:
-        raise PlanningError("self-test fixture drift: CE-42 admission dependency")
     expect_conditional_failure(
-        "missing candidate-bound Verkle admission dependency",
-        missing_verkle_admission,
+        "missing conditional edge",
+        missing_conditional,
         nodes,
         expected_message="conditional edge inventory changed without updating its intentional guard:",
     )
 
+    wrong_polarity = text.replace(
+        "| CE-30 | UPGRADE-1 | migration | target-profile | migration-profile | PROFILE-1 | old-admitted-profile |",
+        "| CE-30 | UPGRADE-1 | migration | target-profile | migration-profile | PROFILE-1 | new-candidate-profile |",
+        1,
+    )
+    if wrong_polarity == text:
+        raise PlanningError("self-test fixture drift: upgrade polarity")
+    expect_conditional_failure(
+        "changed old/new profile polarity",
+        wrong_polarity,
+        nodes,
+        expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
+    )
+
+    launch_edge = "| CE-07 | GENESIS-D1 | genesis-bytes | launch-profile | program-active | VM-D1 | design |"
+    launch_edge_in_target_context = text.replace(
+        launch_edge,
+        "| CE-07 | GENESIS-D1 | genesis-bytes | target-profile | program-active | VM-D1 | design |",
+        1,
+    )
+    if launch_edge_in_target_context == text:
+        raise PlanningError("self-test fixture drift: CE-07 launch context")
+    expect_conditional_failure(
+        "launch-only edge moved into successor target context",
+        launch_edge_in_target_context,
+        nodes,
+        expected_message="launch-profile conditional edge set changed:",
+    )
+
+    target_edge = "| CE-17 | EXECUTOR-1 | profile-executor | target-profile | program-active | PROGRAM-STATE-1 | implementation |"
+    target_edge_in_launch_context = text.replace(
+        target_edge,
+        "| CE-17 | EXECUTOR-1 | profile-executor | launch-profile | program-active | PROGRAM-STATE-1 | implementation |",
+        1,
+    )
+    if target_edge_in_launch_context == text:
+        raise PlanningError("self-test fixture drift: CE-17 target context")
+    expect_conditional_failure(
+        "successor target edge moved into immutable launch context",
+        target_edge_in_launch_context,
+        nodes,
+        expected_message="launch-profile conditional edge set changed:",
+    )
+
+    for number in range(35, 43):
+        edge_id = f"CE-{number:02d}"
+        edge_line = next(
+            (line for line in text.splitlines() if line.startswith(f"| {edge_id} |")),
+            None,
+        )
+        if edge_line is None:
+            raise PlanningError(f"self-test fixture drift: {edge_id} Verkle closure")
+        missing_verkle_edge = text.replace(edge_line + "\n", "", 1)
+        expect_conditional_failure(
+            f"selected-Verkle closure loses {edge_id}",
+            missing_verkle_edge,
+            nodes,
+            expected_message="conditional edge inventory changed without updating its intentional guard:",
+        )
+
+    ce42 = "| CE-42 | PROFILE-1 | new-admission | target-profile | verkle-selected | VERKLE-R1 | prototype |"
     wrong_verkle_admission_predicate = text.replace(
         ce42,
-        "| CE-42 | PROFILE-1 | new-admission | verkle-prototype | VERKLE-R1 | prototype |",
+        "| CE-42 | PROFILE-1 | new-admission | target-profile | program-active | VERKLE-R1 | prototype |",
         1,
     )
     if wrong_verkle_admission_predicate == text:
@@ -1177,7 +1533,7 @@ def run_self_tests(
 
     wrong_verkle_admission_role = text.replace(
         ce42,
-        "| CE-42 | PROFILE-1 | old-admitted-profile | verkle-selected | VERKLE-R1 | feasibility |",
+        "| CE-42 | PROFILE-1 | old-admitted-profile | target-profile | verkle-selected | VERKLE-R1 | feasibility |",
         1,
     )
     if wrong_verkle_admission_role == text:
@@ -1189,7 +1545,7 @@ def run_self_tests(
         expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
     )
 
-    ce43 = "| CE-43 | PROFILE-D1 | new-candidate-profile | always | PROFILE-SCOPE-D0 | candidate-scope |"
+    ce43 = "| CE-43 | PROFILE-D1 | new-candidate-profile | target-profile | always | PROFILE-SCOPE-D0 | candidate-scope |"
     missing_current_scope = text.replace(ce43 + "\n", "", 1)
     if missing_current_scope == text:
         raise PlanningError("self-test fixture drift: CE-43 current scope")
@@ -1202,7 +1558,7 @@ def run_self_tests(
 
     optional_current_scope = text.replace(
         ce43,
-        "| CE-43 | PROFILE-D1 | new-candidate-profile | migration-profile | PROFILE-SCOPE-D0 | candidate-scope |",
+        "| CE-43 | PROFILE-D1 | new-candidate-profile | target-profile | migration-profile | PROFILE-SCOPE-D0 | candidate-scope |",
         1,
     )
     if optional_current_scope == text:
@@ -1216,7 +1572,7 @@ def run_self_tests(
 
     collapsed_current_scope_role = text.replace(
         ce43,
-        "| CE-43 | PROFILE-D1 | candidate-scope | always | PROFILE-SCOPE-D0 | base |",
+        "| CE-43 | PROFILE-D1 | candidate-scope | target-profile | always | PROFILE-SCOPE-D0 | base |",
         1,
     )
     if collapsed_current_scope_role == text:
@@ -1228,10 +1584,11 @@ def run_self_tests(
         expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
     )
 
+    ce40 = "| CE-40 | VERKLE-R1 | prototype | target-profile | verkle-selected | PROFILE-D1 | new-candidate-profile |"
     conditional_cycle = text.replace(
-        "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |",
-        "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |\n"
-        "| CE-44 | PROFILE-D1 | new-candidate-profile | migration-profile | UPGRADE-1 | migration |",
+        ce40,
+        ce40 + "\n"
+        "| CE-44 | PROFILE-D1 | new-candidate-profile | target-profile | migration-profile | UPGRADE-1 | migration |",
         1,
     )
     if conditional_cycle == text:
@@ -1244,22 +1601,20 @@ def run_self_tests(
         expected_message="role-aware conditional dependency cycle:",
     )
 
-    missing_entailment = text.replace(
-        "| PE-11 | verkle-prototype | verkle-selected |\n",
-        "",
-        1,
-    )
+    pe10 = "| PE-10 | in-place-upgrade | migration-profile |"
+    missing_entailment = text.replace(pe10 + "\n", "", 1)
     if missing_entailment == text:
-        raise PlanningError("self-test fixture drift: PE-11")
+        raise PlanningError("self-test fixture drift: PE-10")
     expect_predicate_entailment_failure(
         "missing predicate entailment",
         missing_entailment,
         nodes,
+        expected_message="predicate entailment inventory changed without updating its intentional guard:",
     )
 
     reversed_entailment = text.replace(
-        "| PE-11 | verkle-prototype | verkle-selected |",
-        "| PE-11 | verkle-selected | verkle-prototype |",
+        pe10,
+        "| PE-10 | migration-profile | in-place-upgrade |",
         1,
     )
     if reversed_entailment == text:
@@ -1268,12 +1623,12 @@ def run_self_tests(
         "reversed predicate entailment",
         reversed_entailment,
         nodes,
+        expected_message="predicate entailments changed without updating their guard:",
     )
 
     entailment_cycle = text.replace(
-        "| PE-11 | verkle-prototype | verkle-selected |",
-        "| PE-11 | verkle-prototype | verkle-selected |\n"
-        "| PE-12 | verkle-selected | verkle-prototype |",
+        pe10,
+        pe10 + "\n| PE-11 | migration-profile | in-place-upgrade |",
         1,
     )
     if entailment_cycle == text:
@@ -1358,6 +1713,10 @@ def run_self_tests(
         "frozen third audit mutation",
         third_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_fourth_audit_failure(
+        "frozen fourth audit mutation",
+        fourth_audit_bytes + b"\nnegative-control",
+    )
     expect_frozen_design_receipt_bytes_failure(
         "byte-frozen design receipt mutation",
         design_receipt_bytes + b"\n",
@@ -1427,6 +1786,8 @@ def main() -> int:
     check_frozen_successor_audit(successor_audit_bytes)
     third_audit_bytes = THIRD_AUDIT.read_bytes()
     check_frozen_third_audit(third_audit_bytes)
+    fourth_audit_bytes = FOURTH_AUDIT.read_bytes()
+    check_frozen_fourth_audit(fourth_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
     check_frozen_design_receipt_bytes(design_receipt_bytes)
     design_receipt = parse_frozen_design_receipt(design_receipt_bytes)
@@ -1447,6 +1808,7 @@ def main() -> int:
             design_audit_bytes,
             successor_audit_bytes,
             third_audit_bytes,
+            fourth_audit_bytes,
             design_receipt_bytes,
             design_text,
             design_receipt,

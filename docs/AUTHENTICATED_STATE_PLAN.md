@@ -720,6 +720,20 @@ release/authorization identities. A network consumer accepts the genesis commitm
 authority only through the verified `chain_launch_package`; a raw `genesis_id`, root, or set ID is
 insufficient.
 
+That package MUST carry the Layer 1 `LaunchClosureBundleV1`, not only hashes of unavailable launch
+objects. Under protocol-frozen count/byte/depth bounds, a fresh verifier obtains the exact
+`DomainRegistryV1`, `ProfileScopeV1`, `CandidateProfileV1`,
+`TransitionSpecAtProfileV1`, `ProfileAdmissionManifestV1`, `GenesisRootParityRecordV1`, and
+`AdmittedReleaseRecordV1` preimages plus every supplementary preimage transitively required to
+verify admission and release. It recomputes each typed digest/ID, checks unique role and artifact
+inventory, byte-equal projections, complete reference resolution, and a strictly decreasing
+dependency rank before accepting `launch_closure_bundle_id`. It then verifies the manifest and
+detached launch authorization. A missing preimage, ambient local ID mapping, duplicate role,
+unreachable extra, hash mismatch, self/forward reference, or bundle/manifest mismatch prevents
+bootstrap and genesis replay. The one-way order remains roots/parity and admitted release, then
+closure bundle, then manifest, then detached authorization; no launch ID is fed back into a logical
+root, candidate, parity, admission, or release preimage.
+
 `RequiredDomainV1` is byte-for-byte the active-entry projection from the subject's canonical
 `DomainRegistryV1`. `required_domain_set` is the canonically sorted set of unique
 `RequiredDomainV1` values fixed by that registry. `root_entries` contains exactly one
@@ -765,6 +779,33 @@ schedule, and exactly one authorized migration system transition matching this p
 The resulting execution carries exactly one migration system receipt. Any ordinary transaction,
 additional system transition, new-profile envelope selector, or mixed old/new phase interpretation
 rejects before root publication.
+
+The authenticated-state transition consumes the Layer 1 relation
+`Execute(parent_state, BlockContext, Body)`, never an action list with auxiliary inputs supplied on
+the side. `BlockContext` uniquely owns chain/envelope metadata, committed randomness, and schedules;
+`OrdinaryBodyV1` uniquely owns ordered transactions and deterministic auxiliary value bytes;
+`DedicatedMigrationBodyV1` uniquely owns migration value bytes. The ordinary and migration
+branches are total and disjoint, consume every selected input exactly once, and return the complete
+ordered effects/receipts with the post-state or `BlockInvalid`. A duplicate source, ignored extra,
+missing schedule target, unconsumed input, or branch mismatch prevents construction or publication
+of a candidate commitment set.
+
+Canonical `BlockContext` bytes MUST be present inside the availability-covered
+`AvailabilityPayload`. Before executing or publishing any root, the consumer bound-decodes the
+context, requires every chain/genesis/launch/profile/world/height/parent/epoch/round projection and
+schedule to match the verified header and parent-or-launch authority, and recomputes
+`block_context_root`. Withheld or substituted context cannot be repaired from an implementation's
+local scheduler and cannot support an availability or replay claim.
+
+Network intake first parses only the fixed, profile-independent Layer 1 `ProposalOuterV1` or
+`AcceptedRecordOuterV1`: protocol-frozen magic/version/tag fields, bounded parent-or-launch lookup
+bytes, checked fixed-width lengths, and opaque inner segments. An ordinary parent lookup must pass
+the accepted parent's profile-specific consensus-status rule. The first-record launch lookup must
+instead verify the complete launch closure and detached launch authorization plus the manifest's
+first-height/genesis-parent/root conditions; it is not an accepted parent and never satisfies that
+status predicate by coercion. Only that tagged result selects the envelope owner and inner codecs.
+Every decoded inner object is canonically re-encoded and byte-compared to its exact outer segment
+before a header or state root can become authority.
 
 Overflow rejects. Forks may produce several ordinary or migration children of one parent, but no
 child may name itself, a descendant, a missing set, or a set from another chain/genesis/world

@@ -293,7 +293,7 @@ visible in `PROJECT_INTENT.md`.
 
 User intent: attack the paper repeatedly instead of accepting a persuasive first draft.
 
-Current truth: `LAYER1_DESIGN_AUDIT.md` records two finite audit loops, findings F-01 through F-52,
+Checkpoint-0.3 truth: `LAYER1_DESIGN_AUDIT.md` records two finite audit loops, findings F-01 through F-52,
 their prose patches, exact source/paper pins, checks run, and repository obligations left open.
 Those loops corrected circular identifiers, incomplete roots and receipts, execution/consensus/DA
 conflation, action-lane overclaims, supply correspondence, finality profiles, threat assumptions,
@@ -444,6 +444,29 @@ Broad Rust, Python-vector, headless, release, Lean, network, performance, and di
 unmade until a later audit freezes a zero-new-material-gap sweep and the corresponding tests are
 actually run. A zero finding is evidence about the declared finite lenses and pinned input, not a
 universal proof that no design gap exists.
+
+### 30. Fourth bounded successor sweep and checkpoint-0.3 provenance correction
+
+User intent: keep attacking each pinned correction until a complete independent finite-lens sweep
+finds no new material design gap, and only then begin broad implementation tests.
+
+Current truth: the third correction is pinned at
+`b23ddc95e5075c35d0dbf918b89f353fcdd40ddd`, Git tree
+`3de2d45aa20b08318f1a1af4d93308daccf1f55e`. The next complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md) at
+commit `8a5743595a0aa8ff13ede576f282b92540db5d9b`, with first-addition Git blob
+`350d1af6279d7f441f45fba2689481c0dbea79a5`. It records eight new material gaps: an unavailable
+launch-manifest preimage closure, unavailable canonical block context, an execution relation that
+omits body-owned inputs, missing pre-profile outer framing, two conditional-predicate instance
+failures, a missing launch-closure capability owner, and stale presentation of the checkpoint-0.3
+paper audit as the latest review.
+
+`LAYER1_DESIGN_AUDIT.md` remains immutable historical evidence for checkpoint-0.3; it is not a
+review of later paper revisions. The immutable design-successor audits carry the current review
+chronology. This descendant correction still activates no runtime, network, authenticated trie,
+vector commitment, cryptocurrency, consensus, or Layer 1 capability. Broad Rust, Python-vector,
+headless, release, Lean, network, performance, and display tests remain gated on the next complete
+read-only sweep freezing a zero-new-material-gap result within its declared finite coverage.
 
 ## Semantic lessons that should survive future checkpoints
 

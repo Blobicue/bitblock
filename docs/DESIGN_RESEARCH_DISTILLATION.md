@@ -141,6 +141,14 @@ an initial interpreter by itself. The Layer 1 `ChainLaunchManifestV1` is derived
 feeding back into `genesis_id`; bootstrap and the first accepted record verify that manifest and its
 detached launch authorization.
 
+The authorized `chain_launch_package` also carries a bounded, acyclic `LaunchClosureBundleV1` with
+the exact scope, registry, candidate, profile-resolved transition specification, typed `PROFILE-1`
+admission manifest, genesis-root parity record, typed `RELEASE-1` record, and every supplementary
+preimage transitively required to verify admission and release. A fresh verifier recomputes the
+whole genesis→registry/scope→candidate→specification→admission/parity/release→bundle→manifest→
+authorization chain under a unique, count/byte/depth-bounded inventory before selecting the first
+profile codec. A hash with no carried preimage or an ambient local mapping is not bootstrap input.
+
 Binding `D_n` makes replay inputs explicit; it does not prove an oracle value true, randomness
 unbiased, or acquisition honest.
 
@@ -154,15 +162,35 @@ history formula. The repository's sole proposed byte-contract owner is
 [`LAYER1_DESIGN_PAPER.md` §4.4](LAYER1_DESIGN_PAPER.md#44-proposed-block-identifier-consensus-evidence-and-receipts).
 That proposal already separates ordered actions from deterministic auxiliary inputs, binds effects
 through receipts, binds the chain-launch identity and the deterministic envelope owner plus
-parent-authorized execution/consensus/availability policies and authority context, commits the exact availability payload, derives a non-circular
-block identifier, and keeps signatures and consensus evidence outside that identifier. It remains
+authority-selected execution/consensus/availability policies and authority context, commits the
+exact availability payload, derives a non-circular block identifier, and keeps signatures and
+consensus evidence outside that identifier. The complete authorized launch package selects the
+initial values at the first height; the accepted parent selects them thereafter. It remains
 proposed, unimplemented, and non-authoritative.
 
+The network instantiation of the abstract `Step` relation is the total
+`Execute(state, BlockContext, Body)` relation. `BlockContext` alone owns committed
+chain/height/randomness/schedule values; `OrdinaryBodyV1` alone owns transactions and deterministic
+auxiliary values; `DedicatedMigrationBodyV1` alone owns migration values. Ordinary and migration
+are disjoint total branches, and every selected input is consumed exactly once or the block is
+invalid. The canonical context preimage is carried inside `AvailabilityPayload`, so its repeated
+header/authority projections and `block_context_root` are checked before execution. Withheld or
+substituted context bytes make both replay and the availability claim fail.
+
 Its verifier rejects over-bound outer frames before nested materialization, resolves the accepted
-parent and envelope owner before selecting any codec/hash/signature suite, checks every
-parent-authorized limit/role/policy before execution, and only then decodes payloads, recomputes
+parent or first-launch authority and envelope owner before selecting any codec/hash/signature
+suite, checks every
+authority-selected limit/role/policy before execution, and only then decodes payloads, recomputes
 commitments, executes, and checks successor state. This is an ordering requirement, not evidence
 that the future implementation meets its budgets.
+
+That ordering is inhabited by fixed profile-independent `ProposalOuterV1` and
+`AcceptedRecordOuterV1` frames: protocol-frozen tags, capped fixed-width lengths, a bounded
+parent-or-launch lookup reference, and opaque inner byte ranges. An ordinary reference must resolve
+an accepted parent at its required consensus status. The first-record branch instead verifies the
+complete launch closure and detached launch authorization plus the manifest's first-record
+conditions; launch authorization is not coerced into parent consensus. After that branch selects
+the owner, every decoded inner object is re-encoded and required to equal its exact outer bytes.
 
 A payload commitment establishes byte identity, not retrieval. Consensus and availability evidence
 must each bind the candidate identifier, selected policy, applicable authority/epoch context, and
@@ -171,7 +199,9 @@ renamed finality. The future protocol must still decide whether one network unit
 simulation tick, one action, or one deterministic batch; the current 60 Hz local tick must not
 silently become consensus time.
 
-Ordinary witnessed transitions require `p_n = p_(n-1)` and a parent-authorized `T_(t_n)`. A
+Ordinary witnessed transitions require `p_n = p_(n-1)` and an authority-selected `T_(t_n)`: the
+launch-authorized initial transition at the first height and a parent-authorized transition
+thereafter. A
 commitment-profile change is a different transition class:
 
 ```text
@@ -205,8 +235,8 @@ claims relative to one supplied typed domain root and may carry that profile's u
 is not directly a proof under composed execution root `X_n`, the action, the state delta, a proof
 of authorization, or a proof that the transition function was executed correctly.
 
-An abstract execution-witness bundle therefore needs the parent commitment-set/execution-root
-context plus per-domain entries naming required domain, typed pre-domain root, membership or absence
+An abstract execution-witness bundle therefore needs the authority-selected pre-state
+commitment-set/execution-root context plus per-domain entries naming required domain, typed pre-domain root, membership or absence
 proofs, and update material. The verifier first checks that the domain-root set exactly matches
 `G_p` and recomposes `X_(n-1)`, then verifies each map proof under its own `P_(p,d)`. Inactive,
 unknown, omitted, duplicated, and cross-domain entries reject. Access entries name domain, key, and
@@ -216,8 +246,9 @@ A stateless transition verifier would:
 
 1. resolve one exact admitted chain/genesis/profile, required-domain registry, typed commitment
    profiles, codecs, bounds, policies, authority context, and transition program;
-2. verify parent linkage and check the parent roots against a previously admitted canonical context
-   or an explicitly trusted checkpoint;
+2. verify the required parent-or-launch linkage and check the pre-state roots against the complete
+   launch package, a previously admitted accepted-parent context, or an explicitly trusted
+   checkpoint, as applicable;
 3. retrieve the bounded action body `A_n`, disjoint deterministic input record `D_n`, typed witness,
    active code, receipts/effects, and availability payload; verify every byte commitment;
 4. decode and bound `W_n`, verify the exact typed domain-root set against `X_(n-1)`, and authenticate
@@ -300,7 +331,7 @@ The network must explicitly fund, require, or otherwise justify every availabili
 
 | Method | What the joining node obtains | Cost and trust boundary |
 | --- | --- | --- |
-| Genesis replay | Authorized chain-launch package plus every required historical transition and protocol version | Highest data and execution work; still needs a canonical-chain rule and complete archives. A raw genesis pair cannot select the initial profile. |
+| Genesis replay | Authorized chain-launch package with its complete `LaunchClosureBundleV1`, plus every required historical accepted-record outer frame and protocol version | Highest data and execution work; still needs a canonical-chain rule and complete archives. A raw genesis pair or manifest with unavailable referenced preimages cannot select the initial profile. |
 | Verified snapshot | Materialized state chunks and a manifest at an authenticated checkpoint that binds the chain-launch ID | Fast, but requires root recomputation plus an explicit checkpoint/finality trust model. |
 | Recursive validity proof plus state retrieval | Launch-bound checkpoint, proof of a contiguous transition relation, final roots, and separately retrieved state | Compresses correctness checking; does not supply state values or availability. |
 
