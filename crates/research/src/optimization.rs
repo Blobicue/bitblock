@@ -997,6 +997,173 @@ mod tests {
         .unwrap()
     }
 
+    /// The byte ladder the independent TickOutcome and FrameReceiptV2 vectors already use.
+    fn ladder(start: u8) -> [u8; 32] {
+        let mut digest = [0_u8; 32];
+        for (offset, byte) in digest.iter_mut().enumerate() {
+            *byte = start.wrapping_add(offset as u8);
+        }
+        digest
+    }
+
+    /// One attempt-free canonical `TickOutcome` v2 payload, spelled field by field.
+    ///
+    /// This mirrors `tools/frame_ledger_evidence_vectors.py` exactly and then hands the bytes to
+    /// the production strict decoder. Building the fixture through the codec rather than through
+    /// a constructor is deliberate: it keeps the two languages agreeing on the same 429 bytes
+    /// rather than on two independently assembled structs.
+    fn evidence_outcome_payload(parent: Option<[u8; 32]>, tick: u64, frames: bool) -> Vec<u8> {
+        let mut payload = Vec::with_capacity(429);
+        match parent {
+            Some(digest) => {
+                payload.push(1);
+                payload.extend_from_slice(&digest);
+            }
+            None => {
+                payload.push(0);
+                payload.extend_from_slice(&[0; 32]);
+            }
+        }
+        payload.extend_from_slice(&tick.to_be_bytes());
+        payload.extend_from_slice(&ladder(0x00)); // pre-world
+        payload.extend_from_slice(&ladder(0x20)); // pre-history
+        payload.extend_from_slice(&0_u16.to_be_bytes()); // no input flags
+        for value in [0.0_f64, -0.0, 0.0] {
+            payload.extend_from_slice(&value.to_bits().to_be_bytes());
+        }
+        for dimension in [801_u32, 801, 1201, 801] {
+            payload.extend_from_slice(&dimension.to_be_bytes());
+        }
+        payload.extend_from_slice(&0_u64.to_be_bytes()); // no attempts
+        payload.extend_from_slice(&ladder(0x00)); // post-world, unchanged
+        payload.extend_from_slice(&ladder(0x20)); // post-history, unchanged
+        for value in [0.0_f64, -0.0, -1.0, 0.0, -0.0, 0.0, 0.0, 0.0, 1.0, 1.0] {
+            payload.extend_from_slice(&value.to_bits().to_be_bytes());
+        }
+        for (input, frame) in [(0xA0_u8, 0xC0_u8), (0xE0, 0x10)] {
+            if frames {
+                payload.push(1);
+                payload.extend_from_slice(&ladder(input));
+                payload.extend_from_slice(&ladder(frame));
+            } else {
+                payload.push(0);
+                payload.extend_from_slice(&[0; 64]);
+            }
+        }
+        assert_eq!(payload.len(), 429);
+        payload
+    }
+
+    fn evidence_outcome(parent: Option<[u8; 32]>, tick: u64, frames: bool) -> TickOutcome {
+        TickOutcome::decode_canonical(&evidence_outcome_payload(parent, tick, frames))
+            .expect("the independent fixture is a canonical outcome")
+    }
+
+    /// A ledger holding one admission, optionally reached through one extra idle tick.
+    fn evidence_ledger(stream: FrameStream, skip_an_idle_tick: bool) -> FrameLedgerV2 {
+        let genesis = evidence_outcome(None, 0, false);
+        let mut parent = genesis.tag().digest();
+        let mut tick = 1;
+        let mut successors = Vec::new();
+        if skip_an_idle_tick {
+            let idle = evidence_outcome(Some(parent), tick, false);
+            parent = idle.tag().digest();
+            tick += 1;
+            successors.push(idle);
+        }
+        successors.push(evidence_outcome(Some(parent), tick, true));
+        let mut ledger = FrameLedgerV2::new_structural_genesis(stream, genesis)
+            .expect("the idle tick-zero fixture is a structural genesis");
+        ledger
+            .admit_derived(successors.into_boxed_slice())
+            .expect("the presenting endpoint carries both stream commitments");
+        ledger
+    }
+
+    /// Full-ledger evidence, pinned against `tools/frame_ledger_evidence_vectors.py`.
+    ///
+    /// This tag is what an output lane commits to instead of a bare ledger head, and the reason
+    /// it exists is the third case below: two ledgers ending on the same selected frame, under
+    /// the same stream, differing only by one retained idle tick nothing ever presented. A
+    /// head-only commitment cannot separate those. This one must, and the literals are what
+    /// show it does.
+    ///
+    /// Every literal was produced by the Python reconstruction and never by this module. The
+    /// nested genesis outcome is additionally the exact `genesis-idle` payload already pinned
+    /// by `tools/tick_outcome_vectors.py`, so the two suites cross-check each other's framing.
+    #[test]
+    fn independent_python_vectors_pin_full_ledger_evidence() {
+        let genesis = evidence_outcome(None, 0, false);
+        assert_eq!(
+            genesis.tag().to_string(),
+            "#bb.tick-outcome.sha256.talksm7nbc2yv77tt22zkayqrmsynvmzsugxqjsmmsmnyeiwsxjq"
+        );
+
+        let game_only = FrameLedgerV2::new_structural_genesis(FrameStream::Game, genesis.clone())
+            .expect("a genesis-only game ledger");
+        let composite_only = FrameLedgerV2::new_structural_genesis(FrameStream::Composite, genesis)
+            .expect("a genesis-only composite ledger");
+        assert_eq!(
+            frame_ledger_evidence_len(&game_only),
+            Some(1 + 8 + 429 + 8),
+            "genesis-only framing is stream || len || outcome || admission count"
+        );
+        assert_eq!(
+            frame_ledger_evidence_tag(&game_only).unwrap().to_string(),
+            "#bb.receipt.sha256.kxipl4kkkqzhgv4g4by6bkkhonmfn6xipzesfv5rzes65pddwpeq"
+        );
+        assert_eq!(
+            frame_ledger_evidence_tag(&composite_only)
+                .unwrap()
+                .to_string(),
+            "#bb.receipt.sha256.p3qi75kwn5ybg6xi3ilgrcwrwxbdc4pfnel5vhbxaozilzfhx5va"
+        );
+
+        let game_one = evidence_ledger(FrameStream::Game, false);
+        let composite_one = evidence_ledger(FrameStream::Composite, false);
+        assert_eq!(frame_ledger_evidence_len(&game_one), Some(1021));
+        assert_eq!(
+            frame_ledger_evidence_tag(&game_one).unwrap().to_string(),
+            "#bb.receipt.sha256.zevofrif6nugwrz6xoe2nqhrghstdtqmaicbe5h2wxtnhvmjyjya"
+        );
+        assert_eq!(
+            frame_ledger_evidence_tag(&composite_one)
+                .unwrap()
+                .to_string(),
+            "#bb.receipt.sha256.6i3jqzl764n7j3f4gxfmkn5ckvgqul2vmcsmcoanjpxdvlh7tpdq"
+        );
+
+        // Same stream, same selected frame, one extra retained idle tick.
+        let game_skipped = evidence_ledger(FrameStream::Game, true);
+        assert_eq!(frame_ledger_evidence_len(&game_skipped), Some(1458));
+        assert_eq!(
+            frame_ledger_evidence_tag(&game_skipped)
+                .unwrap()
+                .to_string(),
+            "#bb.receipt.sha256.rjvr35kfsyiqzfea7aacnuvytkcpmafplg25xcwut7ybtznznu2q"
+        );
+        assert_ne!(
+            frame_ledger_evidence_tag(&game_skipped),
+            frame_ledger_evidence_tag(&game_one),
+            "an intermediate successor must move the evidence tag"
+        );
+
+        // The stream role is hashed content, not an in-memory label.
+        assert_ne!(
+            frame_ledger_evidence_tag(&game_only),
+            frame_ledger_evidence_tag(&composite_only)
+        );
+        assert_ne!(
+            frame_ledger_evidence_tag(&game_one),
+            frame_ledger_evidence_tag(&composite_one)
+        );
+        // Admitting is not free: the count lane alone separates an empty ledger from one receipt.
+        assert_ne!(
+            frame_ledger_evidence_tag(&game_one),
+            frame_ledger_evidence_tag(&game_only)
+        );
+    }
+
     fn plans() -> [Vec<Edit>; 2] {
         [
             vec![

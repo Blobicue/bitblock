@@ -3941,6 +3941,14 @@ mod tests {
     /// A change here is not necessarily wrong, but it is never incidental -- it means the
     /// declared headless starting state or its rules moved, and every replay taken under
     /// the old tags describes a different fold.
+    ///
+    /// Until `tools/headless_replay_policy_vectors.py` existed this was still only half a
+    /// guard: the literals below came from the same Rust encoders they check, so a change
+    /// consistent across both would have passed. That tool now rebuilds all three payloads
+    /// from the declared constants -- one bedrock coordinate, the observer-spawn camera, and
+    /// the renderer/crosshair/sidebar policies recomputed from their own constants -- and
+    /// reaches these exact three tags without compiling any Rust. A disagreement now means
+    /// the two implementations parted, and the tool's controls say on which field.
     #[cfg(feature = "protocol-research")]
     #[test]
     fn headless_local_replay_policy_tags_are_pinned() {

@@ -108,7 +108,10 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 #
 # Raise it when tests are added. If it ever needs lowering, that is a deletion
 # and it belongs in the commit message.
-EXPECTED_TESTS = {"quick": 386, "full": 397}
+# 386 -> 389 / 397 -> 400: three literal-tag tests, one each in sequential.rs,
+# replay_evidence.rs and optimization.rs, pinning the seven newly vectored
+# schemas against their independent Python reconstructions.
+EXPECTED_TESTS = {"quick": 389, "full": 400}
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s
@@ -244,7 +247,7 @@ EXTRA_CHECKS = {
     "cargo fmt": (RUST_INPUTS, lambda: run(["cargo", "fmt", "--check"]),
                   "formatting is a CI gate; rustfmt skips macro bodies"),
     "python vectors": (VECTOR_INPUTS, run_vectors,
-                       "24 independent reconstructions; they catch the two sides disagreeing"),
+                       "28 independent reconstructions; they catch the two sides disagreeing"),
     "metric registry": (REGISTRY_INPUTS,
                         lambda: run([sys.executable, "-B", "tools/metric_registry.py", "audit"]),
                         "1,112 aliases must still resolve to their definition tags"),

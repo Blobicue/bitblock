@@ -94,12 +94,12 @@
             "expect": "LOW"
         }
     ],
-    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion.",
+    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion. It then moved 44 -> 53 for seven directly targeted objects plus two picked up transitively: the headless replay-rules policy names the renderer profile and the crosshair overlay by digest, so reconstructing the rules payload meant reconstructing both of those from their own constants, and the derived count noticed before anyone thought to claim it.",
     "counts": {
         "modules": 33,
         "schemas": 58,
         "schemas_fixtures": 23,
-        "schemas_vectored": 44,
+        "schemas_vectored": 53,
         "metrics": 1112,
         "metrics_claimed_by_doc": 1112
     },
@@ -132,8 +132,8 @@
         },
         {
             "schema": "bitblock/overlay-policy/crosshair/v1",
-            "vectored": false,
-            "note": "Recorded as uncovered on purpose. 16 of 58 protocol objects have no independent vectors, and pretending otherwise would make the coverage number meaningless. If someone writes vectors for this, flip it here in the same commit."
+            "vectored": true,
+            "note": "Was recorded as uncovered on purpose, with an invitation to flip it in the same commit as its vectors. This is that commit, and it was flipped by a side effect rather than a decision: tools/headless_replay_policy_vectors.py had to rebuild the crosshair policy from CROSSHAIR_GAP_RADIUS, CROSSHAIR_ARM_LENGTH and RGB_MASK because the headless replay-rules payload names its digest. There is no crosshair literal in a Rust test of its own; what pins this reconstruction is the headless rules tag, which main.rs does assert literally and which moves if the crosshair digest moves. That is a real guard, but it is a transitive one -- worth knowing before treating this line as equal to a directly asserted object."
         },
         {
             "schema": "bitblock/journal/rejected-tail/v1",
@@ -144,6 +144,41 @@
             "schema": "bitblock/storage-record/envelope/v1",
             "vectored": true,
             "note": "The outermost envelope. Its vector rebuilds magic, version, declared length, parent flag, kind name, object digest, schema and payload, and both sides assert the same literal record tag over the `on 0 0 0` edit from edit_vectors.py."
+        },
+        {
+            "schema": "bitblock/history-mode/open-local/v1",
+            "vectored": true,
+            "note": "A nullary policy: the payload is empty, so the schema string is the entire hashed claim. tools/history_mode_vectors.py re-encodes that same empty payload under neighbouring schemas to show the domain wrapper is what separates them, and sequential.rs asserts the tag."
+        },
+        {
+            "schema": "bitblock/history-mode/sequential-history/v1",
+            "vectored": true,
+            "note": "Binds exactly the iterated-function policy digest, which is what stops a transcript admitted under one recurrence being read under another. The vector moves the function by one bit and requires the mode to move with it."
+        },
+        {
+            "schema": "bitblock/local-replay-build/executable-sha256/v1",
+            "vectored": true,
+            "note": "Two fields, and the second is the point: the declared artifact length is inside the hashed domain, so a stream a reader stopped early on cannot be relabelled as the complete build. The vector holds each field while moving the other, and carries a big-endian control the length lane would fail."
+        },
+        {
+            "schema": "bitblock/optimization-equivalence/frame-ledger-evidence/v1",
+            "vectored": true,
+            "note": "The heaviest of the seven: the payload frames whole nested TickOutcome and FrameReceiptV2 objects, so the vector had to reconstruct both codecs before it could reconstruct this one. Its decisive case is two ledgers ending on the same selected frame that differ only by one retained idle tick nothing presented -- exactly what a head-only commitment cannot separate. Its nested genesis outcome is byte-identical to the genesis-idle payload tick_outcome_vectors.py already pins, so the two suites cross-check each other."
+        },
+        {
+            "schema": "bitblock/local-replay-genesis/headless-v1",
+            "vectored": true,
+            "note": "One of three main.rs policies whose literals were pinned before anything independent derived them -- the Rust test and the Rust encoder agreeing, which a consistent change to both would have passed. The reconstruction is complete: World::new() is one bedrock coordinate, and Camera::for_observer_spawn() has yaw wrapping to exactly 0.0 and position exactly (0, 0, -1), so nothing here needed a digest copied out of the implementation. The field-of-view lane is the sharp edge: `math.pi / 3` is one ulp from core::f64::consts::FRAC_PI_3 and that single bit moves the tag, so the tool spells the constant and carries a one-ulp control."
+        },
+        {
+            "schema": "bitblock/local-replay-rules/headless-v1",
+            "vectored": true,
+            "note": "Names the renderer profile, crosshair overlay and composite policy by digest, so deriving it meant deriving all three. Renderer and crosshair come from their own declared constants; the composite chains through the sidebar raster policy, whose authored metric-binding table is read from sidebar.rs and checked against registry.tsv rather than transcribed."
+        },
+        {
+            "schema": "bitblock/local-replay-admission-policy/headless-v1",
+            "vectored": true,
+            "note": "Pure declared limits: eight u64 count lanes then eight u128 work lanes. The width difference is load-bearing, so the vector re-encodes the second half as u64 and requires the tag to move."
         }
     ],
     "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested. unreferenced_pub_items went 4 -> 3 when examples/render_time_probe.rs started calling Camera::set_observation_anchor, which had been dead. Writing a probe that needed it is what made it live.",

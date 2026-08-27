@@ -1586,6 +1586,37 @@ mod tests {
             .collect()
     }
 
+    /// The two history-mode admission policies, pinned against `tools/history_mode_vectors.py`.
+    ///
+    /// A mode is the rule an admitted history is judged under, and the pair is deliberately
+    /// asymmetric. Open-local carries an empty payload -- the schema string is its entire
+    /// claim -- so nothing but the domain wrapper separates it from any other nullary policy.
+    /// The sequential mode carries exactly the function policy's digest, which is what stops
+    /// a transcript admitted under one recurrence from being read under another.
+    ///
+    /// The literals below were produced by the Python reconstruction and never by this
+    /// module; a disagreement means one of the two encoders moved.
+    #[test]
+    fn independent_python_vectors_pin_both_history_modes() {
+        assert_eq!(
+            open_local_mode_tag().to_string(),
+            "#bb.policy.sha256.aglwue2ddgg2owhe57dz3r3w4233jdfs2fq43iyhubeswe7v3aeq"
+        );
+        assert_eq!(
+            sequential_mode_tag().to_string(),
+            "#bb.policy.sha256.k5hvqhzkrstz4qvds534qftmj7zy5qhcr2limfqafdbisyrw3zzq"
+        );
+
+        // The sequential mode exists to bind its function, so it must not equal that function,
+        // and the two modes must never collide with each other.
+        assert_ne!(sequential_mode_tag(), sequential_function_tag());
+        assert_ne!(open_local_mode_tag(), sequential_mode_tag());
+
+        // Both are policies. A mode tag can never be mistaken for the history it admits.
+        assert_eq!(open_local_mode_tag().kind(), TagKind::Policy);
+        assert_eq!(sequential_mode_tag().kind(), TagKind::Policy);
+    }
+
     #[test]
     fn independent_python_vectors_pin_every_recurrence_step() {
         let function = sequential_function_tag();

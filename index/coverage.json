@@ -29,7 +29,9 @@
  "schemas": 58,
  "schemas_fixtures": 23,
  "schemas_tool_local": [
+  "bitblock/history-mode/open-local/v2",
   "bitblock/metric-definition/markdown-v1",
+  "bitblock/optimization-equivalence/frame-ledger-evidence/v2",
   "bitblock/output-color-vector-parent/v1",
   "bitblock/output-topology-observation/v2",
   "bitblock/reference-depth-buffer/analytic-six-face/v1",
@@ -39,20 +41,11 @@
   "bitblock/display-receipt/v1",
   "bitblock/frame-input/v1",
   "bitblock/frame-receipt/v1",
-  "bitblock/history-mode/open-local/v1",
-  "bitblock/history-mode/sequential-history/v1",
-  "bitblock/local-replay-admission-policy/headless-v1",
-  "bitblock/local-replay-build/executable-sha256/v1",
-  "bitblock/local-replay-genesis/headless-v1",
-  "bitblock/local-replay-rules/headless-v1",
-  "bitblock/optimization-equivalence/frame-ledger-evidence/v1",
   "bitblock/overlay-input/v1",
-  "bitblock/overlay-policy/crosshair/v1",
-  "bitblock/renderer-profile/host-f64/v1",
   "bitblock/sidebar/composite-frame-input/v1"
  ],
- "schemas_vectored": 44,
- "source_lines": 51819,
- "tests": 396,
- "tools": 30
+ "schemas_vectored": 53,
+ "source_lines": 52087,
+ "tests": 399,
+ "tools": 34
 }
