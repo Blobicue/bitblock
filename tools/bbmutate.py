@@ -107,7 +107,7 @@ def main(argv: list[str]) -> int:
                 # main.rs's 18 canonical sites are all behind that flag and were
                 # never built. Without every target, main.rs is skipped entirely,
                 # because it is the binary rather than the library.
-                ["cargo", "test", "-q", "--features", "protocol-research"], cwd=ROOT,
+                ["cargo", "test", "-q", "--workspace", "--features", "protocol-research"], cwd=ROOT,
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             output = result.stdout + result.stderr

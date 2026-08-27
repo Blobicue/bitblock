@@ -18,9 +18,13 @@ jobs:
       - name: format
         run: cargo fmt --check
       - name: clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      # --workspace, or cargo tests only the root package and the 343 library
+      # tests in bitblock-core and bitblock-research never run. --features, or
+      # the all(windows, feature) modules are never compiled. Both gaps were
+      # silent: the job stayed green while running 43 of 397 tests.
       - name: test
-        run: cargo test
+        run: cargo test --workspace --features protocol-research
 
   python-tools:
     name: python vector tools (ubuntu-latest)

@@ -236,6 +236,13 @@ tests with `--features protocol-research`. The vector suites execute no Rust at
 all; what they detect is the two implementations *disagreeing*, which is why
 they belong to the per-commit tier.
 
+**How many tests ran is itself a gate.** The workspace split made `cargo test`
+run only the root package -- 43 of 397 -- and every check stayed green,
+including CI, because each one asked "did what ran pass" and none asked "did
+everything run". A suite that quietly stops running is indistinguishable from a
+suite that passes. `bbverify` now records a floor per tier and fails below it,
+and both it and CI use `--workspace`.
+
 All 58 protocol objects are guarded. The last two -- `journal/rejected-tail/v1`
 and `storage-record/envelope/v1` -- had neither an independent vector nor a
 literal tag until both were added, with each side asserting the same digest.

@@ -63,7 +63,7 @@ OUT = ROOT / "target" / "bbtiming.json"
 
 def build(features: list[str]) -> list[tuple[str, str]]:
     result = subprocess.run(
-        ["cargo", "test", "--no-run", "-q", "--message-format=json", *features],
+        ["cargo", "test", "--no-run", "-q", "--workspace", "--message-format=json", *features],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
@@ -139,7 +139,8 @@ def rebuild_cost(argv: list[str]) -> int:
             ROOT / "src")
     found = {p.stem: p for d in dirs for p in d.glob("*.rs") if p.stem != "lib"}
     modules = sorted(n for n in found if not wanted or n in wanted)
-    command = ["cargo", "test", "--no-run", "-q", "--features", "protocol-research"]
+    command = ["cargo", "test", "--no-run", "-q", "--workspace",
+               "--features", "protocol-research"]
 
     def run() -> float:
         mark = time.time()

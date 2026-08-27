@@ -26,9 +26,11 @@ derive the expected digests from the schema -- so they cannot detect a Rust
 change on their own. What they detect is the two implementations *disagreeing*,
 which is why they belong to the per-commit tier rather than the inner loop.
 
-`full` runs the Rust tests with `--features protocol-research`, which CI does
-not. CI's rust job runs bare `cargo test`; the `all(windows, feature)` modules
-are invisible to it. That gap is real -- see AGENTS.md.
+Both tiers run `--workspace`: without it cargo tests only the root package, and
+after the workspace split that was 43 tests of 397 with every gate still green.
+`full` adds `--features protocol-research`, which is also what CI now runs.
+
+How many tests ran is therefore a gate of its own -- see EXPECTED_TESTS.
 
 Three things make it fast, in the order they matter.
 
@@ -61,6 +63,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -93,7 +96,20 @@ INDEX_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tools/*.py", "tools/*.js
                 "docs/metrics/*", "examples/*", "tests/*.rs",
                 "README.md", "METRICS.md", "proof/**/*.lean", "proof/README.md")
 
-CLIPPY = ["cargo", "clippy", "--all-targets", "-q", "--", "-D", "warnings"]
+CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "warnings"]
+
+# A floor on how many tests must actually execute.
+#
+# This exists because the suite once shrank silently. Splitting into a workspace
+# made `cargo test` run only the root package -- 43 tests of 397 -- and every
+# gate stayed green, including CI, because each one was asking "did what ran
+# pass" and none was asking "did everything run". A suite that quietly stops
+# running is indistinguishable from a suite that passes.
+#
+# Raise it when tests are added. If it ever needs lowering, that is a deletion
+# and it belongs in the commit message.
+EXPECTED_TESTS = {"quick": 386, "full": 397}
+RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s
 # after an edit against 4.7s when they genuinely overlap. It costs ~158MB inside
@@ -140,6 +156,18 @@ def save_cache(cache: dict) -> None:
         pass  # a cache that cannot be written is a slow run, not a wrong one
 
 
+def run_counting(path: str, tally: list) -> tuple[bool, str]:
+    """Run one test binary and record how many tests it actually reported."""
+    result = subprocess.run([path, "--quiet"], cwd=ROOT, capture_output=True,
+                            text=True, encoding="utf-8", errors="replace")
+    output = result.stdout + result.stderr
+    tally.extend(int(n) for n in RESULT_LINE.findall(output))
+    if result.returncode == 0:
+        return True, ""
+    tail = output.strip().splitlines()[-12:]
+    return False, "\n".join("      " + line for line in tail)
+
+
 def run(command: list[str], env: dict | None = None) -> tuple[bool, str]:
     environment = None
     if env:
@@ -161,7 +189,8 @@ def build_tests(features: list[str]) -> tuple[bool, list, str]:
     Warm this is ~0.4s. Splitting it out is what lets the binaries run
     concurrently instead of cargo walking them one at a time.
     """
-    command = ["cargo", "test", "--no-run", "-q", "--message-format=json", *features]
+    command = ["cargo", "test", "--no-run", "-q", "--workspace",
+               "--message-format=json", *features]
     result = subprocess.run(
         command, cwd=ROOT, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
@@ -230,6 +259,7 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
     cache = {} if force else load_cache()
     rust_key = digest(RUST_INPUTS)
     rows, jobs = [], []
+    tally: list = []
 
     # The Rust checks share one input set, so one digest decides all of them --
     # including whether the build is needed at all.
@@ -258,7 +288,7 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
             return report(rows, [("build test binaries", detail)], started)
         for label, path in binaries:
             jobs.append(("test %s" % label,
-                         (lambda p: (lambda: run([p, "--quiet"])))(path),
+                         (lambda p: (lambda: run_counting(p, tally)))(path),
                          "literal content tags plus behaviour"))
 
     keys = {}
@@ -294,6 +324,19 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
                 if not ok:
                     failures.append((label, detail))
         parallel = time.time() - mark
+
+    # The count gate. Only meaningful when the tests actually ran; a cached skip
+    # says nothing about how many there are.
+    if tally:
+        total = sum(tally)
+        floor = EXPECTED_TESTS.get(name, 0)
+        ok = total >= floor
+        rows.append(("tests executed", "ok" if ok else "FAIL", None,
+                     "%d ran, %d expected" % (total, floor)))
+        if not ok:
+            failures.append(("tests executed",
+                             "      only %d of an expected %d tests ran -- the suite "
+                             "shrank rather than failed" % (total, floor)))
 
     if clippy_future is not None:
         ok, detail = clippy_future.result()
