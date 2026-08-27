@@ -94,12 +94,12 @@
             "expect": "LOW"
         }
     ],
-    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion.",
+    "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion. It moved 44 -> 51 when render_policy_vectors.py, frame_chain_vectors.py, display_receipt_v1_vectors.py and composite_frame_input_vectors.py closed the seven core-crate objects below. Six of the seven already had literal tag assertions in Rust and no second implementation, so those literals were a program agreeing with itself; every one of them reproduced from the Python side unchanged.",
     "counts": {
         "modules": 33,
         "schemas": 58,
         "schemas_fixtures": 23,
-        "schemas_vectored": 44,
+        "schemas_vectored": 51,
         "metrics": 1112,
         "metrics_claimed_by_doc": 1112
     },
@@ -132,8 +132,8 @@
         },
         {
             "schema": "bitblock/overlay-policy/crosshair/v1",
-            "vectored": false,
-            "note": "Recorded as uncovered on purpose. 16 of 58 protocol objects have no independent vectors, and pretending otherwise would make the coverage number meaningless. If someone writes vectors for this, flip it here in the same commit."
+            "vectored": true,
+            "note": "Was recorded as uncovered on purpose, with a standing instruction to flip it in the same commit as its vectors. tools/render_policy_vectors.py now rebuilds the 16-byte payload from the declared constants and reproduces the literal render.rs already asserted."
         },
         {
             "schema": "bitblock/journal/rejected-tail/v1",
@@ -144,6 +144,36 @@
             "schema": "bitblock/storage-record/envelope/v1",
             "vectored": true,
             "note": "The outermost envelope. Its vector rebuilds magic, version, declared length, parent flag, kind name, object digest, schema and payload, and both sides assert the same literal record tag over the `on 0 0 0` edit from edit_vectors.py."
+        },
+        {
+            "schema": "bitblock/renderer-profile/host-f64/v1",
+            "vectored": true,
+            "note": "render_policy_vectors.py rebuilds the 106-byte profile from the declared constants. Three of its twelve palette slots hold the same word, so equality of a colour proves nothing about position; the vector moves one slot at a time and requires 25 distinct tags."
+        },
+        {
+            "schema": "bitblock/overlay-input/v1",
+            "vectored": true,
+            "note": "The policy-plus-optional-payload object a FrameInput actually binds. An absent payload pads with 32 zero bytes, so None and Some(all-zero digest) differ only in the present marker; the vector pins that both ways."
+        },
+        {
+            "schema": "bitblock/frame-input/v1",
+            "vectored": true,
+            "note": "frame_chain_vectors.py rebuilds the 184-byte payload and composes the renderer profile and crosshair overlay from render_policy_vectors.py. The ten camera lanes are hashed as bits, so swapping +0.0 and -0.0 must move the tag."
+        },
+        {
+            "schema": "bitblock/frame-receipt/v1",
+            "vectored": true,
+            "note": "The same suite varies parent presence, parent identity, source tick, input and frame independently. An absent parent and a genuinely all-zero parent differ only in one marker byte."
+        },
+        {
+            "schema": "bitblock/display-receipt/v1",
+            "vectored": true,
+            "note": "display_receipt_v1_vectors.py pins a matching capture, a mismatching capture and an attempt refused before readback. All three are the same schema and the same 312 bytes; only the fact lanes separate them. Its 175-byte capture-facts block is shared with display_receipt_v2_vectors.py."
+        },
+        {
+            "schema": "bitblock/sidebar/composite-frame-input/v1",
+            "vectored": true,
+            "note": "The only one of the seven with no literal tag anywhere before this commit -- it hashes under kind `frame-input`, the same kind as the inner game input it contains, so a grep for its kind found the game input instead. composite_frame_input_vectors.py composes all four nested digests from suites that already derive them."
         }
     ],
     "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested. unreferenced_pub_items went 4 -> 3 when examples/render_time_probe.rs started calling Camera::set_observation_anchor, which had been dead. Writing a probe that needed it is what made it live.",

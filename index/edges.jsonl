@@ -1458,6 +1458,9 @@
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:protocol"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:world"}
+{"from": "tool:composite_frame_input_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:composite_frame_input_vectors", "kind": "vectors", "to": "schema:bitblock/overlay-input/v1"}
+{"from": "tool:composite_frame_input_vectors", "kind": "vectors", "to": "schema:bitblock/sidebar/composite-frame-input/v1"}
 {"from": "tool:composition_timing_vectors", "kind": "vectors", "to": "schema:bitblock/composition-timing-envelope/v1"}
 {"from": "tool:composition_timing_vectors", "kind": "vectors", "to": "schema:bitblock/composition-timing-policy/windows-dwm-null-hwnd/v1"}
 {"from": "tool:composition_timing_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
@@ -1472,6 +1475,11 @@
 {"from": "tool:display_capture_artifact_vectors", "kind": "vectors", "to": "schema:bitblock/display-receipt/v2"}
 {"from": "tool:display_capture_artifact_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v2"}
 {"from": "tool:display_capture_artifact_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
+{"from": "tool:display_receipt_v1_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:display_receipt_v1_vectors", "kind": "vectors", "to": "schema:bitblock/display-capture-policy/gdi-screen-dc/v1"}
+{"from": "tool:display_receipt_v1_vectors", "kind": "vectors", "to": "schema:bitblock/display-receipt/v1"}
+{"from": "tool:display_receipt_v1_vectors", "kind": "vectors", "to": "schema:bitblock/display-test/v1"}
+{"from": "tool:display_receipt_v1_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/display-capture-policy/gdi-screen-dc/v1"}
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/display-receipt/v2"}
@@ -1480,6 +1488,10 @@
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:edit_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:edit_vectors", "kind": "vectors", "to": "schema:bitblock/edit/op-u8-i64-be/v1"}
+{"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/frame-input/v1"}
+{"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v1"}
+{"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:frame_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:frame_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v2"}
 {"from": "tool:interaction_tape_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
@@ -1515,6 +1527,10 @@
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/reference-renderer-corpus-receipt/v1"}
+{"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/overlay-input/v1"}
+{"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/overlay-policy/crosshair/v1"}
+{"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/renderer-profile/host-f64/v1"}
 {"from": "tool:replay_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:replay_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/local-replay-evidence/v1"}
 {"from": "tool:rgb_gradient_challenge_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}

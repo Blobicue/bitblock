@@ -1641,6 +1641,69 @@ mod tests {
         );
     }
 
+    /// The v1 receipt's whole point is that a refused or disagreeing capture is a first-class
+    /// result rather than an absent one. All three outcomes below are the same schema and the
+    /// same 312 bytes; only the fact lanes separate them. `tools/display_receipt_v1_vectors.py`
+    /// derives each literal without running any Rust.
+    #[test]
+    fn display_receipt_v1_outcomes_match_independent_python_vectors() {
+        let expected_words = [0x0011_2233, 0x0044_5566];
+        let expected = FrameRef::new(2, 1, &expected_words).unwrap();
+        let submitted = tag(TagKind::FrameReceipt, b"submitted");
+
+        let mut ledger = DisplayLedger::default();
+        let matched = *ledger
+            .append(
+                submitted,
+                expected.content_tag(),
+                2,
+                1,
+                capture(expected, expected_words.to_vec()).facts,
+            )
+            .unwrap();
+        assert_eq!(matched.facts().outcome, DisplayOutcome::Match);
+        assert_eq!(
+            matched.tag().to_string(),
+            "#bb.display-receipt.sha256.rsbrsj6aui5mk57qc63uadfylkrj3aritdziqhlhvhxwclj4hz7q"
+        );
+
+        let mismatched = *ledger
+            .append(
+                submitted,
+                expected.content_tag(),
+                2,
+                1,
+                capture(expected, vec![0x0011_2233, 0x0044_5567]).facts,
+            )
+            .unwrap();
+        assert_eq!(mismatched.parent(), Some(matched.tag()));
+        assert_eq!(mismatched.facts().outcome, DisplayOutcome::Mismatch);
+        assert_eq!(mismatched.facts().first_mismatch, Some(1));
+        assert_eq!(
+            mismatched.tag().to_string(),
+            "#bb.display-receipt.sha256.ro5bwfyygtmzp5hqeiripljfpia67fc5mcheebnqg27elugpq7fq"
+        );
+        assert!(ledger.verify().is_ok());
+
+        let mut refused = DisplayLedger::default();
+        let unavailable = *refused
+            .append(
+                submitted,
+                expected.content_tag(),
+                2,
+                1,
+                DisplayCaptureFacts::unavailable(CaptureStage::WindowHandle, 5),
+            )
+            .unwrap();
+        assert_eq!(unavailable.parent(), None);
+        assert_eq!(unavailable.facts().captured, None);
+        assert_eq!(
+            unavailable.tag().to_string(),
+            "#bb.display-receipt.sha256.e7db43nscarqcmnbzec6w44vxm4fepcevsb2yws3th6okh6ihnea"
+        );
+        assert!(refused.verify().is_ok());
+    }
+
     #[test]
     fn display_receipt_v2_matches_independent_python_sha256_vector() {
         let expected_words = [0x0011_2233, 0x0044_5566];

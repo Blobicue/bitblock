@@ -36,23 +36,16 @@
   "bitblock/reference-renderer/analytic-six-face/v1"
  ],
  "schemas_uncovered": [
-  "bitblock/display-receipt/v1",
-  "bitblock/frame-input/v1",
-  "bitblock/frame-receipt/v1",
   "bitblock/history-mode/open-local/v1",
   "bitblock/history-mode/sequential-history/v1",
   "bitblock/local-replay-admission-policy/headless-v1",
   "bitblock/local-replay-build/executable-sha256/v1",
   "bitblock/local-replay-genesis/headless-v1",
   "bitblock/local-replay-rules/headless-v1",
-  "bitblock/optimization-equivalence/frame-ledger-evidence/v1",
-  "bitblock/overlay-input/v1",
-  "bitblock/overlay-policy/crosshair/v1",
-  "bitblock/renderer-profile/host-f64/v1",
-  "bitblock/sidebar/composite-frame-input/v1"
+  "bitblock/optimization-equivalence/frame-ledger-evidence/v1"
  ],
- "schemas_vectored": 44,
- "source_lines": 51819,
- "tests": 396,
- "tools": 30
+ "schemas_vectored": 51,
+ "source_lines": 52017,
+ "tests": 399,
+ "tools": 34
 }

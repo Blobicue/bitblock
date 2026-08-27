@@ -2035,6 +2035,62 @@ mod tests {
         assert_ne!(base.tag(), changed.tag());
     }
 
+    /// `tools/composite_frame_input_vectors.py` derives these literals without running any Rust.
+    /// Every nested object is one an existing independent suite already reconstructs: the game
+    /// input and frame from `tools/frame_chain_vectors.py`, the composition policy from
+    /// `tools/sidebar_vectors.py`, and the metric snapshot from
+    /// `tools/sidebar_snapshot_vectors.py`.
+    #[test]
+    fn composite_frame_input_matches_independent_python_vectors() {
+        let game_input = FrameInput::from_camera_bit_lanes(
+            tag_with_digest(TagKind::World, sequential_digest(0x00)),
+            crate::frame::VECTOR_CAMERA_LANES.map(f64::to_bits),
+            801,
+            801,
+            renderer_profile_tag(),
+            crosshair_overlay_input().tag(),
+        )
+        .unwrap();
+        assert_eq!(
+            game_input.tag().to_string(),
+            "#bb.frame-input.sha256.oiwdnnaxuumavgducowfx7n4uc4gh4zoawgxj56zn5aaux2vzuvq"
+        );
+        let game_frame = FrameRef::new(1, 1, &[0x0012_3456]).unwrap().content_tag();
+
+        let mut none_zero = populated_zero_snapshot();
+        none_zero.bounds = None;
+        none_zero.observer_cell = None;
+        none_zero.world = tag_with_digest(TagKind::World, sequential_digest(0x00));
+        none_zero.history_head = tag_with_digest(TagKind::Receipt, sequential_digest(0x20));
+        none_zero.prior_frame_head = None;
+        none_zero.prior_display_head = None;
+        none_zero.previous_raster = None;
+        let overlay = composite_overlay_input(none_zero.tag()).unwrap();
+        assert_eq!(
+            overlay.tag().to_string(),
+            "#bb.policy.sha256.mzcw7fxkb3owzo4ofsu5dxdecdphjgwiqfmxehkx6sjirjvhmoba"
+        );
+
+        let composite =
+            CompositeFrameInput::new(game_input.tag(), game_frame, overlay, 801, 801, 1201, 801);
+        assert_eq!(composite.tag().kind(), TagKind::FrameInput);
+        assert_eq!(
+            composite.tag().to_string(),
+            "#bb.frame-input.sha256.xt5sklsl47sta5tf5oespjwu3vmtcc5llli4yls23icku7gdlkdq"
+        );
+
+        // The sidebar width is never a stored field: it is exactly the gap between the two
+        // committed widths, so hiding the sidebar moves the composite tag while the inner game
+        // input and frame it names are untouched.
+        let hidden =
+            CompositeFrameInput::new(game_input.tag(), game_frame, overlay, 801, 801, 801, 801);
+        assert_eq!(
+            hidden.tag().to_string(),
+            "#bb.frame-input.sha256.7gmgdzcu2mveylwzudf2ed6cb6ix3jt4f3mhykkr4ulokdrqcd7q"
+        );
+        assert_ne!(composite.tag(), hidden.tag());
+    }
+
     #[test]
     fn raster_never_writes_outside_its_nonzero_origin_region() {
         let stride = 71;

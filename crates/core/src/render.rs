@@ -764,6 +764,9 @@ mod tests {
     use crate::camera::Camera;
     use crate::frame::{FrameFacts, FrameRef};
 
+    /// `tools/render_policy_vectors.py` rebuilds all three payloads from the declared constants
+    /// and applies the content-tag wrapper without running any Rust, so a moved constant fails
+    /// from both sides.
     #[test]
     fn declared_renderer_and_crosshair_profiles_match_independent_vectors() {
         assert_eq!(

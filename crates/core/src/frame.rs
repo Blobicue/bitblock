@@ -688,6 +688,17 @@ pub fn copy_exact(destination: &mut [u32], frame: FrameRef<'_>) -> Result<(), Fr
     Ok(())
 }
 
+/// The camera the independent frame vectors capture, in the declared lane order: position xyz,
+/// yaw, pitch, anchor xyz, observation distance, vertical FOV.
+///
+/// Lane 1 is negative zero. It compares equal to lane 0 under every f64 comparison and differs
+/// only in its bits, which is the property `FrameInput`'s bit-lane encoding exists to preserve.
+/// `crates/core/src/sidebar.rs` names the same lanes so its composite vector contains exactly the
+/// inner game input `tools/frame_chain_vectors.py` derives.
+#[cfg(test)]
+pub(crate) const VECTOR_CAMERA_LANES: [f64; 10] =
+    [0.0, -0.0, 3.0, 0.25, -0.5, 6.0, 7.0, 8.0, 9.0, 1.0];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1103,5 +1114,70 @@ mod tests {
             second.tag().to_string(),
             "#bb.frame-receipt.sha256.iod4acu4trlpx5tomtblxq7ahq66cpmfyfhqsqwguqj4ezxjxg7q"
         );
+    }
+
+    /// The literals below are derived by `tools/frame_chain_vectors.py`, which rebuilds both
+    /// payloads from the schema and applies the content-tag wrapper without running any Rust.
+    /// Every nested object is one some independent suite already reconstructs: the renderer
+    /// profile and crosshair overlay from `tools/render_policy_vectors.py`, the framebuffer under
+    /// the canonical frame domain. The world is a fully declared digest so the vector has no
+    /// input this side alone could move.
+    #[test]
+    fn frame_input_and_receipt_v1_match_independent_python_vectors() {
+        use crate::render::{crosshair_overlay_input, renderer_profile_tag};
+
+        let world =
+            ContentTag::from_digest(TagKind::World, std::array::from_fn(|index| index as u8));
+        let input = FrameInput::from_camera_bit_lanes(
+            world,
+            VECTOR_CAMERA_LANES.map(f64::to_bits),
+            801,
+            801,
+            renderer_profile_tag(),
+            crosshair_overlay_input().tag(),
+        )
+        .unwrap();
+        assert_eq!(
+            input.tag().to_string(),
+            "#bb.frame-input.sha256.oiwdnnaxuumavgducowfx7n4uc4gh4zoawgxj56zn5aaux2vzuvq"
+        );
+
+        let frame = FrameRef::new(1, 1, &[0x0012_3456]).unwrap().content_tag();
+        let root = FrameReceipt::new(None, 4, input.tag(), frame).unwrap();
+        assert_eq!(
+            root.tag().to_string(),
+            "#bb.frame-receipt.sha256.b765k2pnxuxwlwxbbp4w6tn6fdw7fa676e2fpgg5jnhvcfo42yxq"
+        );
+        let linked = FrameReceipt::new(Some(root.tag()), 9, input.tag(), frame).unwrap();
+        assert_eq!(
+            linked.tag().to_string(),
+            "#bb.frame-receipt.sha256.jiwqu7gg62732shlykypv4q3xzaisywfaijtgjs6a5yzfo2ur5ga"
+        );
+
+        // An absent parent pads with 32 zero bytes, so a receipt naming an all-zero parent
+        // differs from a root receipt only in the present marker.
+        let zero_parent = FrameReceipt::new(
+            Some(ContentTag::from_digest(TagKind::FrameReceipt, [0; 32])),
+            4,
+            input.tag(),
+            frame,
+        )
+        .unwrap();
+        assert_ne!(root.tag(), zero_parent.tag());
+
+        // The renderer-profile and overlay-input lanes are both checked against
+        // `TagKind::Policy`, which is the same check, so the constructor accepts either tag in
+        // either position. Only their order in the canonical payload separates them, and that
+        // is what this control pins.
+        let swapped = FrameInput::from_camera_bit_lanes(
+            world,
+            VECTOR_CAMERA_LANES.map(f64::to_bits),
+            801,
+            801,
+            crosshair_overlay_input().tag(),
+            renderer_profile_tag(),
+        )
+        .expect("both lanes are typed as policy tags, so a swap is not refused");
+        assert_ne!(input.tag(), swapped.tag());
     }
 }
