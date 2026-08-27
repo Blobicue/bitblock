@@ -3,6 +3,8 @@
 **Checkpoint:** source-receipted research distillation, 2026-08-27
 **Authority:** notes only; not a protocol specification, capability-tree decision, implementation
 claim, cryptographic result, or Layer 1 admission artifact
+**Audit:** [`DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT.md), frozen
+against input commit `694650f4028f5c1fb715384597326e0b0e31f0e1`
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
 in `C:\Users\Owen\Downloads\design.txt`. The downloaded source remains untouched. It is a mixed
@@ -25,6 +27,10 @@ source_mtime      2026-08-27T02:13:54.4299684-07:00
 The repository does not archive those raw bytes. This receipt can identify an independently
 supplied copy but cannot recover omitted text; continued access to the external file is therefore
 an open provenance dependency.
+
+[`design-source-receipt-v1.json`](design-source-receipt-v1.json) records the canonical count
+methods, external-source identity, and exact pre-audit distillation input. The planning checker
+pins that manifest and requires this Markdown receipt to agree with it.
 
 The concatenated source does not retain a trustworthy machine-readable author boundary. The
 question spine below is therefore paraphrased rather than presented as verbatim user quotation.
@@ -69,7 +75,7 @@ It removes or quarantines:
 | Verkle math | What does replacing sibling hashes with a vector commitment buy and cost? | Smaller aggregated openings are a candidate benefit; update, verification, dependency, side-channel, and migration costs remain. |
 | Migration | Can a live chain change state commitments? | Yes, through a consensus-specified transition that binds the old representation to the new one; an overlay is one option. A new genesis avoids legacy conversion but not upgrade and historical-verification duties. |
 | Parameters | What is the “static base,” and does it require trust? | Split public commitment parameters, genesis state, genesis root, and history genesis. They are not one object. |
-| Ceremony | Can simulated participants, hardware, PoW, or a VDF remove setup trust? | Not by assertion. Transparently derived generators with no known inter-generator discrete-log relations and updatable ceremonies address different setup risks. |
+| Ceremony | Can simulated participants, hardware, PoW, or a VDF remove setup trust? | Not by assertion. A transparent generator basis needs a security argument against efficient discovery of any nonzero linear relation among all basis points; an updatable ceremony addresses a different setup risk. |
 | Mint/sink fairness | Can computational work make issuance and destruction provably fair? | Work may support Sybil resistance, ordering, or delay. Fairness requires explicit economic invariants and threat assumptions. |
 | Tick history | Can state be treated as a deterministic sequence of ticks? | Yes. This is event sourcing and is already close to Bitblock’s local fixed-tick fold. |
 | Statelessness | Can validators operate without a full local state database? | Some validators can, if complete touched-state witnesses and all execution bytes are available. The network is not thereby storage-free. |
@@ -91,100 +97,114 @@ The useful idea is not “state is an illusion.” It is:
 Let:
 
 ```text
-P_v      immutable codec and commitment parameters for admitted profile version v
-T_v      exact transition specification or program for protocol version v
-S_0      declared logical genesis state for the admitted chain profile
-X_0      CommitExecution(P_(v_0), S_0)
-H_0      domain-separated history genesis
-A_n      deterministically ordered proposed actions and deterministic external inputs for tick n
-W_n      authenticated membership/non-membership openings and profile-required update material
-E_n      canonically encoded effects and receipts
-S_n      complete post-execution logical state, not only world occupancy
-X_n      complete post-execution root over every activated typed state domain
-H_n      history accumulator after tick n
+G_p       one admitted profile and its exact scope, required-domain registry, limits, policy IDs,
+          inactive sentinels, codecs, and authority-context projections
+P_(p,d)   immutable commitment and value-codec parameters for required typed domain d under G_p
+T_t       exact transition specification or program selected by transition-specification ID t
+S_0       declared complete logical genesis state for G_p
+C_n       exact RequiredDomainV1 -> typed domain-root map after tick n
+X_n       complete execution root composed from G_p and C_n
+H_n       separately typed history accumulator after tick n
+A_n       deterministically ordered proposed actions only
+D_n       deterministic auxiliary and system inputs only
+W_n       typed per-domain openings plus profile-required update material
+E_n       canonically encoded effects and receipts
+S_n       complete post-execution logical state, not only world occupancy
 ```
 
-The pure transition relation is:
+These are abstract relationships, not wire types:
 
 ```text
-(S_n, E_n) = Step(T_(v_n), n, S_(n-1), A_n)
-X_n        = CommitExecution(P_(v_n), S_n)
+(S_n, E_n) = Step(T_(t_n), n, S_(n-1), A_n, D_n)
+C_n        = CommitTypedDomains(G_(p_n), {P_(p_n,d)}, S_n)
+X_n        = ComposeExecutionRoot(G_(p_n), C_n)
 ```
 
-`X_n` must compose the admitted world, authorization, nonce, accounting, asset, governance, and
-other activated domain roots without silently treating the current occupancy-only `world_tag` as
-the full execution state. A commitment-profile upgrade selects a new immutable `P_v`; a transition
-upgrade selects a separately identified `T_v`.
+Binding `D_n` makes replay inputs explicit; it does not prove an oracle value true, randomness
+unbiased, or acquisition honest.
 
-A proposed network transition record can be derived without a circular consensus signature:
+`G_p` must resolve every component rather than allow callers to mix compatible-looking IDs. `C_n`
+must contain exactly the required world, episode, authorization, nonce, parameter/governance,
+validator-schedule, and activated optional roots under their own typed profiles. The current
+occupancy-only `world_tag` is not `X_n`.
+
+This note deliberately defines no `TickCoreV1`, envelope codec, block identifier, or competing
+history formula. The repository's sole proposed byte-contract owner is
+[`LAYER1_DESIGN_PAPER.md` §4.4](LAYER1_DESIGN_PAPER.md#44-proposed-block-identifier-consensus-evidence-and-receipts).
+That proposal already separates ordered actions from deterministic auxiliary inputs, binds effects
+through receipts, binds one admitted profile plus parent-authorized execution/consensus/availability
+policies and authority context, commits the exact availability payload, derives a non-circular
+block identifier, and keeps signatures and consensus evidence outside that identifier. It remains
+proposed, unimplemented, and non-authoritative.
+
+A payload commitment establishes byte identity, not retrieval. Consensus and availability evidence
+must each bind the candidate identifier, selected policy, applicable authority/epoch context, and
+the exact status or availability predicate being claimed. A probabilistic confirmation must not be
+renamed finality. The future protocol must still decide whether one network unit means one local
+simulation tick, one action, or one deterministic batch; the current 60 Hz local tick must not
+silently become consensus time.
+
+Ordinary witnessed transitions require `p_n = p_(n-1)` and a parent-authorized `T_(t_n)`. A
+commitment-profile change is a different transition class:
 
 ```text
-TickCoreV1 = Canonical(
-    schema_version,
-    chain_id,
-    genesis_id,
-    commitment_profile_id,
-    transition_spec_id,
-    tick_or_height,
-    parent_tick_id,
-    parent_history_root,
-    protocol_version,
-    actions_root,
-    deterministic_inputs_root,
-    pre_execution_root,
-    access_manifest_root,
-    state_witness_commitment,
-    receipts_root,
-    post_execution_root,
-    payload_manifest_root
-)
-
-tick_id_n = H(Domain("bitblock/tick-id/v1") || LengthFrame(TickCoreV1))
-H_n       = H(Domain("bitblock/history/v1") || parent_history_root || tick_id_n)
-
-TickEnvelopeV1 = Canonical(
-    TickCoreV1,
-    tick_id_n,
-    H_n,
-    consensus_or_finality_evidence,
-    availability_evidence
+MigrationTransition(
+    old_profile_id,
+    new_candidate_profile_id,
+    migration_spec_id,
+    old_execution_root,
+    new_execution_root,
+    complete_bounded_correspondence_evidence
 )
 ```
 
-Every object hashed into `TickCoreV1` excludes `tick_id_n`, `H_n`, and certificates over either
-value. Consensus and availability evidence live in the external envelope, so the identity is not
-self-referential. `payload_manifest_root` binds named bytes; it does not prove those bytes are
-retrievable. Exact schemas remain **OPEN**. In particular, the future protocol must decide whether
-one network tick means one local simulation tick, one action, or one deterministically ordered
-batch. The current 60 Hz local tick must not silently become consensus time.
+Touched-state openings cannot establish equality of untouched state across unrelated profiles. An
+admitted migration would additionally need parent-authorized activation, deterministic complete
+old/new correspondence, failure and restart semantics, retained old-profile verification context,
+and available migration material. Root correspondence alone would not authorize the upgrade or
+select its fork.
 
 ## Witnessed transition, stated precisely
 
 A Verkle, Merkle-Patricia, or sparse-Merkle witness authenticates membership or non-membership
-claims relative to one supplied root and may carry profile-required update material. It is not the
-action, the state delta, a proof of authorization, or a proof that the transition function was
-executed correctly.
+claims relative to one supplied typed domain root and may carry that profile's update material. It
+is not directly a proof under composed execution root `X_n`, the action, the state delta, a proof
+of authorization, or a proof that the transition function was executed correctly.
+
+An abstract execution-witness bundle therefore needs the parent commitment-set/execution-root
+context plus per-domain entries naming required domain, typed pre-domain root, membership or absence
+proofs, and update material. The verifier first checks that the domain-root set exactly matches
+`G_p` and recomposes `X_(n-1)`, then verifies each map proof under its own `P_(p,d)`. Inactive,
+unknown, omitted, duplicated, and cross-domain entries reject. Access entries name domain, key, and
+mode.
 
 A stateless transition verifier would:
 
-1. resolve the exact admitted chain, genesis, commitment profile, codec, and transition program;
+1. resolve one exact admitted chain/genesis/profile, required-domain registry, typed commitment
+   profiles, codecs, bounds, policies, authority context, and transition program;
 2. verify parent linkage and check the parent roots against a previously admitted canonical context
    or an explicitly trusted checkpoint;
-3. retrieve the bounded action, deterministic-input, witness, code, and manifest bytes and verify
-   each against its committed root;
-4. decode and bound `W_n`, authenticate every supplied membership or non-membership opening under
-   `X_(n-1)`, and enforce the profile's structural and canonical-encoding rules;
-5. execute `T_(v_n)`, require one unambiguous authenticated result at every state read, and record
-   the actual read/write set plus authorization, nonce, conflict, failure, accounting, resource,
-   and receipt outcomes;
-6. compare the actual read/write set with the committed access manifest and enforce the declared
-   duplicate and unused-material policy;
-7. apply every write through the selected commitment profile and derive `X_n` and `E_n`;
-8. compare the computed input, witness, receipt, payload-manifest, and execution-root commitments
-   with `TickCoreV1`, then derive `tick_id_n` and `H_n`; and
-9. after execution validity is established, independently verify the candidate tick's
-   consensus/finality evidence and evaluate its availability evidence under the declared fault
+3. retrieve the bounded action body `A_n`, disjoint deterministic input record `D_n`, typed witness,
+   active code, receipts/effects, and availability payload; verify every byte commitment;
+4. decode and bound `W_n`, verify the exact typed domain-root set against `X_(n-1)`, and authenticate
+   supplied membership or absence openings under their own roots;
+5. execute `T_(t_n)` with deterministic first-touch semantics: every key's first pre-state-dependent
+   access, including every write target, requires a pre-root opening; later reads after an in-batch
+   write resolve from the deterministic overlay;
+6. record the actual typed read/write set and compare it with the committed access manifest;
+   missing, duplicate, inactive-domain, unauthorized-extra, and non-canonical material rejects;
+7. require final update evidence for every written key, derive each post-domain root, recompute
+   `C_n` and `X_n`, and derive all authorization, nonce, conflict, failure, accounting, and resource
+   outcomes;
+8. recompute each ordered effects commitment, its receipt, the ordered receipts root, history root,
+   body/context/header fields, and availability payload exactly as owned by the Layer 1 paper; and
+9. only after execution validity is established, independently verify the candidate's typed
+   consensus-status evidence and availability predicate under their declared policies and threat
    model.
+
+A profile may choose explicitly chained per-action roots instead of one batch pre-root plus overlay,
+but then it must bind and verify every intermediate root. The two update models cannot be mixed
+implicitly.
 
 This lets a verifier avoid a complete local state database. A full-state builder or another state
 provider must still hold or reconstruct enough current data to generate `W_n`. Ethereum’s own
@@ -251,11 +271,18 @@ still requires the data.
 
 ## Verkle lane retained and narrowed
 
-**CANDIDATE:** A Verkle tree is parameterized by a binding vector-commitment scheme with efficient
-opening proofs. It is not synonymous with KZG and does not inherently require a trusted setup. The
-Ethereum Foundation's concrete 2021 research design uses Pedersen commitments and an inner-product
-argument; it is a historical research design, not evidence of current deployment. Other profiles
-have different setup, proof, update, and verification properties.
+**CANDIDATE:** A Verkle tree is parameterized by a position-binding vector commitment with sound,
+profile-defined opening and multiproof verification. It is not synonymous with KZG and does not
+inherently require a trusted setup. The Ethereum Foundation's concrete 2021 research design uses
+Pedersen commitments and an inner-product argument; it is a historical research design, not
+evidence of current deployment. Other profiles have different setup, proof, update, and
+verification properties.
+
+A Pedersen/IPA profile must freeze the complete generator derivation, group and discrete-log
+assumptions, subgroup/cofactor checks, point/scalar encoding, and transcript domain separation. Its
+security argument must rule out efficient discovery of any nonzero linear relation among the whole
+basis, not merely an unknown pairwise discrete logarithm. Transparent derivation removes toxic
+waste; it does not remove curve, hash-to-curve, implementation, or side-channel assumptions.
 
 The value proposition is smaller aggregated state witnesses for wide trees. The cost surface must
 still include commitment updates, witness generation and verification, group/field work, storage
@@ -267,8 +294,9 @@ fixed-size opening-proof components, but a complete state witness also carries o
 values plus workload- and profile-dependent material. The
 [Ethereum Verkle overview](https://ethereum.org/roadmap/verkle-trees) gives a pedagogical estimate
 of roughly 150 kB for 1,000 opened leaves under its stated assumptions, while the Stagnant
-[EIP-6800](https://eips.ethereum.org/EIPS/eip-6800) gives an approximate average-per-account
-estimate. These are Ethereum design estimates, not benchmarks or Bitblock measurements.
+[EIP-6800 at the audited EIPs revision](https://github.com/ethereum/EIPs/blob/e400af2874d6728bfd369f1851c24f250c8825f7/EIPS/eip-6800.md)
+gives an approximate average-per-account estimate. These are Ethereum design estimates, not
+benchmarks or Bitblock measurements.
 
 Starting Bitblock with a selected commitment at genesis would avoid conversion from a live legacy
 tree. It would not remove:
@@ -334,7 +362,8 @@ selections.
 
 ## History expiry, state expiry, and retrieval
 
-History expiry and state expiry are different designs. [EIP-4444](https://eips.ethereum.org/EIPS/eip-4444)
+History expiry and state expiry are different designs.
+[EIP-4444 at the audited EIPs revision](https://github.com/ethereum/EIPs/blob/e400af2874d6728bfd369f1851c24f250c8825f7/EIPS/eip-4444.md)
 is a Stagnant Ethereum proposal about old headers, bodies, and receipts on the normal execution
 peer-to-peer network. It does not make a dormant current balance disappear.
 
@@ -344,12 +373,12 @@ current root. Any future state-expiry/resurrection design would need an exact ep
 absence or nullifier evidence, nonce and version continuity, ownership/authorization, and
 prevention of replay, double revival, and intervening consumption.
 
-The [Portal Network specifications](https://github.com/ethereum/portal-network-specs) are useful as
-a reference for content-addressed, verifiable retrieval. The exact `10 GB` slices, 32 replicas,
-sub-second retrieval, automatic self-healing, and tit-for-tat guarantees in the raw file are
-**REJECTED** as unsupported. Bitblock would need its own retention target, replication or coding
-rule, repair process, adversarial model, incentive/funding mechanism, and measurable service loss
-condition.
+The [audited Portal specifications revision](https://github.com/ethereum/portal-network-specs/tree/1ac0152620fb6426dd2500f0d43459f49d4dc25d)
+is useful as a reference for content-addressed, verifiable retrieval. The exact `10 GB` slices, 32
+replicas, sub-second retrieval, automatic self-healing, and tit-for-tat guarantees in the raw file
+are **REJECTED** as unsupported. Bitblock would need its own retention target, replication or
+coding rule, repair process, adversarial model, incentive/funding mechanism, and measurable service
+loss condition.
 
 ## Mint and sink fairness, decomposed
 
@@ -366,9 +395,10 @@ at least:
 - storage-rent payer, price, grace, expiry, and ownership consequences; and
 - governance and upgrade authority over every economic parameter.
 
-Proof of work can establish expended work under a hash/difficulty rule. A VDF can establish a
-sequential-computation claim under its assumptions. Neither establishes that the selected issuance
-policy is normatively or distributionally fair.
+Proof of work verifies a target-satisfying output whose expected production cost follows from the
+hash-function and difficulty model; it does not prove measured hashes, energy, or expenditure. A
+VDF can establish a sequential-computation claim under its assumptions. Neither establishes that
+the selected issuance policy is normatively or distributionally fair.
 
 ## Rejected-claim ledger
 
@@ -387,22 +417,27 @@ policy is normatively or distributionally fair.
 | Verkle always means KZG and trusted setup. | **REJECTED** | Verkle is parameterized by a vector commitment; profiles have different setup assumptions. |
 | One fixed proof-size or speed number describes Verkle or a zkVM. | **REJECTED** | Bind every measurement to workload, scheme, version, encoding, hardware, and implementation. |
 | Portal guarantees fixed replicas, latency, and immortal data. | **REJECTED** | Availability requires a Bitblock-specific protocol, incentives, measurements, and fault model. |
-| PoW or a VDF proves monetary fairness. | **REJECTED** | It can support work/delay/ordering claims; fairness is a bundle of explicit economic properties. |
+| PoW or a VDF proves monetary fairness. | **REJECTED** | PoW supports an expected-cost claim and a VDF a scoped delay claim; fairness is a separate bundle of economic properties. |
 
 ## Candidate capability notes, not applied to the tree
 
-The raw conversation suggests three potentially useful future nodes. They are recorded here only;
-they do not yet exist in [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md).
+The raw conversation suggests three potentially useful future packages. Their labels are schematic,
+not capability-tree nodes or dependency declarations; any promotion must be reconciled into
+[`CAPABILITY_TREE.md`](CAPABILITY_TREE.md) with one exact artifact, gate, dependency closure, and
+non-claim.
 
 ### `WITNESSED-TRANSITION-R1` candidate
 
 - **Purpose:** test complete stateless re-execution of one bounded transition batch.
-- **Would depend on:** `ACCOUNT-1`, `TRANSITION-SPEC-1`, a selected `COMMIT-1` profile, `CODEC-1`,
-  `BOUNDS-1`, independent `EXECUTOR-1`, `EXECUTION-ROOT-1`, `PROTOCOL-ID-1`, and the applicable
-  synchronization/availability contract.
-- **Gate idea:** every required pre-state read is authenticated; missing, duplicate, or
-  non-canonical material rejects; independent execution reproduces receipts and execution root;
-  one-over-limit, malformed, withheld, wrong-profile, and partial-domain witnesses fail closed.
+- **Possible authority prerequisites, not DAG edges:** an admitted profile; exact
+  `TRANSITION-SPEC-1`, `COMMIT-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `PROTOCOL-ID-1`, `BOUNDS-1`,
+  and `SYNC-1` artifacts; and independent codecs/verifiers. A world-only research prototype would
+  not establish this full package.
+- **Gate idea:** the exact typed domain set recomposes the parent execution root; every first-touch
+  read and write target is authenticated under its domain pre-root; overlay reads and final update
+  evidence are complete; independent execution reproduces effects, receipts, and execution root;
+  one-over-limit, malformed, withheld, cross-domain, wrong-profile, and partial witnesses fail
+  closed.
 - **Non-claim:** witnessed execution is not succinct validity, consensus, or availability.
 
 ### `VALIDITY-PROOF-R1` candidate
@@ -449,37 +484,44 @@ they do not yet exist in [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md).
 
 Until those questions have artifacts and gates, the concise model is:
 
-> Under a future admitted profile, a finalized Bitblock tick could commit the ordered transition
-> body, witness bytes, receipts, complete post-execution root, history link, and payload manifest.
-> When those bytes are available and validate against their commitments, a stateless verifier could
-> check execution without retaining full state. Full-state producers and archive providers would
-> still need explicit retention duties; consensus alone would select canonical ticks. Optional
-> Verkle, sequential-clock, and recursive-proof lanes must each justify their own cost and security
-> surface.
+> Under a future admitted profile, a Bitblock unit accepted at its profile-declared status could
+> commit the ordered transition body, deterministic auxiliary inputs, typed witness bytes, effects,
+> receipts, complete post-execution root, history link, and exact availability payload. When those
+> bytes are available and validate against their commitments, a stateless verifier could check
+> execution without retaining full state. Full-state producers and archive providers would still
+> need explicit retention duties; the declared consensus/finality rule under its threat assumptions
+> would select canonical units. Optional Verkle, sequential-clock, and recursive-proof lanes must
+> each justify their own cost and security surface.
 
 ## Source queue with scoped authority
 
-Statuses and mutable-page descriptions below were retrieved on 2026-08-27. They must be refreshed
-and pinned to immutable artifacts before supporting a protocol decision.
+Statuses and mutable-page descriptions below were retrieved on 2026-08-27. EIP status observations
+are pinned to `ethereum/EIPs` commit `e400af2874d6728bfd369f1851c24f250c8825f7`; the Portal
+reference is pinned to commit `1ac0152620fb6426dd2500f0d43459f49d4dc25d`. Live explanatory pages
+must still be refreshed and pinned before supporting a protocol decision.
 
 | Source | Scope here |
 | --- | --- |
 | [Ethereum MPT documentation](https://ethereum.org/developers/docs/data-structures-and-encoding/patricia-merkle-trie/) | Existing Ethereum trie mechanics and encoding, not client-I/O benchmarks. |
-| [Kuszmaul, *Verkle Trees*](https://math.mit.edu/research/highschool/primes/materials/2018/Kuszmaul.pdf) | Original construction and asymptotic argument, not a Bitblock profile. |
+| [Kuszmaul, *Verkle Trees*](https://math.mit.edu/research/highschool/primes/materials/2018/Kuszmaul.pdf) | Original Verkle construction instantiated with the Catalano–Fiore vector commitment; its setup, proof, and benchmark results do not transfer to Pedersen/IPA or KZG. |
 | [Ethereum Foundation 2021 Verkle note](https://blog.ethereum.org/2021/12/02/verkle-tree-structure) | One Pedersen/IPA research design, not current deployment. |
+| [Bulletproofs paper](https://eprint.iacr.org/2017/1066.pdf) | Primary inner-product-argument source and assumptions, not a Bitblock generator profile. |
 | [Ethereum Verkle overview](https://ethereum.org/roadmap/verkle-trees) | First-party explanatory witness model and estimates, not a benchmark or specification. |
-| [EIP-6800](https://eips.ethereum.org/EIPS/eip-6800) and [EIP-7612](https://eips.ethereum.org/EIPS/eip-7612) | Stagnant Verkle state/overlay proposals, not current Ethereum selection. |
-| [EIP-7864](https://eips.ethereum.org/EIPS/eip-7864) | Draft competing unified binary-tree proposal; its hash choice remains open. |
+| [EIP-6800](https://github.com/ethereum/EIPs/blob/e400af2874d6728bfd369f1851c24f250c8825f7/EIPS/eip-6800.md) and [EIP-7612](https://github.com/ethereum/EIPs/blob/e400af2874d6728bfd369f1851c24f250c8825f7/EIPS/eip-7612.md) | Stagnant Verkle state/overlay proposals at the audited revision, not current Ethereum selection. |
+| [EIP-7864](https://github.com/ethereum/EIPs/blob/e400af2874d6728bfd369f1851c24f250c8825f7/EIPS/eip-7864.md) | Draft competing unified binary-tree proposal at the audited revision; its hash choice remained open. |
 | [KZG paper](https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf) and [Ethereum KZG ceremony](https://ceremony.ethereum.org/) | KZG assumptions and the EIP-4844 ceremony; not the Pedersen/IPA Verkle setup. |
 | [Solana whitepaper](https://solana.com/solana-whitepaper.pdf) and [Tower BFT note](https://solana.com/uk/news/tower-bft--solana-s-high-performance-implementation-of-pbft) | PoH sequence design and its separation from consensus. |
 | [Boneh et al., *Verifiable Delay Functions*](https://eprint.iacr.org/2018/601.pdf) | VDF definition and assumptions, not a consensus or fairness result. |
-| [EIP-4444](https://eips.ethereum.org/EIPS/eip-4444) | Stagnant history-expiry proposal, not state expiry. |
-| [Portal specifications](https://github.com/ethereum/portal-network-specs) | Retrieval-protocol reference, not a Bitblock availability guarantee. |
+| [Bitcoin whitepaper](https://bitcoin.org/bitcoin.pdf) | Hash-target and expected-work model, not evidence of measured energy or fairness. |
+| [EIP-4444](https://github.com/ethereum/EIPs/blob/e400af2874d6728bfd369f1851c24f250c8825f7/EIPS/eip-4444.md) | Stagnant history-expiry proposal at the audited revision, not state expiry. |
+| [Portal specifications](https://github.com/ethereum/portal-network-specs/tree/1ac0152620fb6426dd2500f0d43459f49d4dc25d) | Audited retrieval-protocol revision, not a Bitblock availability guarantee. |
 | [Halo2 recursion notes](https://zcash.github.io/halo2/background/recursion.html) and [Nova paper](https://eprint.iacr.org/2021/370.pdf) | Distinct recursive-proof research inputs, not selections or benchmarks. |
 
-Every later adoption, performance, security, or deployment claim needs a dated primary source or a
-Bitblock-owned measurement with exact workload, artifact, version, hardware, assumptions, and loss
-condition. This queue is not evidence that Bitblock selected any listed technology.
+Later evidence must match its claim type: construction security needs an exact theorem, model, and
+assumptions; parameter/setup security needs a pinned derivation or ceremony transcript;
+implementation security needs conformance evidence and independent review; performance or
+deployment needs a dated measurement with workload, artifact, version, hardware, assumptions, and
+loss condition. This queue is not evidence that Bitblock selected any listed technology.
 
 ## Compression receipt boundary
 
@@ -487,5 +529,6 @@ This note preserves the raw source fingerprint, question spine, useful architect
 candidate lanes, and source queue. It intentionally does not preserve every phrase or false claim;
 Git history will retain later revisions of this note, while the original downloaded source remains
 an external byte-level provenance artifact on this machine. The checker validates this file's
-Markdown structure and relative planning links, not external URLs or the completeness or truth of
-its technical contents.
+Markdown structure, relative planning files/fragments, frozen receipt identity, and receipt-field
+agreement. It does not validate external URLs or the completeness or truth of the technical
+contents.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,10 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 CAPABILITY = ROOT / "docs" / "CAPABILITY_TREE.md"
 FIRST_AUDIT = ROOT / "docs" / "FUTURE_PLAN_AUDIT.md"
 FIRST_AUDIT_GIT_BLOB = "8a02f4b7b00b440e14a35a098b87a7493fd887b4"
+DESIGN_DISTILLATION = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION.md"
+DESIGN_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT.md"
+DESIGN_AUDIT_GIT_BLOB = "73d53bc6f3ca007b5faca8c499660b207ff048e2"
+DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
+DESIGN_RECEIPT_CANONICAL_SHA256 = "38731565d149bedfc9a9e7570db0ca0a1478e4e7aa3cdeef0aa1a4e5a5888acb"
 PLANNING_FILES = (
     ROOT / "README.md",
     ROOT / "docs" / "PROJECT_INTENT.md",
-    ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION.md",
+    DESIGN_DISTILLATION,
+    DESIGN_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -40,6 +47,7 @@ CONDITIONAL_ROW = re.compile(
     rf"([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
 )
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 
 EXPECTED_NODE_IDS = frozenset(
     """
@@ -307,6 +315,37 @@ def parse_conditional_edges(
     return tuple(edges)
 
 
+def heading_slug(text: str) -> str:
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"<[^>]*>", "", text)
+    text = re.sub(r"\s+#+\s*$", "", text)
+    text = text.replace("`", "").replace("*", "").lower()
+    text = "".join(character for character in text if character.isalnum() or character in " _-")
+    return re.sub(r"\s+", "-", text.strip())
+
+
+def heading_anchors(text: str) -> set[str]:
+    anchors: set[str] = set()
+    counts: dict[str, int] = {}
+    inside_fence = False
+    for line in text.splitlines():
+        if line.startswith("```"):
+            inside_fence = not inside_fence
+            continue
+        if inside_fence:
+            continue
+        match = HEADING.match(line)
+        if not match:
+            continue
+        base = heading_slug(match.group(1))
+        if not base:
+            continue
+        duplicate = counts.get(base, 0)
+        counts[base] = duplicate + 1
+        anchors.add(base if duplicate == 0 else f"{base}-{duplicate}")
+    return anchors
+
+
 def check_markdown(path: Path, text: str) -> None:
     lines = text.splitlines()
     fence_count = sum(1 for line in lines if line.startswith("```"))
@@ -345,12 +384,20 @@ def check_markdown(path: Path, text: str) -> None:
             prose.append(re.sub(r"`[^`]*`", "", line))
 
     for match in LINK.finditer("\n".join(prose)):
-        target = unquote(match.group(1).split("#", 1)[0].strip())
-        if not target or target.startswith(("http://", "https://", "mailto:", "/")):
+        raw_target = unquote(match.group(1).strip())
+        if raw_target.startswith(("http://", "https://", "mailto:", "/")):
             continue
-        resolved = (path.parent / target).resolve()
+        target, separator, fragment = raw_target.partition("#")
+        resolved = path.resolve() if not target else (path.parent / target).resolve()
         if not resolved.exists():
             raise PlanningError(f"{path.relative_to(ROOT)}: missing relative link target {target}")
+        if separator and fragment:
+            target_text = text if resolved == path.resolve() else resolved.read_text(encoding="utf-8")
+            if fragment not in heading_anchors(target_text):
+                raise PlanningError(
+                    f"{path.relative_to(ROOT)}: missing relative Markdown fragment "
+                    f"{fragment} in {target or path.name}"
+                )
 
 
 def check_frozen_first_audit(data: bytes) -> None:
@@ -361,6 +408,65 @@ def check_frozen_first_audit(data: bytes) -> None:
             "docs/FUTURE_PLAN_AUDIT.md changed after its frozen first addition: "
             f"expected Git blob {FIRST_AUDIT_GIT_BLOB}, got {actual}"
         )
+
+
+def check_frozen_design_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != DESIGN_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md changed after its frozen first addition: "
+            f"expected Git blob {DESIGN_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def parse_frozen_design_receipt(data: bytes) -> dict[str, object]:
+    try:
+        receipt = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise PlanningError(f"invalid design source receipt JSON: {error}") from error
+    if not isinstance(receipt, dict):
+        raise PlanningError("design source receipt must be a JSON object")
+    canonical = json.dumps(
+        receipt,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    actual = hashlib.sha256(canonical).hexdigest()
+    if actual != DESIGN_RECEIPT_CANONICAL_SHA256:
+        raise PlanningError(
+            "docs/design-source-receipt-v1.json changed after admission: "
+            f"expected canonical SHA-256 {DESIGN_RECEIPT_CANONICAL_SHA256}, got {actual}"
+        )
+    return receipt
+
+
+def check_design_source_receipt(text: str, receipt: dict[str, object]) -> None:
+    external = receipt.get("external_source")
+    if not isinstance(external, dict):
+        raise PlanningError("design source receipt missing external_source object")
+    interpretation = external.get("text_interpretation")
+    if not isinstance(interpretation, dict):
+        raise PlanningError("design source receipt missing text_interpretation object")
+    expected = {
+        "source_path": external.get("path_hint"),
+        "source_bytes": external.get("raw_bytes"),
+        "source_characters": interpretation.get("decoded_utf16_code_units"),
+        "source_words": interpretation.get("whitespace_word_count"),
+        "source_lines": interpretation.get("line_count"),
+        "source_sha256": external.get("sha256"),
+        "source_mtime": external.get("observed_mtime"),
+    }
+    for label, expected_value in expected.items():
+        matches = re.findall(rf"^{re.escape(label)}\s+(\S+)", text, flags=re.MULTILINE)
+        if len(matches) != 1:
+            raise PlanningError(f"design distillation must contain exactly one {label} receipt field")
+        if matches[0] != str(expected_value):
+            raise PlanningError(
+                f"design distillation {label} disagrees with frozen receipt: "
+                f"expected {expected_value}, got {matches[0]}"
+            )
 
 
 def expect_failure(label: str, text: str) -> None:
@@ -387,6 +493,34 @@ def expect_frozen_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_design_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_design_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_design_receipt_failure(label: str, data: bytes) -> None:
+    try:
+        parse_frozen_design_receipt(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_design_source_receipt_failure(
+    label: str,
+    text: str,
+    receipt: dict[str, object],
+) -> None:
+    try:
+        check_design_source_receipt(text, receipt)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_conditional_failure(
     label: str,
     text: str,
@@ -401,7 +535,14 @@ def expect_conditional_failure(
     raise PlanningError(f"negative control did not fail: {label}")
 
 
-def run_self_tests(text: str, first_audit_bytes: bytes) -> None:
+def run_self_tests(
+    text: str,
+    first_audit_bytes: bytes,
+    design_audit_bytes: bytes,
+    design_receipt_bytes: bytes,
+    design_text: str,
+    design_receipt: dict[str, object],
+) -> None:
     unknown = text.replace(
         "- **Depends on:** `TICK-0`, `REPLAY-0`.",
         "- **Depends on:** `TICK-0`, `REPLAY-0`, `MISSING-9`.",
@@ -517,9 +658,45 @@ def run_self_tests(text: str, first_audit_bytes: bytes) -> None:
         CAPABILITY,
         text + "\n[missing](missing-planning-doc-negative-control.md)\n",
     )
+    bad_fragment = design_text.replace(
+        "AUTHENTICATED_STATE_PLAN.md#world-roots-are-not-history-roots",
+        "AUTHENTICATED_STATE_PLAN.md#missing-fragment-negative-control",
+        1,
+    )
+    if bad_fragment == design_text:
+        raise PlanningError("self-test fixture drift: design distillation fragment")
+    expect_markdown_failure(
+        "missing relative Markdown fragment",
+        DESIGN_DISTILLATION,
+        bad_fragment,
+    )
     expect_frozen_audit_failure(
         "frozen first audit mutation",
         first_audit_bytes + b"\nnegative-control",
+    )
+    expect_frozen_design_audit_failure(
+        "frozen design audit mutation",
+        design_audit_bytes + b"\nnegative-control",
+    )
+    external = design_receipt["external_source"]
+    external_sha = external.get("sha256") if isinstance(external, dict) else None
+    if not isinstance(external_sha, str):
+        raise PlanningError("self-test fixture drift: design source receipt digest")
+    receipt_mutation = design_receipt_bytes.replace(
+        external_sha.encode("ascii"),
+        ("0" * 64).encode("ascii"),
+        1,
+    )
+    if receipt_mutation == design_receipt_bytes:
+        raise PlanningError("self-test fixture drift: frozen design receipt")
+    expect_frozen_design_receipt_failure("frozen design receipt mutation", receipt_mutation)
+    markdown_receipt_mutation = design_text.replace(external_sha, "0" * 64, 1)
+    if markdown_receipt_mutation == design_text:
+        raise PlanningError("self-test fixture drift: Markdown design receipt")
+    expect_design_source_receipt_failure(
+        "Markdown design receipt mutation",
+        markdown_receipt_mutation,
+        design_receipt,
     )
 
 
@@ -533,10 +710,23 @@ def main() -> int:
     conditional_edges = parse_conditional_edges(capability_text, nodes)
     first_audit_bytes = FIRST_AUDIT.read_bytes()
     check_frozen_first_audit(first_audit_bytes)
+    design_audit_bytes = DESIGN_AUDIT.read_bytes()
+    check_frozen_design_audit(design_audit_bytes)
+    design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
+    design_receipt = parse_frozen_design_receipt(design_receipt_bytes)
+    design_text = DESIGN_DISTILLATION.read_text(encoding="utf-8")
+    check_design_source_receipt(design_text, design_receipt)
     for path in PLANNING_FILES:
         check_markdown(path, path.read_text(encoding="utf-8"))
     if args.self_test:
-        run_self_tests(capability_text, first_audit_bytes)
+        run_self_tests(
+            capability_text,
+            first_audit_bytes,
+            design_audit_bytes,
+            design_receipt_bytes,
+            design_text,
+            design_receipt,
+        )
 
     base_edge_count = sum(len(node.dependencies) for node in nodes.values())
     edge_count = base_edge_count + len(conditional_edges)
@@ -544,7 +734,7 @@ def main() -> int:
     print(
         f"planning-doc check PASS: {len(nodes)} capability nodes, "
         f"{edge_count} declared base-plus-conditional edges, "
-        f"{len(PLANNING_FILES)} files{suffix}"
+        f"{len(PLANNING_FILES)} Markdown files and 1 frozen source receipt{suffix}"
     )
     return 0
 

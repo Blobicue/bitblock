@@ -9,9 +9,15 @@ semantic history.
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
-- The current descendant adds `docs/DESIGN_RESEARCH_DISTILLATION.md`: a fingerprinted,
-  source-receipted compression of the downloaded state/Verkle/tick/proof conversation. Its three
-  named research candidates remain notes only and have not been inserted into the capability DAG.
+- `694650f` is the exact clean design-distillation checkpoint: a source-receipted compression of
+  the downloaded state/Verkle/tick/proof conversation. It did not activate its three schematic
+  research packages or change the capability DAG.
+- `a996002` is the first-addition commit for `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md`. It freezes
+  15 gaps found in one read-only sweep over `694650f`; its Git blob
+  `73d53bc6f3ca007b5faca8c499660b207ff048e2` is pinned by the planning checker. The first descendant
+  that changes the audited documents is the one coordinated fix sweep.
+- `docs/FUTURE_PLAN_AUDIT_LOOP2.md` predates the design distillation. Its 16-finding closure and
+  validation boundary do not audit `694650f` or the later correction.
 - `2a9e667` is the exact clean input to the second audit/fix loop. Its result is the first
   descendant commit that adds `docs/FUTURE_PLAN_AUDIT_LOOP2.md`; that audit also records why Verkle
   is a separate feasibility lane rather than a silently selected third trie.
@@ -46,15 +52,16 @@ Read in this order:
 2. `docs/PROJECT_INTENT.md` (why Bitblock exists and what must remain separate)
 3. `docs/CAPABILITY_TREE.md` (dependency DAG, statuses, artifacts, gates, and non-claims)
 4. `docs/DESIGN_RESEARCH_DISTILLATION.md` (source receipt, corrected research map, and open questions)
-5. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (latest frozen audit/fix map and Verkle disposition)
-6. `docs/FUTURE_PLAN_AUDIT.md` (immutable first-loop audit)
-7. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-8. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-9. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
-10. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
-11. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
-12. `README.md` (controls, commands, and feature boundaries)
-13. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+5. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md` (frozen 15-gap successor audit and correction map)
+6. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (latest future-plan audit/fix map and Verkle disposition)
+7. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
+8. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+9. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+10. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
+11. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
+12. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
+13. `README.md` (controls, commands, and feature boundaries)
+14. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
 
 ## What is implemented
 
@@ -108,14 +115,19 @@ self-verified. Neither path produces physical display evidence.
 - `docs/CAPABILITY_TREE.md`: capability dependencies, unlock gates, and current frontier.
 - `docs/DESIGN_RESEARCH_DISTILLATION.md`: fingerprinted compression of the external design
   conversation into typed objects, retained rules, rejected claims, and notes-only candidates.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md`: frozen input, 15 finite findings, correction map,
+  source receipts, and residual boundary for the first successor audit.
+- `docs/design-source-receipt-v1.json`: immutable external-source and pre-audit-distillation receipt;
+  it does not contain or reconstruct the raw source.
 - `docs/AUTHENTICATED_STATE_PLAN.md`: unimplemented authenticated-map comparison and integration
   constraints.
 - `docs/FUTURE_PLAN_AUDIT.md`: the finite audit/fix map for planning input `1624068`.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md`: the second finite audit/fix map for input `2a9e667`, including
   the authenticated-state, activation-graph, checker, provenance, and Verkle corrections.
 - `tools/check_planning_docs.py`: retained dependency/Markdown checker with powered negative
-  controls and a frozen-first-audit guard; it does not validate edge completeness, prose meaning,
-  runtime semantics, or cryptographic security.
+  controls, frozen-audit/receipt guards, receipt agreement, and local-fragment checks; it does not
+  validate edge completeness, prose meaning, external URLs, runtime semantics, or cryptographic
+  security.
 
 ## Claims that are safe to make
 
@@ -136,6 +148,10 @@ self-verified. Neither path produces physical display evidence.
 - Do not claim that a state root contains its values, that a recursive proof supplies discarded
   data, that a sequential clock selects the canonical fork, or that stateless verification makes
   the whole network storage-free.
+- Do not implement the removed `TickCoreV1`/`TickEnvelopeV1` sketch. The Layer 1 paper owns the sole
+  proposed network byte graph, and that graph remains unimplemented and non-authoritative.
+- Do not verify a typed map proof directly under a composed execution root or use a touched-state
+  witness as proof of an old/new commitment-profile migration.
 - Do not present feature-gated `CoordinateEpisodeEvidence` or `LocalReplayEvidence` as default,
   durable, independently held authority.
 - Do not claim the user's ternary hash is integrated; its source and contract have not been
@@ -202,19 +218,19 @@ cd proof/ladderlang-transition-v1
 ```
 
 The earlier `7075c54` check list is an unretained historical report; do not inherit it as a fresh
-pass. The immutable first-loop artifact is `docs/FUTURE_PLAN_AUDIT.md`; the latest successor is
-`docs/FUTURE_PLAN_AUDIT_LOOP2.md`. The current documentation patch is admitted only after:
+pass. The two frozen future-plan artifacts predate the design distillation. The design audit freezes
+input `694650f` and records the exact no-Rust/no-Lean boundary for this correction. The correction is
+admitted only after:
 
 ```powershell
 python -B tools/check_planning_docs.py --self-test
 git diff --cached --check
 ```
 
-The first command validates the pinned node inventory and primary status classes, required detailed
-  fields, declared dependency references and role-expanded union DAG, the structured conditional-edge
-manifest, relative planning links, backtick fences, exact duplicate headings, contiguous table pipe
-shape, and the frozen first-audit blob. Its powered controls exercise those failure paths. It does
-not prove that prose captured every dependency, that a future profile instance is satisfiable, or
-that runtime/cryptographic claims are true. The second command checks the complete staged patch for
-whitespace errors. Stable post-commit checks and the exact no-Rust/no-Lean boundary are retained in
-the second-loop audit.
+The first command validates the pinned node inventory and status classes, declared dependency/role
+graph, structured conditional edges, Markdown shape, relative files and fragments, frozen audit
+blobs, and the canonical design-source receipt plus Markdown agreement. Powered controls exercise
+those paths. It does not prove prose completeness, external-link contents, future-profile
+satisfiability, runtime behavior, or cryptographic security. The second command checks the complete
+staged correction for whitespace errors. Stable post-commit checks are the `694650f..HEAD`
+`git diff --check` and `git show --check` commands recorded in the design audit.

@@ -34,6 +34,11 @@ compressed in
 [`docs/DESIGN_RESEARCH_DISTILLATION.md`](docs/DESIGN_RESEARCH_DISTILLATION.md). That file is a
 notes-only question map with corrected boundaries, rejected claims, and candidate research lanes;
 it does not activate a capability-tree node or change the runtime.
+Its first bounded successor review is frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md), and the
+external input identity/count method is pinned by
+[`docs/design-source-receipt-v1.json`](docs/design-source-receipt-v1.json). The audit corrects notes
+and checker coverage only; it is not cryptographic or implementation validation.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.

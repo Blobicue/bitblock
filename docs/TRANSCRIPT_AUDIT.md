@@ -383,6 +383,25 @@ The original `C:\Users\Owen\Downloads\design.txt` remains outside the repository
 the byte count and SHA-256 receipt recorded in the distilled note. A clone cannot reconstruct the
 omitted raw text from that receipt.
 
+### 27. “Find more gaps, then one fix sweep, back to back again” (paraphrased)
+
+User intent: run one more finite adversarial loop over the new distillation, freeze the gaps before
+editing, and then correct that exact set in one coordinated sweep.
+
+Current truth: [`DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT.md)
+freezes clean input `694650f4028f5c1fb715384597326e0b0e31f0e1`, three independent read-only
+lenses plus local reconciliation, and 15 findings. The highest-risk corrections remove the
+competing `TickCoreV1` byte sketch, bind the abstract model to one admitted profile and exact typed
+domain set, separate ordinary execution from commitment-profile migration, and define per-domain
+first-touch/overlay witness semantics. The Layer 1 paper remains the only proposed network byte
+graph and remains unimplemented.
+
+The same correction adds a frozen external-source receipt manifest, pins mutable EIP/Portal source
+revisions, powers receipt mutation and local-fragment negative controls, and repairs the handoff's
+audit chronology. This is still a **documentation and checker checkpoint**: it implements no trie,
+vector commitment, recursive proof, network, asset, consensus, cryptocurrency, or Layer 1 property,
+and it does not rerun Rust or Lean validation.
+
 ## Semantic lessons that should survive future checkpoints
 
 1. **Coordinate memory is the primitive.** An on bit is a fact about one address; absence means
