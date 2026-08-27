@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """bbverify.py -- one command that says whether anything broke.
 
-    python tools/bbverify.py quick     # per edit
-    python tools/bbverify.py full      # per commit  (default)
-    python tools/bbverify.py list      # what each tier runs, and why
+    python tools/bbverify.py quick        # per edit
+    python tools/bbverify.py full         # per commit  (default)
+    python tools/bbverify.py full --force # ignore the cache and run everything
+    python tools/bbverify.py list         # what each check reads, and why
 
 The point of a refactor gate here is narrow and unusual: this crate's value is
 byte-exact canonical encodings, so "nothing broke" means *no canonical byte
@@ -29,12 +30,26 @@ which is why they belong to the per-commit tier rather than the inner loop.
 not. CI's rust job runs bare `cargo test`; the `all(windows, feature)` modules
 are invisible to it. That gap is real -- see AGENTS.md.
 
-**Why this is not just `cargo test`.** `cargo test` builds three test binaries
-and then runs them one after another -- 2.5s + 2.6s + 2.3s, sequential, for
-7.2s of mostly idle CPU. `cargo test --no-run` costs 0.4s warm and reports where
-those binaries are, so bbverify builds once and runs them concurrently, with
-clippy alongside. The tier is then as slow as its slowest single binary rather
-than the sum, and a per-edit check costs about three seconds instead of eleven.
+Three things make it fast, in the order they matter.
+
+**Every check declares what it reads.** Editing `docs/PROTOCOL.md` cannot change
+what `cargo test` does, so a check whose inputs are byte-identical to the last
+run that passed is skipped rather than repeated. This is the same
+content-addressing the crate itself is built on: the inputs are hashed, and an
+unchanged digest means the answer is already known. It is also why the checks
+are declarative records rather than a script -- the input set is the interesting
+half.
+
+**One build, then everything at once.** `cargo test` compiles three test
+binaries and walks them one after another -- 2.5s + 2.6s + 2.3s of mostly idle
+CPU on a sixteen-core machine. `cargo test --no-run` costs 0.4s warm and reports
+where those binaries are, so they run concurrently, with clippy and the Python
+work alongside. A tier costs its slowest single job instead of the sum.
+
+**The cache is conservative.** It records only checks that passed, it keys on
+this file's own bytes as well as the subject's, and anything it cannot read
+makes it run rather than skip. A stale skip would be a silent false green, which
+is worse than any amount of waiting.
 
 Every stage here has been watched failing before being trusted, per
 docs/TIMELINES.md: "a check that has not been watched failing is not yet
@@ -43,6 +58,7 @@ enforcement".
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -51,6 +67,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+CACHE = ROOT / "target" / ".bbverify-cache.json"
 
 # Not bare validators. bbmutate deliberately rewrites src/ and restores it from
 # git, so it must never run inside a verification sweep -- or in CI.
@@ -59,7 +76,57 @@ SKIP_BARE = {
     "bbindex.py", "bbgraph.py", "bbverify.py", "bbmutate.py",
 }
 
+# What each kind of check reads. A check is skipped only when every path here is
+# byte-identical to the last run that passed it.
+RUST_INPUTS = ("src/**/*.rs", "tests/**/*.rs", "examples/**/*.rs",
+               "Cargo.toml", "Cargo.lock", "rust-toolchain.toml")
+VECTOR_INPUTS = ("tools/*.py",)
+REGISTRY_INPUTS = ("tools/metric_registry.py", "docs/metrics/*", "docs/*.md",
+                   "README.md", "METRICS.md")
+INDEX_INPUTS = ("src/**/*.rs", "tools/*.py", "tools/*.json", "docs/**/*.md",
+                "docs/metrics/*", "examples/*", "tests/*.rs",
+                "README.md", "METRICS.md", "proof/**/*.lean", "proof/README.md")
+
 CLIPPY = ["cargo", "clippy", "--all-targets", "-q", "--", "-D", "warnings"]
+
+
+def digest(patterns) -> str:
+    """A digest of every file the patterns name, or "" if anything is unreadable.
+
+    Returning "" on any failure is deliberate: an empty digest never matches a
+    stored one, so an unreadable input makes the check run. The cache may only
+    ever cost time, never correctness.
+    """
+    hasher = hashlib.sha256()
+    try:
+        paths = sorted({p for pattern in patterns for p in ROOT.glob(pattern)})
+        for path in paths:
+            if not path.is_file():
+                continue
+            hasher.update(path.relative_to(ROOT).as_posix().encode())
+            hasher.update(path.read_bytes())
+        # This file decides what every check means, so its own bytes are part of
+        # every key: editing bbverify invalidates the whole cache.
+        hasher.update(Path(__file__).read_bytes())
+    except OSError:
+        return ""
+    return hasher.hexdigest()
+
+
+def load_cache() -> dict:
+    try:
+        return json.loads(CACHE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_cache(cache: dict) -> None:
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps(cache, indent=1, sort_keys=True),
+                         encoding="utf-8", newline="\n")
+    except OSError:
+        pass  # a cache that cannot be written is a slow run, not a wrong one
 
 
 def run(command: list[str]) -> tuple[bool, str]:
@@ -73,11 +140,10 @@ def run(command: list[str]) -> tuple[bool, str]:
     return False, "\n".join("      " + line for line in tail[-12:])
 
 
-def build_tests(features: list[str]) -> tuple[bool, list[str], str]:
+def build_tests(features: list[str]) -> tuple[bool, list, str]:
     """Compile the test binaries and report where they are.
 
-    Warm this is ~0.4s. It is the only part that must happen before anything
-    else, and splitting it out is what lets the actual test binaries run
+    Warm this is ~0.4s. Splitting it out is what lets the binaries run
     concurrently instead of cargo walking them one at a time.
     """
     command = ["cargo", "test", "--no-run", "-q", "--message-format=json", *features]
@@ -102,21 +168,14 @@ def build_tests(features: list[str]) -> tuple[bool, list[str], str]:
             target = message.get("target", {})
             kinds = target.get("kind") or ["?"]
             # lib and bin test binaries are both named after the crate, so the
-            # target kind is the only thing that tells them apart in the output.
-            binaries.append((f"{target.get('name', '?')} ({kinds[0]})",
+            # target kind is the only thing telling them apart in the output.
+            binaries.append(("%s (%s)" % (target.get("name", "?"), kinds[0]),
                              message["executable"]))
     return True, binaries, ""
 
 
-def run_binary(path: str) -> tuple[bool, str]:
-    ok, detail = run([path, "--quiet"])
-    return ok, detail
-
-
 def run_vectors() -> tuple[bool, str]:
-    tools = [
-        t for t in sorted((ROOT / "tools").glob("*.py")) if t.name not in SKIP_BARE
-    ]
+    tools = [t for t in sorted((ROOT / "tools").glob("*.py")) if t.name not in SKIP_BARE]
     broken = []
     with ThreadPoolExecutor(max_workers=8) as pool:
         for tool, (ok, _detail) in zip(
@@ -129,62 +188,6 @@ def run_vectors() -> tuple[bool, str]:
     return True, ""
 
 
-def tier(name: str, features: list[str], extras) -> int:
-    print("bbverify %s" % name)
-    started = time.time()
-    results = []
-
-    mark = time.time()
-    ok, binaries, detail = build_tests(features)
-    results.append(("build test binaries", ok, time.time() - mark, detail,
-                    "0.4s warm; splitting it out is what allows the rest to overlap"))
-    if not ok:
-        return report(results, started)
-
-    # Everything below is independent, so it all runs at once. The tier costs
-    # the slowest single job rather than the sum of them.
-    jobs = [("clippy", lambda: run(CLIPPY),
-             "lint clean is a CI gate, so a refactor that trips it is already broken")]
-    for name, path in binaries:
-        jobs.append(("test %s" % name, (lambda p: (lambda: run_binary(p)))(path),
-                     "literal content tags plus behaviour"))
-    jobs.extend(extras)
-
-    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
-        futures = [(label, why, pool.submit(fn)) for label, fn, why in jobs]
-        mark = time.time()
-        for label, why, future in futures:
-            ok, detail = future.result()
-            results.append((label, ok, None, detail, why))
-        parallel = time.time() - mark
-    print("  %-34s %-5s %5.1fs   %s" % (results[0][0], "ok", results[0][2], results[0][4]))
-    for label, ok, _elapsed, _detail, why in results[1:]:
-        print("  %-34s %-5s %5s   %s" % (label, "ok" if ok else "FAIL", "", why))
-    print("  %-34s %-5s %5.1fs" % ("(the above ran concurrently)", "", parallel))
-    return report(results, started, printed=True)
-
-
-def report(results, started, printed: bool = False) -> int:
-    if not printed:
-        for label, ok, elapsed, _detail, why in results:
-            print("  %-34s %-5s %5s   %s"
-                  % (label, "ok" if ok else "FAIL",
-                     ("%.1fs" % elapsed) if elapsed else "", why))
-    failures = [(label, detail) for label, ok, _e, detail, _w in results if not ok]
-    total = time.time() - started
-    print()
-    for label, detail in failures:
-        print("  %s failed:" % label)
-        if detail:
-            print(detail)
-    if failures:
-        print("BROKEN -- %d of %d checks failed in %.1fs"
-              % (len(failures), len(results), total))
-        return 1
-    print("NOTHING BROKE -- %d checks in %.1fs" % (len(results), total))
-    return 0
-
-
 def index_then_selftest() -> tuple[bool, str]:
     """Serial by necessity: bbindex writes index/, selftest reads it."""
     ok, detail = run([sys.executable, "tools/bbindex.py"])
@@ -193,30 +196,120 @@ def index_then_selftest() -> tuple[bool, str]:
     return run([sys.executable, "tools/bbgraph.py", "selftest"])
 
 
-FULL_EXTRAS = [
-    ("cargo fmt", lambda: run(["cargo", "fmt", "--check"]),
-     "formatting is a CI gate; rustfmt does not format inside macro bodies"),
-    ("python vectors", run_vectors,
-     "24 independent reconstructions; they detect the two sides disagreeing"),
-    ("metric registry", lambda: run([sys.executable, "-B", "tools/metric_registry.py", "audit"]),
-     "1,112 aliases must still resolve to their definition tags"),
-    ("index + selftest", index_then_selftest,
-     "three accounting gates, then the recorded expectations"),
-]
+EXTRA_CHECKS = {
+    "cargo fmt": (RUST_INPUTS, lambda: run(["cargo", "fmt", "--check"]),
+                  "formatting is a CI gate; rustfmt skips macro bodies"),
+    "python vectors": (VECTOR_INPUTS, run_vectors,
+                       "24 independent reconstructions; they catch the two sides disagreeing"),
+    "metric registry": (REGISTRY_INPUTS,
+                        lambda: run([sys.executable, "-B", "tools/metric_registry.py", "audit"]),
+                        "1,112 aliases must still resolve to their definition tags"),
+    "index + selftest": (INDEX_INPUTS, index_then_selftest,
+                         "three accounting gates, then the recorded expectations"),
+}
+
+
+def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
+    print("bbverify %s%s" % (name, "  (--force)" if force else ""))
+    started = time.time()
+    cache = {} if force else load_cache()
+    rust_key = digest(RUST_INPUTS)
+    rows, jobs = [], []
+
+    # The Rust checks share one input set, so one digest decides all of them --
+    # including whether the build is needed at all.
+    rust_fresh = bool(rust_key) and cache.get("rust::" + name) == rust_key
+    binaries = []
+    if rust_fresh:
+        rows.append(("rust tests + clippy", "skip", None,
+                     "unchanged since the last pass"))
+    else:
+        mark = time.time()
+        ok, binaries, detail = build_tests(features)
+        rows.append(("build test binaries", "ok" if ok else "FAIL",
+                     time.time() - mark, "0.4s warm; lets the rest overlap"))
+        if not ok:
+            return report(rows, [("build test binaries", detail)], started)
+        jobs.append(("clippy", CLIPPY and (lambda: run(CLIPPY)),
+                     "lint clean is a CI gate"))
+        for label, path in binaries:
+            jobs.append(("test %s" % label,
+                         (lambda p: (lambda: run([p, "--quiet"])))(path),
+                         "literal content tags plus behaviour"))
+
+    keys = {}
+    for label, (inputs, fn, why) in extras.items():
+        key = digest(inputs)
+        keys[label] = key
+        if key and cache.get(label) == key:
+            rows.append((label, "skip", None, "unchanged since the last pass"))
+        else:
+            jobs.append((label, fn, why))
+
+    failures = []
+    parallel = 0.0
+    if jobs:
+        mark = time.time()
+        with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+            futures = [(label, why, pool.submit(fn)) for label, fn, why in jobs]
+            for label, why, future in futures:
+                ok, detail = future.result()
+                rows.append((label, "ok" if ok else "FAIL", None, why))
+                if not ok:
+                    failures.append((label, detail))
+        parallel = time.time() - mark
+
+    if not failures:
+        if not rust_fresh and rust_key:
+            cache["rust::" + name] = rust_key
+        for label, key in keys.items():
+            if key:
+                cache[label] = key
+        save_cache(cache)
+
+    return report(rows, failures, started, parallel)
+
+
+def report(rows, failures, started, parallel: float = 0.0) -> int:
+    ran = 0
+    for label, verdict, elapsed, why in rows:
+        stamp = ("%.1fs" % elapsed) if elapsed else ""
+        print("  %-34s %-5s %6s   %s" % (label, verdict, stamp, why))
+        if verdict != "skip":
+            ran += 1
+    if parallel:
+        print("  %-34s %-5s %6.1fs" % ("(concurrent)", "", parallel))
+    print()
+    for label, detail in failures:
+        print("  %s failed:" % label)
+        if detail:
+            print(detail)
+    total = time.time() - started
+    skipped = len(rows) - ran
+    tail = ", %d skipped as unchanged" % skipped if skipped else ""
+    if failures:
+        print("BROKEN -- %d of %d checks failed in %.1fs%s"
+              % (len(failures), ran, total, tail))
+        return 1
+    print("NOTHING BROKE -- %d checks in %.1fs%s" % (ran, total, tail))
+    return 0
 
 
 def main(argv: list[str]) -> int:
-    mode = (argv[1] if len(argv) > 1 else "full").lower()
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    force = "--force" in argv
+    mode = (args[0] if args else "full").lower()
     if mode == "quick":
-        return tier("quick", [], [])
+        return tier("quick", [], {}, force)
     if mode == "full":
-        return tier("full", ["--features", "protocol-research"], FULL_EXTRAS)
+        return tier("full", ["--features", "protocol-research"], EXTRA_CHECKS, force)
     if mode == "list":
-        print("quick   build the test binaries, then run them and clippy at once.")
-        print("        Catches a moved canonical byte. Per edit.")
-        print("full    the same with --features protocol-research, plus fmt, the")
-        print("        independent Python vectors, the metric registry, and the")
-        print("        index gates. Per commit.")
+        print("rust tests + clippy  reads: %s" % ", ".join(RUST_INPUTS))
+        for label, (inputs, _fn, why) in EXTRA_CHECKS.items():
+            print("%-20s reads: %s" % (label, ", ".join(inputs)))
+            print("%-20s   %s" % ("", why))
+        print("\nA check whose inputs are unchanged since the last pass is skipped.")
+        print("--force ignores the cache.")
         return 0
     print(__doc__)
     return 1

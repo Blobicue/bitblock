@@ -169,8 +169,9 @@ each coined in their own tests, and it was fusing them into a shared subsystem.
 ## Proving a change did not break anything
 
 ```bash
-python tools/bbverify.py quick     # 3.7s, per edit
-python tools/bbverify.py full      # 8s, per commit
+python tools/bbverify.py quick     # per edit
+python tools/bbverify.py full      # per commit
+python tools/bbverify.py list      # what each check reads
 ```
 
 "Nothing broke" means something specific in this repository: **no canonical byte
@@ -178,12 +179,33 @@ moved**. 101 literal content tags are asserted across the Rust tests, and 24
 Python suites rebuild those same payloads without importing any Rust, so a moved
 byte fails both from opposite directions.
 
-Both tiers build once and then run everything at once. `cargo test` compiles
-three test binaries and walks them one after another -- 2.5s + 2.6s + 2.3s of
-mostly idle CPU -- while `cargo test --no-run` costs 0.4s warm and reports where
-those binaries are. Running them concurrently, with clippy and the rest
-alongside, makes a tier cost its slowest single job instead of the sum: 10.7s to
-3.7s for quick, 39.6s to 8s for full.
+| what changed | full | quick |
+|---|---:|---:|
+| nothing | 0.1s | 0.0s |
+| a document | 1.0s | 0.0s |
+| a source file | ~8s | ~4s |
+| everything (`--force`) | 8.0s | 3.9s |
+
+Three things get it there.
+
+**Every check declares what it reads.** Editing `docs/PROTOCOL.md` cannot change
+what `cargo test` does, so a check whose inputs are byte-identical to the last
+run that passed is skipped instead of repeated -- the same content-addressing
+the crate itself is built on. `bbverify list` prints the input set of each.
+
+**One build, then everything at once.** `cargo test` compiles three test
+binaries and walks them one after another -- 2.5s + 2.6s + 2.3s of mostly idle
+CPU on sixteen cores. `cargo test --no-run` costs 0.4s warm and says where they
+are, so they run concurrently with clippy and the Python work. A tier costs its
+slowest single job rather than the sum.
+
+**The cache is conservative, and that matters more than the speed.** It records
+only checks that passed, it keys on `bbverify.py`'s own bytes as well as the
+subject's, and an unreadable input makes it run rather than skip. It was watched
+doing the right thing in each case: a failing tree fails again on the next run
+rather than being skipped, a `touch` with no content change correctly skips, and
+a byte-order flip in `frame.rs` still fails 28 tests. A stale skip would be a
+silent false green, which is worse than any amount of waiting.
 
 The two tiers split by what each detects, not by thoroughness. `quick` is
 `cargo test` plus clippy -- the literal tag assertions live inside the Rust
