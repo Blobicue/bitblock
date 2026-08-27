@@ -971,6 +971,68 @@ mod tests {
         .unwrap()
     }
 
+    /// The executable fingerprint, pinned against `tools/local_replay_build_vectors.py`.
+    ///
+    /// The build tag carries two fields, not one, and the second is why: a digest alone would
+    /// be satisfied by a stream the reader stopped early on, so the declared length is inside
+    /// the hashed domain too. The cases below hold one field while moving the other, which is
+    /// the only way to show both are actually bound.
+    ///
+    /// This encoder was previously unpinned from either direction. The carrier vector above
+    /// exercises the replay-evidence payload, which spells the build's two fields inline
+    /// through a different encoder, so a byte-order flip in `LocalReplayBuild::tag` left it
+    /// green. That mutation was run: it fails here and nowhere else.
+    ///
+    /// The literals were produced by the Python reconstruction and never by this module.
+    #[test]
+    fn independent_python_vectors_pin_the_local_replay_build_tag() {
+        // The empty artifact: length zero and the SHA-256 of no bytes at all.
+        let empty = LocalReplayBuild::fingerprint_reader(Cursor::new(Vec::new()), 0, 1 << 20)
+            .expect("an empty artifact is a well-formed declaration");
+        assert_eq!(
+            empty.tag().to_string(),
+            "#bb.build.sha256.finohoe777iojerrq7tckczn6jr65uzsvt42dvuyfxbsztdxazca"
+        );
+
+        let artifact: Vec<u8> = (0..4).flat_map(|_| 0..=255_u8).collect();
+        assert_eq!(artifact.len(), 1024);
+        let real =
+            LocalReplayBuild::fingerprint_reader(Cursor::new(artifact.clone()), 1024, 1 << 20)
+                .expect("a complete stream is admitted");
+        assert_eq!(
+            real.tag().to_string(),
+            "#bb.build.sha256.7vr3dqbgdrme5n5n3kfzqbixtbwhtgkomjcfde6bckv5rnqa2hyq"
+        );
+
+        // Same digest, a length short by one: a truncated read cannot name the whole artifact.
+        let lied = LocalReplayBuild::from_parts(1023, real.sha256());
+        assert_eq!(
+            lied.tag().to_string(),
+            "#bb.build.sha256.6btonokjyyuciib5kq3saaib7gqfwap5irozq62b6endjgk6sbya"
+        );
+        assert_ne!(lied.tag(), real.tag());
+
+        // Same length, one flipped artifact byte.
+        let mut flipped_bytes = artifact;
+        flipped_bytes[512] ^= 0x01;
+        let flipped =
+            LocalReplayBuild::fingerprint_reader(Cursor::new(flipped_bytes), 1024, 1 << 20)
+                .expect("a complete stream is admitted");
+        assert_eq!(
+            flipped.tag().to_string(),
+            "#bb.build.sha256.dnvcagmbmwfcs6rucq3f2xy3d7wrizhqrlqe2malwzp4edpxeqfq"
+        );
+        assert_ne!(flipped.tag(), real.tag());
+        assert_eq!(flipped.artifact_len(), real.artifact_len());
+
+        // The streamed fingerprint and the raw declaration name the same object.
+        assert_eq!(
+            LocalReplayBuild::from_parts(1024, flipped.sha256()).tag(),
+            flipped.tag()
+        );
+        assert_eq!(flipped.tag().kind(), TagKind::Build);
+    }
+
     fn endpoint(nonempty: bool) -> LocalReplayEndpoint {
         LocalReplayEndpoint::new(
             nonempty.then(|| tag(TagKind::TickOutcome, 5)),

@@ -20,6 +20,18 @@
             "why": "A synthetic parent digest that roots the vector chain, so the fixtures do not depend on a real prior receipt. It is test scaffolding, not a protocol object."
         },
         {
+            "schema": "bitblock/history-mode/open-local/v2",
+            "tool": "history_mode_vectors",
+            "must_not_exist_in_rust": true,
+            "why": "A negative control. The open-local mode has an empty payload, so its schema string is the only thing inside the hashed domain; re-encoding that same empty payload under a neighbouring version is what shows the domain wrapper, and nothing else, separates the two. If this ever appears in src/ the control names a real object and has stopped testing separation."
+        },
+        {
+            "schema": "bitblock/optimization-equivalence/frame-ledger-evidence/v2",
+            "tool": "frame_ledger_evidence_vectors",
+            "must_not_exist_in_rust": true,
+            "why": "A negative control for the same reason as the mode above: the ledger-evidence payload is re-tagged under a version that does not exist, so one epoch's ledger cannot be read as a later one's. A Rust declaration would make this a real schema and silently retire the control."
+        },
+        {
             "schema": "bitblock/reference-renderer/analytic-six-face/v1",
             "tool": "reference_renderer_vectors",
             "must_not_exist_in_rust": true,

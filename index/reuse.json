@@ -416,12 +416,6 @@
     ]
    },
    {
-    "item": "open_local_mode_tag",
-    "modules": [
-     "sequential"
-    ]
-   },
-   {
     "item": "profile_tag",
     "modules": [
      "physical_sensor"
@@ -650,7 +644,7 @@
    ]
   },
   "test": {
-   "code_lines": 18011,
+   "code_lines": 18202,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -676,7 +670,7 @@
     {
      "left": "display_store:1685",
      "lines": 19,
-     "right": "main:4070"
+     "right": "main:4078"
     },
     {
      "left": "output_topology:1469",
@@ -684,9 +678,9 @@
      "right": "presentation_output:663"
     },
     {
-     "left": "main:4112",
+     "left": "main:4120",
      "lines": 17,
-     "right": "main:5175"
+     "right": "main:5183"
     },
     {
      "left": "presentation_output:693",
@@ -696,7 +690,7 @@
     {
      "left": "display_store:1649",
      "lines": 12,
-     "right": "main:4029"
+     "right": "main:4037"
     },
     {
      "left": "history:938",
@@ -711,7 +705,7 @@
     {
      "left": "frame_v2:979",
      "lines": 10,
-     "right": "optimization:1509"
+     "right": "optimization:1676"
     },
     {
      "left": "journal:1238",
@@ -741,7 +735,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4597"
+     "right": "main:4605"
     },
     {
      "left": "history_store:1595",

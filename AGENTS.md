@@ -1,7 +1,7 @@
 # Using this repo as an index
 
 Bitblock is ~52,000 lines of Rust across 33 modules, ~8,600 lines of protocol
-prose, a 1,112-family metric registry, 22 independent Python vector suites, and
+prose, a 1,112-family metric registry, 28 independent Python vector suites, and
 a Lean proof capsule. `index/` turns that into something an agent can query
 instead of scan.
 
@@ -43,8 +43,7 @@ most common way to waste an hour here.
 python tools/bbgraph.py schema
 ```
 
-`schema` is the coverage report the tree cannot state about itself. 58 protocol
-objects, 42 with an independent Python reconstruction, **16 without**. That
+`schema` is the coverage report the tree cannot state about itself. 58 protocol objects, every one with an independent Python reconstruction. That
 number is derived, not authored: a tool that declares the identical schema
 string has independently rebuilt that payload, so the uncovered set is a fact
 about the tree rather than a TODO list someone forgot to update.
@@ -243,9 +242,18 @@ everything run". A suite that quietly stops running is indistinguishable from a
 suite that passes. `bbverify` now records a floor per tier and fails below it,
 and both it and CI use `--workspace`.
 
-All 58 protocol objects are guarded. The last two -- `journal/rejected-tail/v1`
-and `storage-record/envelope/v1` -- had neither an independent vector nor a
-literal tag until both were added, with each side asserting the same digest.
+**All 58 protocol objects now have an independent vector suite**, closed by two
+agents working disjoint halves of the tree. That number was wrong here before
+they ran: this page claimed every object was guarded while the index said 44 of
+58, and the agents flagged it rather than quietly matching the prose.
+
+Six of the seven core-crate objects already had literal tags in Rust and no
+second implementation behind them -- a program agreeing with itself -- and every
+one reproduced from the Python side unchanged. `sidebar/composite-frame-input/v1`
+had no literal anywhere: it hashes under kind `frame-input`, the same kind as
+the inner game input it contains, so grepping for its kind found the wrong
+object. `LocalReplayBuild::tag` was likewise unchecked, because the existing
+carrier suite spelled its two fields inline through a different encoder.
 
 ### Where the time goes
 
@@ -472,9 +480,13 @@ diagnoses with wrong implementations, and only the output showed it.
 1. **`index/` describes the tree, not the running system.** It is parsed from
    source text. It does not build, run, or verify anything, and a module's
    presence here is not evidence that its tests pass.
-2. **16 of 58 protocol objects have no independent vectors.** They are not
-   wrong, they are unchecked by any second implementation. `schema` marks them
-   with `!`.
+2. **A vector proves agreement, not correctness.** Every protocol object now
+   has an independent Python reconstruction, so the two implementations pin each
+   other -- but both could encode the same wrong thing. What a vector rules out
+   is one side drifting, which is the failure that actually happens. Note also
+   that `overlay-policy/crosshair/v1` has no directly asserted Rust literal: it
+   is pinned transitively, because the headless replay-rules tag names it by
+   digest and `main.rs` asserts that. Real, but weaker than a direct assertion.
 3. **Dependency edges are textual.** A `crate::foo` inside a comment or a
    `#[cfg]`-disabled block still counts. The DAG is a good map of coupling, not
    a compiler's answer.
