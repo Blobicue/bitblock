@@ -486,7 +486,9 @@ impl History {
     }
 
     /// Seals one nonpublished candidate so persistence can name it before live publication.
-    pub(crate) fn prepare_tick(
+    /// Stage a tick without committing it, so a persistent store can admit the
+    /// bytes first and commit only if that succeeded.
+    pub fn prepare_tick(
         &self,
         transaction: TickTransaction,
         world: &World,
@@ -508,11 +510,8 @@ impl History {
     }
 
     /// Publishes a candidate previously sealed by [`History::prepare_tick`] without rehashing it.
-    pub(crate) fn commit_prepared_tick(
-        &mut self,
-        prepared: PreparedTick,
-        world: &World,
-    ) -> &Receipt {
+    /// Commit what [`Self::prepare_tick`] staged.
+    pub fn commit_prepared_tick(&mut self, prepared: PreparedTick, world: &World) -> &Receipt {
         assert_eq!(
             prepared.receipt.parent, self.head,
             "history changed after a tick was prepared"
@@ -621,7 +620,13 @@ impl History {
     }
 }
 
-pub(crate) struct PreparedTick {
+/// A tick staged by [`History::prepare_tick`] and not yet committed.
+///
+/// Its fields stay private: the point of the type is that a caller can inspect
+/// what a tick *would* commit, admit those bytes to a store, and only then call
+/// [`History::commit_prepared_tick`]. It cannot be constructed or altered from
+/// outside.
+pub struct PreparedTick {
     receipt: Receipt,
     provenance_updates: HashMap<Coord, Option<ContentTag>>,
     #[cfg(any(test, feature = "protocol-research"))]
@@ -630,11 +635,13 @@ pub(crate) struct PreparedTick {
 
 #[cfg(any(test, feature = "protocol-research"))]
 impl PreparedTick {
-    pub(crate) const fn receipt(&self) -> &Receipt {
+    /// The receipt this tick would commit.
+    pub const fn receipt(&self) -> &Receipt {
         &self.receipt
     }
 
-    pub(crate) const fn changes(&self) -> usize {
+    /// How many coordinates the tick would change.
+    pub const fn changes(&self) -> usize {
         self.changes
     }
 }

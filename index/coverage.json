@@ -16,14 +16,12 @@
  "metrics_claimed_by_doc": 1112,
  "modules": 33,
  "modules_by_gate": {
-  "all(windows, feature = \"protocol-research\")": 2,
-  "any(test, feature = \"protocol-research\")": 16,
   "binary": 1,
   "default": 13,
-  "windows": 1
+  "protocol-research": 15,
+  "windows": 4
  },
  "modules_undocumented": [
-  "lib",
   "main",
   "world"
  ],
@@ -54,7 +52,7 @@
   "bitblock/sidebar/composite-frame-input/v1"
  ],
  "schemas_vectored": 44,
- "source_lines": 51828,
+ "source_lines": 51819,
  "tests": 396,
  "tools": 30
 }

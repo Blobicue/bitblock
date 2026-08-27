@@ -83,12 +83,13 @@ SKIP_BARE = {
 
 # What each kind of check reads. A check is skipped only when every path here is
 # byte-identical to the last run that passed it.
-RUST_INPUTS = ("src/**/*.rs", "tests/**/*.rs", "examples/**/*.rs",
-               "Cargo.toml", "Cargo.lock", "rust-toolchain.toml")
+RUST_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tests/**/*.rs",
+               "examples/**/*.rs", "Cargo.toml", "crates/*/Cargo.toml",
+               "Cargo.lock", "rust-toolchain.toml")
 VECTOR_INPUTS = ("tools/*.py",)
 REGISTRY_INPUTS = ("tools/metric_registry.py", "docs/metrics/*", "docs/*.md",
                    "README.md", "METRICS.md")
-INDEX_INPUTS = ("src/**/*.rs", "tools/*.py", "tools/*.json", "docs/**/*.md",
+INDEX_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tools/*.py", "tools/*.json", "docs/**/*.md",
                 "docs/metrics/*", "examples/*", "tests/*.rs",
                 "README.md", "METRICS.md", "proof/**/*.lean", "proof/README.md")
 

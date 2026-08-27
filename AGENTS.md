@@ -268,6 +268,30 @@ costs about four seconds, because the binaries run concurrently and libtest
 parallelises within each. The floor is the *slowest single binary*, so the thing
 worth optimising is always the longest pole, never the largest sum.
 
+### The workspace
+
+```
+crates/core/       bitblock-core       13 modules, no dependencies
+crates/research/   bitblock-research   18 modules, depends on core
+src/               bitblock            the binary, plus a facade lib
+```
+
+The module DAG always said `bitblock-research` was downstream of everything;
+now cargo knows it too, and the boundary is the compiler's rather than a
+convention's. The split was possible because the dependency direction was
+already one-way -- no default module reached a research module, not even in
+test scope -- and it cost five `pub(crate)` promotions plus `PreparedTick`.
+
+`bitblock-research` re-exports core's modules, so `crate::protocol::ContentTag`
+resolves inside it exactly as before. That was deliberate: the point was to give
+the compiler the graph, not to rewrite 84 import paths through a byte-exact
+codec and hope no transcription error slipped in. `src/lib.rs` is a facade over
+both, so the binary, the examples and the integration test are untouched.
+
+**Every one of the 106 literal content tags is byte-identical across the split,**
+and all 397 tests pass. That was the acceptance test, and it is why the split was
+attemptable at all.
+
 ### What it costs to touch a module
 
 ```bash
@@ -277,25 +301,30 @@ python tools/bbtime.py --build
 Once the tests take half a second, verification *is* the Rust toolchain, and
 this is the part `bbgraph dag` cannot see:
 
-| module | touch cost | dependents |
+Before the workspace split the compiler charged almost the same wherever an
+edit landed, because the crate was one compilation unit and the module DAG was
+not a build boundary. `coordinate_episode`, a leaf nothing depends on, cost 7.9s
+to touch -- more than `protocol`, which 29 of 33 modules reach.
+
+After the split, over all 32 modules:
+
+| | before | after |
 |---|---:|---:|
-| world | 8.0s | 22 |
-| **coordinate_episode** | **7.9s** | **0** |
-| protocol | 6.4s | 29 |
-| frame | 5.6s | 14 |
-| main | 4.0s | 0 |
+| mean touch cost | ~6.2s | **4.9s** |
+| modules with >= 10 dependents | — | 5.9s |
+| modules with 0 dependents | — | 4.3s |
 
-`coordinate_episode` is a leaf that nothing depends on, and it costs more to
-touch than `protocol`, which 29 of 33 modules reach. The compiler charges almost
-the same wherever the edit lands, because the crate is one compilation unit and
-the module DAG is not a build boundary. That gap is the measurement: a module
-far above its dependent count is paying for coupling the source does not have.
+The mean improved by about a fifth, which is less than the 2x the estimate
+suggested. The shape matters more than the mean: cost now tracks blast radius,
+where before a leaf and a hub cost the same. `coordinate_episode` went 7.9s to
+3.2s and `world` 8.0s to 3.9s.
 
-Closing it means splitting the crate into a workspace so a leaf edit recompiles
-a leaf. Roughly half the cost is type-checking and half codegen plus linking,
-and both would shrink -- a leaf edit might go from ~6s to ~3s. It is a real but
-moderate win for a large, invasive change to a byte-exact codebase, so it is
-recorded here rather than done.
+It is not uniformly better, and pretending otherwise would be dishonest.
+`camera` went 5.4s to 8.5s and `protocol` 6.4s to 7.8s, because editing the most
+upstream core module now rebuilds four crates in a chain -- core, research,
+facade, binary -- that cargo cannot overlap. Making the hubs more expensive and
+the leaves cheaper is the correct direction, but it is a trade rather than a
+free win.
 
 What is *not* left: incremental is already on (turning it off costs 17-20s),
 codegen-units is already at the dev default of 256 and lowering it is worse, and

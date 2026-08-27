@@ -1,50 +1,16 @@
-pub mod camera;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod coordinate_episode;
-pub mod display;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod display_artifact;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod display_store;
-pub mod frame;
-pub mod frame_v2;
-pub mod history;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod history_store;
-pub mod interaction;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod journal;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod ladder_bridge;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod optimization;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod output_color;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod output_topology;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod physical_sensor;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod presentation;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod presentation_output;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod presentation_output_v2;
-pub mod program;
-pub mod protocol;
-pub mod render;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod replay_evidence;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod sequential;
-pub mod sidebar;
-#[cfg(any(test, feature = "protocol-research"))]
-pub mod storage;
-pub mod tick;
-#[cfg(windows)]
-pub mod windows_present;
+//! Facade over the workspace, so `bitblock::protocol::ContentTag` keeps meaning
+//! what it always did for the binary, the examples and the integration test.
+//!
+//! The split behind it is what the module DAG always said: `bitblock-core` is
+//! upstream of `bitblock-research`, and now cargo knows, so editing a research
+//! leaf no longer recompiles the world model.
+pub use bitblock_core::*;
+
+#[cfg(feature = "protocol-research")]
+pub use bitblock_research::{
+    coordinate_episode, display_artifact, display_store, history_store, journal, ladder_bridge,
+    optimization, output_color, output_topology, physical_sensor, presentation,
+    presentation_output, presentation_output_v2, replay_evidence, sequential, storage,
+};
 #[cfg(all(windows, feature = "protocol-research"))]
-pub mod windows_timing;
-#[cfg(all(windows, feature = "protocol-research"))]
-pub mod windows_topology;
-pub mod world;
+pub use bitblock_research::{windows_timing, windows_topology};

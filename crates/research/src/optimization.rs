@@ -1431,9 +1431,15 @@ mod tests {
     }
 
     fn compositor_implementation_tag(executable: ContentTag, arm: &[u8]) -> ContentTag {
-        let sidebar_source = tag(TagKind::Registry, include_bytes!("sidebar.rs"));
-        let cargo_lock = tag(TagKind::Registry, include_bytes!("../Cargo.lock"));
-        let toolchain = tag(TagKind::Registry, include_bytes!("../rust-toolchain.toml"));
+        let sidebar_source = tag(
+            TagKind::Registry,
+            include_bytes!("../../core/src/sidebar.rs"),
+        );
+        let cargo_lock = tag(TagKind::Registry, include_bytes!("../../../Cargo.lock"));
+        let toolchain = tag(
+            TagKind::Registry,
+            include_bytes!("../../../rust-toolchain.toml"),
+        );
         hash_canonical(
             TagKind::Registry,
             b"bitblock/compositor-implementation-manifest/v1",

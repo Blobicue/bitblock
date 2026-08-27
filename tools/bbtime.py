@@ -135,8 +135,10 @@ def rebuild_cost(argv: list[str]) -> int:
         dependents = _json.loads(dag_path.read_text(encoding="utf-8"))\
             .get("transitive_dependents", {})
 
-    modules = sorted(p.stem for p in (ROOT / "src").glob("*.rs")
-                     if not wanted or p.stem in wanted)
+    dirs = (ROOT / "crates" / "core" / "src", ROOT / "crates" / "research" / "src",
+            ROOT / "src")
+    found = {p.stem: p for d in dirs for p in d.glob("*.rs") if p.stem != "lib"}
+    modules = sorted(n for n in found if not wanted or n in wanted)
     command = ["cargo", "test", "--no-run", "-q", "--features", "protocol-research"]
 
     def run() -> float:
@@ -149,7 +151,7 @@ def rebuild_cost(argv: list[str]) -> int:
     run()
     rows = []
     for name in modules:
-        path = ROOT / "src" / ("%s.rs" % name)
+        path = found[name]
         # Bytes, not text. read_text translates CRLF to LF and write_text would
         # put it back as LF, silently rewriting the line endings of every module
         # probed. Nothing would break, but the working tree churns and

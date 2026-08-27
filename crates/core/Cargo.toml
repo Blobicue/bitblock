@@ -1,0 +1,22 @@
+[package]
+name = "bitblock-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+
+[features]
+default = []
+# The research surface adds variants to shared types here -- TagKind alone has
+# 48 gated sites -- so the flag has to exist on this side of the boundary too.
+# bitblock-research turns it on unconditionally.
+protocol-research = []
+
+[dependencies]
+sha2 = { version = "=0.10.9", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+] }

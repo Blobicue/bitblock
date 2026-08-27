@@ -406,7 +406,8 @@ impl DisplayReceiptV2 {
     }
 
     #[cfg(any(test, feature = "protocol-research"))]
-    pub(crate) fn prepare(
+    /// Stage a display capture for a store to admit before it is committed.
+    pub fn prepare(
         parent: Option<ContentTag>,
         expected_receipt: FrameReceiptV2,
         expected_width: u32,

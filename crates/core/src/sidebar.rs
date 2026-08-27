@@ -1688,7 +1688,7 @@ mod tests {
 
     #[test]
     fn displayed_bindings_are_unique_and_exact_registry_rows() {
-        let registry = include_str!("../docs/metrics/registry.tsv");
+        let registry = include_str!("../../../docs/metrics/registry.tsv");
         let mut aliases = HashSet::new();
         let mut definitions = HashSet::new();
         for binding in DISPLAYED_METRICS {

@@ -1329,6 +1329,7 @@
 {"from": "module:journal", "kind": "depends_on", "to": "module:storage"}
 {"from": "module:ladder_bridge", "kind": "depends_on", "to": "module:program"}
 {"from": "module:ladder_bridge", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:lib", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:main", "kind": "depends_on", "to": "module:camera"}
 {"from": "module:main", "kind": "depends_on", "to": "module:display"}
 {"from": "module:main", "kind": "depends_on", "to": "module:display_store"}

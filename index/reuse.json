@@ -272,6 +272,12 @@
     ]
    },
    {
+    "item": "PreparedTick",
+    "modules": [
+     "history"
+    ]
+   },
+   {
     "item": "RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA",
     "modules": [
      "physical_sensor"
@@ -434,7 +440,7 @@
     ]
    }
   ],
-  "pub_items": 561,
+  "pub_items": 566,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -464,7 +470,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29226,
+   "code_lines": 29181,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -493,7 +499,7 @@
      "right": "presentation_output_v2:384"
     },
     {
-     "left": "display:1101",
+     "left": "display:1102",
      "lines": 16,
      "right": "frame:574"
     },
@@ -508,7 +514,7 @@
      "right": "presentation_output:452"
     },
     {
-     "left": "display:852",
+     "left": "display:853",
      "lines": 13,
      "right": "tick:939"
     },
@@ -560,10 +566,10 @@
     {
      "left": "coordinate_episode:700",
      "lines": 9,
-     "right": "display:1104"
+     "right": "display:1105"
     },
     {
-     "left": "display:1060",
+     "left": "display:1061",
      "lines": 9,
      "right": "frame:555"
     },
@@ -593,12 +599,12 @@
      "right": "storage:751"
     },
     {
-     "left": "display:1147",
+     "left": "display:1148",
      "lines": 8,
      "right": "display_artifact:763"
     },
     {
-     "left": "display:1156",
+     "left": "display:1157",
      "lines": 8,
      "right": "frame:598"
     },
@@ -650,7 +656,7 @@
    ]
   },
   "test": {
-   "code_lines": 17858,
+   "code_lines": 17864,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -699,7 +705,7 @@
      "right": "main:4029"
     },
     {
-     "left": "history:931",
+     "left": "history:938",
      "lines": 12,
      "right": "history_store:1499"
     },
@@ -711,7 +717,7 @@
     {
      "left": "frame_v2:979",
      "lines": 10,
-     "right": "optimization:1503"
+     "right": "optimization:1509"
     },
     {
      "left": "journal:1238",
@@ -724,7 +730,7 @@
      "right": "presentation:1147"
     },
     {
-     "left": "display:1542",
+     "left": "display:1543",
      "lines": 9,
      "right": "display_artifact:790"
     },

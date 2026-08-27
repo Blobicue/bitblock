@@ -103,7 +103,8 @@ impl TagKind {
     }
 
     #[cfg(any(test, feature = "protocol-research"))]
-    pub(crate) fn from_name(name: &[u8]) -> Option<Self> {
+    /// Resolve a kind from its canonical name, for decoding a storage envelope.
+    pub fn from_name(name: &[u8]) -> Option<Self> {
         Some(match name {
             #[cfg(any(test, feature = "protocol-research"))]
             b"build" => Self::Build,
@@ -158,7 +159,17 @@ pub struct ContentTag {
 }
 
 impl ContentTag {
-    pub(crate) const fn from_digest(kind: TagKind, digest: [u8; 32]) -> Self {
+    /// Rebuild a tag from a digest that is already known to be canonical.
+    ///
+    /// This constructs a tag *without* hashing anything, so it can only be
+    /// applied to a digest some canonical encoding already produced -- decoding
+    /// a stored record, or re-reading a receipt. Handing it arbitrary bytes
+    /// makes a well-formed tag for content nobody computed.
+    ///
+    /// It became `pub` when the research modules moved to their own crate. The
+    /// set of callers did not change -- they were all inside this crate before
+    /// -- but the boundary is now the compiler's rather than a convention's.
+    pub const fn from_digest(kind: TagKind, digest: [u8; 32]) -> Self {
         Self { kind, digest }
     }
 

@@ -32,7 +32,9 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
+SRC_DIRS = (ROOT / "crates" / "core" / "src",
+            ROOT / "crates" / "research" / "src",
+            ROOT / "src")
 
 
 def git(*args: str) -> subprocess.CompletedProcess:
@@ -73,14 +75,14 @@ def main(argv: list[str]) -> int:
     # Only src/ has to be clean: that is the only thing restored, and requiring a
     # clean tree everywhere blocks the run on unrelated edits, including this
     # tool's own.
-    dirty = git("status", "--porcelain", "--", "src").stdout.strip()
+    dirty = git("status", "--porcelain", "--", "src", "crates").stdout.strip()
     if dirty:
         print("bbmutate: src/ must be clean -- it is restored from git.\n%s" % dirty)
         return 2
 
     wanted = set(argv[1:])
     targets = []
-    for path in sorted(SRC.glob("*.rs")):
+    for path in sorted(p for d in SRC_DIRS for p in d.glob("*.rs")):
         if wanted and path.stem not in wanted:
             continue
         text = path.read_text(encoding="utf-8")
@@ -119,7 +121,7 @@ def main(argv: list[str]) -> int:
             print("  %-28s %-12s %d sites" % (path.stem, verdict, sites))
             git("checkout", "--", str(path.relative_to(ROOT)).replace("\\", "/"))
     finally:
-        git("checkout", "--", "src")
+        git("checkout", "--", "src", "crates")
 
     total = time.time() - started
     print("\n  killed       %2d" % len(killed))

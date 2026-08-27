@@ -1,3 +1,6 @@
+[workspace]
+members = ["crates/core", "crates/research"]
+
 [package]
 name = "bitblock"
 version = "0.1.0"
@@ -7,9 +10,11 @@ rust-version = "1.96"
 [features]
 default = []
 headless-console = []
-protocol-research = []
+protocol-research = ["dep:bitblock-research", "bitblock-core/protocol-research"]
 
 [dependencies]
+bitblock-core = { path = "crates/core" }
+bitblock-research = { path = "crates/research", optional = true }
 sha2 = { version = "=0.10.9", default-features = false }
 winit = "=0.30.13"
 

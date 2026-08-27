@@ -106,8 +106,8 @@
     "structure": [
         {
             "module": "protocol",
-            "dependents": 29,
-            "note": "The most load-bearing module in the crate: everything but camera, lib and world reaches it. That is exactly why its structural rank must never be allowed to decide a query. Was 28 while the dep scan matched only `crate::` and missed the binary, which reaches the library as `bitblock::`."
+            "dependents": 30,
+            "note": "The most load-bearing module in the workspace. Gained one dependent when the crate split introduced src/lib.rs as a facade that re-exports it -- a re-export is a real edge. Was 28 while the dep scan matched only `crate::` and missed the binary's `bitblock::` imports."
         },
         {
             "module": "world",

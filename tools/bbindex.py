@@ -34,6 +34,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "index"
 
+# The crate is a workspace: bitblock-core is upstream of bitblock-research, and
+# the binary sits on top. A module's crate now *is* its availability -- research
+# modules are the protocol-research surface by construction rather than by a cfg
+# attribute repeated 18 times.
+SRC_DIRS = (
+    ("core", ROOT / "crates" / "core" / "src"),
+    ("research", ROOT / "crates" / "research" / "src"),
+    ("binary", ROOT / "src"),
+)
+
+
+def module_paths():
+    for crate, directory in SRC_DIRS:
+        for path in sorted(directory.glob("*.rs")):
+            if path.stem == "lib" and crate != "binary":
+                continue
+            yield crate, path
+
+
 SRC = ROOT / "src"
 TOOLS = ROOT / "tools"
 DOCS = ROOT / "docs"
@@ -70,7 +89,7 @@ DOC_FILES = (
 # The digit is load-bearing too: without it `frame_v2` truncates to `frame_v`,
 # which is not a module, and the graph silently grows a phantom node. Gate A
 # re-checks every target against the declared module set for exactly that.
-RE_CRATE_DEP = re.compile(r"(?:crate|bitblock)::([a-z0-9_]+)")
+RE_CRATE_DEP = re.compile(r"(?:crate|bitblock|bitblock_core|bitblock_research)::([a-z0-9_]+)")
 RE_PUB_MOD = re.compile(r"^\s*pub mod ([a-z0-9_]+);", re.M)
 RE_CFG = re.compile(r'^#\[cfg\((.+)\)\]\s*$')
 RE_SCHEMA_LIT = re.compile(r'b"(bitblock/[a-z0-9/_-]+)"')
@@ -216,10 +235,13 @@ def schema_declarations(text: str, path: Path) -> list[dict]:
 
 
 def extract_modules() -> list[dict]:
-    lib_text = read(SRC / "lib.rs")
-    gates = module_gate(lib_text)
+    gates = {}
+    for _crate, directory in SRC_DIRS:
+        lib = directory / "lib.rs"
+        if lib.exists():
+            gates.update(module_gate(read(lib)))
     nodes = []
-    for path in sorted(SRC.glob("*.rs")):
+    for crate, path in module_paths():
         name = path.stem
         text = read(path)
         summary, doc = summarize_doc_comment(text)
@@ -238,12 +260,15 @@ def extract_modules() -> list[dict]:
         )
         pub_items = sorted(set(RE_PUB_ITEM.findall(text)))
         schemas = schema_declarations(text, path)
-        if name == "lib":
-            gate = "default"
-        elif name == "main":
-            gate = "binary"
+        # The crate answers this now. A cfg in that crate's lib.rs still refines
+        # it -- windows_present is core but only on Windows.
+        declared = gates.get(name, "default")
+        if name in ("lib", "main"):
+            gate = "binary" if name == "main" else "default"
+        elif crate == "research":
+            gate = declared if "windows" in declared else "protocol-research"
         else:
-            gate = gates.get(name, "undeclared")
+            gate = declared
         terms = sorted(
             set(
                 tokens(name.replace("_", " "))
@@ -258,6 +283,7 @@ def extract_modules() -> list[dict]:
                 "kind": "module",
                 "name": name,
                 "path": rel(path),
+                "crate": crate,
                 "summary": summary,
                 "doc": doc,
                 "lines": text.count("\n") + 1,
@@ -769,7 +795,7 @@ def dead_surface(modules: list[dict]) -> dict:
     # tally and a word-boundary search agree by construction.
     corpus: dict[str, tuple] = {}
     for path in (
-        sorted(SRC.glob("*.rs"))
+        [p for _c, p in module_paths()]
         + sorted(EXAMPLES.glob("*.rs"))
         + sorted(TESTS.glob("*.rs"))
     ):
@@ -843,7 +869,11 @@ def stage_audit(nodes: list[dict]) -> int:
     # Every src/*.rs is a declared `pub mod`, lib.rs, or main.rs -- and every
     # `crate::` target resolves. The second half is what catches a truncating
     # dep regex, which otherwise adds a phantom node that looks plausible.
-    declared = set(RE_PUB_MOD.findall(read(SRC / "lib.rs")))
+    declared = set()
+    for _crate, directory in SRC_DIRS:
+        lib = directory / "lib.rs"
+        if lib.exists():
+            declared |= set(RE_PUB_MOD.findall(read(lib)))
     entrypoints = {"lib", "main"}
     accounted = declared | entrypoints
     unaccounted = sorted(module_names - accounted)

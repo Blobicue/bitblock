@@ -336,7 +336,7 @@ def emit_rust(name: str, rows: list[tuple[int, int, int]]) -> None:
 
 
 def verify_rust_vector_parity(observed: list[tuple[Fixture, bytes, bytes, list[tuple[int, int, int]]]]) -> None:
-    source = (Path(__file__).resolve().parents[1] / "src" / "render.rs").read_text(
+    source = (Path(__file__).resolve().parents[1] / "crates" / "core" / "src" / "render.rs").read_text(
         encoding="utf-8"
     )
     row_pattern = re.compile(

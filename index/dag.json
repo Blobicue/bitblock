@@ -64,7 +64,9 @@
    "program",
    "protocol"
   ],
-  "lib": [],
+  "lib": [
+   "protocol"
+  ],
   "main": [
    "camera",
    "display",
@@ -177,7 +179,7 @@
   ],
   "world": []
  },
- "edges": 114,
+ "edges": 115,
  "stratum": {
   "camera": 0,
   "coordinate_episode": 4,
@@ -191,7 +193,7 @@
   "interaction": 2,
   "journal": 2,
   "ladder_bridge": 2,
-  "lib": 0,
+  "lib": 1,
   "main": 9,
   "optimization": 5,
   "output_color": 2,
@@ -236,7 +238,7 @@
   "presentation_output": 4,
   "presentation_output_v2": 2,
   "program": 19,
-  "protocol": 29,
+  "protocol": 30,
   "render": 3,
   "replay_evidence": 1,
   "sequential": 0,

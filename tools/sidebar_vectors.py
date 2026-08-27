@@ -48,7 +48,7 @@ def decode_digest(encoded: str) -> bytes:
 
 
 def bindings() -> list[tuple[bytes, bytes]]:
-    source = (ROOT / "src" / "sidebar.rs").read_text(encoding="utf-8")
+    source = (ROOT / "crates" / "core" / "src" / "sidebar.rs").read_text(encoding="utf-8")
     matches = re.findall(
         r'binding!\(\s*"([^"]+)",\s*"([^"]+)"\s*\)', source, re.MULTILINE
     )
