@@ -150,6 +150,16 @@
   ]
  },
  {
+  "id": "sub:history",
+  "members": [
+   "module:history"
+  ],
+  "name": "history",
+  "terms": [
+   "history"
+  ]
+ },
+ {
   "id": "sub:history-mode",
   "members": [
    "module:sequential"
@@ -437,6 +447,16 @@
    "policy",
    "present",
    "windows"
+  ]
+ },
+ {
+  "id": "sub:world",
+  "members": [
+   "module:history"
+  ],
+  "name": "world",
+  "terms": [
+   "world"
   ]
  }
 ]

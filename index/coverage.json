@@ -1,5 +1,5 @@
 {
- "docs": 100,
+ "docs": 108,
  "examples": 10,
  "gates": {
   "metric_accounting": true,
@@ -22,9 +22,14 @@
   "default": 13,
   "windows": 1
  },
+ "modules_undocumented": [
+  "lib",
+  "main",
+  "world"
+ ],
  "proofs": 8,
- "schemas": 54,
- "schemas_fixtures": 27,
+ "schemas": 58,
+ "schemas_fixtures": 23,
  "schemas_tool_local": [
   "bitblock/metric-definition/markdown-v1",
   "bitblock/output-color-vector-parent/v1",
@@ -50,7 +55,7 @@
   "bitblock/sidebar/composite-frame-input/v1",
   "bitblock/storage-record/envelope/v1"
  ],
- "schemas_vectored": 38,
+ "schemas_vectored": 42,
  "source_lines": 51735,
  "tests": 393,
  "tools": 24

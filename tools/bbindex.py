@@ -148,18 +148,30 @@ def summarize_doc_comment(text: str) -> tuple[str, str]:
 
 
 def test_scope_line(text: str) -> int:
-    """Line at which a file's `#[cfg(test)]` module begins, or a large number.
+    """Line at which a file's `#[cfg(test)] mod` block begins, else unbounded.
 
     Schemas declared past it are fixtures, not protocol surface. Without this
     distinction `bitblock/test-object/v1` -- a throwaway name that frame.rs and
-    storage.rs each happen to use in their own tests -- becomes a shared
-    subsystem joining two unrelated modules, and it inflates the count of
-    protocol objects lacking independent vectors with objects that should not
-    have any.
+    storage.rs each coined in their own tests -- becomes a shared subsystem
+    joining two unrelated modules, and the count of protocol objects lacking
+    independent vectors is inflated with objects that should not have any.
+
+    The boundary is the `mod`, not the attribute. `#[cfg(test)]` also guards
+    test-only imports and helpers: history.rs carries two such `use` lines at
+    the top, and treating the first attribute as the boundary demoted all four
+    of its real schema constants -- GENESIS_SCHEMA and RECEIPT_SCHEMA among them,
+    both `pub` -- to fixtures on line 18 of a 1,424-line file.
     """
-    for num, line in enumerate(text.splitlines(), 1):
-        if line.strip() == "#[cfg(test)]":
-            return num
+    lines = text.splitlines()
+    for num, line in enumerate(lines, 1):
+        if line.strip() != "#[cfg(test)]":
+            continue
+        for follower in lines[num:]:
+            if not follower.strip():
+                continue
+            if follower.lstrip().startswith("mod "):
+                return num
+            break
     return 1 << 30
 
 
@@ -732,8 +744,14 @@ def stage_audit(nodes: list[dict]) -> int:
         "schema_accounting": gate_b,
         "metric_accounting": gate_c,
     }
+    # A module with no `//!` comment contributes no vocabulary beyond its name
+    # and its public item names, so it is reachable by `ask` only if the query
+    # happens to use those words. This is the doc-side analogue of a schema with
+    # no vectors: derived, actionable, and not a failure.
+    undocumented = sorted(m["name"] for m in modules if not m["summary"])
     coverage = {
         "modules": len(modules),
+        "modules_undocumented": undocumented,
         "modules_by_gate": tally(m["gate"] for m in modules),
         "source_lines": sum(m["lines"] for m in modules),
         "tests": sum(m["tests"] for m in modules),
@@ -757,6 +775,9 @@ def stage_audit(nodes: list[dict]) -> int:
     print("audit")
     print("    modules      %d in %d lines, %d tests" % (
         coverage["modules"], coverage["source_lines"], coverage["tests"]))
+    if undocumented:
+        print("                 %d without a //! doc comment: %s"
+              % (len(undocumented), ", ".join(undocumented)))
     print("    schemas      %d protocol objects (+%d test fixtures)"
           % (len(surface), len(schemas) - len(surface)))
     print("                 %d with independent vectors, %d without"
