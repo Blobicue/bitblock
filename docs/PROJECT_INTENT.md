@@ -216,6 +216,8 @@ written down.
 - [`TRANSCRIPT_AUDIT.md`](TRANSCRIPT_AUDIT.md) owns chronology, original intent, and corrections.
 - [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md) owns dependency order, status, and next gates.
 - [`AUTHENTICATED_STATE_PLAN.md`](AUTHENTICATED_STATE_PLAN.md) owns the MPT/SMT research checkpoint.
+- [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md) owns the finite audit and correction map for the
+  capability/authenticated-state planning checkpoint at its pinned input.
 - [`LAYER1_DESIGN_PAPER.md`](LAYER1_DESIGN_PAPER.md) owns the proposed replicated protocol.
 - [`LAYER1_DESIGN_AUDIT.md`](LAYER1_DESIGN_AUDIT.md) owns the pinned audit of that paper.
 - [`PROTOCOL.md`](PROTOCOL.md) owns implemented canonical-byte and research-carrier contracts.

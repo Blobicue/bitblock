@@ -31,15 +31,18 @@ their parser, VM, resource, refinement, upgrade, and security nodes. A node with
 must report each phase separately; an early research artifact cannot lend **IMPLEMENTED** status to
 its later authority or operations phase.
 
-Nodes that expand with schemas or profiles—especially `COST-1`, `CODEC-1`, `EXECUTOR-1`,
-`BOUNDS-1`, `RELEASE-1`, and the crypto/operations nodes—must record status as
-`node@profile-or-schema`, with exact artifact and commit identities. Passing a local-v1 corpus does
-not give a later network, program, asset, or migration profile the same status.
+Once a schema/profile instance has an artifact, expanding nodes—especially `COST-1`, `CODEC-1`,
+`EXECUTOR-1`, `THREAT-1`, `BOUNDS-1`, `RELEASE-1`, and the crypto/operations nodes—record it as
+`node@profile-or-schema`, with exact artifact and commit identities. Before an instance exists, the
+node must say which framework/design phase is READY and which authority instance remains LOCKED;
+it must not invent a profile label merely to satisfy this convention. Passing a local-v1 corpus
+does not give a later network, program, asset, or migration profile the same status.
 
 ## The tree at a glance
 
-`A + B -> C` means that both named nodes are direct prerequisites. The detailed node contracts
-below are normative when this compact view omits a later profile-specific prerequisite.
+This compact view is a selected scheduling projection, not an exhaustive edge manifest. The
+`Depends on` fields below are authoritative. `A + B -> C` means the shown inputs are required, but
+other direct or profile-conditional prerequisites may be omitted here for readability.
 
 ```text
 FOUNDATION (current)
@@ -50,23 +53,33 @@ FOUNDATION (current)
   PROOF-0  bounded Lean/LadderLang and canonical-tag evidence
 
 LOCAL AUTHORITY TRUNK
-  TICK-0 + REPLAY-0 -> ACCOUNT-1 -> STORAGE-1 -> LEDGER-1
+  TICK-0 + REPLAY-0 -> ACCOUNT-1
+  ACCOUNT-1 + COST-1 -> LOCAL-BOUNDS-1 -> STORAGE-1 -> LEDGER-1
+  LEDGER-1 + ACCOUNT-1 -> TRANSITION-SPEC-D1
   WORLD-0 + PROOF-0 -> COMMIT-R1
-  LEDGER-1 + COMMIT-R1 -> COMMIT-1
+  LEDGER-1 + COMMIT-R1 + CODEC-1 -> COMMIT-1
+
+PRE-GENESIS DESIGN AND IDENTITY
+  PROOF-0 -> CODEC-1
+  FOUNDATION -> COST-1 -> THREAT-D0
+  CODEC-1 + THREAT-D0 -> CRYPTO-D1
+  ACCOUNT-1 + CODEC-1 + THREAT-D0 + CRYPTO-D1 -> IDENTITY-D1
+  THREAT-D0 + CRYPTO-D1 -> CONSENSUS-D1 + GOVERNANCE-D1
+  TRANSITION-SPEC-D1 + IDENTITY-D1 + CONSENSUS-D1 + GOVERNANCE-D1
+      + COMMIT-R1 -> PROFILE-SCOPE-D0
+  PROFILE-SCOPE-D0 + measured COST-1 -> THREAT-1 -> BOUNDS-1
+  PROFILE-SCOPE-D0 + BOUNDS-1 -> GENESIS-D1 -> PROTOCOL-ID-1 -> PROFILE-D1
 
 IDENTITY AND SHARED ORDER
-  PROOF-0 -> CODEC-1
-  FOUNDATION -> COST-1 -> THREAT-1
-  CODEC-1 + THREAT-1 -> CRYPTO-D1
-  ACCOUNT-1 + CODEC-1 + THREAT-1 + CRYPTO-D1 -> IDENTITY-D1
-  COMMIT-1 + IDENTITY-D1 + CODEC-1 -> PROTOCOL-ID-1
   CRYPTO-D1 + IDENTITY-D1 + PROTOCOL-ID-1 -> CRYPTO-1
   IDENTITY-D1 + PROTOCOL-ID-1 + CRYPTO-1 -> IDENTITY-1
-  IDENTITY-1 + COMMIT-1 -> AUTH-COMMIT-1 -> MULTI-1
-  MULTI-1 + PROTOCOL-ID-1 + CODEC-1 + BOUNDS-1 + COMMIT-1 + EXECUTOR-1 -> SEQUENCER-1
+  IDENTITY-1 + COMMIT-1 -> AUTH-COMMIT-1
+  TRANSITION-SPEC-D1 -> EXECUTOR-1
+  AUTH-COMMIT-1 + EXECUTOR-1 + PROFILE-D1 -> EXECUTION-ROOT-1 -> MULTI-1
+  MULTI-1 + BOUNDS-1 + EXECUTOR-1 + EXECUTION-ROOT-1 -> SEQUENCER-1
   SEQUENCER-1 + STORAGE-1 + BOUNDS-1 -> SYNC-1
-  SYNC-1 + PROTOCOL-ID-1 + THREAT-1 + CRYPTO-1 + BOUNDS-1 -> CONSENSUS-1
-  CONSENSUS-1 + COMMIT-1 + AUTH-COMMIT-1 + PROTOCOL-ID-1 -> CLIENT-1
+  SYNC-1 + CONSENSUS-D1 + THREAT-1 + CRYPTO-1 + EXECUTION-ROOT-1 -> CONSENSUS-1
+  CONSENSUS-1 + EXECUTION-ROOT-1 + PROTOCOL-ID-1 -> CLIENT-1
   CLIENT-1 + PROFILE-1 + cross-cutting release/security nodes -> TESTNET-1
   TESTNET-1 -> L1-CANDIDATE -> L1-PRODUCTION -> optional VALUE-1
 
@@ -79,8 +92,9 @@ ASSET BRANCH
 VISUAL LANGUAGE AND EMERGENCE BRANCH
   WORLD-0 + PROOF-0 -> LANGUAGE-R1 exact static spatial grammar research
   ACCOUNT-1 -> RULE-1 one finite deterministic block rule -> EMERGENCE-R1
-  LANGUAGE-R1 + RULE-1 + ACCOUNT-1 + REFINE-1 + BOUNDS-1 -> VM-1
-  VM-1 + COMMIT-1 + SEQUENCER-1 + selected consensus + PROFILE-D1 -> PROGRAM-CONSENSUS
+  LANGUAGE-R1 + RULE-1 + TRANSITION-SPEC-D1 -> VM-D1
+  VM-D1 + BOUNDS-1 -> VM-1
+  VM-1 + REFINE-1 + RESOURCE-1 + EXECUTION-ROOT-1 -> PROGRAM-CONSENSUS
 
 SCALE BRANCH
   WORLD-0 + OBSERVE-0 -> SCALE-1 -> SCALE-2
@@ -94,10 +108,16 @@ CROSS-CUTTING BEFORE A PUBLIC L1 CLAIM
   CRYPTO-1 key/signature/hash lifecycle and migration
   HASH-SOURCE-R1 intended ternary-hash source discovery (optional research)
   HASH-R1 intended ternary-hash evaluation (optional research)
+  LOCAL-BOUNDS-1 local record/storage/recovery limits
   BOUNDS-1 protocol work, allocation, state-growth, and admission limits
+  THREAT-D0 pre-profile adversary/claim envelope
   GOVERNANCE-D1 upgrade/emergency authority decision
+  GOVERNANCE-1 implemented governance transitions and state
+  PROFILE-SCOPE-D0 pre-ID feature/operation/configuration scope
+  GENESIS-D1 non-self-referential genesis configuration
   PROFILE-D1 frozen candidate activation manifest
   PROFILE-1 admitted activated-feature closure
+  UPGRADE-FRAMEWORK-1 version-lifecycle policy and migration verifier
   UPGRADE-1 deterministic version migration and historical verification
   SIGNER-OPS-1 anti-double-sign key custody and restore
   RELEASE-1 reviewed-source-to-shipped-binary integrity
@@ -118,7 +138,7 @@ and the asset branch does not require visual programming.
 | `TICK-0` | **IMPLEMENTED** | `WORLD-0`, `OBSERVE-0` | Give every state transition one deterministic clock. | Fixed 60 Hz reducer and ordered tick outcomes; presentation is separate. | Deterministic same-build tape replay for declared inputs. | Not consensus time, wall-clock proof, or a guarantee that every tick rerenders. |
 | `REPLAY-0` | **IMPLEMENTED, bounded** | `TICK-0` | Give people and agents a shared action language. | Edit programs, canonical `InteractionTape`, JSON scenario helper, headless reducer. | Parser/codec/limit vectors and local replay paths. | Not a complete recorder of all accepted live OS input or an independently held run receipt. |
 | `PROOF-0` | **BOUNDED** | `WORLD-0`; individual capsules declare more | Make semantic claims attackable instead of intuitive. | SHA-256 content tags, Lean world model, finite LadderLang transition capsule, research receipts. | The declared finite/model checks exist. | Not Rust refinement, ternary-hash integration, physical truth, ownership, consensus, or L1 security. |
-| `DOC-0` | **IMPLEMENTED by this checkpoint** | Current source and all documents it describes | Preserve intent, dependencies, and claim boundaries for successor agents. | Project intent, capability tree, authenticated-state plan, transcript and handoff links. | Markdown/source consistency checks for the committed checkpoint. | Documentation is not implementation or independent audit evidence. |
+| `DOC-0` | **IMPLEMENTED by this checkpoint** | None; source/document evidence is external | Preserve intent, dependencies, and claim boundaries for successor agents. | Project intent, capability tree, authenticated-state plan, finite plan audit, transcript and handoff links. | Retained planning-doc checker plus committed validation receipt. | Documentation is not implementation or independent audit evidence. |
 
 ## First trunk: complete and authenticate local state
 
@@ -137,26 +157,41 @@ and the asset branch does not require visual programming.
 - **Non-claim:** a complete local action record is not durable custody, authentication, ownership,
   or consensus.
 
+### `LOCAL-BOUNDS-1` — local record and recovery limits
+
+- **Status:** **LOCKED** on `ACCOUNT-1`; `COST-1` measurement work can begin now.
+- **Depends on:** `ACCOUNT-1`, measured `COST-1` facts for the local storage profile.
+- **Motive:** prevent local durability from depending on unnamed record, history, recovery, or disk
+  limits while avoiding a dependency on the later network profile.
+- **Artifact:** numeric limits for canonical tick/ledger record bytes, records per commit, staged
+  writes, retained local history, restart scan work, backup/restore work, and local pruning batches,
+  with checked preallocation arithmetic and a versioned local-storage profile.
+- **Gate:** worst-shaped valid local records and recovery histories fit the predeclared envelope;
+  over-limit carriers reject before allocation or mutation; the limits are fixed before fault tests.
+- **Non-claim:** local bounds do not cover remote peers, consensus messages, programs, economic
+  sufficiency, or production capacity.
+
 ### `STORAGE-1` — crash-safe local publication substrate
 
-- **Status:** **LOCKED** on `ACCOUNT-1`; bounded research journals exist but are not this authority.
-- **Depends on:** complete canonical records and fixed storage/resource bounds.
+- **Status:** **LOCKED** on `ACCOUNT-1` and `LOCAL-BOUNDS-1`; bounded research journals exist but are
+  not this authority.
+- **Depends on:** `ACCOUNT-1`, `LOCAL-BOUNDS-1`.
 - **Motive:** make later ledger heads and authenticated nodes recover together instead of treating
   in-memory success as durable state.
 - **Artifact:** versioned append/record envelopes, exclusive-writer rule, atomic or recoverably
   ordered head publication, checksummed data, fsync policy, rollback detection, retained failure
   evidence, supplied-carrier verification, backup/restore hooks, and bounded pruning entry points.
 - **Gate:** process-death, torn-write, corruption, stale-head, rollback, concurrent-writer, disk-full,
-  and restore assays recover one fully verified committed prefix or fail closed without inventing a
-  new head.
+  malformed supplied-carrier, independent-decoder, pruning/GC, and restore assays recover one fully
+  verified committed prefix or fail closed without inventing a new head or deleting a pinned one.
 - **Non-claim:** one-machine durability is not independent custody, network availability,
   Byzantine agreement, or anti-administrator rollback resistance.
 
 ### `LEDGER-1` — durable local occupancy-episode ledger
 
 - **Status:** **LOCKED** on `ACCOUNT-1` and `STORAGE-1`.
-- **Depends on:** the complete result lane, crash-safe publication substrate, and current
-  feature-gated coordinate-episode prototype.
+- **Depends on:** `ACCOUNT-1`, `STORAGE-1`; the current feature-gated coordinate-episode prototype is
+  bounded input evidence, not a prerequisite node.
 - **Motive:** establish the exact local meaning of placement-as-mint and deletion-as-burn before
   adding participants or monetary language.
 - **Artifact:** optional authoritative local ledger with crash-safe canonical records for one live
@@ -165,10 +200,27 @@ and the asset branch does not require visual programming.
   replay/pruning rules. `ASSET-D1` still decides whether origin has a separate locked genesis
   allocation.
 - **Gate:** domain equality and bijection between mutable occupancy and the active episode map;
-  injective live identifiers; every consumed episode has one burn provenance; restart and torn-write
-  tests restore one committed head or fail closed.
+  globally fresh episode identifiers never reuse a live or burned identifier; delete/re-mint,
+  origin, no-op/rejection, canonical-carrier, independently supplied replay, pruning-retention,
+  restart, and torn-write vectors restore one committed head or fail closed; every consumed episode
+  has one burn provenance.
 - **Non-claim:** provenance and conservation do not create a transferable coin, market value,
   multiplayer authority, rollback resistance against an administrator, or consensus.
+
+### `TRANSITION-SPEC-D1` — authoritative base transition specification
+
+- **Status:** **LOCKED** on the completed accounting and local-ledger semantics.
+- **Depends on:** `ACCOUNT-1`, `LEDGER-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
+- **Motive:** give independent executors a third reference so mutual agreement cannot settle an
+  underspecified or unintended transition.
+- **Artifact:** versioned specification for genesis initialization, accepted operations, ordering,
+  transaction lifecycle, atomicity, no-op/rejection/admitted-failure, nonce/fee dispositions,
+  system transitions, complete effects/receipts, activated state domains, and root composition.
+- **Gate:** executable/formal vectors give every accepted byte sequence and context one result or
+  one rejection; ambiguity, omitted-lane, partial-write, wrong-version, and powered semantic mutants
+  fail before any executor-to-executor comparison is considered.
+- **Non-claim:** a specification is not an implementation, refinement proof, root publication, or
+  consensus rule.
 
 ### `COMMIT-R1` — authenticated-map research
 
@@ -187,12 +239,13 @@ and the asset branch does not require visual programming.
 ### `COMMIT-1` — authenticated local state
 
 - **Status:** **LOCKED**.
-- **Depends on:** `LEDGER-1`, `COMMIT-R1`, `STORAGE-1`, selected coordinate commitment profile,
-  and separately frozen key/value profiles for every additional root this node activates.
+- **Depends on:** `LEDGER-1`, `COMMIT-R1`, `STORAGE-1`, `CODEC-1` at every activated commitment
+  schema; each domain also requires a frozen numeric commitment-limit profile.
 - **Motive:** support independently verifiable occupancy, absence, active-episode, and provenance
   queries without replaying or hashing the complete live set for every query.
 - **Artifact:** context-free separately typed world, active-token, and episode roots; canonical
-  membership/non-membership proofs; full-rebuild parity; atomic publication beside the
+  membership/non-membership proofs; full-rebuild parity; one immutable `CommitmentSetV1` binding
+  the ledger head and all roots, with staged-node then recoverable-head publication beside the
   corresponding ledger head. `COMMIT-R1` validates only the 192-bit world map: `MintIdV1` value
   framing and the still-unfrozen `EventIdV1`/episode profile must each pass their own domain gates
   before those roots are included. Authorization, nonce, and asset roots are later typed
@@ -201,14 +254,17 @@ and the asset branch does not require visual programming.
   map has one root regardless of insertion order; insert/delete restores the old world root when
   logical occupancy is restored; every activated key/value domain passes the same applicable
   canonicalization/proof/parity gates; malformed, cross-domain, stale-version, and over-bound
-  witnesses reject.
+  witnesses reject. Independent projection rebuilds prove active-token keys/values and episode
+  status against the exact same ledger head/manifest after every transition and recovery; crash
+  assays recover the previous or next complete commitment set, never a mixed tuple.
 - **Non-claim:** an authenticated map proves a statement relative to a supplied root, not that the
   root is canonical, finalized, available, honestly executed, or economically meaningful.
 
 ### `REFINE-1` — Rust/model correspondence
 
 - **Status:** **READY as a bounded proof project**.
-- **Depends on:** `WORLD-0`; expand after `ACCOUNT-1` and `COMMIT-1` for those surfaces.
+- **Depends on:** `WORLD-0`; profile instances additionally depend on the implemented surface they
+  refine—`ACCOUNT-1`, `COMMIT-1`, or `VM-1` respectively.
 - **Motive:** connect abstract world theorems to the actual chunked implementation.
 - **Artifact:** independently checked refinement or exhaustive/symbolic correspondence for
   coordinate splitting, bit indexing, bedrock, edits, iteration, and eventually root updates.
@@ -221,7 +277,7 @@ and the asset branch does not require visual programming.
 ### `IDENTITY-D1` — actor and authorization schema
 
 - **Status:** **LOCKED**.
-- **Depends on:** `ACCOUNT-1`, `CODEC-1`, `THREAT-1`, and primitive/key-encoding choices from
+- **Depends on:** `ACCOUNT-1`, `CODEC-1`, `THREAT-D0`, and primitive/key-encoding choices from
   `CRYPTO-D1`.
 - **Motive:** define what a credential and permission mean before genesis identifiers bind them or
   signed actions use them.
@@ -237,10 +293,11 @@ and the asset branch does not require visual programming.
 ### `PROTOCOL-ID-1` — genesis and non-circular identifier graph
 
 - **Status:** **LOCKED**.
-- **Depends on:** `COMMIT-1`, `IDENTITY-D1`, `CODEC-1`.
+- **Depends on:** `GENESIS-D1`, `IDENTITY-D1`, `CODEC-1`, `COMMIT-R1` root/profile definitions.
 - **Motive:** give signatures, transactions, receipts, roots, and later votes one chain/world
   context without objects hashing themselves or candidates selecting their own authority.
-- **Artifact:** immutable genesis-core and derived `genesis_id`; chain/world/version domains;
+- **Artifact:** immutable pre-ID genesis payload from `GENESIS-D1` and derived `genesis_id`;
+  chain/world/version domains;
   pre-genesis authorization descriptor encoding; acyclic transaction, body, context, proposal,
   block, receipt, effect, availability, and consensus-evidence identifier graph; explicit system
   transition subjects.
@@ -266,7 +323,7 @@ and the asset branch does not require visual programming.
 ### `AUTH-COMMIT-1` — authenticated authorization and nonce state
 
 - **Status:** **LOCKED**.
-- **Depends on:** `IDENTITY-1`, implemented `COMMIT-1`; `COMMIT-R1` selection alone is insufficient.
+- **Depends on:** `IDENTITY-1`, implemented `COMMIT-1`, `CODEC-1` at the authorization/nonce schemas.
 - **Motive:** let a verifier prove which descriptor and nonce state governed an admitted action
   without making identity a circular prerequisite of occupancy-root design.
 - **Artifact:** separately typed `AuthorizationRootV1` and `NonceRootV1`, canonical values and
@@ -278,10 +335,28 @@ and the asset branch does not require visual programming.
 - **Non-claim:** an authenticated authorization map does not prove the key holder is one human or
   that a submitted action was included, executed, or finalized.
 
+### `EXECUTION-ROOT-1` — complete execution-state commitment
+
+- **Status:** **LOCKED** for every authority profile.
+- **Depends on:** `TRANSITION-SPEC-D1`, `COMMIT-1`, `AUTH-COMMIT-1`, `EXECUTOR-1`, `PROTOCOL-ID-1`,
+  `PROFILE-D1`, `CODEC-1`, `GOVERNANCE-1`, and `CONSENSUS-D1`; activated asset/program domains add
+  their exact implementation nodes.
+- **Motive:** ensure no parameter, governance, validator-schedule, authorization, asset, or
+  application state can affect execution while remaining outside the accepted root.
+- **Artifact:** per-domain commitment instances plus a typed application/execution-root composer for
+  every activated world, episode, asset, authorization, nonce, parameter, governance, and validator
+  schedule domain; `AuthenticatedRootRefV1`; `CommitmentSetV1`; header/root correspondence.
+- **Gate:** every domain passes independent codec, rebuild/update/proof/malformed/persistence parity;
+  typed roots are non-interchangeable; full-state recomposition matches the executor after every
+  transition/recovery; chain/genesis/world/version/header mutations and mixed-manifest publication
+  reject.
+- **Non-claim:** a complete execution root does not prove valid ordering, consensus status, data
+  availability, or correct rendering.
+
 ### `MULTI-1` — deterministic multi-actor harness
 
 - **Status:** **LOCKED**.
-- **Depends on:** `AUTH-COMMIT-1`.
+- **Depends on:** `AUTH-COMMIT-1`, `TRANSITION-SPEC-D1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`.
 - **Motive:** expose ordering, authorization, and same-coordinate conflicts at the cheapest scale.
 - **Artifact:** two or more signed action streams folded by one in-process deterministic executor.
 - **Gate:** permutations of races, stale anchors, duplicate nonces, delegated rights, no-ops,
@@ -293,8 +368,8 @@ and the asset branch does not require visual programming.
 ### `SEQUENCER-1` — accountable centralized multiplayer
 
 - **Status:** **LOCKED**.
-- **Depends on:** `MULTI-1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`, `EXECUTOR-1`, and durable
-  `COMMIT-1` publication.
+- **Depends on:** `MULTI-1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`, `EXECUTOR-1`,
+  `EXECUTION-ROOT-1`, and durable `STORAGE-1` publication.
 - **Motive:** let remote participants share one signed, replayable world before consensus is added.
 - **Artifact:** bounded wire messages; authenticated admission; canonical batch order; append-only
   bodies/receipts; atomic state-root publication; independently replaying clients.
@@ -321,7 +396,7 @@ and the asset branch does not require visual programming.
 
 ### `ASSET-D1` — choose what a block asset means
 
-- **Status:** **OPEN DECISION**, eligible after `LEDGER-1` exposes the real episode model.
+- **Status:** **LOCKED** on `LEDGER-1`; the asset meaning remains an **OPEN DECISION**.
 - **Depends on:** `LEDGER-1`; threat/resource analysis may force revision.
 - **Motive:** prevent one word—“coin”—from hiding incompatible state machines.
 - **Artifact:** a decision record choosing and specifying occupancy collectible, coordinate edit
@@ -347,7 +422,8 @@ and the asset branch does not require visual programming.
 ### `RESOURCE-1` — fees, rent, and economic resource policy
 
 - **Status:** **LOCKED**.
-- **Depends on:** `BOUNDS-1`, `ASSET-D1`, and the selected network role model.
+- **Depends on:** `BOUNDS-1`, `PROFILE-SCOPE-D0`; an economic charging profile additionally depends
+  on `ASSET-D1`, while a non-economic profile may choose deterministic quotas.
 - **Motive:** prevent the huge coordinate space and proof/history creation from becoming an
   unpaid obligation or denial-of-service surface.
 - **Artifact:** deterministic pricing or quota policy for signatures, codecs, execution, proof
@@ -362,8 +438,8 @@ and the asset branch does not require visual programming.
 ### `VALIDATOR-ECON-1` — consensus incentives
 
 - **Status:** **LOCKED**.
-- **Depends on:** `CONSENSUS-1`; only activated profiles that use economic validator incentives
-  require this node.
+- **Depends on:** `CONSENSUS-1`, `ASSET-D1`, `ASSET-1`, `RESOURCE-1`, `EXECUTION-ROOT-1`; only
+  activated profiles that use economic validator incentives require this node.
 - **Motive:** align validator behavior only after “validator” has an exact protocol meaning.
 - **Artifact:** separate stake/reward/slashing domains, issuance schedule, unbonding, evidence,
   and economic attack analysis.
@@ -398,15 +474,28 @@ and the asset branch does not require visual programming.
   have explicit results.
 - **Non-claim:** a pattern recognized by the renderer or a human is not canonical program data.
 
+### `VM-D1` — frozen visual-machine semantics
+
+- **Status:** **LOCKED** on `LANGUAGE-R1`, `RULE-1`, and `TRANSITION-SPEC-D1`.
+- **Depends on:** `LANGUAGE-R1`, `RULE-1`, `ACCOUNT-1`, `TRANSITION-SPEC-D1`.
+- **Motive:** define the instruction and work surface before either the bounds checker or interpreter
+  is asked to validate it.
+- **Artifact:** versioned instruction set, parse-to-instruction mapping, integer state semantics,
+  read/write sets, ordering/conflicts, scheduler, traps, rollback/commit behavior, randomness input
+  if any, and a pre-execution work-accounting formula.
+- **Gate:** every opcode/program form has one finite step or deterministic trap in model vectors;
+  ambiguous parses, uncharged work, hidden renderer/camera input, and undefined conflict order stop
+  the draft before `BOUNDS-1@program` begins.
+- **Non-claim:** frozen VM semantics do not implement an interpreter or establish safe resource
+  bounds, usefulness, or consensus authority.
+
 ### `VM-1` — bounded deterministic interpreter
 
 - **Status:** **LOCKED**.
-- **Depends on:** `LANGUAGE-R1`, `RULE-1`, `ACCOUNT-1`, `REFINE-1`, and `BOUNDS-1` for the activated
-  language profile.
+- **Depends on:** `VM-D1`, `ACCOUNT-1`, `CODEC-1`, and `BOUNDS-1` for the activated language profile.
 - **Motive:** turn exact spatial programs into reproducible state transitions.
-- **Artifact:** versioned instruction set, integer-only authority semantics where possible,
-  deterministic scheduler, gas/work bounds, memory limits, traps, rollback/commit rules, and an
-  independent reference executor.
+- **Artifact:** bounded interpreter plus an independent reference executor implementing the frozen
+  `VM-D1` semantics, with versioned gas/work, memory, trap, rollback, and commit enforcement.
 - **Gate:** differential and adversarial programs agree per step/root; nontermination and resource
   exhaustion stop deterministically; renderer/camera mutations cannot affect execution.
 - **Non-claim:** determinism alone does not make a language safe, useful, decentralized, or
@@ -430,15 +519,17 @@ and the asset branch does not require visual programming.
 ### `PROGRAM-CONSENSUS` — programs as shared authority
 
 - **Status:** **LOCKED**.
-- **Depends on:** `VM-1`, `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `COMMIT-1`, `BOUNDS-1`, `EXECUTOR-1`,
-  `SEQUENCER-1`, `SYNC-1`, `CONSENSUS-1`, `UPGRADE-1`, and a `PROFILE-D1` draft that proposes
-  programmability.
+- **Depends on:** `VM-1`, `REFINE-1`, `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `EXECUTION-ROOT-1`,
+  `BOUNDS-1`, `RESOURCE-1`, `EXECUTOR-1`, `SEQUENCER-1`, `SYNC-1`, `CONSENSUS-1`,
+  `UPGRADE-FRAMEWORK-1`, and a `PROFILE-D1` draft that proposes programmability.
 - **Motive:** allow spatial programs to affect shared state only when every verifier can reproduce
   and price them.
 - **Artifact:** program/code roots, activation/version rules, transaction context, receipts,
   migration policy, deterministic randomness source if any, and refinement evidence.
-- **Gate:** independent nodes reproduce program effects and resource charges across upgrades;
-  malformed code, nondeterminism, stale versions, and unavailable program bytes fail closed.
+- **Gate:** independent nodes reproduce program effects and resource charges; malformed code,
+  nondeterminism, stale versions, and unavailable program bytes fail closed. Genesis activation
+  binds the framework policy; post-genesis activation additionally requires a concrete
+  `UPGRADE-1@old-profile->new-profile` result in the profile admission matrix.
 - **Non-claim:** visual programmability is not required for the base occupancy ledger or an L1.
 
 ## Scale branch
@@ -468,13 +559,30 @@ and the asset branch does not require visual programming.
 
 ## Consensus and Layer 1 branch
 
+### `CONSENSUS-D1` — pre-genesis consensus and network-role selection
+
+- **Status:** **LOCKED**; mechanism, fault threshold, synchrony, finality type, and node roles remain
+  **OPEN DECISIONS**.
+- **Depends on:** `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`, `COST-1` design inputs.
+- **Motive:** freeze the validator/sequencer role schema and initial authority bytes before genesis
+  identifies them, without pretending the protocol is implemented or tested.
+- **Artifact:** selected candidate mechanism, quantitative design envelope, proposal/vote/certificate
+  schemas, initial validator descriptor and weight rules, role/retention model, data-before-vote,
+  validator-set transition shape, finality/confirmation vocabulary, and rejected alternatives.
+- **Gate:** the selected design has one non-self-referential initial authority encoding and named
+  safety/liveness assumptions, quorum rule, network powers, bootstrap trust, and falsifiers; a
+  candidate cannot select its own authority.
+- **Non-claim:** a frozen consensus design is not a safety proof, running network, finality evidence,
+  or adequate incentive model.
+
 ### `CONSENSUS-1` — select and specify one consensus profile
 
-- **Status:** **LOCKED**; mechanism, fault threshold, synchrony model, and finality type are
-  **OPEN**.
-- **Depends on:** `SYNC-1`, `PROTOCOL-ID-1`, `THREAT-1`, `CRYPTO-1`, `BOUNDS-1`.
+- **Status:** **LOCKED** on the selected `CONSENSUS-D1` design and implementation prerequisites.
+- **Depends on:** `CONSENSUS-D1`, `SYNC-1`, `PROTOCOL-ID-1`, `THREAT-1`, `CRYPTO-1`, `BOUNDS-1`,
+  `EXECUTION-ROOT-1`.
 - **Motive:** replace sequencer trust with an explicit replicated ordering and state-root rule.
-- **Artifact:** quantitative adversary and network model; proposal/vote/certificate domains;
+- **Artifact:** implementation and evidence for the selected quantitative adversary/network model;
+  proposal/vote/certificate domains;
   fork-choice or deterministic-finality rule; validator-set transition; data-before-vote;
   confirmation/finality status; safe-halt and recovery rules.
 - **Gate:** formal/model safety argument appropriate to the profile plus a deterministic reference
@@ -487,7 +595,7 @@ and the asset branch does not require visual programming.
 ### `CLIENT-1` — proof-bound provisional and accepted client state
 
 - **Status:** **LOCKED**.
-- **Depends on:** `CONSENSUS-1`, `COMMIT-1`, `AUTH-COMMIT-1`, and receipt-inclusion commitments from
+- **Depends on:** `CONSENSUS-1`, `EXECUTION-ROOT-1`, and receipt-inclusion commitments from
   `PROTOCOL-ID-1`.
 - **Motive:** stop wallets and observers from presenting a sequencer acknowledgement, candidate
   receipt, confirmed result, and finalized result as the same fact.
@@ -504,21 +612,24 @@ and the asset branch does not require visual programming.
 ### `TESTNET-1` — replicated adversarial testnet
 
 - **Status:** **LOCKED**.
-- **Depends on:** `CLIENT-1`, `PROFILE-1`, `EXECUTOR-1`, `UPGRADE-1`, `SIGNER-OPS-1`, `RELEASE-1`,
-  `CRYPTO-1`, `THREAT-1`, and the activated `BOUNDS-1` profile.
+- **Depends on:** `CLIENT-1`, `PROFILE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
+  `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `GOVERNANCE-1`, `CRYPTO-1`, `THREAT-1`, and
+  the activated `BOUNDS-1` profile.
 - **Motive:** expose implementation and operating failures across independent Rust processes.
 - **Artifact:** version-pinned genesis, validators, full verifiers, archive/recovery nodes, fault
   injector, retained bodies/witnesses/evidence, and public coverage results.
-- **Gate:** every design-paper gate G0–G19 relevant to the activated profile has an artifact,
-  result, assumption, and stop condition; unresolved authority/root/availability faults halt the
-  candidate rather than being documented away.
+- **Gate:** the admitted stage-by-gate matrix marks every G0–G19 row as required, conditional, or
+  excluded-with-reason and names its owner/artifact/stop condition. Every testnet-required row must
+  pass; production-only G18 remains owned by `PROD-OPS-1`; optional G5/G19 rows cannot be excluded if
+  their feature is active. Unresolved authority/root/availability faults halt the candidate.
 - **Non-claim:** a testnet, hash agreement, or long fault-free run is not production security.
 
 ### `L1-CANDIDATE` — independently reviewable base state machine
 
 - **Status:** **LOCKED**.
-- **Depends on:** `TESTNET-1`, `PROFILE-1`, `UPGRADE-1`, `RELEASE-1`, `PROD-OPS-1`, and the complete
-  activated-profile coverage matrix.
+- **Depends on:** `TESTNET-1`, `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `RELEASE-1`, `PROD-OPS-1`, and the
+  complete activated-profile coverage matrix. A profile permitting in-place migration also needs a
+  successful `UPGRADE-1` rehearsal.
 - **Motive:** make the strongest possible claim reviewable before real value depends on it.
 - **Artifact:** frozen schemas, reproducible builds, independent executor, genesis package,
   threat model, consensus proof/evidence, DA and recovery contracts, upgrade rules, operations
@@ -562,7 +673,8 @@ and the asset branch does not require visual programming.
 ### `COST-1` — cheapness budgets and measurements
 
 - **Status:** **READY as measurement work**; no “cheap” budget is currently frozen.
-- **Depends on:** the current foundation; repeats for every activated feature.
+- **Depends on:** `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, `PROOF-0`; repeats for every
+  activated feature.
 - **Motive:** turn “as cheap as possible” into separate, attackable resource claims.
 - **Artifact:** pinned measurements and proposed budgets for default binary/dependency size,
   touched-state memory, tick work, renderer/collision work, commitment updates, proof verification,
@@ -588,22 +700,33 @@ and the asset branch does not require visual programming.
 ### `EXECUTOR-1` — independent transition executor
 
 - **Status:** **LOCKED** for the first authority profile.
-- **Depends on:** `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`, `PROTOCOL-ID-1`, and the frozen base transition
-  specification for that profile.
+- **Depends on:** `TRANSITION-SPEC-D1`, `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`, `PROTOCOL-ID-1`.
 - **Motive:** detect a shared implementation bug that same-code replay would reproduce perfectly.
 - **Artifact:** independently implemented base state-transition executor with no shared
   authority-path code, producing ordered effects, receipts, and roots. Each later upgrade must add
   its own independently implemented migration extension under `UPGRADE-1`.
-- **Gate:** differential corpora, generated sequences, failure/no-op paths, fork contexts, and
-  powered semantic mutants agree or fail at a named boundary per step for the pinned profile.
+- **Gate:** each executor first passes the frozen specification vectors and powered semantic mutants;
+  then differential corpora, generated sequences, failure/no-op paths, and fork contexts agree or
+  fail at a named boundary per step for the pinned profile.
 - **Non-claim:** two wrappers, binaries, or processes around the same reducer are not independent.
+
+### `THREAT-D0` — pre-profile adversary and claim envelope
+
+- **Status:** **READY as non-authoritative design work**.
+- **Depends on:** `COST-1` measurement framework and the current foundation.
+- **Motive:** enumerate attacker powers, public properties, parameter slots, and loss conditions
+  before crypto, consensus, or genesis choices narrow the candidate.
+- **Artifact:** versioned threat taxonomy and candidate quantitative ranges for corruption, network,
+  eclipse, key compromise, denial of service, censorship, supply-chain, bridge/oracle, bootstrap,
+  and operational powers, including the measurements still required.
+- **Gate:** every proposed property has an attacker action, assumption slot, loss condition, and
+  candidate mitigation; unquantified entries remain visibly open and cannot support profile status.
+- **Non-claim:** an envelope is not the profile's measured adversary model or a security proof.
 
 ### `THREAT-1` — quantitative adversary model
 
-- **Status:** **READY as design work; required before consensus selection**.
-- **Depends on:** the exact claim/profile being considered and measured `COST-1` facts. It defines
-  capacity/admission requirements that `BOUNDS-1` must later realize rather than depending on that
-  later node.
+- **Status:** **LOCKED** for the first authority profile; `THREAT-D0` is the ready design phase.
+- **Depends on:** `THREAT-D0`, `PROFILE-SCOPE-D0`, measured `COST-1` facts.
 - **Motive:** make “secure” falsifiable against declared attacker powers and time horizons.
 - **Artifact:** static/adaptive corruption, network scheduling/partition/eclipsing, validator weight,
   key compromise, client bootstrap, economic budget, denial-of-service capacity, censorship,
@@ -615,8 +738,9 @@ and the asset branch does not require visual programming.
 
 ### `CRYPTO-D1` — primitive and key-encoding selection
 
-- **Status:** **OPEN DECISION** for network signatures and production commitment suites.
-- **Depends on:** `CODEC-1`, `THREAT-1`.
+- **Status:** **LOCKED** on its prerequisites; network signatures and production commitment suites
+  remain an **OPEN DECISION**.
+- **Depends on:** `CODEC-1`, `THREAT-D0`.
 - **Motive:** freeze the primitive, suite identifier, key bytes, validation, and signing/hash domain
   assumptions needed to define identity without also pretending the operational lifecycle exists.
 - **Artifact:** selected signature/hash candidates, canonical key encodings and validation,
@@ -670,9 +794,9 @@ and the asset branch does not require visual programming.
 ### `BOUNDS-1` — protocol admission and state-growth bounds
 
 - **Status:** **LOCKED** for the first authority profile; it expands for later profiles.
-- **Depends on:** `COST-1`, `ACCOUNT-1`, `CODEC-1`, the common proof shapes frozen by `COMMIT-R1`,
-  and the exact accepted-input operations proposed for that profile—not a future sequencer or
-  consensus implementation.
+- **Depends on:** `PROFILE-SCOPE-D0`, `THREAT-1`, `LOCAL-BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, and the
+  common proof shapes frozen by `COMMIT-R1`; a program profile additionally depends on `VM-D1`, not
+  the later interpreter implementation.
 - **Motive:** make every accepted remote input and retained obligation processable under a committed
   deterministic limit before fees or consensus rely on it.
 - **Artifact:** checked maxima and pre-mutation charging for payloads, batches, signatures, keys,
@@ -685,13 +809,14 @@ and the asset branch does not require visual programming.
 - **Non-claim:** a resource bound does not ensure economic coverage, fair inclusion, chain liveness,
   or adequate hardware decentralization.
 
-### `GOVERNANCE-D1` — upgrade and emergency authority
+### `GOVERNANCE-D1` — upgrade and emergency authority schema
 
-- **Status:** **OPEN DECISION**.
-- **Depends on:** `IDENTITY-D1`, `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `THREAT-1`.
+- **Status:** **LOCKED** on its prerequisites; governance authority remains an **OPEN DECISION**.
+- **Depends on:** `IDENTITY-D1`, `THREAT-D0`, `CRYPTO-D1`.
 - **Motive:** name who may activate a migration, halt for a proven authority/root fault, or authorize
   recovery without leaving those powers as an operator convention.
-- **Artifact:** governance subjects and permissions, proposal/approval threshold, timelock,
+- **Artifact:** pre-genesis-encodable governance subjects and permissions, proposal/approval
+  threshold, timelock,
   conflict-of-interest and validator-set rules, emergency scope, safe-halt trigger, restart
   authority, compensation versus forbidden history rewrite, appeal/expiry, and public evidence.
 - **Gate:** unauthorized, replayed, conflicting, rushed, censored, compromised-key, stale-set,
@@ -700,30 +825,96 @@ and the asset branch does not require visual programming.
 - **Non-claim:** a governance rule does not make decisions wise, decentralized, legally legitimate,
   uncensorable, or immune to capture.
 
-### `PROFILE-D1` — candidate activated-feature manifest
+### `PROFILE-SCOPE-D0` — pre-ID feature and configuration scope
+
+- **Status:** **LOCKED**.
+- **Depends on:** `TRANSITION-SPEC-D1`, `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`,
+  `COMMIT-R1`, `CODEC-1`, `COST-1`; activated asset or program scope additionally depends on
+  `ASSET-D1` or `VM-D1` respectively.
+- **Motive:** give bounds and genesis an exact, non-self-referential target before any derived chain,
+  genesis, or profile identifier exists.
+- **Artifact:** canonical pre-ID scope containing activated operations/schemas/root domains, roles,
+  suite and consensus/governance choices, initial logical state descriptors, proposed numeric
+  limits, optional features, and stage-gate applicability—explicitly excluding all derived IDs.
+- **Gate:** independent encoding and closure expansion produce one scope digest; every field owner is
+  named; no `genesis_id`, `profile_id`, candidate-selected authority, missing operation, or unknown
+  optional feature can enter the preimage.
+- **Non-claim:** a scope digest does not validate its proposed limits, derive genesis, implement its
+  features, or admit a network profile.
+
+### `GENESIS-D1` — reproducible non-self-referential genesis configuration
+
+- **Status:** **LOCKED**.
+- **Depends on:** `PROFILE-SCOPE-D0`, `BOUNDS-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
+- **Motive:** freeze every initial logical state and authority byte before deriving the identifier
+  that later signatures, roots, and profiles bind.
+- **Artifact:** canonical genesis payload containing the scope digest, validated limits, chain/world
+  namespace, initial world/episode/asset descriptors, authorization descriptors, parameter and
+  governance state, validator configuration, suites, and bootstrap/availability policy; it excludes
+  its derived `genesis_id` and any self-derived profile identifier.
+- **Gate:** independent reconstruction produces one payload; every initial execution component is
+  explicit; mutation/omission/duplicate/self-reference tests reject; root implementations later
+  rebuild the same logical genesis state.
+- **Non-claim:** reproducible bytes do not prove trusted distribution, fair allocation, usable keys,
+  available archives, or consensus safety.
+
+### `PROFILE-D1` — ID-bound candidate activated-feature manifest
 
 - **Status:** **LOCKED** for the first network-profile draft.
-- **Depends on:** `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`, and the manifest schema; it names rather
-  than implements optional features.
+- **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`; it names rather than
+  implements optional features.
 - **Motive:** give programs, migrations, economics, and other optional features one immutable target
   without pretending their implementation has already passed.
-- **Artifact:** versioned canonical candidate manifest of activated schemas, roles, optional
-  capability nodes, parameters, roots, limits, suites, genesis/profile identifiers, and the
-  transitive prerequisite set required for each activation.
-- **Gate:** independent codec/parser parity, no unknown or duplicate activation, canonical ordering,
-  and deterministic closure expansion. Missing implementation evidence is reported but does not
-  make drafting circular.
+- **Artifact:** versioned canonical candidate manifest binding the pre-ID scope digest, derived
+  `genesis_id`, activated schemas/roles/capability nodes, validated parameters/roots/limits/suites,
+  transitive prerequisites, and a stage-by-gate matrix. Candidate bytes exclude their own
+  `profile_id`; that identifier is derived afterward from a domain-separated digest.
+- **Gate:** independent codec/parser parity, non-circular identifier graph, no unknown/duplicate
+  activation, canonical ordering, deterministic closure expansion, and exactly one
+  required/conditional/excluded-with-reason entry for each G0–G19 stage. Missing implementation
+  evidence is reported but does not make drafting circular.
 - **Non-claim:** a frozen candidate manifest is not an admitted profile and does not implement or
   approve any feature it names.
+
+### `GOVERNANCE-1` — implemented governance and emergency transitions
+
+- **Status:** **LOCKED**.
+- **Depends on:** `GOVERNANCE-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
+  `TRANSITION-SPEC-D1`, `CODEC-1`, `BOUNDS-1`.
+- **Motive:** turn pre-genesis authority bytes into deterministic, authenticated state transitions
+  instead of operator convention.
+- **Artifact:** governance and emergency transactions/system transitions, canonical receipts,
+  parameter/governance-root updates, timelocks, conflict/expiry rules, safe-halt and restart paths.
+- **Gate:** unauthorized, replayed, conflicting, rushed, censored, stale-set, compromised-key,
+  rollback, emergency-overreach, and restart vectors match the frozen schema and preserve history,
+  supply, and root invariants.
+- **Non-claim:** correct governance execution does not make decisions wise, decentralized, fair, or
+  immune to capture.
+
+### `UPGRADE-FRAMEWORK-1` — version lifecycle and migration verifier
+
+- **Status:** **LOCKED** for the first network profile.
+- **Depends on:** `PROTOCOL-ID-1`, `CODEC-1`, `COMMIT-1`, `EXECUTOR-1`, `CRYPTO-1`, `GOVERNANCE-1`,
+  `PROFILE-D1`.
+- **Motive:** make genesis activation and later migration distinct while every profile still has an
+  explicit version-lifecycle policy.
+- **Artifact:** either an immutable-version policy requiring a new genesis/chain for change, or an
+  in-place-upgrade framework with activation authority, old/new profile roles, bounded migration
+  interface, downgrade rule, historical verifier, interruption/restart, rollback/safe-halt policy.
+- **Gate:** genesis rejects fabricated old-profile inputs; the no-upgrade policy rejects changed
+  versions as a different chain; the migration framework refuses a target without an admitted old
+  profile and new candidate, and powered version/downgrade/history mutants fail.
+- **Non-claim:** a framework does not prove any concrete migration or authorize an upgrade.
 
 ### `UPGRADE-1` — deterministic version migration
 
 - **Status:** **LOCKED**.
-- **Depends on:** `PROTOCOL-ID-1`, `CODEC-1`, `COMMIT-1`, base `EXECUTOR-1`, `CRYPTO-1`,
-  `GOVERNANCE-D1`, and the old/new `PROFILE-D1` candidate manifests.
+- **Depends on:** `UPGRADE-FRAMEWORK-1`, `PROFILE-1` admission procedure and an already admitted old
+  profile instance, the new `PROFILE-D1` candidate, `EXECUTOR-1`, `GOVERNANCE-1`.
 - **Motive:** prevent a codec, hash, VM, or state-layout upgrade from silently rewriting authority,
   supply, bedrock, ownership, or historical verification.
-- **Artifact:** frozen migration specification, activation authority/timelock, deterministic
+- **Artifact:** `UPGRADE-1@old-profile-id->new-candidate-id`, a frozen migration specification,
+  activation authority/timelock, deterministic
   bounded migration function, old/new roots over one logical state, dual-profile window if any,
   downgrade rejection, rollback/safe-halt rule, archival historical verifier, and an independent
   migration extension implemented after the migration specification is frozen.
@@ -735,16 +926,17 @@ and the asset branch does not require visual programming.
 ### `PROFILE-1` — admitted activated-feature closure
 
 - **Status:** **LOCKED** for the first testnet profile.
-- **Depends on:** `PROFILE-D1` and every exact-version capability node named by its expanded
-  prerequisite set, including `UPGRADE-1` for a migration profile and `PROGRAM-CONSENSUS`,
-  `ASSET-1`, `RESOURCE-1`, or `VALIDATOR-ECON-1` only when activated.
+- **Depends on:** `PROFILE-D1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`, and every exact-version capability
+  node named by its expanded prerequisite set, including `PROGRAM-CONSENSUS`, `ASSET-1`,
+  `RESOURCE-1`, `VALIDATOR-ECON-1`, `GOVERNANCE-1`, or `EXECUTION-ROOT-1` when activated.
 - **Motive:** prevent a testnet or release from inheriting gates for the base profile while quietly
   activating an optional surface whose evidence is missing.
 - **Artifact:** immutable admitted-manifest digest plus a machine-readable mapping from every
   activated node/version to its artifact, commit, result, assumptions, and loss condition.
-- **Gate:** the closure walker rejects every missing, wrong-version, non-passing, stale, or mutually
-  incompatible prerequisite; `TESTNET-1`, releases, and coverage matrices bind this exact admitted
-  digest.
+- **Gate:** the closure walker rejects every missing, unknown, wrong-version, non-passing, stale, or
+  mutually incompatible prerequisite and every unjustified gate exclusion. A migration admission
+  additionally consumes the concrete `UPGRADE-1@old->new` evidence after verifying its old-profile
+  polarity; `TESTNET-1`, releases, and coverage matrices bind the exact admitted digest.
 - **Non-claim:** profile admission does not prove properties outside the activated closure or make
   its assumptions universally true.
 
@@ -763,8 +955,10 @@ and the asset branch does not require visual programming.
 
 ### `RELEASE-1` — reviewed source to shipped binary
 
-- **Status:** **READY to establish; required before adversarial testnet claims inherit review**.
-- **Depends on:** pinned Rust/tool/proof dependencies and activated build profiles.
+- **Status:** **READY@framework** for current builds; **LOCKED@profile** until its exact
+  `PROFILE-D1` candidate exists.
+- **Depends on:** `PROFILE-D1` for a profile-bound release; the reusable framework has only external
+  pinned Rust/tool/proof dependency inputs.
 - **Motive:** stop an unreviewed compiler, dependency, feature set, binary, or genesis configuration
   from inheriting source-level evidence.
 - **Artifact:** dependency lock/policy, pinned toolchain, reproducible independent builds, SBOM or
@@ -799,7 +993,7 @@ single checkpoint:
 1. **Semantic trunk:** `ACCOUNT-1` is the first implementation prerequisite shared by the ledger,
    multiplayer, and programming branches.
 2. **Research without authority:** `COMMIT-R1`, `REFINE-1`, `LANGUAGE-R1`, `SCALE-1`, `COST-1`,
-   `CODEC-1`, and `HASH-SOURCE-R1` can produce comparisons and vectors without
+   `CODEC-1`, `THREAT-D0`, and `HASH-SOURCE-R1` can produce comparisons and vectors without
    changing the live state representation.
 3. **Visual decision:** the exact one-pixel-startup choice remains independent and can be handled as
    a small observer checkpoint, provided its source, vectors, and docs change together.
@@ -809,21 +1003,29 @@ one change. The strongest next trunk sequence is:
 
 ```text
 ACCOUNT-1
+  -> LOCAL-BOUNDS-1
   -> STORAGE-1
   -> LEDGER-1
+  -> TRANSITION-SPEC-D1
   -> select COMMIT-R1 result
   -> COMMIT-1
-  -> IDENTITY-D1
+  -> pre-genesis design closure
+  -> PROFILE-SCOPE-D0
+  -> THREAT-1 + BOUNDS-1
+  -> GENESIS-D1
   -> PROTOCOL-ID-1
+  -> PROFILE-D1
   -> IDENTITY-1
   -> AUTH-COMMIT-1
+  -> EXECUTOR-1 + EXECUTION-ROOT-1
   -> MULTI-1
   -> SEQUENCER-1
 ```
 
-`CODEC-1`, `CRYPTO-D1`, `CRYPTO-1`, `COST-1`, and `BOUNDS-1` join the trunk at their named
-prerequisites; they are omitted from the linear display only to keep the main semantic sequence
-readable.
+This sequence is deliberately non-normative shorthand. `IDENTITY-D1`, `CONSENSUS-D1`,
+`GOVERNANCE-D1`, `THREAT-D0`, `CODEC-1`, `CRYPTO-D1`, `CRYPTO-1`, `COST-1`, `BOUNDS-1`,
+`EXECUTOR-1`, and conditional branches join only at their exact `Depends on` fields. Run the
+retained checker rather than inferring an omitted edge from this display.
 
 At that point Bitblock could be truthfully described as an authenticated, accountable multiplayer
 ledger under a centralized ordering boundary. Consensus, currency, and Layer 1 would still remain
@@ -841,6 +1043,11 @@ When a checkpoint changes a node:
 6. retain rejected alternatives and failed controls in the owning design/audit document;
 7. update [`HANDOFF.md`](HANDOFF.md) and any changed current semantics in
    [`SEMANTICS.md`](SEMANTICS.md).
+
+Run `python -B tools/check_planning_docs.py --self-test` after every tree edit. It checks all
+foundation and detailed nodes, required fields, undefined dependencies, the full conservative DAG,
+links/fences/tables in the planning set, and powered in-memory mutations for missing fields,
+undefined nodes, duplicate nodes, and cycles. The compact diagram remains explanatory only.
 
 A branch can unlock knowledge without unlocking authority. That distinction is the central rule of
 this tree.

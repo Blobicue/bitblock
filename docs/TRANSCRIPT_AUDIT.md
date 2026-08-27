@@ -5,6 +5,12 @@ checkpoint. It was reconstructed from the user/assistant transcript and reconcil
 source tree on the progress branch. It is not a claim that every historical command was rerun
 while writing this file.
 
+Implemented/source claims were reconciled to source/proof snapshot
+`6545d8e7d60e75607445fda564bbf11610a62658`; source/proof/tool files remained unchanged through
+planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronology is checked through
+that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). Changes to
+named source/proof files or this chronology stale the corresponding statements.
+
 The words below have deliberately narrow meanings:
 
 - **Implemented** means the behavior or surface exists in the current source tree.
@@ -18,15 +24,17 @@ The words below have deliberately narrow meanings:
 
 When memories disagree, use this order:
 
-1. The current Rust implementation and its explicit tests/vectors.
-2. The Lean/LadderLang capsules and their declared scope.
-3. `SEMANTICS.md`, `PROTOCOL.md`, the README, metrics, and display documents for current contracts.
+1. The current Rust implementation and its explicit tests/vectors for implemented behavior.
+2. The Lean/LadderLang capsules for only their declared proof/model scope.
+3. `SEMANTICS.md` for current state meaning and `PROTOCOL.md` for implemented canonical-byte and
+   research-carrier contracts.
 4. `PROJECT_INTENT.md` for the motive chain and `CAPABILITY_TREE.md` for future dependency/status
    planning; neither overrides current behavior.
 5. The Layer 1 paper for proposed protocol design and its pinned audit for the finite review result.
-6. This transcript audit for chronology, original intent, rejected interpretations, and unresolved
+6. README, metrics, display documents, and `HANDOFF.md` as summaries owned by the authorities above.
+7. This transcript audit for chronology, original intent, rejected interpretations, and unresolved
    questions.
-7. A visual or verbal recollection that has no artifact is an observation to investigate, not a
+8. A visual or verbal recollection that has no artifact is an observation to investigate, not a
    world-state fact.
 
 ## Conversation checkpoints reconciled with the repository
@@ -318,6 +326,17 @@ Current truth: `PROJECT_INTENT.md` now owns the motive chain;
 gate, and non-claim; `AUTHENTICATED_STATE_PLAN.md` owns the MPT/SMT research checkpoint. This is a
 **documentation checkpoint**. It changes no Rust simulation, storage, proof, networking, identity,
 asset, or consensus behavior.
+
+### 24. “Find more gaps once, then fix them once”
+
+User intent: make one complete read-only pass over the newly recorded future plan, freeze its
+findings, and apply one coordinated correction instead of alternating between audit and edits.
+
+Current truth: [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md) pins input `1624068`, records the
+three independent audit lenses plus the local cross-document pass, freezes 18 material findings,
+and maps every finding to this single documentation/tooling sweep. The corrections add no runtime
+trie, ledger, network, identity, asset, VM, consensus, or Layer 1 implementation. This remains a
+**finite planning audit**, not proof that no further gap exists.
 
 ## Semantic lessons that should survive future checkpoints
 

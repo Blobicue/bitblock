@@ -9,6 +9,13 @@ The corresponding capability nodes are `COMMIT-R1` and `COMMIT-1` in
 [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md). The wider root hierarchy and proof meanings are in
 §5 of [`LAYER1_DESIGN_PAPER.md`](LAYER1_DESIGN_PAPER.md).
 
+The current-source statements below were checked against source/proof snapshot
+`6545d8e7d60e75607445fda564bbf11610a62658`, specifically `src/world.rs`, `src/history.rs`,
+`src/protocol.rs`, and the named proof/tool artifacts. The planning audit input is
+`162406819133c1fd57d0fd26cbe5fa0b495766b8`; post-input corrections are mapped in
+[`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). A change to a named source file, root/key contract,
+or this plan invalidates the corresponding statement rather than inheriting its “checked” status.
+
 ## Outcome sought
 
 Bitblock needs a way to answer questions such as:
@@ -148,6 +155,43 @@ Spatial locality is not the first key objective. Plain `x || y || z` supports ca
 queries but may give poor viewport/range locality. A later chunk/Morton profile or multiproof
 strategy can be evaluated without making renderer caches consensus state.
 
+Bit traversal is also part of the key codec, not an implementation choice. For every depth
+`d in 0..191`:
+
+```text
+KeyBit(key, d) = (key[floor(d / 8)] >> (7 - (d mod 8))) AND 1
+```
+
+Depth zero therefore consumes the most-significant bit of the first biased `x` byte; traversal then
+continues MSB-first through `x`, `y`, and `z`. Bit `0` selects the left child and bit `1` the right.
+Patricia packed paths use this order. Sparse-tree bitmap bit `d` names the sibling at depth `d`,
+with bits packed MSB-first inside each bitmap byte; included sibling hashes are serialized in
+increasing `d` order, root to leaf. Reversing byte, bit, axis, child, bitmap, or sibling order must
+change or reject the vector rather than silently describe a second tree.
+
+## Common node-hash contract
+
+Both candidates use one profile-fixed `NodeHash` framing. R0 still selects the concrete hash suite
+and canonical byte codec, but the preimage structure is not optional:
+
+```text
+NodeHash(node_type, consumed_bit_depth, payload) =
+    H(Canonical(
+        commitment_profile_id,
+        tree_domain,
+        hash_suite_id,
+        node_codec_version,
+        node_type,
+        consumed_bit_depth,
+        LengthFrame(payload)
+    ))
+```
+
+The commitment-profile definition fixes the hash suite, all tags, codecs, key width, and value
+type. Ordered children remain ordered inside `payload`. Database metadata, compression, reference
+counts, cache hints, and storage offsets remain outside the authoritative preimage. A node cannot
+be transplanted across profile, domain, type, codec, or depth without changing the hash.
+
 ## Candidate A — fixed-key binary Merkle Patricia trie
 
 This is a constrained custom binary Patricia design over exactly 192 key bits. It deliberately
@@ -166,10 +210,12 @@ Branch(left_hash, right_hash)
 Canonical normalization must make the logical map-to-root function unique:
 
 - every key consumes exactly 192 bits;
-- a leaf stores the complete unconsumed suffix and one canonical typed value;
+- a leaf at depth `d` stores exactly `192 - d` unconsumed bits and one canonical typed value;
 - an extension path is non-empty and points to a branch;
 - adjacent extensions are merged;
 - a branch has two non-empty logical children;
+- insertion of two divergent keys uses their unique longest common remaining prefix, one branch at
+  the first differing bit, and canonically normalized children; no shorter or longer split is valid;
 - deletion of one branch child prepends the surviving direction bit to the survivor: a leaf becomes
   `Leaf(bit || suffix, value)`, an extension becomes
   `Extension(bit || prefix, child_hash)`, and a surviving branch becomes
@@ -181,20 +227,9 @@ Canonical normalization must make the logical map-to-root function unique:
 - the empty map has one domain- and profile-specific root;
 - stored-false/tombstone leaves and duplicate logical keys are rejected.
 
-Node hashes must bind at least:
-
-```text
-commitment_profile_id
-tree_domain
-node_codec_version
-node_type
-consumed_bit_depth
-canonical node payload
-```
-
-Depth and tree-domain binding prevent a valid node from being transplanted to a different level or
-logical map. Database metadata, compression, reference counts, cache hints, and storage offsets
-must remain outside the authoritative node preimage.
+Every Patricia `Empty`, `Leaf`, `Extension`, and `Branch` hash uses the common `NodeHash` contract.
+The payload includes the exact packed-path bit length where applicable; unused packed bits are zero
+and rejected otherwise. `Empty` is valid only as the whole empty map, never as a branch child.
 
 Expected advantage: path compression can make point witnesses shorter when long key prefixes have
 no authenticated branch. Expected cost: insertion and especially deletion normalization become
@@ -216,6 +251,23 @@ Domain-specific default hashes are precomputed for every depth. A raw point witn
 sibling per level. Its wire form can omit default siblings using a fixed 192-bit bitmap followed by
 the non-default hashes in depth order. Batch queries should use a canonical multiproof rather than
 repeating shared paths.
+
+The sparse-tree recurrence to instantiate in R0 is structurally fixed as follows, where
+`CanonicalValue(v)` is length-framed by the common contract and `d` is the branch depth:
+
+```text
+PresentLeaf(v) = NodeHash(SmtPresentLeaf, 192, CanonicalValue(v))
+D[192]         = NodeHash(SmtEmptyLeaf,   192, EmptyPayload)
+Branch(d,l,r)  = NodeHash(SmtBranch,        d, l || r)
+D[d]           = Branch(d, D[d+1], D[d+1])  for d = 191 down to 0
+EmptyRoot      = D[0]
+```
+
+A present leaf is never an empty leaf, even when its value bytes are empty under some later value
+type. Explicitly carrying a default sibling when its bitmap bit says omitted, omitting a
+non-default sibling, swapping children, using the wrong depth, or using a default from another
+profile/domain is noncanonical and rejects. Golden vectors must cover both default-only and
+non-default present-leaf/branch paths, not only the empty root.
 
 Expected advantage: update work, absence semantics, proof parsing, deletion, and formal refinement
 have a fixed shape. Expected cost: 192 logical hash levels per update and potentially larger point
@@ -241,10 +293,19 @@ ExpectedProofContextV1 {
     ResearchLimitsV1
 }
 
-query_key and canonical key
-claimed presence/value or claimed absence
-bounded proof payload
+VerifyLookup(expected_context, logical_query_key, bounded_proof_payload)
+    -> Absent | Present(canonical_typed_value)
+
+VerifyClaim(expected_context, logical_query_key,
+            Absent | Present(expected_typed_value), bounded_proof_payload)
+    -> verified | rejected
 ```
+
+There is exactly one query-key input. The typed entry point canonically encodes
+`logical_query_key` with the caller-selected key codec; a byte-level entry point instead accepts
+exactly those canonical key bytes. A carrier cannot supply an independent “logical” key and
+“canonical” key. `VerifyClaim` compares the verified lookup result to the caller-selected expected
+absence/value; proof bytes do not choose what proposition the caller believes was proved.
 
 If the carrier repeats a profile, domain, root type, root, or codec identifier, it must exactly
 match the caller's expected value; the carrier cannot negotiate or downgrade it. The verifier must
@@ -307,11 +368,38 @@ domain(active_token_map) = mutable_occupied_coordinates
 That equality and the live-episode bijection must be enforced by genesis, one atomic transition
 function, full-rebuild checks, and refinement/conservation evidence.
 
+For every transition and recovery, an independent projection rebuild must additionally establish
+that `ActiveTokenRootV1` has exactly the mutable occupied coordinates as keys, that each value is
+the ledger head's exact live `MintIdV1`, and that every retained `EpisodeRecordV1` agrees with the
+ledger's live/consumed status and burn provenance. All compared projections must name the same
+committed ledger head and `CommitmentSetV1`; separately valid roots from different heads do not pass.
+
 ## Persistence, forks, and garbage collection
 
 Both candidates should use immutable content-addressed nodes and path-copy updates. A candidate
 branch is represented by its root; switching branches switches roots rather than applying an
 untrusted sequence of inverse edits.
+
+The crash-consistent commit unit is a small immutable manifest rather than an impossible atomic
+write of every reachable node:
+
+```text
+CommitmentSetV1 {
+    schema_version,
+    ledger_head_id,
+    transition_or_height,
+    ordered (root_type, commitment_profile_id, root_bytes) entries,
+    required_domain_set,
+    prior_commitment_set_id
+}
+```
+
+Writers durably stage content-addressed nodes first, verify complete reachability for every root,
+durably write and reread the canonical manifest, and only then advance one checksummed recoverable
+head pointer to its identifier. Recovery accepts exactly the previous complete set or the next
+complete set—never an old ledger head with new roots, roots from different transitions, or a head
+whose reachable closure is missing. The exact fsync/rename/journal mechanism belongs to
+`STORAGE-1`, but this tuple invariant does not.
 
 Node storage should be keyed by at least `(commitment_profile_id, tree_domain, node_hash)`. Hash
 alone is not enough across tree types or cryptographic migrations. Every node read must decode
@@ -324,12 +412,21 @@ Garbage collection is outside the logical root but inside operational safety:
   required by the activated policy;
 - mark reachable nodes from one authenticated pin-set snapshot/epoch, or forbid pin changes for the
   complete mark/sweep operation;
+- protect nodes staged by a concurrent writer with a writer/GC barrier, provisional staging pin, or
+  generation rule under which sweep cannot reclaim the writer's generation before publication;
 - treat crash-sensitive reference counts as an optimization, not the only reachability authority;
 - assay crash points before and after node staging, root-pin publication, and ledger/root-head
   publication; harmless unreferenced nodes may survive a crash, but a published root may never lack
   one of its reachable nodes;
 - make GC bounded and resumable, and reclaim nothing when a complete verified mark cannot finish;
 - retain enough old-profile nodes to verify historical blocks under the upgrade policy.
+
+Logical pruning and physical garbage collection are different transitions. Removing an episode
+record from the logical retained set changes `EpisodeRootV1` and must be a canonical, authorized,
+receipted transition under the activated retention policy. GC may remove only unreachable physical
+node bodies; it must not change any logical root. Releasing an archival duty additionally requires
+the declared availability/retention handoff—it is not licensed merely because a local root was
+unpinned.
 
 Repeated place/delete cycles can create unbounded historical nodes even when live occupancy returns
 to the same root. Trie compression does not solve history growth, witness retention, archival duty,
@@ -341,8 +438,9 @@ No step below changes the live authority path.
 
 ### R0 — freeze common logical inputs
 
-Specify `CoordinateKeyV1`, typed values, tree domains, commitment profile identifiers, canonical
-hash framing, empty roots, `ResearchLimitsV1`, and duplicate-key rejection. Freeze one common
+Specify `CoordinateKeyV1`, the exact MSB-first traversal/bitmap/sibling order, typed values, tree
+domains, commitment profile identifiers, the common node-hash framing, the complete SMT default
+recurrence, empty roots, `ResearchLimitsV1`, and duplicate-key rejection. Freeze one common
 logical node-store envelope, durability mode, cache-cold/cache-warm protocol, build profile,
 toolchain, corpus and operation order, allocation instrument, and method for reporting input-sort
 cost separately. Use the same hash suite and logical maps for both candidates so the experiment
@@ -365,7 +463,8 @@ for the same occupied set.
 
 Generate and independently verify membership and non-membership witnesses. Include empty maps in
 generic tests, bedrock-only valid worlds, signed extrema, deep shared prefixes, maximally divergent
-keys, malformed packing, redundant nodes, wrong domains, and over-limit proofs.
+keys, reversal-sensitive bit/axis/child/bitmap/sibling vectors, non-default SMT branches, malformed
+packing, redundant nodes, wrong domains/depths/profiles, and over-limit proofs.
 
 **Stop if:** any alternate encoding verifies, any unused proof material is accepted, or absence can
 be claimed without an authenticated terminal condition.
@@ -391,10 +490,11 @@ noncanonical deletion shape.
 
 Measure canonical multiproofs for clustered and dispersed coordinates. Exercise sibling forks,
 root switching, restart, partial writes, pinning, mark-and-sweep, and old-root verification after
-new writes.
+new writes. Exercise the exact concurrent schedule `stage -> mark -> sweep -> publish`, restart at
+every boundary, and mixed old/new ledger/root/manifest tuples.
 
-**Stop if:** reclaiming one branch can invalidate a pinned root, restart can publish a ledger head
-without its root nodes, or proof validity depends on mutable cache metadata.
+**Stop if:** reclaiming one branch can invalidate a pinned or provisionally staged root, restart can
+publish any incomplete or mixed commitment set, or proof validity depends on mutable cache metadata.
 
 ### R5 — independent parity and decision
 
@@ -434,8 +534,9 @@ After `LEDGER-1` and the research decision pass:
 3. add incremental sidecar updates behind a research feature;
 4. after every generated transition, assert incremental/full-rebuild parity in tests and bounded
    debug/research modes;
-5. publish the ledger head, `WorldRootV1`, `ActiveTokenRootV1`, `EpisodeRootV1`, and every required
-   reachable node atomically; each non-world root must already have passed its own domain profile;
+5. durably stage and verify every required reachable node, write and reread one
+   `CommitmentSetV1`, then atomically/recoverably advance its small head pointer; each non-world root
+   must already have passed its own codec, numeric-limit, and domain profile;
 6. provide a decoder/verifier that accepts supplied carriers rather than trusting the producer;
 7. only then allow receipts or later proposal headers to reference the new root type;
 8. keep legacy `world_tag` versioned for historical receipt verification until an explicit

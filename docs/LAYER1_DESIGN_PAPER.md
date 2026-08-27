@@ -1,5 +1,12 @@
 # Bitblock: From Binary Occupancy to a Verifiable Layer 1
 
+The checkpoint-0.3 audit remains pinned to paper commit `034b7b2b5f129625f9c6dcec3e14038b7c4aee5f`.
+Two post-checkpoint corrections—conditional bedrock economics and scheduling-authority
+cross-links—were made after frozen planning input
+`162406819133c1fd57d0fd26cbe5fa0b495766b8` and are scoped in
+[`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). They are not a silent claim that the whole paper was
+re-audited.
+
 **Design paper — checkpoint 0.3 — 2026-08-26**
 
 This paper makes the Bitblock idea explicit as a protocol design. It starts from the
@@ -184,8 +191,11 @@ genesis_package = (genesis_payload, genesis_id)
 contains exactly one `world_id`; a future multi-world version would replace the single world
 with a committed `worlds_root`. Initially `support(B_0) = {o}`, `M_0` and `E_0` are empty, and every
 allocation, authority, parameter, validator, and governance record is explicit. The package MUST be
-immutable and reproducible. Origin bedrock is an application invariant, not an initial coin
-allocation, observer property, or validator trust anchor.
+immutable and reproducible. For this paper's provisional non-economic first-profile sketch, origin
+bedrock is an application invariant rather than an occupancy-episode token, observer property, or
+validator trust anchor. That is not a final asset ruling: `ASSET-D1` may instead define a separate
+permanently locked genesis allocation outside mutable occupancy episodes, and the selected genesis
+profile must make the choice explicit.
 
 The authoritative execution transition is a pure function:
 
@@ -1329,7 +1339,13 @@ the same atomic accounting rules as an ordinary burn or transfer.
 ## 11. Layered implementation plan
 
 The following checkpoints preserve the current cheap Rust core and add one security surface
-at a time.
+at a time. They are conceptual security milestones, not the current scheduling authority. Exact
+dependencies and status live only in [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md): checkpoint A maps
+primarily to `ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, and `LEDGER-1`; B to
+`TRANSITION-SPEC-D1`, identity/authorization, `EXECUTOR-1`, and `MULTI-1`; C to the commitment,
+execution-root, sequencer, and synchronization nodes; D to the consensus/profile/testnet nodes; E
+to `L1-CANDIDATE`; and F to `L1-PRODUCTION`. A later tree correction therefore does not require
+silently rewriting this historical milestone summary.
 
 ### Checkpoint A — local occupancy ledger
 
@@ -1341,7 +1357,8 @@ Required properties:
 
 - one live mint record per mutable occupied coordinate;
 - one consuming burn record per deletion;
-- no token for bedrock;
+- no mutable occupancy-episode token for bedrock; any separate locked genesis allocation remains an
+  explicit `ASSET-D1` choice;
 - fresh token identity after re-placement;
 - explicit no-op/rejection records and a reconciled submitted/admitted/executed/result lane;
 - exact active-map correspondence, injective token identities, and parent-root checks;

@@ -57,7 +57,7 @@ tests. This audit does not promote prose into implementation evidence.
 | F-09 | State, execution, finality, and availability proofs were not separated by type. | A valid world digest is not a membership witness or a finality certificate. | Paper §5 | Patched in paper |
 | F-10 | Future visual programs and randomness had no explicit authority boundary. | Executable blocks, random choices, and renderer inputs can become consensus inputs accidentally. | Paper §4.6 and §9 | Patched in paper |
 | F-11 | Block-level resource limits, state growth, fee accounting, and asset-domain separation were thin. | Infinite-coordinate intent creates allocation, history, and spam risks even without monetary value. | Paper §4.1 and §10 | Patched in paper |
-| F-12 | Release and dependency substitution were not part of the security model. | A proof about reviewed source does not cover a different compiler, dependency, or binary. | Paper §9 and Gate G14 | Patched in paper |
+| F-12 | Release and dependency substitution were not part of the security model. | A proof about reviewed source does not cover a different compiler, dependency, or binary. | Paper §9 and Gate G16 | Patched in paper; gate pointer corrected after the pinned loop |
 | F-13 | Finality, validator-set changes, censorship, MEV/order manipulation, and long-range attacks were not explicit enough. | A proposer can reorder or withhold without forging a user signature; validator changes can invalidate old assumptions. | Paper §6 and §7 | Patched in paper |
 | F-14 | Key custody and Sybil identity limits were listed but not treated as an operational lifecycle. | Public-key control is not human uniqueness, and lost/compromised keys need protocol behavior. | Paper §3 and §7 | Patched in paper |
 | F-15 | The paper did not explicitly carry forward the repository's current open obligations. | Future agents could mistake a complete architecture map for completed Layer 1 evidence. | Paper §14 | Patched in paper |
@@ -168,3 +168,9 @@ pinned source snapshot, the branch remains a deterministic local Bitblock world 
 provenance/proof surfaces. The three audit lenses and their refreshes found no remaining
 material paper contradiction after the listed patches, but that finite result is not proof
 that the inventory is complete.
+
+The table's original F-12 row incorrectly named G14; G16 is the reproducible-release gate. The
+post-checkpoint bedrock qualification and this pointer correction were found against planning input
+`162406819133c1fd57d0fd26cbe5fa0b495766b8` and are mapped in
+[`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). This erratum does not change the historical claim
+scope or pretend that checkpoint 0.3 received a third complete paper audit.
