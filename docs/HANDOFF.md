@@ -54,6 +54,17 @@ semantic history.
   detached release authorization, structured dependency/status metadata, and historical-audit
   provenance only at the documentation/checker level. It must not be mistaken for runtime, proof,
   cryptographic, consensus, or Layer 1 validation.
+- `1821f37d1f042115a4ffb3bd50292885e581d812` is the coordinated correction for PG-01 through
+  PG-08. Its Git tree is `9b8c08b10c611dd62ac8dbd7b4e46d1b0a02bf90`. It remains proposed-protocol,
+  planning, checker, and checkout-policy work; no runtime or Layer 1 capability was activated.
+- `80b58e0a40408e03f16e2d0c739c177e05c22903` is the first-addition commit for
+  `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`. It freezes the complete successor sweep over
+  `1821f37`/tree `9b8c08b`, four material findings, and audit blob
+  `5374b160424b78bd516ffc598e9bbd3b29392227`. The coordinated RG-01 through RG-04 correction
+  separates unique accepted proposal identity from plural evidence, makes failure of the frozen
+  protocol identity hash terminal, types the sole external launch-genesis root, and checks every
+  phase-status prose projection. It remains documentation/checker work, not implementation or
+  security validation.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md` predates the design distillation. Its 16-finding closure and
   validation boundary do not audit `694650f` or the later correction.
 - `2a9e667` is the exact clean input to the second audit/fix loop. Its result is the first
@@ -99,18 +110,19 @@ Read in this order:
 7. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md` (frozen eight-gap third successor audit)
 8. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md` (frozen eight-gap fourth successor audit)
 9. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md` (frozen eight-gap fifth successor audit)
-10. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (second future-plan audit/fix map and Verkle disposition)
-11. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
-12. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-13. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-14. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
-15. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
-16. `docs/LAYER1_DESIGN_AUDIT.md` (canonical corrected checkpoint-0.3 reading copy; not a later review)
-17. `README.md` (controls, commands, and feature boundaries)
-18. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
-19. `docs/TIMELINES.md` (actual CI trigger and command contract)
+10. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md` (frozen four-gap sixth successor audit)
+11. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (second future-plan audit/fix map and Verkle disposition)
+12. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
+13. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+14. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+15. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
+16. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
+17. `docs/LAYER1_DESIGN_AUDIT.md` (canonical corrected checkpoint-0.3 reading copy; not a later review)
+18. `README.md` (controls, commands, and feature boundaries)
+19. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
+20. `docs/TIMELINES.md` (actual CI trigger and command contract)
 
-## Current proposed design delta after the fifth audit
+## Current proposed design delta after the sixth audit
 
 - Successor migration is closed at the carrier level by old-envelope, availability-covered
   `SuccessorActivationCarrierV1`. Its embedded branch carries `SuccessorActivationBundleV1` and
@@ -128,9 +140,31 @@ Read in this order:
   phase-specific edges, and every normative secondary readiness/lock/open state is a structured
   phase-status tuple rather than an unguarded prose suffix. `SUCCESSOR-ACTIVATION-1` is the explicit
   owner and remains `LOCKED`.
+- An accepted-parent lookup resolves one unique byte-exact `AcceptedProposalCoreV1`, not one
+  evidence-bearing wrapper. Typed `VerifiedAcceptedEvidenceEntryV1` values live in a sorted,
+  deduplicated `AcceptedEvidenceSetV1` and may have multiple qualifying members.
+  `ParentAuthorityEligibilityV1` is admitted-profile-owned, purpose-specific, and monotone, so
+  additional qualifying evidence cannot make an already eligible core ineligible. It returns a
+  semantic `VerifiedEligibleAcceptedParentRefV1` for one canonical, purpose-tagged
+  `AcceptedParentAuthorityRefV1`. Release and successor-activation sign documents carry that as
+  `predecessor_accepted_parent_authority_ref`; distinct-core lookup collisions still reject.
+- `ProfileOwnedCryptographicMigrationV1` can replace only admitted profile-owned suites.
+  `ProtocolIdentityHashCompromiseV1`—collision, practical second-preimage failure, or equivalent
+  loss of identity binding in `ProfileIdHashV1`—is instead a terminal safe-halt/new-genesis
+  boundary; an in-place successor identified through that failed function cannot repair it.
+- `LaunchClosureBundleV1` has exactly one `LaunchClosureExternalGenesisRootV1` for the already
+  outer-carried `GenesisPackageV1`, fixed at rank 0 and count 1 with required byte equality. Typed
+  `LaunchClosureDependencyRefV1` values separate internal from classified external-genesis edges;
+  any duplicated genesis bytes or additional external root rejects.
+- Each node-prose status field is the exact manifest-order token list
+  `PS-NNN:NODE@phase=STATUS`; every token must equal one authoritative phase-status tuple. Missing,
+  duplicate, unknown, reordered, or promoted/demoted projections fail the planning checker without
+  making prose itself authoritative.
 
-These are specification and checker changes only. No successor migration, release authority,
-network intake, authenticated state, cryptographic suite, or Layer 1 execution exists in Rust.
+These are specification and checker changes only. No accepted-core/evidence index, parent-
+eligibility evaluator, protocol-identity safe halt, new-genesis recovery, external-root verifier,
+successor migration, release authority, network intake, authenticated state, proposed network
+cryptographic suite, or Layer 1 execution exists in Rust.
 
 ## What is implemented
 
@@ -196,6 +230,9 @@ self-verified. Neither path produces physical display evidence.
 - `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`: frozen `2cb1cc0`/tree `60e9714` input, eight
   finite findings, challenged candidates, one-sweep correction boundary, and the same finite-lens
   zero-new-gap convergence rule.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`: frozen `1821f37`/tree `9b8c08b` input, four
+  finite findings, challenged candidates, one-sweep correction boundary, and the same finite-lens
+  zero-new-gap convergence rule.
 - `docs/LAYER1_DESIGN_AUDIT.md`: canonical corrected checkpoint-0.3 reading copy, frozen at current
   blob `124e066b418a61279abf90c1b1b2c2cc0604ef2a` from the fifth-successor correction onward; Git
   history retains the distinct original result blob.
@@ -207,15 +244,18 @@ self-verified. Neither path produces physical display evidence.
 - `docs/FUTURE_PLAN_AUDIT.md`: the finite audit/fix map for planning input `1624068`.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md`: the second finite audit/fix map for input `2a9e667`, including
   the authenticated-state, activation-graph, checker, provenance, and Verkle corrections.
-- `.gitattributes`: forces LF checkout bytes for all nine byte-frozen audit/receipt artifacts so
-  their Git-blob guards are reproducible under Windows `core.autocrlf=true`.
+- `.gitattributes`: forces LF checkout bytes for all ten byte-frozen artifacts—nine Markdown audits
+  and one JSON source receipt—so their Git-blob guards are reproducible under Windows
+  `core.autocrlf=true`.
 - `tools/check_planning_docs.py`: retained dependency/Markdown checker with powered negative
   controls, structured unconditional-base and phase-specific dependency/status manifests,
   72 nodes, 94 structured phase-status tuples, five structured phase dependencies, 44 conditional
-  instance edges, predicate-entailment manifests, exact 19-document authority inventory, effective
-  frozen-file EOL policy, frozen-audit/receipt guards, historical receipt-object reconstruction,
-  and repository-contained tracked link/fragment checks; it does not validate semantic dependency
-  completeness, prose meaning, external URLs, runtime semantics, or cryptographic security.
+  instance edges, 360 total declared edges, 10 predicate entailments, and exact equality for every
+  canonical node-status projection. It also pins the exact 20-document authority inventory,
+  effective frozen-file EOL policy, frozen-audit/receipt guards, historical receipt-object
+  reconstruction, and repository-contained tracked link/fragment checks; it does not validate
+  semantic dependency completeness, prose meaning beyond the canonical projection fields, external
+  URLs, runtime semantics, or cryptographic security.
 
 ## Claims that are safe to make
 
@@ -263,7 +303,7 @@ The candidate labels in `docs/DESIGN_RESEARCH_DISTILLATION.md` are research note
 nodes; promote one only through an explicit later capability-tree decision with dependencies,
 artifact, gate, and non-claim.
 
-1. Finish the convergence protocol first: pin this fifth-audit correction, run another complete
+1. Finish the convergence protocol first: pin this sixth-audit correction, run a seventh complete
    independent read-only sweep, and freeze either its new findings or a zero-new-material-gap
    result. Only the zero-gap result opens the broad Rust, Python-vector, headless, Lean, and
    release-path test pass requested by the user. It still cannot replace physical display review.
@@ -319,9 +359,9 @@ git diff --check 694650f4028f5c1fb715384597326e0b0e31f0e1..ea9294ba08b5e4bd339f8
 git show --check --format=fuller ea9294ba08b5e4bd339f82894ecb761461f5af13
 ```
 
-The second through fifth successor audits freeze `ea9294b`, `54926f5`, `b23ddc9`, and `2cb1cc0`
-before their corrections. The stable whitespace receipts for the complete second and third
-corrections are:
+The second through sixth successor audits freeze `ea9294b`, `54926f5`, `b23ddc9`, `2cb1cc0`, and
+`1821f37` before their corrections. The stable whitespace receipts for the complete second and
+third corrections are:
 
 ```powershell
 git diff --check fb5f5ca048144f84b0d600619202b3a6f400a02c..54926f52fa8ba9768e817ecb6139dcca41960e6a
@@ -342,10 +382,11 @@ unconditional-base/phase dependency and role graph, structured conditional edges
 entailments, Markdown shape,
 repository-contained tracked relative files and fragments, frozen audit/receipt blobs, the
 canonical source receipt plus Markdown agreement, and its historical Git-object/count claims.
-It also pins the exact 19-document authority inventory and the effective LF checkout policy for
-all nine frozen text artifacts. Powered controls exercise those paths. It does not decide predicate
+It also pins the exact 20-document authority inventory and the effective LF checkout policy for all
+ten frozen text artifacts: nine Markdown audits and one JSON source receipt. Powered controls
+exercise those paths. It does not decide predicate
 truth, prove prose or closure completeness, inspect external-link contents, establish
 future-profile satisfiability, validate runtime behavior, or prove cryptographic security. The
 second command checks the complete staged correction for whitespace errors. A later
-zero-new-material-gap audit must pin this fifth correction before broad tests are attributed to it;
+zero-new-material-gap Loop 7 audit must pin this sixth correction before broad tests are attributed;
 moving `HEAD` is never a stable historical receipt.

@@ -22,9 +22,13 @@ link to those documents, but prose alone never marks an implementation node comp
 
 The following manifest is the authoritative phase-status surface. Every capability has exactly one
 `base` tuple; a capability with a separately reportable research, decision, candidate, or authority
-phase has additional tuples. Status words in the node prose are explanatory projections of these
-rows and cannot create, remove, or promote a phase. The checker row regex is ASCII with exact single
-spaces and delimiters:
+phase has additional tuples. Each node's `Status` field is only a checked, non-authoritative
+projection of all the manifest rows owned by that node, in manifest order, using the exact token
+`` `PS-NNN:NODE@phase=STATUS` ``. Projection prose is forbidden: explanations belong in the other
+node fields, so a free-text promotion or demotion cannot disagree with the manifest while appearing
+normative. A projection cannot create, remove, rename, duplicate, or promote a phase; the checker
+requires byte-for-byte tuple equality with the authoritative rows. The checker row regex is ASCII
+with exact single spaces and delimiters:
 
 ```regex
 ^\| (PS-[0-9]{3}) \| ([A-Z0-9]+(?:-[A-Z0-9]+)*) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| (IMPLEMENTED|BOUNDED|READY|LOCKED|OPEN-DECISION|NOT-STARTED) \|$
@@ -416,18 +420,18 @@ a checker error.
 
 | Node | Status | Prerequisites | Motive | Current artifact | Gate already met | Non-claim |
 | --- | --- | --- | --- | --- | --- | --- |
-| `WORLD-0` | **IMPLEMENTED** | None; substrate root | Make one coordinate carry one binary fact. | Sparse 16³ chunks over signed `i64³`; absent is off; bedrock is permanent. | World invariant tests and current source semantics. | Not mathematically infinite or unbounded in cost. |
-| `OBSERVE-0` | **IMPLEMENTED, bounded** | `WORLD-0` | Let a person inspect and edit the substrate without an entity system. | Free camera, swept-point collision, crosshair, depth controls, fit, sidebar. | Current renderer/camera tests and bounded display carriers. | Not a body, user identity, physical-display proof, or scalable far-coordinate solution. |
-| `TICK-0` | **IMPLEMENTED** | `WORLD-0`, `OBSERVE-0` | Give every state transition one deterministic clock. | Fixed 60 Hz reducer and ordered tick outcomes; presentation is separate. | Deterministic same-build tape replay for declared inputs. | Not consensus time, wall-clock proof, or a guarantee that every tick rerenders. |
-| `REPLAY-0` | **IMPLEMENTED, bounded** | `TICK-0` | Give people and agents a shared action language. | Edit programs, canonical `InteractionTape`, JSON scenario helper, headless reducer. | Parser/codec/limit vectors and local replay paths. | Not a complete recorder of all accepted live OS input or an independently held run receipt. |
-| `PROOF-0` | **BOUNDED** | `WORLD-0`; individual capsules declare more | Make semantic claims attackable instead of intuitive. | SHA-256 content tags, Lean world model, finite LadderLang transition capsule, research receipts. | The declared finite/model checks exist. | Not Rust refinement, ternary-hash integration, physical truth, ownership, consensus, or L1 security. |
-| `DOC-0` | **IMPLEMENTED by this checkpoint** | None; source/document evidence is external | Preserve intent, dependencies, and claim boundaries for successor agents. | Project intent, capability tree, authenticated-state plan, finite plan audit, transcript and handoff links. | Retained planning-doc checker plus committed validation receipt. | Documentation is not implementation or independent audit evidence. |
+| `WORLD-0` | `PS-001:WORLD-0@base=IMPLEMENTED` | None; substrate root | Make one coordinate carry one binary fact. | Sparse 16³ chunks over signed `i64³`; absent is off; bedrock is permanent. | World invariant tests and current source semantics. | Not mathematically infinite or unbounded in cost. |
+| `OBSERVE-0` | `PS-002:OBSERVE-0@base=IMPLEMENTED`, `PS-003:OBSERVE-0@claim-scope=BOUNDED` | `WORLD-0` | Let a person inspect and edit the substrate without an entity system. | Free camera, swept-point collision, crosshair, depth controls, fit, sidebar. | Current renderer/camera tests and bounded display carriers. | Not a body, user identity, physical-display proof, or scalable far-coordinate solution. |
+| `TICK-0` | `PS-004:TICK-0@base=IMPLEMENTED` | `WORLD-0`, `OBSERVE-0` | Give every state transition one deterministic clock. | Fixed 60 Hz reducer and ordered tick outcomes; presentation is separate. | Deterministic same-build tape replay for declared inputs. | Not consensus time, wall-clock proof, or a guarantee that every tick rerenders. |
+| `REPLAY-0` | `PS-005:REPLAY-0@base=IMPLEMENTED`, `PS-006:REPLAY-0@claim-scope=BOUNDED` | `TICK-0` | Give people and agents a shared action language. | Edit programs, canonical `InteractionTape`, JSON scenario helper, headless reducer. | Parser/codec/limit vectors and local replay paths. | Not a complete recorder of all accepted live OS input or an independently held run receipt. |
+| `PROOF-0` | `PS-007:PROOF-0@base=BOUNDED` | `WORLD-0`; individual capsules declare more | Make semantic claims attackable instead of intuitive. | SHA-256 content tags, Lean world model, finite LadderLang transition capsule, research receipts. | The declared finite/model checks exist. | Not Rust refinement, ternary-hash integration, physical truth, ownership, consensus, or L1 security. |
+| `DOC-0` | `PS-008:DOC-0@base=IMPLEMENTED` | None; source/document evidence is external | Preserve intent, dependencies, and claim boundaries for successor agents. | Project intent, capability tree, authenticated-state plan, finite plan audit, transcript and handoff links. | Retained planning-doc checker plus committed validation receipt. | Documentation is not implementation or independent audit evidence. |
 
 ## First trunk: complete and authenticate local state
 
 ### `ACCOUNT-1` — complete action/result accounting
 
-- **Status:** **READY; preferred next semantic implementation checkpoint**.
+- **Status:** `PS-009:ACCOUNT-1@base=READY`.
 - **Depends on:** `TICK-0`, `REPLAY-0`.
 - **Motive:** ensure every included action has one visible disposition before authority, programs,
   or money depend on the reducer.
@@ -442,7 +446,7 @@ a checker error.
 
 ### `LOCAL-BOUNDS-1` — local record and recovery limits
 
-- **Status:** **LOCKED** on `ACCOUNT-1`; `COST-1` measurement work can begin now.
+- **Status:** `PS-010:LOCAL-BOUNDS-1@base=LOCKED`.
 - **Depends on:** `ACCOUNT-1`, measured `COST-1` facts for the local storage profile.
 - **Motive:** prevent local durability from depending on unnamed record, history, recovery, or disk
   limits while avoiding a dependency on the later network profile.
@@ -456,8 +460,7 @@ a checker error.
 
 ### `STORAGE-1` — crash-safe local publication substrate
 
-- **Status:** **LOCKED** on `ACCOUNT-1` and `LOCAL-BOUNDS-1`; bounded research journals exist but are
-  not this authority.
+- **Status:** `PS-011:STORAGE-1@base=LOCKED`, `PS-012:STORAGE-1@research-journals=BOUNDED`.
 - **Depends on:** `ACCOUNT-1`, `LOCAL-BOUNDS-1`.
 - **Motive:** make later ledger heads and authenticated nodes recover together instead of treating
   in-memory success as durable state.
@@ -472,7 +475,7 @@ a checker error.
 
 ### `LEDGER-1` — durable local occupancy-episode ledger
 
-- **Status:** **LOCKED** on `ACCOUNT-1` and `STORAGE-1`.
+- **Status:** `PS-013:LEDGER-1@base=LOCKED`.
 - **Depends on:** `ACCOUNT-1`, `STORAGE-1`; the current feature-gated coordinate-episode prototype is
   bounded input evidence, not a prerequisite node.
 - **Motive:** establish the exact local meaning of placement-as-mint and deletion-as-burn before
@@ -492,7 +495,7 @@ a checker error.
 
 ### `TRANSITION-SPEC-D1` — base occupancy/episode transition contract
 
-- **Status:** **LOCKED** on the completed accounting and local-ledger semantics.
+- **Status:** `PS-014:TRANSITION-SPEC-D1@base=LOCKED`.
 - **Depends on:** `ACCOUNT-1`, `LEDGER-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
 - **Motive:** freeze the substrate transition and the interface by which later profile extensions
   compose, without making base semantics depend on identity, fees, consensus, or optional features.
@@ -510,7 +513,7 @@ a checker error.
 
 ### `COMMIT-R1` — authenticated-map research
 
-- **Status:** **READY as research only**.
+- **Status:** `PS-015:COMMIT-R1@base=READY`.
 - **Depends on:** `WORLD-0`, `PROOF-0` claim discipline.
 - **Motive:** compare proof-carrying sparse-state structures before one becomes consensus-critical.
 - **Artifact:** the side-by-side fixed-key binary Patricia and 192-level sparse Merkle prototypes,
@@ -526,11 +529,7 @@ a checker error.
 
 ### `VERKLE-R1` — separate Verkle feasibility and prototype lane
 
-- **Status:** **READY@feasibility** from the implemented foundation; a `verkle-selected` candidate
-  scope remains **LOCKED** until CE-41 consumes the completed feasibility artifact;
-  **LOCKED@prototype** remains until the exact cryptographic, codec, threat, bound,
-  candidate-profile, and migration prerequisites activated by that same target-context predicate in
-  CE-35–CE-40 exist.
+- **Status:** `PS-016:VERKLE-R1@base=READY`, `PS-017:VERKLE-R1@feasibility=READY`, `PS-018:VERKLE-R1@candidate-scope=LOCKED`, `PS-019:VERKLE-R1@prototype=LOCKED`.
 - **Depends on:** `WORLD-0`, `PROOF-0`.
 - **Motive:** evaluate whether a vector-commitment map could materially improve witnesses or updates
   without silently importing trusted setup, field/curve, codec, cryptographic, or migration risk.
@@ -555,7 +554,7 @@ a checker error.
 
 ### `COMMIT-1` — authenticated local state
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-020:COMMIT-1@base=LOCKED`.
 - **Depends on:** `LEDGER-1`, `TRANSITION-SPEC-D1`, `COMMIT-R1`, `STORAGE-1`, `CODEC-1` at every
   activated commitment schema; each domain also requires a frozen numeric commitment-limit profile.
 - **Motive:** support independently verifiable occupancy, absence, active-episode, and provenance
@@ -579,7 +578,7 @@ a checker error.
 
 ### `REFINE-1` — Rust/model correspondence
 
-- **Status:** **READY as a bounded proof project**.
+- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=READY`, `PS-023:REFINE-1@accounting=LOCKED`, `PS-024:REFINE-1@commitment=LOCKED`, `PS-025:REFINE-1@vm=LOCKED`.
 - **Depends on:** `WORLD-0`.
 - **Motive:** connect abstract world theorems to the actual chunked implementation.
 - **Artifact:** independently checked refinement or exhaustive/symbolic correspondence for
@@ -594,7 +593,7 @@ a checker error.
 
 ### `IDENTITY-D1` — actor and authorization schema
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-026:IDENTITY-D1@base=LOCKED`.
 - **Depends on:** `ACCOUNT-1`, `CODEC-1`, `THREAT-D0`, and primitive/key-encoding choices from
   `CRYPTO-D1`.
 - **Motive:** define what a credential and permission mean before genesis identifiers bind them or
@@ -610,24 +609,30 @@ a checker error.
 
 ### `PROTOCOL-ID-1` — genesis and non-circular identifier graph
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-027:PROTOCOL-ID-1@base=LOCKED`.
 - **Depends on:** `GENESIS-D1`, `IDENTITY-D1`, `CODEC-1`, `COMMIT-R1` root/profile definitions.
 - **Motive:** give signatures, transactions, receipts, roots, and later votes one chain/world
   context without objects hashing themselves or candidates selecting their own authority.
 - **Artifact:** immutable pre-ID genesis payload from `GENESIS-D1` and derived `genesis_id`;
   chain/world/version domains;
   pre-genesis authorization descriptor encoding; acyclic transaction, body, context, proposal,
-  block, receipt, effect, availability, and consensus-evidence identifier graph; explicit system
-  transition subjects.
+  block, receipt, effect, availability, and consensus-evidence identifier graph; unique
+  `AcceptedProposalCoreV1` identity separated from its typed, possibly multiple
+  `AcceptedEvidenceSetV1`; explicit system transition subjects; and the protocol-frozen
+  `ProfileIdHashV1` trust anchor with a named `ProtocolIdentityHashCompromiseV1` terminal boundary.
 - **Gate:** dependency-graph cycle check plus cross-domain, self-reference, field-omission,
   duplicate-field, alternate-body, wrong-parent, and wrong-version mutation corpus. Every
-  authority-relevant byte reaches exactly the intended identifier before it can be signed.
+  authority-relevant byte reaches exactly the intended identifier before it can be signed. Two
+  valid evidence wrappers for one proposal resolve one semantic parent, while a distinct-core
+  collision rejects; a `ProfileIdHashV1` collision or second preimage reaches terminal safe halt and
+  never an in-place successor.
 - **Non-claim:** identifiers and genesis bytes do not establish trusted distribution, valid keys,
-  honest execution, consensus, availability, or a fair initial allocation.
+  honest execution, consensus, availability, a fair initial allocation, or the cryptographic
+  soundness of `ProfileIdHashV1`.
 
 ### `IDENTITY-1` — actor identity and authorization
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-028:IDENTITY-1@base=LOCKED`.
 - **Depends on:** `IDENTITY-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`.
 - **Motive:** distinguish who requested an action from which camera submitted it.
 - **Artifact:** non-circular canonical signing preimage; chain/genesis/world/version binding;
@@ -640,7 +645,7 @@ a checker error.
 
 ### `AUTH-COMMIT-1` — authenticated authorization and nonce state
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-029:AUTH-COMMIT-1@base=LOCKED`.
 - **Depends on:** `IDENTITY-1`, implemented `COMMIT-1`, `CODEC-1` at the authorization/nonce schemas.
 - **Motive:** let a verifier prove which descriptor and nonce state governed an admitted action
   without making identity a circular prerequisite of occupancy-root design.
@@ -655,7 +660,7 @@ a checker error.
 
 ### `EXECUTION-ROOT-1` — complete execution-state commitment
 
-- **Status:** **LOCKED** for every authority profile.
+- **Status:** `PS-030:EXECUTION-ROOT-1@base=LOCKED`.
 - **Depends on:** `TRANSITION-SPEC-1`, `COMMIT-1`, `AUTH-COMMIT-1`, `EXECUTOR-1`, `PROTOCOL-ID-1`,
   `PROFILE-D1`, `CODEC-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated domain producers are
   the target-profile conditional prerequisites in CE-19–CE-21.
@@ -676,7 +681,7 @@ a checker error.
 
 ### `GENESIS-ROOT-PARITY-1` — logical-genesis to typed-root parity
 
-- **Status:** **LOCKED** until every root implementation required by the candidate profile exists.
+- **Status:** `PS-031:GENESIS-ROOT-PARITY-1@base=LOCKED`.
 - **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`, `COMMIT-1`, `AUTH-COMMIT-1`,
   `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `CODEC-1`; activated
   launch-domain implementations are the launch-profile conditional prerequisites in CE-22–CE-24.
@@ -694,7 +699,7 @@ a checker error.
 
 ### `MULTI-1` — deterministic multi-actor harness
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-032:MULTI-1@base=LOCKED`.
 - **Depends on:** `AUTH-COMMIT-1`, `TRANSITION-SPEC-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
   `GENESIS-ROOT-PARITY-1`.
 - **Motive:** expose ordering, authorization, and same-coordinate conflicts at the cheapest scale.
@@ -707,7 +712,7 @@ a checker error.
 
 ### `SEQUENCER-1` — accountable centralized multiplayer
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-033:SEQUENCER-1@base=LOCKED`.
 - **Depends on:** `MULTI-1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`, `EXECUTOR-1`,
   `EXECUTION-ROOT-1`, and durable `STORAGE-1` publication.
 - **Motive:** let remote participants share one signed, replayable world before consensus is added.
@@ -721,7 +726,7 @@ a checker error.
 
 ### `SYNC-1` — peer synchronization, availability, and recovery
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-034:SYNC-1@base=LOCKED`.
 - **Depends on:** `SEQUENCER-1`, `STORAGE-1`, and the applicable `BOUNDS-1` limits.
 - **Motive:** make required bodies, witnesses, and accepted state recoverable from more than one
   process.
@@ -736,7 +741,7 @@ a checker error.
 
 ### `ASSET-D1` — choose what a block asset means
 
-- **Status:** **LOCKED** on `LEDGER-1`; the asset meaning remains an **OPEN DECISION**.
+- **Status:** `PS-035:ASSET-D1@base=LOCKED`, `PS-036:ASSET-D1@asset-meaning=OPEN-DECISION`.
 - **Depends on:** `LEDGER-1`; threat/resource analysis may force revision.
 - **Motive:** prevent one word—“coin”—from hiding incompatible state machines.
 - **Artifact:** a decision record choosing and specifying occupancy collectible, coordinate edit
@@ -749,8 +754,7 @@ a checker error.
 
 ### `VALIDATOR-ECON-D1` — pre-genesis stake and incentive schema
 
-- **Status:** **LOCKED** on its design prerequisites and required only for profiles whose predicates
-  activate stake-weighted consensus or validator economics.
+- **Status:** `PS-037:VALIDATOR-ECON-D1@base=LOCKED`.
 - **Depends on:** `ASSET-D1`, `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`.
 - **Motive:** define stake, weight, issuance, rewards, penalties, and exits before a consensus
   candidate or genesis payload can treat economic state as authority.
@@ -767,7 +771,7 @@ a checker error.
 
 ### `ASSET-1` — ownership and transfer
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-038:ASSET-1@base=LOCKED`.
 - **Depends on:** `ASSET-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `COMMIT-1`,
   `TRANSITION-SPEC-1`, `PROFILE-D1`.
 - **Motive:** distinguish occupancy, episode identity, and authority to transfer or edit.
@@ -780,7 +784,7 @@ a checker error.
 
 ### `RESOURCE-1` — fees, rent, and economic resource policy
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-039:RESOURCE-1@base=LOCKED`.
 - **Depends on:** `BOUNDS-1`, `PROFILE-SCOPE-D0`; target-profile economic charging adds the
   conditional design edge CE-14, while a non-economic profile may choose deterministic quotas.
 - **Motive:** prevent the huge coordinate space and proof/history creation from becoming an
@@ -796,7 +800,7 @@ a checker error.
 
 ### `ECONOMIC-STATE-1` — deterministic stake, reward, and slash state
 
-- **Status:** **LOCKED**; required only when validator economics is active.
+- **Status:** `PS-040:ECONOMIC-STATE-1@base=LOCKED`.
 - **Depends on:** `VALIDATOR-ECON-D1`, `ASSET-1`, `RESOURCE-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`,
   `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
 - **Motive:** produce every economic state transition and commitment before execution-root or
@@ -813,7 +817,7 @@ a checker error.
 
 ### `VALIDATOR-ECON-1` — consensus incentives
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-041:VALIDATOR-ECON-1@base=LOCKED`.
 - **Depends on:** `CONSENSUS-1`, `VALIDATOR-ECON-D1`, `ECONOMIC-STATE-1`, `EXECUTION-ROOT-1`,
   `THREAT-1`; only activated profiles that use economic validator incentives require this node.
 - **Motive:** align validator behavior only after “validator” has an exact protocol meaning.
@@ -830,7 +834,7 @@ a checker error.
 
 ### `RULE-1` — one finite autonomous transformation rule
 
-- **Status:** **LOCKED**; rule choice is **OPEN**.
+- **Status:** `PS-042:RULE-1@base=LOCKED`, `PS-043:RULE-1@rule-choice=OPEN-DECISION`.
 - **Depends on:** `ACCOUNT-1`.
 - **Motive:** test the emergence hypothesis with the smallest executable semantics.
 - **Artifact:** one opt-in, finite, tick-scoped rule over exact coordinates with declared read/write
@@ -842,7 +846,7 @@ a checker error.
 
 ### `LANGUAGE-R1` — exact spatial grammar research
 
-- **Status:** **READY as non-authoritative research**; grammar remains **OPEN**.
+- **Status:** `PS-044:LANGUAGE-R1@base=READY`, `PS-045:LANGUAGE-R1@grammar-choice=OPEN-DECISION`.
 - **Depends on:** `WORLD-0`, `PROOF-0` claim discipline.
 - **Motive:** let arrangements of bits denote symbols and instructions without visual ambiguity.
 - **Artifact:** canonical coordinate normalization, origin/orientation, framing, namespaces,
@@ -854,7 +858,7 @@ a checker error.
 
 ### `VM-D1` — frozen visual-machine semantics
 
-- **Status:** **LOCKED** on `LANGUAGE-R1`, `RULE-1`, and `TRANSITION-SPEC-D1`.
+- **Status:** `PS-046:VM-D1@base=LOCKED`.
 - **Depends on:** `LANGUAGE-R1`, `RULE-1`, `ACCOUNT-1`, `TRANSITION-SPEC-D1`.
 - **Motive:** define the instruction and work surface before either the bounds checker or interpreter
   is asked to validate it.
@@ -869,7 +873,7 @@ a checker error.
 
 ### `VM-1` — bounded deterministic interpreter
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-047:VM-1@base=LOCKED`.
 - **Depends on:** `VM-D1`, `ACCOUNT-1`, `CODEC-1`, and `BOUNDS-1` for the activated language profile.
 - **Motive:** turn exact spatial programs into reproducible state transitions.
 - **Artifact:** bounded interpreter plus an independent reference executor implementing the frozen
@@ -881,7 +885,7 @@ a checker error.
 
 ### `PROGRAM-STATE-1` — deterministic code and program-state commitments
 
-- **Status:** **LOCKED**; required only when programmability is active.
+- **Status:** `PS-048:PROGRAM-STATE-1@base=LOCKED`.
 - **Depends on:** `VM-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
 - **Motive:** produce canonical code/program state and roots before the execution-root composer or
   shared-authority layer consumes them.
@@ -896,7 +900,7 @@ a checker error.
 
 ### `EMERGENCE-R1` — bounded emergence assays
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-049:EMERGENCE-R1@base=LOCKED`.
 - **Depends on:** `RULE-1`.
 - **Motive:** turn the founding question—whether simple bit/tick rules produce higher-order
   structure—into observations that can fail rather than examples selected for looking interesting.
@@ -912,7 +916,7 @@ a checker error.
 
 ### `PROGRAM-CONSENSUS` — programs as shared authority
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-050:PROGRAM-CONSENSUS@base=LOCKED`.
 - **Depends on:** `PROGRAM-STATE-1`, `REFINE-1`, `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `EXECUTION-ROOT-1`,
   `BOUNDS-1`, `RESOURCE-1`, `EXECUTOR-1`, `SEQUENCER-1`, `SYNC-1`, `CONSENSUS-1`,
   `UPGRADE-FRAMEWORK-1`, and a `PROFILE-D1` draft that proposes programmability.
@@ -932,7 +936,7 @@ a checker error.
 
 ### `SCALE-1` — measure before redesign
 
-- **Status:** **READY as read-only research**.
+- **Status:** `PS-051:SCALE-1@base=READY`.
 - **Depends on:** `WORLD-0`, `OBSERVE-0`.
 - **Motive:** identify the real limits behind “near-infinite” intent.
 - **Artifact:** reproducible workloads separating allocated bits, chunks, visible contributions,
@@ -943,7 +947,7 @@ a checker error.
 
 ### `SCALE-2` — chunk-relative queries and hierarchical observation
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-052:SCALE-2@base=LOCKED`.
 - **Depends on:** `SCALE-1` and its parity vectors.
 - **Motive:** preserve exact interaction across far coordinates and large occupied worlds without
   scanning every on bit for every query.
@@ -957,8 +961,7 @@ a checker error.
 
 ### `CONSENSUS-D1` — pre-genesis consensus and network-role selection
 
-- **Status:** **LOCKED**; mechanism, fault threshold, synchrony, finality type, and node roles remain
-  **OPEN DECISIONS**.
+- **Status:** `PS-053:CONSENSUS-D1@base=LOCKED`, `PS-054:CONSENSUS-D1@mechanism-choice=OPEN-DECISION`.
 - **Depends on:** `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`, `COST-1` design inputs; a target-profile
   stake-weighted candidate realizes CE-04 before it can be selected.
 - **Motive:** freeze the validator/sequencer role schema and initial authority bytes before genesis
@@ -974,8 +977,7 @@ a checker error.
 
 ### `VALIDATOR-SCHEDULE-1` — deterministic validator schedule state and root
 
-- **Status:** **LOCKED** on the selected consensus/governance profile; required before execution-root
-  or consensus implementation.
+- **Status:** `PS-055:VALIDATOR-SCHEDULE-1@base=LOCKED`.
 - **Depends on:** `CONSENSUS-D1`, `GOVERNANCE-1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
   `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`; stake-weighted consensus adds
   the target-profile conditional producer edge CE-15.
@@ -992,7 +994,7 @@ a checker error.
 
 ### `CONSENSUS-1` — select and specify one consensus profile
 
-- **Status:** **LOCKED** on the selected `CONSENSUS-D1` design and implementation prerequisites.
+- **Status:** `PS-056:CONSENSUS-1@base=LOCKED`.
 - **Depends on:** `CONSENSUS-D1`, `SYNC-1`, `PROTOCOL-ID-1`, `THREAT-1`, `CRYPTO-1`, `BOUNDS-1`,
   `VALIDATOR-SCHEDULE-1`, `EXECUTION-ROOT-1`.
 - **Motive:** replace sequencer trust with an explicit replicated ordering and state-root rule.
@@ -1009,7 +1011,7 @@ a checker error.
 
 ### `CLIENT-1` — proof-bound provisional and accepted client state
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-057:CLIENT-1@base=LOCKED`.
 - **Depends on:** `CONSENSUS-1`, `EXECUTION-ROOT-1`, and receipt-inclusion commitments from
   `PROTOCOL-ID-1`.
 - **Motive:** stop wallets and observers from presenting a sequencer acknowledgement, candidate
@@ -1026,7 +1028,7 @@ a checker error.
 
 ### `TESTNET-1` — replicated adversarial testnet
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-058:TESTNET-1@base=LOCKED`.
 - **Depends on:** `CLIENT-1`, `PROFILE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
   `GENESIS-ROOT-PARITY-1`,
   `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `CHAIN-LAUNCH-1`, `GOVERNANCE-1`, `CRYPTO-1`,
@@ -1049,7 +1051,7 @@ a checker error.
 
 ### `L1-CANDIDATE` — independently reviewable base state machine
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-059:L1-CANDIDATE@base=LOCKED`.
 - **Depends on:** `TESTNET-1`, `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `RELEASE-1`, `PROD-OPS-1`, and the
   complete activated-profile coverage matrix; target-profile in-place upgrade rehearsal is the
   conditional edge CE-33.
@@ -1067,7 +1069,7 @@ a checker error.
 
 ### `L1-PRODUCTION` — scoped production security claim
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-060:L1-PRODUCTION@base=LOCKED`.
 - **Depends on:** `L1-CANDIDATE`, `PROD-OPS-1`, external review, and matched deployed artifacts.
   Real monetary value is a separate optional activation.
 - **Motive:** state exactly what the deployed base layer guarantees and under which assumptions.
@@ -1082,7 +1084,7 @@ a checker error.
 
 ### `VALUE-1` — optional production-value activation
 
-- **Status:** **LOCKED** and optional; Bitblock can remain a research/game network indefinitely.
+- **Status:** `PS-061:VALUE-1@base=LOCKED`.
 - **Depends on:** `L1-PRODUCTION`, `ASSET-1`, `RESOURCE-1`, independent economic/security/legal
   review, and an explicit human decision; target-profile validator rewards realize CE-34.
 - **Motive:** keep launching secure replication separate from asking people to assign or risk real
@@ -1099,7 +1101,7 @@ a checker error.
 
 ### `COST-1` — cheapness budgets and measurements
 
-- **Status:** **READY as measurement work**; no “cheap” budget is currently frozen.
+- **Status:** `PS-062:COST-1@base=READY`, `PS-063:COST-1@budget=OPEN-DECISION`.
 - **Depends on:** `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, `PROOF-0`; repeats for every
   activated feature.
 - **Motive:** turn “as cheap as possible” into separate, attackable resource claims.
@@ -1114,7 +1116,7 @@ a checker error.
 
 ### `CODEC-1` — independent canonical-codec parity
 
-- **Status:** **READY for current schemas; expands before each authority-relevant schema activates**.
+- **Status:** `PS-064:CODEC-1@base=READY`.
 - **Depends on:** `PROOF-0` framing discipline and a frozen schema.
 - **Motive:** ensure “the same bytes” does not mean only that one encoder can decode itself.
 - **Artifact:** language-neutral positive/negative corpus plus an independent implementation for
@@ -1126,7 +1128,7 @@ a checker error.
 
 ### `EXECUTOR-1` — independent transition executor
 
-- **Status:** **LOCKED** for the first authority profile.
+- **Status:** `PS-065:EXECUTOR-1@base=LOCKED`.
 - **Depends on:** `TRANSITION-SPEC-1`, `PROFILE-D1`, `BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`,
   `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated state producers
   are the target-profile conditional prerequisites in CE-16–CE-18.
@@ -1143,7 +1145,7 @@ a checker error.
 
 ### `THREAT-D0` — pre-profile adversary and claim envelope
 
-- **Status:** **READY as non-authoritative design work**.
+- **Status:** `PS-066:THREAT-D0@base=READY`.
 - **Depends on:** implemented `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, plus bounded `PROOF-0`
   claim discipline.
 - **Motive:** enumerate attacker powers, public properties, parameter slots, and loss conditions
@@ -1158,7 +1160,7 @@ a checker error.
 
 ### `THREAT-1` — quantitative adversary model
 
-- **Status:** **LOCKED** for the first authority profile; `THREAT-D0` is the ready design phase.
+- **Status:** `PS-067:THREAT-1@base=LOCKED`.
 - **Depends on:** `THREAT-D0`, `PROFILE-SCOPE-D0`, measured `COST-1` facts.
 - **Motive:** make “secure” falsifiable against declared attacker powers and time horizons.
 - **Artifact:** static/adaptive corruption, network scheduling/partition/eclipsing, validator weight,
@@ -1171,8 +1173,7 @@ a checker error.
 
 ### `CRYPTO-D1` — primitive and key-encoding selection
 
-- **Status:** **LOCKED** on its prerequisites; network signatures and production commitment suites
-  remain an **OPEN DECISION**.
+- **Status:** `PS-068:CRYPTO-D1@base=LOCKED`, `PS-069:CRYPTO-D1@primitive-selection=OPEN-DECISION`.
 - **Depends on:** `CODEC-1`, `THREAT-D0`.
 - **Motive:** freeze the primitive, suite identifier, key bytes, validation, and signing/hash domain
   assumptions needed to define identity without also pretending the operational lifecycle exists.
@@ -1186,7 +1187,7 @@ a checker error.
 
 ### `CRYPTO-1` — cryptographic and key lifecycle
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-070:CRYPTO-1@base=LOCKED`.
 - **Depends on:** `CRYPTO-D1`, `IDENTITY-D1`, `PROTOCOL-ID-1`.
 - **Motive:** turn selected primitive/key bytes into operated, role-separated actor and validator
   credentials while keeping custody and migration requirements visible.
@@ -1200,7 +1201,7 @@ a checker error.
 
 ### `HASH-SOURCE-R1` — intended ternary-hash source discovery
 
-- **Status:** **READY as identification work**; no candidate exists in this repository.
+- **Status:** `PS-071:HASH-SOURCE-R1@base=READY`, `PS-072:HASH-SOURCE-R1@candidate=NOT-STARTED`.
 - **Depends on:** none beyond access to the exact artifact the user intends.
 - **Motive:** distinguish the user's actual balanced-trit construction from similarly named but
   already disqualified Aethor TSH/PDH or IterHash designs.
@@ -1212,7 +1213,7 @@ a checker error.
 
 ### `HASH-R1` — intended ternary-hash evaluation
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-073:HASH-R1@base=LOCKED`.
 - **Depends on:** `HASH-SOURCE-R1`, `CODEC-1`, `THREAT-1`, and a declared use case.
 - **Motive:** evaluate the intended balanced-trit construction without replacing the implemented
   SHA-256 suite by resemblance or assumption.
@@ -1226,7 +1227,7 @@ a checker error.
 
 ### `BOUNDS-1` — protocol admission and state-growth bounds
 
-- **Status:** **LOCKED** for the first authority profile; it expands for later profiles.
+- **Status:** `PS-074:BOUNDS-1@base=LOCKED`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `THREAT-1`, `LOCAL-BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, and the
   common proof shapes frozen by `COMMIT-R1`; target-profile program scope realizes the design edge
   CE-05, not a dependency on the later interpreter implementation.
@@ -1244,7 +1245,7 @@ a checker error.
 
 ### `GOVERNANCE-D1` — upgrade and emergency authority schema
 
-- **Status:** **LOCKED** on its prerequisites; governance authority remains an **OPEN DECISION**.
+- **Status:** `PS-075:GOVERNANCE-D1@base=LOCKED`, `PS-076:GOVERNANCE-D1@authority-choice=OPEN-DECISION`.
 - **Depends on:** `IDENTITY-D1`, `THREAT-D0`, `CRYPTO-D1`.
 - **Motive:** name who may activate a migration, halt for a proven authority/root fault, or authorize
   recovery without leaving those powers as an operator convention.
@@ -1260,7 +1261,7 @@ a checker error.
 
 ### `PROFILE-SCOPE-D0` — pre-ID feature and configuration scope
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-077:PROFILE-SCOPE-D0@base=LOCKED`.
 - **Depends on:** `TRANSITION-SPEC-D1`, `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`,
   `COMMIT-R1`, `CODEC-1`, `COST-1`; target-profile conditional design prerequisites are CE-01–CE-03
   and CE-41.
@@ -1279,7 +1280,7 @@ a checker error.
 
 ### `GENESIS-D1` — reproducible non-self-referential genesis configuration
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-078:GENESIS-D1@base=LOCKED`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `BOUNDS-1`, `CODEC-1`, `COMMIT-R1` profile definitions;
   launch-profile activated logical domains add CE-06–CE-09. Successor target predicates never add
   state to this immutable launch artifact.
@@ -1299,7 +1300,7 @@ a checker error.
 
 ### `PROFILE-D1` — ID-bound candidate activated-feature manifest
 
-- **Status:** **LOCKED** for the first network-profile draft.
+- **Status:** `PS-079:PROFILE-D1@base=LOCKED`.
 - **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`; target-profile CE-43 always
   binds the exact current candidate-scope instance, and the candidate names rather than implements
   optional features.
@@ -1327,8 +1328,7 @@ a checker error.
 
 ### `TRANSITION-SPEC-1` — exact candidate-profile transition specification
 
-- **Status:** **LOCKED** until the candidate profile, bounds, and every activated design extension
-  are frozen.
+- **Status:** `PS-080:TRANSITION-SPEC-1@base=LOCKED`.
 - **Depends on:** `TRANSITION-SPEC-D1`, `PROFILE-D1`, `BOUNDS-1`, `IDENTITY-D1`, `CONSENSUS-D1`,
   `GOVERNANCE-D1`, `CODEC-1`; target-profile conditional design/policy inputs are CE-10–CE-13.
 - **Motive:** resolve the base extension interface into one exact operation/state/work contract before
@@ -1346,7 +1346,7 @@ a checker error.
 
 ### `GOVERNANCE-1` — implemented governance and emergency transitions
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-081:GOVERNANCE-1@base=LOCKED`.
 - **Depends on:** `GOVERNANCE-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
   `TRANSITION-SPEC-1`, `CODEC-1`, `BOUNDS-1`.
 - **Motive:** turn pre-genesis authority bytes into deterministic, authenticated state transitions
@@ -1361,7 +1361,7 @@ a checker error.
 
 ### `UPGRADE-FRAMEWORK-1` — version lifecycle and migration verifier
 
-- **Status:** **LOCKED** for the first network profile.
+- **Status:** `PS-082:UPGRADE-FRAMEWORK-1@base=LOCKED`.
 - **Depends on:** `PROTOCOL-ID-1`, `CODEC-1`, `COMMIT-1`, `EXECUTOR-1`, `CRYPTO-1`, `GOVERNANCE-1`,
   `PROFILE-D1`.
 - **Motive:** make genesis activation and later migration distinct while every profile still has an
@@ -1369,19 +1369,25 @@ a checker error.
 - **Artifact:** either an immutable-version policy requiring a new genesis/chain for change, or an
   in-place-upgrade framework with activation authority, old/new profile roles, bounded migration
   interface, downgrade rule, historical verifier, interruption/restart, rollback/safe-halt policy.
+  In-place migration owns profile-selected object-hash, signature, proof, credential, codec, VM, and
+  state-layout changes; it explicitly excludes compromise of the pre-profile identity hash.
 - **Gate:** genesis rejects fabricated old-profile inputs; the no-upgrade policy rejects changed
   versions as a different chain; the migration framework refuses a target without an admitted old
-  profile and new candidate, and powered version/downgrade/history mutants fail.
-- **Non-claim:** a framework does not prove any concrete migration or authorize an upgrade.
+  profile and new candidate, and powered version/downgrade/history mutants fail. A profile-owned
+  suite-failure control may activate only its fully admitted successor, while
+  `ProtocolIdentityHashCompromiseV1` forbids that path and requires terminal safe halt/new genesis
+  under a separately trusted recovery anchor.
+- **Non-claim:** a framework does not prove any concrete migration or authorize an upgrade, and an
+  in-place successor cannot repair the identity function used to identify and authorize itself.
 
 ### `UPGRADE-1` — deterministic version migration
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-083:UPGRADE-1@base=LOCKED`.
 - **Depends on:** `UPGRADE-FRAMEWORK-1`, `EXECUTOR-1`, `GOVERNANCE-1`; target-profile CE-30 and CE-31
   bind the already admitted old-profile instance and distinct new candidate-profile instance
   without reversing their polarity.
-- **Motive:** prevent a codec, hash, VM, or state-layout upgrade from silently rewriting authority,
-  supply, bedrock, ownership, or historical verification.
+- **Motive:** prevent a codec, profile-owned object hash, signature/proof suite, VM, or state-layout
+  upgrade from silently rewriting authority, supply, bedrock, ownership, or historical verification.
 - **Artifact:** `UPGRADE-1@old-profile-id->new-candidate-id`, a frozen migration specification,
   activation authority/timelock, deterministic
   bounded migration function, old/new roots over one logical state, dual-profile window if any,
@@ -1390,11 +1396,12 @@ a checker error.
 - **Gate:** old/new-root vectors and full bounded migration replay agree independently; invariant,
   interruption, restart, unauthorized activation, downgrade, and historical-proof tests pass.
 - **Non-claim:** governance approval or old-root equality alone does not prove migration correctness,
-  especially if the old hash or implementation is compromised.
+  especially if the old profile-owned hash or implementation is compromised. This capability does
+  not recover `ProfileIdHashV1`; its compromise is a terminal chain boundary.
 
 ### `PROFILE-1` — admitted activated-feature closure
 
-- **Status:** **LOCKED** for the first testnet profile.
+- **Status:** `PS-084:PROFILE-1@base=LOCKED`.
 - **Depends on:** `PROFILE-D1`, `TRANSITION-SPEC-1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`,
   `GENESIS-ROOT-PARITY-1`, `GOVERNANCE-1`, `EXECUTION-ROOT-1`; optional exact-version authority and
   implementation prerequisites are target-profile CE-25–CE-29 and CE-42.
@@ -1419,7 +1426,7 @@ a checker error.
 
 ### `SIGNER-OPS-1` — validator signer safety
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-085:SIGNER-OPS-1@base=LOCKED`.
 - **Depends on:** `IDENTITY-1`, selected `CONSENSUS-1` credentials, and `CRYPTO-1`.
 - **Motive:** keep restart, failover, and backup from creating equivocation even when the protocol
   rules are correct.
@@ -1432,8 +1439,7 @@ a checker error.
 
 ### `RELEASE-R1` — candidate-build reproducibility
 
-- **Status:** **READY@framework** for non-authoritative current builds; **LOCKED@candidate** until the
-  exact `PROFILE-D1` candidate exists.
+- **Status:** `PS-086:RELEASE-R1@base=READY`, `PS-087:RELEASE-R1@framework=READY`, `PS-088:RELEASE-R1@candidate=LOCKED`.
 - **Depends on:** None.
 - **Motive:** stop an unreviewed compiler, dependency, feature set, binary, or genesis configuration
   from inheriting candidate source-level evidence.
@@ -1451,7 +1457,7 @@ a checker error.
 
 ### `RELEASE-1` — admitted-profile signed release
 
-- **Status:** **LOCKED@admitted** until both the candidate artifact and admitted profile exist.
+- **Status:** `PS-089:RELEASE-1@base=LOCKED`, `PS-090:RELEASE-1@admitted=LOCKED`.
 - **Depends on:** `RELEASE-R1`, `PROFILE-1`, `CRYPTO-1`.
 - **Motive:** ensure the binary distributed to testnet or production is the reproducible candidate
   whose exact profile closure was admitted, not merely a similarly configured build.
@@ -1467,8 +1473,7 @@ a checker error.
 
 ### `CHAIN-LAUNCH-1` — complete authorized launch closure
 
-- **Status:** **LOCKED** until one initial profile, its root parity, its admitted release, and the
-  launch-authority implementation all pass their own gates.
+- **Status:** `PS-091:CHAIN-LAUNCH-1@base=LOCKED`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`,
   `TRANSITION-SPEC-1`, `PROFILE-1`, `EXECUTION-ROOT-1`, `GENESIS-ROOT-PARITY-1`, `RELEASE-1`,
   `IDENTITY-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`, `CRYPTO-1`, `CODEC-1`.
@@ -1476,9 +1481,11 @@ a checker error.
   trust anchor instead of leaving bootstrap to reconstruct its bound preimages from an undeclared
   local mapping.
 - **Artifact:** `CHAIN-LAUNCH-1@chain-launch-manifest-id`, the canonical `LaunchClosureBundleV1`,
-  its `launch_closure_bundle_id`, and `chain_launch_package`: a bounded, complete, uniquely typed,
-  embedded-only inventory carrying the genesis package/payload and ID, initial `ProfileScopeV1` and
-  `DomainRegistryV1`, initial `CandidateProfileV1` and profile ID,
+  its `launch_closure_bundle_id`, and `chain_launch_package`: a bounded, complete, uniquely typed
+  carrier with one outer genesis package/payload and ID. The bundle is an embedded-only inventory
+  for its internal artifacts plus exactly one `LaunchClosureExternalGenesisRootV1` descriptor bound
+  to the exact outer `GenesisPackageV1`; initial `ProfileScopeV1` and `DomainRegistryV1`, initial
+  `CandidateProfileV1` and profile ID,
   `TransitionSpecAtProfileV1` and ID, `ProfileAdmissionManifestV1` and ID,
   `GenesisRootParityRecordV1` and initial typed execution-root reference, `RELEASE-1` record and ID,
   `ChainLaunchManifestV1` and ID, and detached `ChainLaunchAuthorizationV1` with the exact launch
@@ -1488,32 +1495,34 @@ a checker error.
   omitted, over-limit, unavailable, or type-substituted entries, and hash-check every embedded
   preimage. The seven explicit artifacts are the scope, registry, candidate, transition
   specification, admission manifest, parity record, and admitted release. If `S` is the carried
-  supplementary-artifact list and `D` the dependency-node list, the checked equations are
-  `supplementary_artifact_count_u32 = |S|`, `complete_artifact_count_u32 = 7 + |S| = |D|`,
-  `complete_dependency_edge_count_u32 = SumChecked(|D[i].dependency_ids|)`, and
-  `total_canonical_preimage_bytes_u64 = SumChecked(len(Canonical(explicit[i]))) +
-  SumChecked(len(S[i].canonical_artifact_preimage_bytes))`; every declared individual preimage
-  length also equals its exact slice length. The byte sum counts the seven separately carried fields
-  exactly once each, including a repeated registry projection as its own explicit field, and excludes
-  bundle schema/counter/length fields, dependency-node bytes, collection framing, the outer
-  `genesis_package`, `launch_closure_bundle_id`, `ChainLaunchManifestV1`, and launch authorization.
+  supplementary-artifact list, `D` the internal dependency-node list, and `G` the exact outer
+  genesis-package bytes, the checked equations include `internal_artifact_count_u32 = 7 + |S| =
+  |D|`, `external_root_count_u32 = 1`, `complete_artifact_count_u32 = 8 + |S|`, separate internal
+  and external dependency-edge counts whose checked sum is the complete count, and separate internal
+  and external byte counts whose checked sum includes `len(G)` exactly once. Every declared
+  individual preimage/root length equals its exact slice. Bundle schema/counter/length fields,
+  dependency-node/descriptor bytes, collection framing, `launch_closure_bundle_id`,
+  `ChainLaunchManifestV1`, and launch authorization remain excluded from that byte total.
   Fixed-width counters and length prefixes are streaming-preflighted with checked arithmetic before
   allocation, copying, hashing, nested decode, profile-owned work, or materialization. The verifier
   then reproduces the acyclic genesis -> scope/registry -> candidate -> transition
   specification -> admission/parity/release -> launch-manifest derivation. Every repeated
-  projection and typed ID matches its unique owner; the initial target and launch predicate
+  projection and typed ID matches its unique owner; the sole rank-zero external root byte-equals the
+  outer genesis package, permits only the typed incoming genesis-dependency classes, and every other
+  external root rejects; the initial target and launch predicate
   contexts are identical; the detached authorization verifies only under the launch policy already
   committed in genesis. Missing-preimage, wrong-profile/specification/admission/parity/root/release,
-  candidate-selected-authority, altered authorization, off-by-one count, arithmetic overflow,
-  double-count, locator-only, and manifest/package self-reference mutants fail before bootstrap or
-  the first accepted record.
+  candidate-selected-authority, altered authorization, omitted-genesis-edge, injected-external-root,
+  outer/root mismatch, rank-to-unranked-root, off-by-one count, arithmetic overflow, double-count,
+  locator-only, and manifest/package self-reference mutants fail before bootstrap or the first
+  accepted record.
 - **Non-claim:** a complete authorized launch package does not prove archive availability after
   launch, validator honesty, consensus safety, transition correctness, operator custody, or the
   security of its cryptographic primitives.
 
 ### `SUCCESSOR-ACTIVATION-1` — authorized successor-profile closure
 
-- **Status:** **LOCKED**; this planning node does not activate migration or a successor profile.
+- **Status:** `PS-092:SUCCESSOR-ACTIVATION-1@base=LOCKED`, `PS-093:SUCCESSOR-ACTIVATION-1@activation=LOCKED`.
 - **Depends on:** `CHAIN-LAUNCH-1`, `PROFILE-SCOPE-D0`, `PROFILE-D1`, `TRANSITION-SPEC-1`,
   `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `UPGRADE-1`, `RELEASE-1`, `SYNC-1`, `EXECUTOR-1`,
   `EXECUTION-ROOT-1`, `GOVERNANCE-1`, `CRYPTO-1`, `CODEC-1`, `BOUNDS-1`.
@@ -1541,7 +1550,7 @@ a checker error.
 
 ### `PROD-OPS-1` — production operations and incident safety
 
-- **Status:** **LOCKED**.
+- **Status:** `PS-094:PROD-OPS-1@base=LOCKED`.
 - **Depends on:** `TESTNET-1`, `STORAGE-1`, `SIGNER-OPS-1`, `RELEASE-1`, and the safe-halt/recovery
   authority selected by `GOVERNANCE-D1`.
 - **Motive:** preserve the published claim through ordinary failures, attacks, and human operation.

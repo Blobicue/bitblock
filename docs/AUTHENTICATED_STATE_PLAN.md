@@ -18,9 +18,9 @@ The current-source statements below were checked against source/proof snapshot
 [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). A change to a named source file, root/key contract,
 or this plan invalidates the corresponding statement rather than inheriting its “checked” status.
 The later network-integration boundary is reviewed through the frozen
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md); its
-successor-carrier, lookup, preflight, release-authorization, and planning-metadata corrections do
-not select or implement an authenticated-map candidate.
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md); its
+accepted-parent evidence, protocol-identity-failure, external-genesis-root, and planning-projection
+corrections do not select or implement an authenticated-map candidate.
 
 ## Outcome sought
 
@@ -186,6 +186,14 @@ pre-admission chain—domain registry, profile scope, chain genesis, candidate p
 and profile-bound transition specification. Every invocation is domain separated and length frames
 its canonical payload. Candidate-selected cryptographic-suite fields govern only later
 profile-resolved operations and cannot alter `ProfileIdHashV1`.
+
+That separation has a terminal loss condition. `ProfileOwnedCryptographicMigrationV1` may migrate
+an admitted profile-owned node, object, commitment, proof, signature, or credential suite, but
+`ProtocolIdentityHashCompromiseV1`—collision, practical second-preimage failure, or equivalent loss
+of identity binding in `ProfileIdHashV1`—compromises the identities that would name and authorize
+such a successor. The affected lineage MUST safe-halt and recover only through a new independently
+authorized genesis, unless a different non-self-selecting transition authority was explicitly
+precommitted before launch. A successor identified through the failed function is not a repair.
 
 ```text
 ProofPolicyDescriptorV1 {
@@ -731,23 +739,35 @@ objects. Under protocol-frozen count/byte/depth bounds, a fresh verifier obtains
 `AdmittedReleaseRecordV1` preimages plus every supplementary preimage transitively required to
 verify admission and release. The carrier is embedded-only: its seven explicit preimages and every
 supplementary preimage occur exactly once, every such artifact has exactly one dependency node, the
-supplementary count equals that set's cardinality, and `complete_artifact_count = 7 +
-supplementary_artifact_count = dependency_node_count`. The edge count equals the checked sum of
-canonical dependency-list lengths, and the byte total equals the checked sum of the seven exact
-explicit-preimage lengths plus the supplementary canonical-preimage lengths. Every declared
-per-preimage length must match. Dependency metadata, counters, bundle/package/manifest/launch-
-authorization bytes, framing, and nested bytes already included in a top-level preimage are
-excluded from that preimage-byte sum so the equation is neither recursive nor double-counted. The
-verifier preflights the declared counts, lengths, and byte sum before materialization, then
+supplementary count equals that set's cardinality, and `internal_artifact_count = 7 +
+supplementary_artifact_count = dependency_node_count`. The sole external genesis root makes
+`external_root_count = 1` and `complete_artifact_count = 8 + supplementary_artifact_count`.
+Internal and external dependency-edge counts are checked separately and summed; internal canonical
+preimage bytes are the checked sum of the seven exact explicit lengths plus supplementary lengths,
+external-root canonical bytes equal the outer `GenesisPackageV1` length, and their checked sum is
+the total. Every declared per-preimage length must match. Dependency metadata, counters, bundle/
+manifest/launch-authorization bytes, framing, the external-root descriptor itself, and nested bytes
+already included in a top-level preimage are excluded so the equations are neither recursive nor
+double-counted; the exact outer genesis bytes are counted once as external bytes. The verifier
+preflights the declared counts, lengths, and byte sums before materialization, then
 recomputes each typed digest/ID, checks unique role and artifact inventory, byte-equal projections,
 complete reference resolution, and a strictly decreasing dependency rank before accepting
 `launch_closure_bundle_id`.
+
+`LaunchClosureExternalGenesisRootV1` is the sole typed external dependency root for the already
+outer-carried `GenesisPackageV1`. Its exact `genesis_id`, fixed rank 0, and external-root count 1 are
+bound by the launch schema. `LaunchClosureDependencyRefV1` distinguishes internal refs from external-
+genesis refs, and only the declared `ExternalGenesisIncomingDependencyClassV1` edge classes may
+target that root. The verifier requires byte equality with the outer carrier and keeps separate
+internal/external artifact, edge, and byte equations. Duplicated genesis bytes, an omitted required
+genesis edge, a second external root, an undeclared edge class, an unranked/root-rank violation, or
+an outer/root mismatch rejects before profile resolution.
 
 The release object itself begins with an authorization-free `AdmittedReleaseCoreV1` and its
 domain-separated core ID. A detached `ReleaseAuthorizationV1` covers `ReleaseSignDocV1`, which names
 that exact core ID and `ReleaseAuthorityContextRefV1`; policy, scheme, credentials, codec, and
 verification rule are resolved from the genesis authority record already committed in `G_0` or the
-exact governance-authority root of the independently verified accepted predecessor. The final
+exact governance-authority root of the independently verified accepted predecessor core. The final
 `AdmittedReleaseRecordV1` and ID are derived only after verification. The candidate record's own
 unverified policy field cannot choose the verifier. The verifier then checks the manifest and
 detached launch authorization. A missing preimage, ambient local ID mapping, duplicate role,
@@ -835,8 +855,16 @@ bytes, checked fixed-width lengths, and shallow opaque header, availability-payl
 segments. An ordinary branch uses the protocol-frozen
 `AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id`, binding the chain/launch identity,
 envelope-owner profile, block-ID suite and type, and exact bounded parent digest. A unique local
-index must return exactly one accepted parent; after retrieval the consumer recomputes the payload
-and lookup ID and applies that parent's profile-specific consensus-status rule.
+index must return exactly one byte-exact accepted proposal/core; after retrieval the consumer
+recomputes the payload and lookup ID. Verified consensus and availability evidence are separately
+typed `VerifiedAcceptedEvidenceEntryV1` values in a sorted, deduplicated `AcceptedEvidenceSetV1` and
+may contain several valid objects for that `AcceptedProposalCoreV1`. The admitted-profile-owned,
+purpose-specific `ParentAuthorityEligibilityV1` defines evidence identity and conflict handling and
+is monotone: adding qualifying evidence cannot invalidate an already eligible core. Nonqualifying/
+conflicting evidence cannot create eligibility, while two distinct cores under one lookup ID reject
+as a true collision. It returns semantic `VerifiedEligibleAcceptedParentRefV1` for canonical,
+purpose-tagged `AcceptedParentAuthorityRefV1`; release and successor-activation sign documents carry
+that as `predecessor_accepted_parent_authority_ref` rather than one evidence-wrapper occurrence.
 The first-record launch lookup instead verifies the complete launch closure and detached launch
 authorization plus the manifest's first-height/genesis-parent/root conditions; it is not an
 accepted parent and never satisfies that status predicate by coercion.

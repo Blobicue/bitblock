@@ -25,8 +25,9 @@ frozen
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
 and
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md)
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md)
 successor records.
 
 The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
@@ -76,11 +77,18 @@ capability-owner, and review-provenance gaps before correction
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
 whose first-addition Git blob is `519451b120b458735afaa59daa01aa23466e165e`. It records eight
 successor-activation-closure, pre-limit work, parent-lookup, launch-count, release-authorization,
-capability-dependency/status, and corrected-audit-provenance gaps before this coordinated
-descendant correction.
+capability-dependency/status, and corrected-audit-provenance gaps before correction
+`1821f37d1f042115a4ffb3bd50292885e581d812`. A sixth complete sweep of that correction and Git tree
+`9b8c08b10c611dd62ac8dbd7b4e46d1b0a02bf90` is frozen at commit
+`80b58e0a40408e03f16e2d0c739c177e05c22903` in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
+whose first-addition Git blob is `5374b160424b78bd516ffc598e9bbd3b29392227`. It records four
+accepted-parent evidence-multiplicity, protocol-identity-hash failure, external-genesis-root, and
+phase-status-projection gaps before this coordinated descendant correction.
 None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
 cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
-deferred until a later complete sweep records zero new material design gaps.
+deferred until the complete Loop 7 sweep records zero new material design gaps within its declared
+finite lenses.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.

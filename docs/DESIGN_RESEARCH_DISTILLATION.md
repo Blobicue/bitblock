@@ -21,7 +21,12 @@ against that third correction
 **Fifth successor audit:**
 [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md), frozen
 at first-addition commit `0d0122d9bf84664511db7588bb09d5c590a006f9`, Git blob
-`519451b120b458735afaa59daa01aa23466e165e`, against that fourth correction; its descendant remains
+`519451b120b458735afaa59daa01aa23466e165e`, against that fourth correction
+**Fifth correction:** `1821f37d1f042115a4ffb3bd50292885e581d812`
+**Sixth successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md), frozen
+at first-addition commit `80b58e0a40408e03f16e2d0c739c177e05c22903`, Git blob
+`5374b160424b78bd516ffc598e9bbd3b29392227`, against that fifth correction; its descendant remains
 a documentation/checker correction
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
@@ -88,10 +93,13 @@ Capability scheduling has its own structured boundary. In `CAPABILITY_TREE.md`, 
 `Depends on` field names only true unconditional base prerequisites. Phase- or instance-specific
 requirements live in the canonical phase-dependency manifest, and every normative base/secondary
 phase state lives in the canonical phase-status manifest. Negations, examples, hypothetical later
-work, and explanatory status prose are not dependency edges or status authority. This metadata is
-planning input only; a checker accepting its 72-node, 94-status-tuple, five-phase-edge, and
-44-conditional-instance manifests does not make a capability ready or implemented. In particular,
-the new `SUCCESSOR-ACTIVATION-1` owner remains `LOCKED`.
+work, and explanatory status prose are not dependency edges or status authority. Each node status
+field projects all owned manifest rows in manifest order as exact
+`PS-NNN:NODE@phase=STATUS` tokens. Each token must equal one authoritative tuple; missing,
+duplicate, unknown, reordered, or promoted/demoted projections reject. This synchronization does
+not make prose an authority source. A checker accepting its 72-node, 94-status-tuple,
+360-total-edge, 10-predicate-entailment, and 20-planning-document surfaces does not make a capability
+ready or implemented. In particular, `SUCCESSOR-ACTIVATION-1` remains `LOCKED`.
 
 ## Preserved question spine
 
@@ -153,7 +161,12 @@ X_n        = ComposeExecutionRoot(G_(p_n), C_n)
 Every scope, genesis, candidate-profile, and other pre-admission identifier is derived with the
 single protocol-frozen `ProfileIdHashV1`; a candidate's selected cryptographic suites cannot choose
 or reinterpret the function that identifies the candidate. Profile-selected hashes apply only
-where the already identified and admitted profile assigns them.
+where the already identified and admitted profile assigns them. `ProfileOwnedCryptographicMigrationV1`
+can replace those admitted profile-owned suites, but not this pre-profile trust anchor.
+`ProtocolIdentityHashCompromiseV1`—collision, practical second-preimage failure, or equivalent loss
+of identity binding in `ProfileIdHashV1`—is therefore a terminal safe-halt/new-genesis condition
+unless a different non-self-selecting transition authority was precommitted before launch; a
+successor named through the failed function cannot repair it.
 
 The raw `(genesis payload, genesis_id)` pair intentionally predates `profile_id` and cannot select
 an initial interpreter by itself. The Layer 1 `ChainLaunchManifestV1` is derived afterward without
@@ -168,12 +181,22 @@ whole genesis→registry/scope→candidate→specification→admission/parity/re
 authorization chain under a unique, count/byte/depth-bounded inventory before selecting the first
 profile codec. This launch carrier is embedded-only: each of the seven explicit preimages and each
 supplementary preimage is carried exactly once, its dependency node is carried exactly once, and
-`complete_artifact_count = 7 + supplementary_artifact_count = dependency_node_count`, the edge
-count is the checked sum of dependency-list lengths, and the canonical-preimage byte total is the
-checked sum of the seven explicit lengths plus the supplementary preimage lengths. Exact per-
-preimage lengths are also checked. Bundle/package/manifest/authorization framing, counters,
-dependency-node bytes, and nested bytes already included in a top-level preimage are not counted
-again. A hash with no carried preimage or an ambient local mapping is not bootstrap input.
+`internal_artifact_count = 7 + supplementary_artifact_count = dependency_node_count`.
+`external_root_count = 1`, so `complete_artifact_count = 8 + supplementary_artifact_count`.
+Internal/external edge and byte counts are checked separately and summed: internal preimage bytes
+are the seven explicit lengths plus supplementary lengths, and external-root bytes are the exact
+outer `GenesisPackageV1` length. Exact per-preimage lengths are also checked. Bundle/manifest/
+authorization framing, counters, dependency-node bytes, the external-root descriptor itself, and
+nested bytes already included in a top-level preimage are not counted again; the exact outer genesis
+bytes are counted once as external bytes. `LaunchClosureExternalGenesisRootV1` is the sole typed
+external dependency root for the already outer-carried `GenesisPackageV1`: its exact `genesis_id`,
+fixed rank 0 and external-root count 1 are bound. `LaunchClosureDependencyRefV1` separates internal
+refs from external-genesis refs, only the declared `ExternalGenesisIncomingDependencyClassV1` edge
+classes may point to it, and its bytes must equal the outer carrier. It is not silently folded into
+the seven-internal-artifact
+equations. Any duplicated genesis bytes, other external dependency, omitted genesis edge, or outer/
+root mismatch rejects. A hash with no carried preimage or an ambient local mapping is not bootstrap
+input.
 
 The carried release is likewise non-circular. An authorization-free canonical
 `AdmittedReleaseCoreV1` is identified first; a detached, tagged `ReleaseAuthorizationV1` authorizes
@@ -226,11 +249,20 @@ That ordering is inhabited by fixed profile-independent `ProposalOuterV1` and
 parent-or-launch lookup reference, and opaque inner byte ranges. An ordinary reference uses a
 fixed-hash `AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id` that binds chain/launch
 identity, envelope-owner profile, block-ID suite and type, and the exact bounded parent digest; a
-unique local index must return one accepted parent, and the lookup payload and ID are recomputed
-after retrieval. The first-record branch instead verifies the complete launch closure and detached
-launch authorization plus the manifest's first-record conditions; launch authorization is not
-coerced into parent consensus. After that branch selects the owner and its limits, every decoded
-inner object is re-encoded and required to equal its exact outer bytes.
+unique local index must return one byte-exact `AcceptedProposalCoreV1`, and the lookup payload and ID
+are recomputed after retrieval. Typed `VerifiedAcceptedEvidenceEntryV1` values live in a sorted,
+deduplicated `AcceptedEvidenceSetV1`, so several honest evidence objects may refer to the same core.
+The admitted-profile-owned, purpose-specific `ParentAuthorityEligibilityV1` defines evidence
+identity/conflict handling and is monotone: additional qualifying evidence cannot invalidate an
+already eligible core. Nonqualifying or conflicting evidence cannot create eligibility, and a true
+distinct-core lookup collision rejects. It returns `VerifiedEligibleAcceptedParentRefV1` for a
+canonical, purpose-tagged `AcceptedParentAuthorityRefV1`; release and
+`SuccessorActivationSignDocV1` carry that as `predecessor_accepted_parent_authority_ref` rather than
+a raw lookup ID or wrapper occurrence. The
+first-record branch instead verifies the complete launch closure and detached launch authorization
+plus the manifest's first-record conditions; launch authorization is not coerced into parent
+consensus. After that branch selects the owner and its limits, every decoded inner object is re-
+encoded and required to equal its exact outer bytes.
 
 A payload commitment establishes byte identity, not retrieval. Consensus and availability evidence
 must each bind the candidate identifier, selected policy, applicable authority/epoch context, and

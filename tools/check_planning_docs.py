@@ -30,6 +30,8 @@ FOURTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md"
 FOURTH_AUDIT_GIT_BLOB = "350d1af6279d7f441f45fba2689481c0dbea79a5"
 FIFTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md"
 FIFTH_AUDIT_GIT_BLOB = "519451b120b458735afaa59daa01aa23466e165e"
+SIXTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md"
+SIXTH_AUDIT_GIT_BLOB = "5374b160424b78bd516ffc598e9bbd3b29392227"
 LAYER1_DESIGN_AUDIT = ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md"
 LAYER1_DESIGN_AUDIT_GIT_BLOB = "124e066b418a61279abf90c1b1b2c2cc0604ef2a"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
@@ -44,6 +46,7 @@ FROZEN_TEXT_FILES = (
     THIRD_AUDIT,
     FOURTH_AUDIT,
     FIFTH_AUDIT,
+    SIXTH_AUDIT,
     LAYER1_DESIGN_AUDIT,
     DESIGN_RECEIPT,
 )
@@ -54,6 +57,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/LAYER1_DESIGN_AUDIT.md",
@@ -69,6 +73,7 @@ PLANNING_FILES = (
     THIRD_AUDIT,
     FOURTH_AUDIT,
     FIFTH_AUDIT,
+    SIXTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -92,6 +97,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -105,7 +111,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "3411c02e25882d9017056f1b21559dacca7bd853e6e80884bb316023161de129"
+    "807390d50af9e43e8a6a8cd72043e07385e00b754ab1a96c1389f465ab1fd6be"
 )
 NODE_ID = r"[A-Z][A-Z0-9-]*"
 PHASE_NODE_ID = r"[A-Z0-9]+(?:-[A-Z0-9]+)*"
@@ -113,7 +119,7 @@ DETAIL_HEADING = re.compile(rf"^### `({NODE_ID})`(?:\s|$)")
 FIELD_BOUNDARY = re.compile(r"^#{1,3}\s")
 FIELD = re.compile(r"^- \*\*(Status|Depends on|Motive|Artifact|Gate|Non-claim):\*\*\s*(.*)$")
 DEPENDENCY = re.compile(rf"`({NODE_ID})`")
-FOUNDATION_ROW = re.compile(rf"^\| `({NODE_ID})` \| \*\*([^|]+)\*\* \| ([^|]+) \|")
+FOUNDATION_ROW = re.compile(rf"^\| `({NODE_ID})` \| ([^|]+) \| ([^|]+) \|")
 CONDITIONAL_ROW = re.compile(
     rf"^\| (CE-[0-9]{{2}}) \| ({NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
     rf"(launch-profile|target-profile) \| "
@@ -123,6 +129,10 @@ CONDITIONAL_ROW = re.compile(
 PHASE_STATUS_ROW = re.compile(
     rf"^\| (PS-[0-9]{{3}}) \| ({PHASE_NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
     r"(IMPLEMENTED|BOUNDED|READY|LOCKED|OPEN-DECISION|NOT-STARTED) \|$"
+)
+STATUS_PROJECTION_TOKEN = re.compile(
+    rf"`(PS-[0-9]{{3}}):({PHASE_NODE_ID})@([a-z0-9]+(?:-[a-z0-9]+)*)="
+    r"(IMPLEMENTED|BOUNDED|READY|LOCKED|OPEN-DECISION|NOT-STARTED)`"
 )
 PHASE_DEPENDENCY_ROW = re.compile(
     rf"^\| (PD-[0-9]{{2}}) \| ({PHASE_NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
@@ -225,6 +235,7 @@ EXPECTED_CHAIN_LAUNCH_ARTIFACT_FRAGMENTS = (
     "`ChainLaunchManifestV1` and ID",
     "`ChainLaunchAuthorizationV1`",
     "embedded-only inventory",
+    "`LaunchClosureExternalGenesisRootV1`",
     "entries and retrieval locators are not members of this carrier",
 )
 EXPECTED_SUCCESSOR_ACTIVATION_ARTIFACT_FRAGMENTS = (
@@ -276,6 +287,28 @@ EXPECTED_LOOP5_PAPER_FRAGMENTS = {
         "ResolveTrustedReleaseAuthorityV1(release_authority_context_ref)",
     ),
 }
+EXPECTED_LOOP6_PAPER_FRAGMENTS = {
+    "RG-01": (
+        "AcceptedProposalCoreV1 = FixedPreProfileCanonicalV1(",
+        "AcceptedEvidenceSetV1 = CanonicalSortedUniqueByTypedEvidenceId([",
+        "AcceptedParentAuthorityRefV1 = Canonical(",
+        "ParentAuthorityEligibilityV1(core, use, E) = Eligible",
+        "Powered parent-index controls MUST include:",
+    ),
+    "RG-02": (
+        "`ProfileOwnedCryptographicMigrationV1` may",
+        "`ProtocolIdentityHashCompromiseV1` is therefore terminal safe halt",
+        "The protocol-identity control supplies colliding or",
+        "restart requires the separately trusted new-genesis procedure",
+    ),
+    "RG-03": (
+        "ExternalGenesisIncomingDependencyClassV1 =",
+        "LaunchClosureExternalGenesisRootV1 = Canonical(",
+        "external_root_count_u32                 = 1",
+        "external root, other external dependency, duplicated external edge",
+        "mismatch the outer/root bytes or ID",
+    ),
+}
 
 
 class PlanningError(ValueError):
@@ -287,6 +320,7 @@ class Node:
     node_id: str
     dependencies: tuple[str, ...]
     status_class: str
+    status_projections: tuple["PhaseStatus", ...]
     source: str
 
 
@@ -325,22 +359,49 @@ class PredicateEntailment:
     consequent: str
 
 
-STATUS_CLASSES = (
-    "IMPLEMENTED",
-    "BOUNDED",
-    "READY",
-    "LOCKED",
-    "OPEN DECISION",
-    "NOT STARTED",
-)
+def _status_projections(
+    text: str,
+    node_id: str,
+) -> tuple[tuple[PhaseStatus, ...], str]:
+    """Parse a node's checked projection without treating its prose as authority."""
 
+    canonical = text.strip()
+    if canonical.endswith("."):
+        canonical = canonical[:-1]
+    tokens = canonical.split(", ") if canonical else []
+    projections: list[PhaseStatus] = []
+    seen_ids: set[str] = set()
+    seen_phases: set[str] = set()
+    for token in tokens:
+        match = STATUS_PROJECTION_TOKEN.fullmatch(token)
+        if match is None:
+            raise PlanningError(
+                f"{node_id}: status field is not a canonical projection token list: {text}"
+            )
+        projection = PhaseStatus(*match.groups())
+        if projection.node_id != node_id:
+            raise PlanningError(
+                f"{node_id}: status projection {projection.status_id} names node "
+                f"{projection.node_id}"
+            )
+        if projection.status_id in seen_ids:
+            raise PlanningError(
+                f"{node_id}: duplicate status projection ID {projection.status_id}"
+            )
+        if projection.phase in seen_phases:
+            raise PlanningError(
+                f"{node_id}: duplicate status projection phase {projection.phase}"
+            )
+        seen_ids.add(projection.status_id)
+        seen_phases.add(projection.phase)
+        projections.append(projection)
 
-def _status_class(text: str, node_id: str) -> str:
-    plain = re.sub(r"[*`]", "", text).strip().upper()
-    for status in STATUS_CLASSES:
-        if plain.startswith(status):
-            return status
-    raise PlanningError(f"{node_id}: invalid primary status vocabulary: {text}")
+    base = [projection for projection in projections if projection.phase == "base"]
+    if len(base) != 1:
+        raise PlanningError(
+            f"{node_id}: expected exactly one projected base phase, got {len(base)}"
+        )
+    return tuple(projections), base[0].status.replace("-", " ")
 
 
 def _unconditional_dependency_clause(text: str) -> str:
@@ -414,10 +475,12 @@ def parse_capability(text: str) -> dict[str, Node]:
         if node_id in nodes:
             raise PlanningError(f"duplicate node {node_id} at line {number}")
         dependency_clause = _unconditional_dependency_clause(prerequisites)
+        status_projections, status_class = _status_projections(_status, node_id)
         nodes[node_id] = Node(
             node_id,
             tuple(DEPENDENCY.findall(dependency_clause)),
-            _status_class(_status, node_id),
+            status_class,
+            status_projections,
             f"line {number}",
         )
 
@@ -441,10 +504,12 @@ def parse_capability(text: str) -> dict[str, Node]:
         dependencies = tuple(DEPENDENCY.findall(dependency_clause))
         if not dependencies and "none" not in dependency_clause.lower():
             raise PlanningError(f"{node_id}: dependency field names no node and does not say None")
+        status_projections, status_class = _status_projections(fields["Status"], node_id)
         nodes[node_id] = Node(
             node_id,
             dependencies,
-            _status_class(fields["Status"], node_id),
+            status_class,
+            status_projections,
             f"line {start + 1}",
         )
 
@@ -581,20 +646,24 @@ def parse_phase_statuses(
         raise PlanningError("no structured phase-status rows parsed")
 
     for node_id, node in nodes.items():
-        base_rows = [
-            status
-            for status in statuses
-            if status.node_id == node_id and status.phase == "base"
-        ]
+        node_rows = tuple(status for status in statuses if status.node_id == node_id)
+        base_rows = [status for status in node_rows if status.phase == "base"]
         if len(base_rows) != 1:
             raise PlanningError(
                 f"{node_id}: expected exactly one base phase-status tuple, got {len(base_rows)}"
             )
-        manifest_primary = base_rows[0].status.replace("-", " ")
-        if manifest_primary != node.status_class:
+        if node.status_projections != node_rows:
+            projected = [
+                f"{row.status_id}:{row.node_id}@{row.phase}={row.status}"
+                for row in node.status_projections
+            ]
+            authoritative = [
+                f"{row.status_id}:{row.node_id}@{row.phase}={row.status}"
+                for row in node_rows
+            ]
             raise PlanningError(
-                f"{node_id}: base phase status {base_rows[0].status} disagrees with prose primary "
-                f"status {node.status_class}"
+                f"{node_id}: checked status projections disagree with authoritative phase-status "
+                f"rows: projected={projected}, authoritative={authoritative}"
             )
 
     canonical = "\n".join(
@@ -1241,6 +1310,16 @@ def check_frozen_fifth_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_sixth_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != SIXTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md changed after its frozen first "
+            f"addition: expected Git blob {SIXTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
 def check_frozen_layer1_design_audit(data: bytes) -> None:
     header = f"blob {len(data)}\0".encode("ascii")
     actual = hashlib.sha1(header + data).hexdigest()
@@ -1253,6 +1332,16 @@ def check_frozen_layer1_design_audit(data: bytes) -> None:
 
 def check_loop5_paper_fragments(text: str) -> None:
     for finding_id, fragments in EXPECTED_LOOP5_PAPER_FRAGMENTS.items():
+        for fragment in fragments:
+            if text.count(fragment) != 1:
+                raise PlanningError(
+                    f"LAYER1_DESIGN_PAPER.md must contain exactly one {finding_id} protocol "
+                    f"fragment: {fragment}"
+                )
+
+
+def check_loop6_paper_fragments(text: str) -> None:
+    for finding_id, fragments in EXPECTED_LOOP6_PAPER_FRAGMENTS.items():
         for fragment in fragments:
             if text.count(fragment) != 1:
                 raise PlanningError(
@@ -1482,6 +1571,14 @@ def expect_frozen_fifth_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_sixth_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_sixth_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_frozen_layer1_design_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_layer1_design_audit(data)
@@ -1594,6 +1691,32 @@ def expect_phase_status_failure(
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_loop6_paper_fragment_failure(label: str, text: str) -> None:
+    try:
+        check_loop6_paper_fragments(text)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_status_projection_failure(
+    label: str,
+    text: str,
+    *,
+    expected_message: str | None = None,
+) -> None:
+    try:
+        nodes = parse_capability(text)
+        parse_phase_statuses(text, nodes)
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_phase_dependency_failure(
     label: str,
     text: str,
@@ -1652,6 +1775,7 @@ def run_self_tests(
     third_audit_bytes: bytes,
     fourth_audit_bytes: bytes,
     fifth_audit_bytes: bytes,
+    sixth_audit_bytes: bytes,
     layer1_design_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
@@ -1660,7 +1784,7 @@ def run_self_tests(
     tracked_paths: frozenset[Path],
     frozen_eol_policy: dict[str, dict[str, str]],
 ) -> None:
-    reduced_inventory = tuple(path for path in PLANNING_FILES if path != FIFTH_AUDIT)
+    reduced_inventory = tuple(path for path in PLANNING_FILES if path != SIXTH_AUDIT)
     if len(reduced_inventory) != len(PLANNING_FILES) - 1:
         raise PlanningError("self-test fixture drift: planning authority inventory")
     expect_planning_inventory_failure(
@@ -1671,7 +1795,7 @@ def run_self_tests(
     wrong_eol_policy = {
         path: dict(attributes) for path, attributes in frozen_eol_policy.items()
     }
-    eol_probe_path = repository_relative_path(FIFTH_AUDIT)
+    eol_probe_path = repository_relative_path(SIXTH_AUDIT)
     wrong_eol_policy[eol_probe_path]["eol"] = "crlf"
     expect_frozen_text_eol_policy_failure(
         "fresh-checkout EOL policy changed from LF",
@@ -1694,8 +1818,10 @@ def run_self_tests(
     expect_failure("undefined dependency", unknown)
 
     foundation_cycle = text.replace(
-        "| `OBSERVE-0` | **IMPLEMENTED, bounded** | `WORLD-0` |",
-        "| `OBSERVE-0` | **IMPLEMENTED, bounded** | `TICK-0` |",
+        "| `OBSERVE-0` | `PS-002:OBSERVE-0@base=IMPLEMENTED`, "
+        "`PS-003:OBSERVE-0@claim-scope=BOUNDED` | `WORLD-0` |",
+        "| `OBSERVE-0` | `PS-002:OBSERVE-0@base=IMPLEMENTED`, "
+        "`PS-003:OBSERVE-0@claim-scope=BOUNDED` | `TICK-0` |",
         1,
     )
     if foundation_cycle == text:
@@ -1709,7 +1835,7 @@ def run_self_tests(
     expect_failure("duplicate node", duplicate)
 
     bad_status = text.replace(
-        "- **Status:** **READY; preferred next semantic implementation checkpoint**.",
+        "- **Status:** `PS-009:ACCOUNT-1@base=READY`.",
         "- **Status:** **MAGICALLY SECURE**.",
         1,
     )
@@ -1718,8 +1844,8 @@ def run_self_tests(
     expect_failure("invalid status vocabulary", bad_status)
 
     false_promotion = text.replace(
-        "- **Status:** **READY; preferred next semantic implementation checkpoint**.",
-        "- **Status:** **IMPLEMENTED**.",
+        "- **Status:** `PS-009:ACCOUNT-1@base=READY`.",
+        "- **Status:** `PS-009:ACCOUNT-1@base=IMPLEMENTED`.",
         1,
     )
     if false_promotion == text:
@@ -1864,6 +1990,71 @@ def run_self_tests(
     phase_statuses = parse_phase_statuses(text, nodes)
     parse_phase_dependencies(text, nodes, phase_statuses)
 
+    prototype_projection = "`PS-019:VERKLE-R1@prototype=LOCKED`"
+    missing_projection = text.replace(f", {prototype_projection}", "", 1)
+    if missing_projection == text:
+        raise PlanningError("self-test fixture drift: missing status projection")
+    expect_status_projection_failure(
+        "missing secondary status projection",
+        missing_projection,
+        expected_message="checked status projections disagree with authoritative phase-status rows:",
+    )
+
+    duplicate_projection = text.replace(
+        prototype_projection,
+        f"{prototype_projection}, {prototype_projection}",
+        1,
+    )
+    expect_status_projection_failure(
+        "duplicate secondary status projection",
+        duplicate_projection,
+        expected_message="duplicate status projection ID PS-019",
+    )
+
+    unknown_projection_id = text.replace(
+        prototype_projection,
+        "`PS-999:VERKLE-R1@prototype=LOCKED`",
+        1,
+    )
+    expect_status_projection_failure(
+        "unknown status projection ID",
+        unknown_projection_id,
+        expected_message="checked status projections disagree with authoritative phase-status rows:",
+    )
+
+    unknown_projection_phase = text.replace(
+        prototype_projection,
+        "`PS-019:VERKLE-R1@unknown-phase=LOCKED`",
+        1,
+    )
+    expect_status_projection_failure(
+        "unknown status projection phase",
+        unknown_projection_phase,
+        expected_message="checked status projections disagree with authoritative phase-status rows:",
+    )
+
+    unknown_projection_status = text.replace(
+        prototype_projection,
+        "`PS-019:VERKLE-R1@prototype=MAGIC`",
+        1,
+    )
+    expect_status_projection_failure(
+        "unknown status projection token",
+        unknown_projection_status,
+        expected_message="status field is not a canonical projection token list:",
+    )
+
+    prose_only_promotion = text.replace(
+        prototype_projection,
+        f"{prototype_projection}; **READY@prototype**",
+        1,
+    )
+    expect_status_projection_failure(
+        "prose-only secondary status promotion",
+        prose_only_promotion,
+        expected_message="status field is not a canonical projection token list:",
+    )
+
     for status_row, promoted_row, label in (
         (
             "| PS-019 | VERKLE-R1 | prototype | LOCKED |",
@@ -1883,7 +2074,7 @@ def run_self_tests(
             label,
             promoted,
             nodes,
-            expected_message="phase-status tuples changed without updating their intentional guard:",
+            expected_message="checked status projections disagree with authoritative phase-status rows:",
         )
 
     missing_base_status = text.replace(
@@ -2402,6 +2593,10 @@ def run_self_tests(
         "frozen fifth audit mutation",
         fifth_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_sixth_audit_failure(
+        "frozen sixth audit mutation",
+        sixth_audit_bytes + b"\nnegative-control",
+    )
     expect_frozen_layer1_design_audit_failure(
         "frozen corrected checkpoint-0.3 audit mutation",
         layer1_design_audit_bytes + b"\nnegative-control",
@@ -2418,6 +2613,21 @@ def run_self_tests(
                     f"self-test fixture drift: {finding_id} paper fragment {index}"
                 )
             expect_loop5_paper_fragment_failure(
+                f"{finding_id} paper fragment mutation {index}",
+                mutated_paper,
+            )
+    for finding_id, fragments in EXPECTED_LOOP6_PAPER_FRAGMENTS.items():
+        for index, fragment in enumerate(fragments, 1):
+            mutated_paper = layer1_design_paper_text.replace(
+                fragment,
+                f"mutated-{finding_id.lower()}-paper-fragment-{index}",
+                1,
+            )
+            if mutated_paper == layer1_design_paper_text:
+                raise PlanningError(
+                    f"self-test fixture drift: {finding_id} paper fragment {index}"
+                )
+            expect_loop6_paper_fragment_failure(
                 f"{finding_id} paper fragment mutation {index}",
                 mutated_paper,
             )
@@ -2500,6 +2710,8 @@ def main() -> int:
     check_frozen_fourth_audit(fourth_audit_bytes)
     fifth_audit_bytes = FIFTH_AUDIT.read_bytes()
     check_frozen_fifth_audit(fifth_audit_bytes)
+    sixth_audit_bytes = SIXTH_AUDIT.read_bytes()
+    check_frozen_sixth_audit(sixth_audit_bytes)
     layer1_design_audit_bytes = LAYER1_DESIGN_AUDIT.read_bytes()
     check_frozen_layer1_design_audit(layer1_design_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
@@ -2512,6 +2724,7 @@ def main() -> int:
         encoding="utf-8"
     )
     check_loop5_paper_fragments(layer1_design_paper_text)
+    check_loop6_paper_fragments(layer1_design_paper_text)
     for path in PLANNING_FILES:
         check_markdown(
             path,
@@ -2528,6 +2741,7 @@ def main() -> int:
             third_audit_bytes,
             fourth_audit_bytes,
             fifth_audit_bytes,
+            sixth_audit_bytes,
             layer1_design_audit_bytes,
             design_receipt_bytes,
             design_text,

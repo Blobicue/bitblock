@@ -11,7 +11,7 @@ planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronol
 that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md), the
 second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md), and the
 design-successor chronology through
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md).
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md).
 Those audits cover planning/proposed-protocol corrections only; none silently extends or reruns the
 checkpoint-0.3 paper audit. Changes to named source/proof files or this chronology stale the
 corresponding statements.
@@ -505,6 +505,39 @@ contracts: they activate no runtime, networking, storage, cryptography, trie, ve
 cryptocurrency, consensus, or Layer 1 capability. Broad Rust, Python-vector, headless, release,
 Lean, network, performance, and display tests remain gated on another complete sweep freezing zero
 new material gaps within its declared coverage.
+
+### 32. Sixth bounded successor sweep and terminal identity boundary
+
+User intent: continue freezing each complete successor sweep and correcting only its findings until
+one later independent finite-lens sweep finds neither a new material gap nor a falsely closed
+residual, then begin broad implementation tests.
+
+Current truth: the fifth correction is pinned at
+`1821f37d1f042115a4ffb3bd50292885e581d812`, Git tree
+`9b8c08b10c611dd62ac8dbd7b4e46d1b0a02bf90`. The next complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md) at
+first-addition commit `80b58e0a40408e03f16e2d0c739c177e05c22903`, with Git blob
+`5374b160424b78bd516ffc598e9bbd3b29392227`. It records four material gaps: accepted-parent lookup
+incorrectly requiring one evidence-bearing wrapper; a false generic migration promise for failure
+of `ProfileIdHashV1`; the outer genesis object missing from the advertised complete launch closure;
+and unchecked phase-status projections in node prose.
+
+The coordinated descendant correction makes one byte-exact `AcceptedProposalCoreV1` the lookup
+identity while a sorted, deduplicated `AcceptedEvidenceSetV1` feeds purpose-specific, monotone
+`ParentAuthorityEligibilityV1`; a true distinct-core collision still rejects. It separates
+`ProfileOwnedCryptographicMigrationV1`
+from `ProtocolIdentityHashCompromiseV1`: failure of `ProfileIdHashV1` is a terminal safe-halt/new-
+genesis boundary, while ordinary in-place upgrades remain limited to profile-owned suites. It gives
+the already outer-carried `GenesisPackageV1` exactly one `LaunchClosureExternalGenesisRootV1` role
+at rank 0/count 1 with separate internal/external equations, and requires every canonical
+`PS-NNN:NODE@phase=STATUS` prose projection to equal exactly one authoritative phase tuple.
+
+These are proposed-protocol, planning, attribute-policy, and checker corrections only. They do not
+implement parent indexing, evidence verification, consensus eligibility, a safe-halt mechanism, a
+new-genesis ceremony, launch retrieval, cryptography, networking, authenticated state, or Layer 1
+execution. No broad Rust, Python-vector, headless, release, Lean, network, performance, or display
+test is attributed to this correction. A seventh complete sweep must pin it and freeze zero new
+material gaps within its declared lenses before those broad tests begin.
 
 ## Semantic lessons that should survive future checkpoints
 

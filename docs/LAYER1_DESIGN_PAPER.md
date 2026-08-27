@@ -160,9 +160,10 @@ where:
   active and delayed-next authority sets where the selected consensus needs them;
 - `ConsensusHead_(i,h)` identifies node `i`'s rule-verified ledger prefix, exact
   finality/confirmation status, and typed availability status/assessment reference. For an
-  accepted head, the latter pair is the exact projection of the canonical
-  `AvailabilityAssessmentV1` in `AcceptedBlockRecord`; a node cannot attach a different status to
-  the same accepted bytes. Before such an assessment verifies, a candidate view uses
+  accepted head, those values are the deterministic profile-owned projection of the verified
+  evidence set for one byte-exact `AcceptedProposalCoreV1`; they are not selected from an arbitrary
+  `AcceptedBlockRecord` wrapper. A node cannot attach a status not derived by that projection.
+  Before qualifying evidence verifies, a candidate view uses
   `(Unverified, None)` and cannot satisfy a profile that requires availability before acceptance.
   A probabilistic tip may be node-relative; a public safety claim covers only the prefix satisfying
   its declared confirmation/common-prefix rule; and
@@ -253,7 +254,8 @@ genesis_id = ProfileIdHashV1(
     Domain("bitblock/chain-genesis/v1")
  || LengthFrame(Canonical(ChainGenesisPayloadV1))
 )
-genesis_package = (ChainGenesisPayloadV1, genesis_id)  // pre-ID launch input only
+GenesisPackageV1 = Canonical(ChainGenesisPayloadV1, genesis_id)
+genesis_package = GenesisPackageV1  // pre-ID launch input only
 
 ProfileLineageV1 =
     InitialProfileV1
@@ -347,13 +349,25 @@ profile_admission_manifest_id = ProfileIdHashV1(
  || LengthFrame(Canonical(ProfileAdmissionManifestV1))
 )
 
+AcceptedParentAuthorityUseV1 =
+    EnvelopeParentAuthorityV1
+  | SuccessorReleaseAuthorityV1
+  | SuccessorActivationAuthorityV1
+
+AcceptedParentAuthorityRefV1 = Canonical(
+    accepted_parent_lookup_id,
+    accepted_parent_authority_use,
+    parent_authority_eligibility_policy_id,
+    required_parent_authority_predicate_id
+)
+
 ReleaseAuthorityContextRefV1 =
     GenesisReleaseAuthorityV1(
         genesis_id,
         genesis_release_authority_record_id
     )
   | AcceptedParentReleaseAuthorityV1(
-        predecessor_accepted_parent_lookup_id,
+        predecessor_accepted_parent_authority_ref,
         predecessor_governance_authority_root
     )
 
@@ -458,15 +472,42 @@ SupplementaryLaunchArtifactV1 = Canonical(
 LaunchClosureDependencyNodeV1 = Canonical(
     topological_rank_u32,
     typed_artifact_id,
-    canonical_sorted_unique_dependency_ids
+    canonical_sorted_unique_dependency_refs
+)
+
+ExternalGenesisIncomingDependencyClassV1 =
+    InitialScopeRegistryLinkageDependencyV1
+  | InitialCandidateGenesisIdentityDependencyV1
+  | GenesisStateDerivationDependencyV1
+  | GenesisReleaseAuthorityDependencyV1
+
+LaunchClosureDependencyRefV1 =
+    InternalLaunchArtifactDependencyV1(typed_artifact_id)
+  | ExternalGenesisRootDependencyV1(
+        genesis_id,
+        ExternalGenesisIncomingDependencyClassV1
+    )
+
+LaunchClosureExternalGenesisRootV1 = Canonical(
+    external_root_schema_id,
+    external_root_topological_rank_u32,
+    genesis_id,
+    canonical_outer_genesis_package_length_u64
 )
 
 LaunchClosureBundleV1 = Canonical(
     launch_closure_bundle_schema_version,
+    internal_artifact_count_u32,
+    external_root_count_u32,
     complete_artifact_count_u32,
     supplementary_artifact_count_u32,
+    internal_dependency_edge_count_u32,
+    external_root_dependency_edge_count_u32,
     complete_dependency_edge_count_u32,
+    internal_canonical_preimage_bytes_u64,
+    external_root_canonical_preimage_bytes_u64,
     total_canonical_preimage_bytes_u64,
+    LaunchClosureExternalGenesisRootV1,
     explicit_preimage_lengths_u64[
         profile_scope,
         domain_registry,
@@ -520,7 +561,11 @@ authority context. `ReleaseAuthorizationV1` may carry a signature, threshold pro
 another policy-frozen form, but its codec, scheme, credential set, and verification rule MUST come
 from `ResolveTrustedReleaseAuthorityV1(release_authority_context_ref)`. For an initial release that
 resolver consumes the release-authority record already committed in `G_0`; for a successor it
-consumes the exact governance authority root of the independently verified accepted predecessor.
+consumes the exact governance authority root reached through the purpose-tagged
+`VerifiedEligibleAcceptedParentRefV1` derived from
+`predecessor_accepted_parent_authority_ref`; that ref MUST use
+`SuccessorReleaseAuthorityV1`. A release cannot substitute a raw lookup ID, weaker envelope-parent
+predicate, or particular evidence wrapper for that semantic authority.
 The policy ID in the core is a required byte-equal projection of that resolver, never a selector for
 it. Only after the authorization verifies is `admitted_release_record_id` derived from the core,
 core ID, and detached authorization. Neither authorization signs the final record ID, and neither
@@ -535,23 +580,45 @@ independently recomputed. The supplementary inventory embeds every other canonic
 transitively referenced by the admission or release records and required to verify them. There is no
 locator, content-address-only, optional-fetch, or ambient-database variant in this schema. A locator
 tag or an omitted/unavailable preimage is an unknown variant and rejects rather than masquerading as
-a complete carrier.
+a complete carrier. The sole exception to internal embedding is the one `genesis_package` already
+carried immediately outside the bundle by `chain_launch_package`; it is represented inside the
+bundle by exactly one typed `LaunchClosureExternalGenesisRootV1`, never by a second copy of its
+bytes.
 
 Let `E` be the ordered seven-element tuple of the exact canonical preimage byte strings named by
-`explicit_preimage_lengths_u64`, let `S` be the supplementary-artifact sequence, and let `D` be the
-dependency-node sequence. The checked equations are:
+`explicit_preimage_lengths_u64`, let `S` be the supplementary-artifact sequence, let `D` be the
+internal dependency-node sequence, and let `G` be the exact canonical byte string of the outer
+`genesis_package`. Let `InternalRefs(D)` and `ExternalGenesisRefs(D)` partition every dependency
+reference in `D` by its tag. The checked equations are:
 
 ```text
 Length(E)                              = 7
 supplementary_artifact_count_u32       = Length(S)
-complete_artifact_count_u32            = 7 + Length(S) = Length(D)
-complete_dependency_edge_count_u32     = SumChecked(node in D, Length(node.dependency_ids))
-total_canonical_preimage_bytes_u64      =
+internal_artifact_count_u32             = 7 + Length(S) = Length(D)
+external_root_count_u32                 = 1
+complete_artifact_count_u32             = internal_artifact_count_u32
+                                          + external_root_count_u32
+                                        = 8 + Length(S)
+internal_dependency_edge_count_u32     = Length(InternalRefs(D))
+external_root_dependency_edge_count_u32 = Length(ExternalGenesisRefs(D))
+complete_dependency_edge_count_u32     = internal_dependency_edge_count_u32
+                                          + external_root_dependency_edge_count_u32
+internal_canonical_preimage_bytes_u64   =
     SumChecked(e in E, Length(e))
   + SumChecked(s in S, Length(s.canonical_artifact_preimage_bytes))
+external_root_canonical_preimage_bytes_u64 = Length(G)
+total_canonical_preimage_bytes_u64      =
+    internal_canonical_preimage_bytes_u64
+  + external_root_canonical_preimage_bytes_u64
 explicit_preimage_lengths_u64[i]       = Length(E[i])              for every i
 s.canonical_artifact_preimage_length_u64 =
     Length(s.canonical_artifact_preimage_bytes)                    for every s
+LaunchClosureExternalGenesisRootV1.external_root_schema_id
+                                        = GenesisPackageV1
+LaunchClosureExternalGenesisRootV1.external_root_topological_rank_u32 = 0
+LaunchClosureExternalGenesisRootV1.genesis_id = genesis_package.genesis_id
+LaunchClosureExternalGenesisRootV1.canonical_outer_genesis_package_length_u64
+                                        = Length(G)
 ```
 
 Every sum and conversion is checked before use. A top-level carried artifact contributes exactly
@@ -559,10 +626,14 @@ once to the artifact count and once to the byte sum. Bytes embedded inside one c
 are already included in that preimage's length and are not recursively counted again. Where the
 same semantic registry is deliberately carried both inside `ProfileScopeV1` and as the separate
 `DomainRegistryV1` preimage, its bytes occur once in each of those two top-level preimages and no
-third time. Bundle schema/counter/length fields, dependency-node bytes, collection framing,
-`genesis_package`, `launch_closure_bundle_id`, `ChainLaunchManifestV1`, and launch authorization are
-excluded from `total_canonical_preimage_bytes_u64`; their bytes remain covered by the independent
-protocol-frozen total package/frame cap, avoiding a self-referential total.
+third time. `G` is counted once as the external root even though its bytes are physically owned only
+by the outer package. The bundle MUST require its external-root length and `genesis_id` to match that
+outer byte string exactly and MUST recompute the ID from the outer `ChainGenesisPayloadV1`; an
+in-bundle duplicate is forbidden. Bundle schema/counter/length fields, the external-root descriptor,
+dependency-node bytes, collection framing, `launch_closure_bundle_id`, `ChainLaunchManifestV1`, and
+launch authorization are excluded from `total_canonical_preimage_bytes_u64`; their bytes remain
+covered by the independent protocol-frozen total package/frame cap, avoiding a self-referential
+total.
 
 The protocol-frozen bundle grammar places the fixed-width count/total prefix and the seven explicit
 lengths before their variable slices; each supplementary entry likewise places its declared length
@@ -572,16 +643,29 @@ that the declared slices consume the exact enclosing frame. It does so without a
 hashing, nested decode, or profile-owned work. Only then may it materialize and verify artifacts.
 Every explicit and supplementary artifact occurs in exactly one
 `LaunchClosureDependencyNodeV1`; each typed artifact ID occurs exactly once, each dependency
-resolves to exactly one carried artifact, and every dependency has a strictly lower
-`topological_rank_u32` than its referrer. Duplicate IDs, duplicate semantic roles, self/forward
-references, unknown schemas, an unreachable extra, a missing reference, or an equation mismatch
-rejects before profile resolution. Thus the bundle is finite and acyclic; a content hash does not
-excuse an undeclared local database lookup.
+resolves either to exactly one internally carried artifact or to the sole typed external genesis
+root, and every dependency has a strictly lower `topological_rank_u32` than its referrer. The
+external root has fixed rank zero and no dependency node of its own. Its only permitted incoming
+dependency classes are: scope/registry linkage from `ProfileScopeV1` or `DomainRegistryV1`;
+initial-candidate genesis identity from `CandidateProfileV1`; genesis-state derivation from
+`GenesisRootParityRecordV1` or an exact reconstruction artifact named by that record; and genesis
+release authority from `AdmittedReleaseRecordV1` or the exact `G_0` authority artifact named by that
+record. `TransitionSpecAtProfileV1` and `ProfileAdmissionManifestV1` reach genesis only through their
+declared internal dependencies and MUST NOT invent a direct external edge. Every required direct
+genesis dependency must carry its matching class; a class on any other referrer rejects. Any second
+external root, other external dependency, duplicated external edge, dependency to an unranked root,
+or outer/root byte or ID mismatch rejects. Duplicate internal IDs, duplicate semantic roles,
+self/forward references, unknown schemas, an unreachable extra, a missing reference, or an equation
+mismatch likewise rejects before profile resolution. Thus the complete graph is finite and acyclic;
+a content hash does not excuse an undeclared local database lookup.
 
 Powered launch-carrier controls increment and decrement each count and declared length, overflow
 each checked sum, double-count an embedded registry, alter a dependency edge total, truncate or
-append a slice, omit one preimage, and replace an embedded preimage with an unavailable locator.
-Every mutant rejects during preflight or closure verification before profile resolution.
+append a slice, omit one preimage or required genesis edge, inject a second or differently typed
+external root, point a ranked node to an unranked genesis root, mismatch the outer/root bytes or ID,
+and replace an embedded preimage with an unavailable locator. The corpus mutates internal and
+external artifact, edge, and byte counts independently as well as their checked totals. Every mutant
+rejects during preflight or closure verification before profile resolution.
 
 `TransitionSpecAtProfileV1` is an admission prerequisite, not an input to `CandidateProfileV1`;
 putting its digest back into the candidate preimage would create a candidate/specification
@@ -654,6 +738,32 @@ the exact `Domain(...) || LengthFrame(Canonical(...))` framing shown. The
 `cryptographic_suite_ids` inside `ProfileScopeV1` govern only profile-resolved post-admission
 operations; they cannot select or alter `ProfileIdHashV1`. Bare `H` below denotes such a separately
 resolved post-admission object hash and MUST NOT be substituted into this pre-admission chain.
+
+This creates two explicitly different failure classes. `ProfileOwnedCryptographicMigrationV1` may
+replace an admitted profile's object-hash, signature, proof, or credential suite through the
+parent-authorized in-place successor path, with downgrade protection, any declared dual-validation
+window, and historical verification preserved. It MUST NOT claim to replace or recover
+`ProfileIdHashV1`. A demonstrated collision, practical second-preimage break, or equivalent loss of
+identity binding in `ProfileIdHashV1` is `ProtocolIdentityHashCompromiseV1`: nodes MUST stop
+proposing, voting, authorizing releases or activations, and publishing new accepted indexes. A
+candidate, release, launch object, lookup ref, or successor identified or authorized through the
+compromised function cannot non-circularly repair that function.
+
+This paper defines no separately trusted transition precommitted before launch. Its disposition for
+`ProtocolIdentityHashCompromiseV1` is therefore terminal safe halt for the affected chain and a new
+genesis under a separately distributed recovery trust anchor and independently selected protocol-
+identity function. The replacement is a new protocol generation, not an in-place successor and not
+a continuation proved by a `ProfileIdHashV1` link. A future design may avoid that terminal boundary
+only by freezing before launch a non-self-selecting recovery authority and transition encoding whose
+identity and authorization do not depend solely on `ProfileIdHashV1`; adding one after compromise is
+not recovery evidence.
+
+Powered controls MUST distinguish the two classes. The profile-owned control fails an active
+profile hash/signature suite and accepts only the fully authorized successor migration while the
+protocol identity chain remains sound. The protocol-identity control supplies colliding or
+second-preimage-distinct launch, release, lookup, and successor objects under one
+`ProfileIdHashV1` output and MUST reach `ProtocolIdentityHashCompromiseV1`; it must never select one
+object, activate a successor, reuse the old chain identity, or report an in-place migration pass.
 
 Chain genesis has two separate launch gates for `InitialProfileV1`. **Logical-byte completion**
 under `GENESIS-D1` means independent encoders reconstruct the same initial-scope-bound concrete
@@ -1088,7 +1198,7 @@ what selects the profile. The wire therefore starts with this fixed, profile-ind
 AcceptedParentLookupPayloadV1 = FixedPreProfileCanonicalV1(
     accepted_parent_lookup_payload_version_u16_be,
     accepted_parent_lookup_namespace_tag,
-    accepted_record_type_tag,
+    accepted_proposal_core_type_tag,
     block_id_type_tag,
     genesis_id,
     chain_launch_manifest_id,
@@ -1147,6 +1257,13 @@ AcceptedRecordOuterV1 = FixedPreProfileFrameV1(
     opaque_consensus_evidence_bytes,
     opaque_availability_assessment_bytes
 )
+
+AcceptedProposalCoreV1 = FixedPreProfileCanonicalV1(
+    accepted_proposal_core_version_u16_be,
+    accepted_parent_lookup_id,
+    canonical_proposal_outer_length_u64_be,
+    canonical_proposal_outer_bytes
+)
 ```
 
 `FixedPreProfileFrameV1`, `FixedPreProfileShallowFrameV1`, and
@@ -1167,13 +1284,19 @@ encoding: the outer branch tag selects one of two exact, fixed-width `ProfileIdH
 profile codec participates.
 
 The local accepted-parent index is keyed only by this typed lookup ID and MUST map it to exactly one
-byte-exact, locally verified `AcceptedBlockRecord`. Zero matches, multiple records, or two distinct
-payloads/records claiming one lookup ID rejects as an unresolved collision rather than selecting an
-arbitrary row. After retrieval, the verifier recomputes the parent's `block_id` with the retrieved
-envelope owner, reconstructs every field of `AcceptedParentLookupPayloadV1`, recomputes the lookup
-ID, and requires exact equality before consulting its status. Wrong launch/genesis, profile, suite,
-record or block type, digest length, digest, alias, or collision therefore fails before the parent
-can supply authority. `InitialLaunchLookupV1` instead must resolve the complete `chain_launch_package`,
+byte-exact, locally verified `AcceptedProposalCoreV1` plus a separately indexed, possibly empty or
+multiple `AcceptedEvidenceSetV1`. The core is the exact fixed outer proposal bytes extracted from a
+valid accepted-record carrier together with the lookup ID recomputed for that proposal. Zero cores
+or two distinct core byte strings under one lookup ID rejects as an unresolved core collision rather
+than selecting an arbitrary row. Multiple `AcceptedBlockRecord` carriers with that same core are
+expected: their independently verified evidence entries are unioned by typed evidence ID, not
+treated as competing core records. After retrieval, the verifier recomputes the parent's `block_id`
+with the core's envelope owner, reconstructs every field of `AcceptedParentLookupPayloadV1`,
+recomputes the lookup ID, and requires exact equality before evaluating eligibility. Wrong
+launch/genesis, profile, suite, core or block type, digest length, digest, alias, or a true core
+collision therefore fails before the parent can supply authority. Evidence multiplicity by itself
+is not a collision and cannot poison this index. `InitialLaunchLookupV1` instead must resolve the
+complete `chain_launch_package`,
 recompute its entire launch closure, and verify `ChainLaunchAuthorizationV1`; it is legal only for
 the manifest's `first_ledger_height`, `genesis_parent_block_id`, initial ordinary profile context,
 initial root, and history root. Launch authorization is not an accepted-parent consensus status and
@@ -1184,7 +1307,10 @@ before that record becomes accepted.
 VerifiedEnvelopeAuthorityV1(lookup_ref) =
     match lookup_ref {
         AcceptedParentLookupV1(lookup_id) =>
-            VerifyUniqueAcceptedParentByLookupIdAndConsensusStatusV1(lookup_id)
+            ResolveEligibleAcceptedParentCoreV1(
+                lookup_id,
+                EnvelopeParentAuthorityV1
+            )
         InitialLaunchLookupV1(manifest_id) =>
             VerifyCompleteLaunchClosureAndAuthorizationV1(manifest_id)
     }
@@ -1192,6 +1318,12 @@ VerifiedEnvelopeAuthorityV1(lookup_ref) =
 
 These branches return the same bounded resolver interface but remain distinct tagged authority
 proofs. Neither function may call, coerce, or fall through to the other.
+`ResolveEligibleAcceptedParentCoreV1` constructs the exact `AcceptedParentAuthorityRefV1` for the
+requested use from the unique core's authority-owned policy and predicate. A carried release or
+activation ref must byte-equal that derivation, including its purpose tag; its policy and predicate
+fields are assertions, never selectors. Successful resolution returns a semantic
+`VerifiedEligibleAcceptedParentRefV1` bound to the unique core and the attained profile-owned status,
+not to one evidence wrapper or evidence-set serialization.
 Throughout §4.4, **authority-selected** means selected by that verified tagged result: the complete
 authorized launch package supplies the initial values at the first ledger height, while the
 verified accepted parent supplies them thereafter. A rule written only for an accepted parent does
@@ -1372,7 +1504,7 @@ successor_activation_bundle_id = ProfileIdHashV1(
 SuccessorActivationSignDocV1 = Canonical(
     successor_activation_sign_doc_schema_version,
     chain_launch_manifest_id,
-    predecessor_accepted_parent_lookup_id,
+    predecessor_accepted_parent_authority_ref,
     old_active_profile_context,
     new_admitted_profile_context,
     successor_profile_admission_manifest_id,
@@ -1684,6 +1816,28 @@ availability_assessment_resolution =
 canonical_availability_assessment_bytes = Canonical[
     availability_assessment_resolution.canonical_codec_id
 ](AvailabilityAssessmentV1)
+availability_assessment_id = H[availability_assessment_resolution.hash_suite_id](
+    Domain("bitblock/availability-assessment/v1")
+ || LengthFrame(canonical_availability_assessment_bytes)
+)
+
+TypedAcceptedEvidenceIdV1 =
+    ConsensusEvidenceIdV1(consensus_evidence_id)
+  | AvailabilityAssessmentIdV1(availability_assessment_id)
+
+VerifiedAcceptedEvidenceEntryV1 =
+    VerifiedConsensusEvidenceEntryV1(
+        ConsensusEvidenceIdV1(consensus_evidence_id),
+        canonical_consensus_evidence_bytes
+    )
+  | VerifiedAvailabilityAssessmentEntryV1(
+        AvailabilityAssessmentIdV1(availability_assessment_id),
+        canonical_availability_assessment_bytes
+    )
+
+AcceptedEvidenceSetV1 = CanonicalSortedUniqueByTypedEvidenceId([
+    VerifiedAcceptedEvidenceEntryV1...
+])
 
 outer_authority_ref_bytes =
     FixedPreProfileEncodeRefPayloadV1(ParentOrLaunchLookupRefV1)
@@ -1718,6 +1872,56 @@ context, or a trusted sequencer signature according to the selected consensus pr
 `block_id` it authenticates. Consensus-specific header fields must replace, not informally
 reinterpret, generic fields such as `round_or_view`.
 
+`TypedAcceptedEvidenceIdV1` makes consensus evidence and availability assessments separate ID
+namespaces even if their underlying profile-owned hash bytes happen to match. Every entry MUST be
+bounded-decoded under the authority-selected codec, recompute its typed ID, verify against the exact
+core `block_id`, policy, epoch/authority, status, and predicate, and only then enter
+`AcceptedEvidenceSetV1`. The set is sorted by the complete tagged ID. An exact duplicate is
+idempotent. Two different canonical byte strings claiming one tagged evidence ID are an evidence-ID
+collision and trigger the profile's declared safe-halt/conflict path; a node never chooses one by
+arrival order. An invalid entry is rejected without changing the set. A valid but nonqualifying
+entry may be retained for diagnosis or later status projection, but cannot by itself make a core
+eligible.
+
+For a fixed core and requested `AcceptedParentAuthorityUseV1`, the envelope owner's admitted profile
+MUST freeze `ParentAuthorityEligibilityV1`: the authorized consensus/availability evidence codecs,
+typed-ID rules, evidence-set bounds and deterministic retention/summary rule, a status partial order
+and deterministic join, the purpose-specific eligibility predicate, and the exact conflict
+predicate/disposition. Admission MUST establish, for conflict-free verified sets `E subset E2`,
+
+```text
+ParentAuthorityStatusV1(core, use, E)
+    <= ParentAuthorityStatusV1(core, use, E2)
+
+ParentAuthorityEligibilityV1(core, use, E) = Eligible
+    implies ParentAuthorityEligibilityV1(core, use, E2) = Eligible
+```
+
+The retention/summary rule MUST preserve the attained status, one canonical verifying witness for
+each attained requirement, and all conflict evidence needed by the declared disposition; resource
+bounds cannot silently downgrade an already eligible core. Additional qualifying evidence may
+upgrade the deterministic status but cannot invalidate eligibility. Verified evidence satisfying
+the frozen conflict predicate is retained and invokes its predeclared disposition separately: a
+safety-rule violation enters safe halt, while a profile-permitted non-safety alternative remains
+nonqualifying. Conflict handling never deletes the unique core, selects an evidence wrapper, or
+turns a different core into the value of the same lookup ID.
+
+`ParentAuthorityEligibilityV1` returns `VerifiedEligibleAcceptedParentRefV1` only when the unique
+core and purpose-specific predicate pass. That semantic result binds the exact
+`AcceptedParentAuthorityRefV1`, unique core `block_id`, and attained status, but neither the
+evidence-set bytes nor one quorum/assessment occurrence becomes parent identity. Release and
+successor activation therefore may name a stable parent while independent honest nodes prove its
+eligibility with different valid evidence subsets.
+
+Powered parent-index controls MUST include: two byte-distinct valid accepted-record wrappers for one
+core, which union their evidence and still resolve one parent; addition of qualifying evidence,
+which may upgrade status without changing the lookup/ref or invalidating prior eligibility; valid
+nonqualifying evidence, which cannot create or downgrade eligibility; verified conflicting
+evidence, which follows the frozen conflict disposition without wrapper selection; and two distinct
+proposal-core byte strings forced under one lookup ID, which reject as a true core collision before
+eligibility. Arrival-order permutations of every control MUST produce the same set, status, and
+disposition.
+
 For `OrdinaryProfileTransitionV1`, the profile context MUST resolve to one admitted `PROFILE-1`
 record whose candidate bytes, scope/genesis projections, and capability closure all verify; both
 root references MUST contain that exact context. For `InPlaceMigrationTransitionV1`, the old context
@@ -1743,26 +1947,33 @@ manifest MUST name its ID in the evidence closure, avoiding a backward identifie
 supplementary sequence embeds every source, implementation, migration-specification, corpus, and
 other preimage transitively needed to verify `UPGRADE-1`, `PROFILE-1`, and `RELEASE-1`.
 
-The successor bundle uses the same exact checked equations, exclusions, prefix-first streaming
-preflight, unique dependency-node rule, and embedded-only/no-locator rule defined for
-`LaunchClosureBundleV1`, with its own seven-element explicit tuple. Every identifier in its fixed
-prefix MUST recompute from the corresponding carried preimage; every predecessor, successor,
+The successor bundle uses the launch bundle's exact **internal** seven-plus-supplementary equations,
+prefix-first streaming preflight, unique internal dependency-node rule, and embedded-only/no-locator
+rule, with its own seven-element explicit tuple. It does not inherit the launch-only external
+genesis-root count or bytes: its immutable launch/genesis context is reached through the verified
+eligible predecessor ref, while every successor admission/migration preimage is embedded. Every
+identifier in its fixed prefix MUST recompute from the corresponding carried preimage; every predecessor, successor,
 transition-specification, admission, release, migration-specification, evidence, root, and lineage
 projection MUST agree. The fixed `successor_activation_bundle_id` is derived with
 `ProfileIdHashV1`, not with a suite selected by the inactive successor.
 
 `SuccessorActivationSignDocV1` binds that bundle ID and exact target admission ID to the launch,
-unique accepted parent lookup ID, old and new contexts, migration specification, activation height,
-and exact old/expected-new typed roots. `ResolveParentAuthorizedActivationAuthorityV1` consumes the
-independently verified accepted parent and its committed governance/upgrade authority state, then
+purpose-tagged `predecessor_accepted_parent_authority_ref`, old and new contexts, migration
+specification, activation height, and exact old/expected-new typed roots.
+`ResolveParentAuthorizedActivationAuthorityV1` requires
+`SuccessorActivationAuthorityV1`, resolves a `VerifiedEligibleAcceptedParentRefV1` from the unique
+parent core and a qualifying verified evidence set, and consumes that core's committed
+governance/upgrade authority state, then
 returns the only allowed policy, codec, scheme, and credential set. Every corresponding field in
 `ActivationAuthorizationV1` is a byte-equal assertion against that resolver; neither the successor,
 bundle, sign document, nor authorization object selects its verifier. The authorization covers
 exactly `Domain("bitblock/successor-activation-sign-doc/v1") ||
 LengthFrame(Canonical(SuccessorActivationSignDocV1))`. Its final ID is derived under
 `OrdinaryProfileTransitionV1(old_active_profile_context)`, never the inactive new profile, and does
-not enter its own sign document. The sign document's parent lookup ID, old root, and expected-new
-root MUST byte-equal the verified outer parent and the proposal's typed pre/post root references.
+not enter its own sign document. The sign document's complete parent authority ref, old root, and
+expected-new root MUST byte-equal the purpose-specific verified parent derivation and the proposal's
+typed pre/post root references. Different honest qualifying evidence subsets for the same core do
+not change that sign document; a distinct core under the same lookup ID rejects.
 
 A migration payload MUST carry exactly one `EmbeddedSuccessorActivationV1` containing the complete
 bundle and authorization preimages plus their recomputed IDs. An ordinary payload MUST carry
@@ -1873,8 +2084,9 @@ scheme. A payload
 commitment alone, possession by one verifier, or a node-local retrieval observation cannot populate
 either canonical variant. Such observations remain local diagnostics outside `AcceptedBlockRecord`
 and cannot overwrite its assessment. `ConsensusHead.availability_assessment_ref` is the matching
-tagged `AvailabilityAssessmentRefV1` projection; the full accepted record remains the object that
-binds the claim core to that reference.
+tagged `AvailabilityAssessmentRefV1` projection selected by the deterministic profile-owned status
+join. Its verified evidence entry binds the claim core to that reference; no one accepted-record
+wrapper is the canonical parent identity.
 
 ```text
 execution_policy_id = EnvelopeHashV1(
@@ -1897,15 +2109,18 @@ data_availability_policy_id = EnvelopeHashV1(
 `AcceptedBlockRecord` is a neutral carrier name. A deterministic-finality profile may call
 it finalized only after its finality rule passes. A probabilistic profile must retain its
 confidence/confirmation status and cannot turn work ancestry into absolute finality by using
-this envelope.
+this envelope. The carrier is one evidence occurrence, not a unique database row: parent identity
+is the indexed `AcceptedProposalCoreV1`, and authority is the profile-owned projection of its
+`AcceptedEvidenceSetV1`.
 
 A valid proposal requires this explicit checklist to pass:
 
 1. apply the profile-independent bounded outer framing, fixed-width length/count checks, and checked
    preallocation arithmetic before nested decoding, hashing, signature/proof work, or allocation;
 2. resolve exactly one authority branch from the bounded outer reference. For an
-   `AcceptedParentLookupV1`, resolve exactly one indexed record, recompute its fixed lookup payload
-   and ID, and verify its profile-specific consensus status. For an `InitialLaunchLookupV1`, verify
+   `AcceptedParentLookupV1`, resolve exactly one indexed proposal core, recompute its fixed lookup
+   payload and ID, normalize its verified evidence set, and satisfy the monotone purpose-specific
+   `ParentAuthorityEligibilityV1` predicate. For an `InitialLaunchLookupV1`, verify
    the complete launch closure and detached launch authorization plus all
    first-height/genesis-parent/initial-root conditions, without applying an accepted-parent
    consensus predicate;
@@ -2087,8 +2302,9 @@ successor closure and activation authorization; a migration-block validator veri
 replays that already admitted dedicated transition from the exact parent root before accepting its
 new root. Only consensus acceptance activates the successor. Bedrock, supply, ownership, and
 authorization changes must appear as explicit deltas
-rather than emerge from serialization drift. A cryptographic migration must prevent downgrade,
-define any dual-validation window, and preserve verification of historical blocks. Emergency and
+rather than emerge from serialization drift. A profile-owned cryptographic migration must prevent
+downgrade, define any dual-validation window, and preserve verification of historical blocks; it
+cannot migrate `ProfileIdHashV1`. Emergency and
 rollback policy cannot silently rewrite history that the selected rule treats as irreversible.
 
 Cross-world or cross-chain transfers MUST be explicit bridge transactions with their own
@@ -2457,7 +2673,8 @@ The initial threat inventory is:
 | Sybil participation | Admission, stake, proof-of-work, permissioning, or another declared cost |
 | Spam and unbounded coordinates | Fees, quotas, work budgets, chunk limits, and allocation-failure handling |
 | Malicious implementation | Independent executor, differential replay, fuzzing, and formal refinement where practical |
-| Hash or signature failure | Versioned cryptographic suite, conservative assumptions, and migration path |
+| Profile-owned hash, signature, proof, or credential-suite failure | Versioned admitted suite, conservative assumptions, and parent-authorized `ProfileOwnedCryptographicMigrationV1` with downgrade and historical-verification controls |
+| `ProfileIdHashV1` collision or second-preimage compromise | `ProtocolIdentityHashCompromiseV1`: terminal safe halt and new genesis under a separately trusted recovery anchor; the compromised identity chain cannot authorize its own successor |
 | Key loss or compromise | Rotation, recovery, revocation, and incident procedures |
 | Validator restore or signer failover | Durable anti-double-sign state, restore monotonicity, and slashing/equivocation protection |
 | Clock manipulation | Logical height for validity; wall-clock only for scheduling/timeouts |
@@ -2588,7 +2805,10 @@ diagnostic projections, never consensus authority.
 A node MUST enter a declared safe-halt mode—stop proposing, voting, or publishing new
 accepted indexes—when evidence violates the selected profile's safety rule, it observes an
 unknown active version, consensus-required bytes remain unavailable beyond the permitted
-horizon, a state-root mismatch is irrecoverable, or anti-double-sign state has regressed.
+horizon, a state-root mismatch is irrecoverable, anti-double-sign state has regressed, or
+`ProtocolIdentityHashCompromiseV1` is established. In that last case the ordinary coordinated-
+upgrade restart path is forbidden; restart requires the separately trusted new-genesis procedure
+defined above.
 Ordinary competing branches in a probabilistic protocol go through its fork-choice and
 confirmation rules; their mere existence is not a safe-halt trigger. Safe halt does not automatically
 roll back or rewrite finalized history. The incident procedure must define evidence capture,
