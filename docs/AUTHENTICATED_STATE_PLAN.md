@@ -17,6 +17,10 @@ The current-source statements below were checked against source/proof snapshot
 `162406819133c1fd57d0fd26cbe5fa0b495766b8`; post-input corrections are mapped in
 [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). A change to a named source file, root/key contract,
 or this plan invalidates the corresponding statement rather than inheriting its “checked” status.
+The later network-integration boundary is reviewed through the frozen
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md); its
+successor-carrier, lookup, preflight, release-authorization, and planning-metadata corrections do
+not select or implement an authenticated-map candidate.
 
 ## Outcome sought
 
@@ -725,9 +729,27 @@ objects. Under protocol-frozen count/byte/depth bounds, a fresh verifier obtains
 `DomainRegistryV1`, `ProfileScopeV1`, `CandidateProfileV1`,
 `TransitionSpecAtProfileV1`, `ProfileAdmissionManifestV1`, `GenesisRootParityRecordV1`, and
 `AdmittedReleaseRecordV1` preimages plus every supplementary preimage transitively required to
-verify admission and release. It recomputes each typed digest/ID, checks unique role and artifact
-inventory, byte-equal projections, complete reference resolution, and a strictly decreasing
-dependency rank before accepting `launch_closure_bundle_id`. It then verifies the manifest and
+verify admission and release. The carrier is embedded-only: its seven explicit preimages and every
+supplementary preimage occur exactly once, every such artifact has exactly one dependency node, the
+supplementary count equals that set's cardinality, and `complete_artifact_count = 7 +
+supplementary_artifact_count = dependency_node_count`. The edge count equals the checked sum of
+canonical dependency-list lengths, and the byte total equals the checked sum of the seven exact
+explicit-preimage lengths plus the supplementary canonical-preimage lengths. Every declared
+per-preimage length must match. Dependency metadata, counters, bundle/package/manifest/launch-
+authorization bytes, framing, and nested bytes already included in a top-level preimage are
+excluded from that preimage-byte sum so the equation is neither recursive nor double-counted. The
+verifier preflights the declared counts, lengths, and byte sum before materialization, then
+recomputes each typed digest/ID, checks unique role and artifact inventory, byte-equal projections,
+complete reference resolution, and a strictly decreasing dependency rank before accepting
+`launch_closure_bundle_id`.
+
+The release object itself begins with an authorization-free `AdmittedReleaseCoreV1` and its
+domain-separated core ID. A detached `ReleaseAuthorizationV1` covers `ReleaseSignDocV1`, which names
+that exact core ID and `ReleaseAuthorityContextRefV1`; policy, scheme, credentials, codec, and
+verification rule are resolved from the genesis authority record already committed in `G_0` or the
+exact governance-authority root of the independently verified accepted predecessor. The final
+`AdmittedReleaseRecordV1` and ID are derived only after verification. The candidate record's own
+unverified policy field cannot choose the verifier. The verifier then checks the manifest and
 detached launch authorization. A missing preimage, ambient local ID mapping, duplicate role,
 unreachable extra, hash mismatch, self/forward reference, or bundle/manifest mismatch prevents
 bootstrap and genesis replay. The one-way order remains roots/parity and admitted release, then
@@ -766,11 +788,21 @@ profile context MUST byte-equal `old_active_profile_context`; the candidate subj
 byte-equal the distinct `new_admitted_profile_context`; that admitted profile's candidate lineage
 MUST name the old admitted profile, and its `PROFILE-1` evidence MUST already have consumed the
 matching concrete `UPGRADE-1` old-to-candidate migration evidence. The migration transition's
-specification, activation authorization, and activation height MUST match the proposal/header and
-parent-authorized governance state. Its typed old execution-root reference MUST recompute from the
-prior set, and its typed new execution-root reference MUST recompute from the candidate set after
-deterministic migration. Consensus acceptance activates the previously admitted successor;
-admission, migration evidence, and the predecessor tag grant no activation authority by themselves.
+specification, activation authorization, activation height, exact
+`successor_profile_admission_manifest_id`, and fixed
+`SuccessorActivationBundleV1` ID MUST match the proposal/header and parent-authorized governance
+state. The old-profile `AvailabilityPayload` MUST embed `SuccessorActivationCarrierV1`, containing
+that bounded bundle plus the matching `ActivationAuthorizationV1`, including the exact successor
+scope, registry, candidate, transition specification, admission evidence, admitted release,
+implementation artifacts, and `SuccessorUpgradeEvidenceManifestV1`. The migration context and
+`SuccessorActivationSignDocV1` bind the bundle/authorization IDs, exact target admission, migration
+specification, height, and old/new roots. A fresh verifier recomputes the complete old-to-new closure
+under old-envelope bounds before migration execution or activation; an
+unavailable, omitted, substituted, or ambient-map artifact rejects. Its typed old
+execution-root reference MUST recompute from the prior set, and its typed new execution-root
+reference MUST recompute from the candidate set after deterministic migration. Consensus
+acceptance activates the previously admitted successor; admission, migration evidence, the bundle,
+and the predecessor tag grant no activation authority by themselves.
 
 The referenced Layer 1 proposal MUST use the old parent-admitted profile as its sole envelope codec,
 object-hash, ordered-commitment, policy-selector, and proposal-credential owner. Its body MUST be the
@@ -799,13 +831,23 @@ local scheduler and cannot support an availability or replay claim.
 
 Network intake first parses only the fixed, profile-independent Layer 1 `ProposalOuterV1` or
 `AcceptedRecordOuterV1`: protocol-frozen magic/version/tag fields, bounded parent-or-launch lookup
-bytes, checked fixed-width lengths, and opaque inner segments. An ordinary parent lookup must pass
-the accepted parent's profile-specific consensus-status rule. The first-record launch lookup must
-instead verify the complete launch closure and detached launch authorization plus the manifest's
-first-height/genesis-parent/root conditions; it is not an accepted parent and never satisfies that
-status predicate by coercion. Only that tagged result selects the envelope owner and inner codecs.
-Every decoded inner object is canonically re-encoded and byte-compared to its exact outer segment
-before a header or state root can become authority.
+bytes, checked fixed-width lengths, and shallow opaque header, availability-payload, and signature
+segments. An ordinary branch uses the protocol-frozen
+`AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id`, binding the chain/launch identity,
+envelope-owner profile, block-ID suite and type, and exact bounded parent digest. A unique local
+index must return exactly one accepted parent; after retrieval the consumer recomputes the payload
+and lookup ID and applies that parent's profile-specific consensus-status rule.
+The first-record launch lookup instead verifies the complete launch closure and detached launch
+authorization plus the manifest's first-height/genesis-parent/root conditions; it is not an
+accepted parent and never satisfies that status predicate by coercion.
+
+Only that tagged result selects the envelope owner, active codecs, and
+`AuthorityOwnedParseAndWorkLimitsV1`. Before materializing, hashing, decompressing, canonically
+re-encoding, or performing signature or proof work, intake checks every
+`ProposalInnerShallowFrameV1` segment bound plus every nested length, count, decompression, and work
+charge under both the protocol cap and the equal-or-tighter active profile. Only afterward is each
+inner object decoded, canonically re-encoded, and byte-compared to its exact outer segment before a
+header or state root can become authority.
 
 Overflow rejects. Forks may produce several ordinary or migration children of one parent, but no
 child may name itself, a descendant, a missing set, or a set from another chain/genesis/world

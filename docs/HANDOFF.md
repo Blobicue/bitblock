@@ -40,9 +40,20 @@ semantic history.
 - `8a5743595a0aa8ff13ede576f282b92540db5d9b` is the first-addition commit for
   `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`. It freezes the complete successor sweep over
   `b23ddc9`/tree `3de2d45`, eight new findings, and audit blob
-  `350d1af6279d7f441f45fba2689481c0dbea79a5`. Its descendant correction is still documentation,
-  checker, and checkout-policy work and must not be mistaken for runtime, proof, cryptographic,
-  consensus, or Layer 1 validation.
+  `350d1af6279d7f441f45fba2689481c0dbea79a5`.
+- `2cb1cc02320d180ac9ee34bd103bd44459f128fa` is the coordinated correction for QG-01 through
+  QG-08. Its Git tree is `60e9714c6d691f383fc75be03f6c9927c7665b84`. It binds the complete
+  initial launch carrier, canonical available block context, total execution branches, fixed outer
+  framing, profile-scoped conditional predicates, launch owner/gate, and the corrected review
+  chronology. It remains documentation, checker, and checkout-policy work.
+- `0d0122d9bf84664511db7588bb09d5c590a006f9` is the first-addition commit for
+  `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`. It freezes the complete successor sweep over
+  `2cb1cc0`/tree `60e9714`, eight material findings, and audit blob
+  `519451b120b458735afaa59daa01aa23466e165e`. The coordinated PG-01 through PG-08 correction closes
+  the proposed successor carrier, pre-work limits and lookup identity, embedded launch equations,
+  detached release authorization, structured dependency/status metadata, and historical-audit
+  provenance only at the documentation/checker level. It must not be mistaken for runtime, proof,
+  cryptographic, consensus, or Layer 1 validation.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md` predates the design distillation. Its 16-finding closure and
   validation boundary do not audit `694650f` or the later correction.
 - `2a9e667` is the exact clean input to the second audit/fix loop. Its result is the first
@@ -58,8 +69,12 @@ semantic history.
   note.
 - `018ca52` is an intermediate shared-worktree bank of the in-progress checkpoint-0.3 paper;
   do not treat it as the reviewed result.
-- The hardened checkpoint-0.3 Layer 1 paper is pinned at `034b7b2`; its second-loop audit is
-  `9eace50`. Later motive/tree docs link to that pinned result without silently re-auditing it.
+- The hardened checkpoint-0.3 Layer 1 paper is pinned at `034b7b2`; its second-loop audit result is
+  at `9eace50`, where `docs/LAYER1_DESIGN_AUDIT.md` had blob
+  `ee2075547d7c7895c7d0ebaabfc64d1e09f5ba3a`. Later provenance and F-12 errata produced the current
+  canonical corrected reading copy, blob `124e066b418a61279abf90c1b1b2c2cc0604ef2a`, which is frozen
+  from the fifth-successor correction onward. Do not describe that corrected copy as retrospectively
+  immutable or as a review of later paper revisions.
 - The branch contains the full non-build local checkpoint plus the semantic and transcript
   handoffs. Generated `target`, Lean `.lake`, and Python cache files are intentionally absent.
 - The original non-Git working folder was preserved separately; a new agent should clone the
@@ -83,16 +98,39 @@ Read in this order:
 6. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md` (frozen 11-gap second successor audit)
 7. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md` (frozen eight-gap third successor audit)
 8. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md` (frozen eight-gap fourth successor audit)
-9. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (second future-plan audit/fix map and Verkle disposition)
-10. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
-11. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-12. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-13. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
-14. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
-15. `docs/LAYER1_DESIGN_AUDIT.md` (historical checkpoint-0.3 audit; not the latest successor review)
-16. `README.md` (controls, commands, and feature boundaries)
-17. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
-18. `docs/TIMELINES.md` (actual CI trigger and command contract)
+9. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md` (frozen eight-gap fifth successor audit)
+10. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (second future-plan audit/fix map and Verkle disposition)
+11. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
+12. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+13. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+14. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
+15. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
+16. `docs/LAYER1_DESIGN_AUDIT.md` (canonical corrected checkpoint-0.3 reading copy; not a later review)
+17. `README.md` (controls, commands, and feature boundaries)
+18. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
+19. `docs/TIMELINES.md` (actual CI trigger and command contract)
+
+## Current proposed design delta after the fifth audit
+
+- Successor migration is closed at the carrier level by old-envelope, availability-covered
+  `SuccessorActivationCarrierV1`. Its embedded branch carries `SuccessorActivationBundleV1` and
+  `ActivationAuthorizationV1`; the migration context and `SuccessorActivationSignDocV1` bind their
+  IDs, the exact target admission, migration specification, height, and old/new roots. Its admitted
+  profile/release/`SuccessorUpgradeEvidenceManifestV1`/implementation closure must verify before
+  execution or activation.
+- Pre-profile intake uses `AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id`, resolves the
+  envelope owner and `AuthorityOwnedParseAndWorkLimitsV1` before profile-owned work, and uses
+  `ProposalInnerShallowFrameV1` for header, availability-payload, and signature slices. The launch
+  closure is embedded-only with exact checked count, edge, per-preimage-length, and byte-sum
+  equations. An authorization-free `AdmittedReleaseCoreV1`, exact `ReleaseSignDocV1`, and detached
+  `ReleaseAuthorizationV1` remove the release-signing cycle.
+- Capability planning now distinguishes unconditional base dependencies from structured
+  phase-specific edges, and every normative secondary readiness/lock/open state is a structured
+  phase-status tuple rather than an unguarded prose suffix. `SUCCESSOR-ACTIVATION-1` is the explicit
+  owner and remains `LOCKED`.
+
+These are specification and checker changes only. No successor migration, release authority,
+network intake, authenticated state, cryptographic suite, or Layer 1 execution exists in Rust.
 
 ## What is implemented
 
@@ -155,6 +193,12 @@ self-verified. Neither path produces physical display evidence.
 - `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`: frozen `b23ddc9`/tree `3de2d45` input, eight
   finite findings, rejected candidates, one-sweep correction boundary, and the same finite-lens
   zero-new-gap convergence rule.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`: frozen `2cb1cc0`/tree `60e9714` input, eight
+  finite findings, challenged candidates, one-sweep correction boundary, and the same finite-lens
+  zero-new-gap convergence rule.
+- `docs/LAYER1_DESIGN_AUDIT.md`: canonical corrected checkpoint-0.3 reading copy, frozen at current
+  blob `124e066b418a61279abf90c1b1b2c2cc0604ef2a` from the fifth-successor correction onward; Git
+  history retains the distinct original result blob.
 - `docs/design-source-receipt-v1.json`: byte-frozen external-source and pre-audit-distillation
   receipt. The checker reproduces its historical Git-object fields; it still does not contain,
   recover, or authenticate the external raw source.
@@ -163,14 +207,15 @@ self-verified. Neither path produces physical display evidence.
 - `docs/FUTURE_PLAN_AUDIT.md`: the finite audit/fix map for planning input `1624068`.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md`: the second finite audit/fix map for input `2a9e667`, including
   the authenticated-state, activation-graph, checker, provenance, and Verkle corrections.
-- `.gitattributes`: forces LF checkout bytes for all seven byte-frozen audit/receipt artifacts so
+- `.gitattributes`: forces LF checkout bytes for all nine byte-frozen audit/receipt artifacts so
   their Git-blob guards are reproducible under Windows `core.autocrlf=true`.
 - `tools/check_planning_docs.py`: retained dependency/Markdown checker with powered negative
-  controls, conditional-edge and predicate-entailment manifests, exact 18-document authority
-  inventory, effective frozen-file EOL policy, frozen-audit/receipt guards, historical
-  receipt-object reconstruction, and repository-contained tracked link/fragment checks; it does not
-  validate edge completeness, prose meaning, external URLs, runtime semantics, or cryptographic
-  security.
+  controls, structured unconditional-base and phase-specific dependency/status manifests,
+  72 nodes, 94 structured phase-status tuples, five structured phase dependencies, 44 conditional
+  instance edges, predicate-entailment manifests, exact 19-document authority inventory, effective
+  frozen-file EOL policy, frozen-audit/receipt guards, historical receipt-object reconstruction,
+  and repository-contained tracked link/fragment checks; it does not validate semantic dependency
+  completeness, prose meaning, external URLs, runtime semantics, or cryptographic security.
 
 ## Claims that are safe to make
 
@@ -218,7 +263,7 @@ The candidate labels in `docs/DESIGN_RESEARCH_DISTILLATION.md` are research note
 nodes; promote one only through an explicit later capability-tree decision with dependencies,
 artifact, gate, and non-claim.
 
-1. Finish the convergence protocol first: pin this fourth-audit correction, run another complete
+1. Finish the convergence protocol first: pin this fifth-audit correction, run another complete
    independent read-only sweep, and freeze either its new findings or a zero-new-material-gap
    result. Only the zero-gap result opens the broad Rust, Python-vector, headless, Lean, and
    release-path test pass requested by the user. It still cannot replace physical display review.
@@ -274,9 +319,9 @@ git diff --check 694650f4028f5c1fb715384597326e0b0e31f0e1..ea9294ba08b5e4bd339f8
 git show --check --format=fuller ea9294ba08b5e4bd339f82894ecb761461f5af13
 ```
 
-The second, third, and fourth successor audits freeze `ea9294b`, `54926f5`, and `b23ddc9` before
-their corrections. The stable whitespace receipts for the complete second and third corrections
-are:
+The second through fifth successor audits freeze `ea9294b`, `54926f5`, `b23ddc9`, and `2cb1cc0`
+before their corrections. The stable whitespace receipts for the complete second and third
+corrections are:
 
 ```powershell
 git diff --check fb5f5ca048144f84b0d600619202b3a6f400a02c..54926f52fa8ba9768e817ecb6139dcca41960e6a
@@ -292,14 +337,15 @@ python -B tools/check_planning_docs.py --self-test
 git diff --cached --check
 ```
 
-The first command validates the pinned node inventory and status classes, declared dependency/role
-graph, structured conditional edges and predicate entailments, Markdown shape,
+The first command validates the pinned node inventory and structured phase statuses, declared
+unconditional-base/phase dependency and role graph, structured conditional edges and predicate
+entailments, Markdown shape,
 repository-contained tracked relative files and fragments, frozen audit/receipt blobs, the
 canonical source receipt plus Markdown agreement, and its historical Git-object/count claims.
-It also pins the exact 18-document authority inventory and the effective LF checkout policy for
-all seven frozen text artifacts. Powered controls exercise those paths. It does not decide predicate
+It also pins the exact 19-document authority inventory and the effective LF checkout policy for
+all nine frozen text artifacts. Powered controls exercise those paths. It does not decide predicate
 truth, prove prose or closure completeness, inspect external-link contents, establish
 future-profile satisfiability, validate runtime behavior, or prove cryptographic security. The
 second command checks the complete staged correction for whitespace errors. A later
-zero-new-material-gap audit must pin this fourth correction before broad tests are attributed to it;
+zero-new-material-gap audit must pin this fifth correction before broad tests are attributed to it;
 moving `HEAD` is never a stable historical receipt.

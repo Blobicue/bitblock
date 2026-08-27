@@ -347,8 +347,18 @@ profile_admission_manifest_id = ProfileIdHashV1(
  || LengthFrame(Canonical(ProfileAdmissionManifestV1))
 )
 
-AdmittedReleaseRecordV1 = Canonical(
-    admitted_release_record_schema_version,
+ReleaseAuthorityContextRefV1 =
+    GenesisReleaseAuthorityV1(
+        genesis_id,
+        genesis_release_authority_record_id
+    )
+  | AcceptedParentReleaseAuthorityV1(
+        predecessor_accepted_parent_lookup_id,
+        predecessor_governance_authority_root
+    )
+
+AdmittedReleaseCoreV1 = Canonical(
+    admitted_release_core_schema_version,
     admitted_profile_id,
     admitted_transition_spec_at_profile_id,
     profile_admission_manifest_id,
@@ -356,8 +366,35 @@ AdmittedReleaseRecordV1 = Canonical(
     exact_source_and_build_recipe_digests,
     exact_feature_toolchain_dependency_and_binary_digests,
     exact_genesis_and_runtime_configuration_digests,
-    release_authority_policy_id,
+    release_authority_context_ref,
+    release_authority_policy_id
+)
+
+admitted_release_core_id = ProfileIdHashV1(
+    Domain("bitblock/admitted-release-core/v1")
+ || LengthFrame(Canonical(AdmittedReleaseCoreV1))
+)
+
+ReleaseSignDocV1 = Canonical(
+    release_sign_doc_schema_version,
+    admitted_release_core_id,
+    release_authority_context_ref,
+    release_authority_policy_id
+)
+
+ReleaseAuthorizationV1 = Canonical(
+    release_authorization_schema_version,
+    ReleaseSignDocV1,
+    release_authorization_scheme_id,
+    release_authority_credential_set_id,
     canonical_release_authorization_bytes
+)
+
+AdmittedReleaseRecordV1 = Canonical(
+    admitted_release_record_schema_version,
+    AdmittedReleaseCoreV1,
+    admitted_release_core_id,
+    ReleaseAuthorizationV1
 )
 
 admitted_release_record_id = ProfileIdHashV1(
@@ -414,6 +451,7 @@ ChainLaunchAuthorizationV1 = Canonical(
 SupplementaryLaunchArtifactV1 = Canonical(
     typed_artifact_schema_id,
     typed_artifact_id,
+    canonical_artifact_preimage_length_u64,
     canonical_artifact_preimage_bytes
 )
 
@@ -425,6 +463,19 @@ LaunchClosureDependencyNodeV1 = Canonical(
 
 LaunchClosureBundleV1 = Canonical(
     launch_closure_bundle_schema_version,
+    complete_artifact_count_u32,
+    supplementary_artifact_count_u32,
+    complete_dependency_edge_count_u32,
+    total_canonical_preimage_bytes_u64,
+    explicit_preimage_lengths_u64[
+        profile_scope,
+        domain_registry,
+        candidate_profile,
+        transition_spec_at_profile,
+        profile_admission_manifest,
+        genesis_root_parity_record,
+        admitted_release_record
+    ],
     ProfileScopeV1,
     DomainRegistryV1,
     CandidateProfileV1,
@@ -432,10 +483,6 @@ LaunchClosureBundleV1 = Canonical(
     ProfileAdmissionManifestV1,
     GenesisRootParityRecordV1,
     AdmittedReleaseRecordV1,
-    complete_artifact_count_u32,
-    supplementary_artifact_count_u32,
-    complete_dependency_edge_count_u32,
-    total_canonical_preimage_bytes_u64,
     CanonicalSortedUniqueByTypedArtifactId([
         LaunchClosureDependencyNodeV1...
     ]),
@@ -465,23 +512,76 @@ and its evidence-closure manifest MUST name every artifact consumed to derive th
 `AdmittedReleaseRecordV1` is the exact `RELEASE-1` output, not a `RELEASE-R1` candidate-build
 receipt. Its profile, specification, admission, candidate-release configuration, source, feature,
 toolchain, dependency, binary, genesis, and runtime-configuration projections MUST byte-equal their
-already identified owners. Both typed IDs use the protocol-frozen `ProfileIdHashV1` because a fresh
-node must identify these launch inputs before it can resolve the initial profile's codec or object
-hash. Neither record contains the later launch-manifest or closure-bundle ID.
+already identified owners. `AdmittedReleaseCoreV1` contains no authorization bytes. Its fixed
+`admitted_release_core_id` is derived first, and the detached authorization covers exactly
+`Domain("bitblock/release-authorization-sign-doc/v1") ||
+LengthFrame(Canonical(ReleaseSignDocV1))`; the sign document in turn names that exact core ID and
+authority context. `ReleaseAuthorizationV1` may carry a signature, threshold proof, certificate, or
+another policy-frozen form, but its codec, scheme, credential set, and verification rule MUST come
+from `ResolveTrustedReleaseAuthorityV1(release_authority_context_ref)`. For an initial release that
+resolver consumes the release-authority record already committed in `G_0`; for a successor it
+consumes the exact governance authority root of the independently verified accepted predecessor.
+The policy ID in the core is a required byte-equal projection of that resolver, never a selector for
+it. Only after the authorization verifies is `admitted_release_record_id` derived from the core,
+core ID, and detached authorization. Neither authorization signs the final record ID, and neither
+record contains the later launch-manifest or closure-bundle ID, so no identifier cycle is possible.
+All release IDs shown here use protocol-frozen `ProfileIdHashV1` because a fresh launch or successor
+verifier must identify them before resolving the admitted profile's object hash.
 
-`LaunchClosureBundleV1` is the bounded retrieval closure for a fresh verifier. Its seven explicit
-preimages are mandatory even where one repeats another projection: the separate registry MUST
-byte-equal the registry embedded by the scope, and every typed ID or digest is independently
-recomputed. The supplementary inventory contains every other canonical preimage transitively
-referenced by the admission or release records and required to verify them. It is a closed,
-protocol-frozen union for this launch, not a candidate-extensible blob type. Every explicit and
-supplementary artifact occurs in exactly one `LaunchClosureDependencyNodeV1`; each typed artifact ID
-occurs exactly once, each dependency resolves to exactly one carried artifact, and every dependency
-has a strictly lower `topological_rank_u32` than its referrer. Duplicate IDs, duplicate semantic
-roles, self/forward references, unknown schemas, an unreachable extra, a missing reference, a count
-or byte-total mismatch, or any artifact above the protocol-frozen launch count/byte/depth bounds
+`LaunchClosureBundleV1` is an **embedded-only** bounded retrieval closure for a fresh verifier. Its
+seven explicit preimages are mandatory even where one repeats another projection: the separate
+registry MUST byte-equal the registry embedded by the scope, and every typed ID or digest is
+independently recomputed. The supplementary inventory embeds every other canonical preimage
+transitively referenced by the admission or release records and required to verify them. There is no
+locator, content-address-only, optional-fetch, or ambient-database variant in this schema. A locator
+tag or an omitted/unavailable preimage is an unknown variant and rejects rather than masquerading as
+a complete carrier.
+
+Let `E` be the ordered seven-element tuple of the exact canonical preimage byte strings named by
+`explicit_preimage_lengths_u64`, let `S` be the supplementary-artifact sequence, and let `D` be the
+dependency-node sequence. The checked equations are:
+
+```text
+Length(E)                              = 7
+supplementary_artifact_count_u32       = Length(S)
+complete_artifact_count_u32            = 7 + Length(S) = Length(D)
+complete_dependency_edge_count_u32     = SumChecked(node in D, Length(node.dependency_ids))
+total_canonical_preimage_bytes_u64      =
+    SumChecked(e in E, Length(e))
+  + SumChecked(s in S, Length(s.canonical_artifact_preimage_bytes))
+explicit_preimage_lengths_u64[i]       = Length(E[i])              for every i
+s.canonical_artifact_preimage_length_u64 =
+    Length(s.canonical_artifact_preimage_bytes)                    for every s
+```
+
+Every sum and conversion is checked before use. A top-level carried artifact contributes exactly
+once to the artifact count and once to the byte sum. Bytes embedded inside one canonical preimage
+are already included in that preimage's length and are not recursively counted again. Where the
+same semantic registry is deliberately carried both inside `ProfileScopeV1` and as the separate
+`DomainRegistryV1` preimage, its bytes occur once in each of those two top-level preimages and no
+third time. Bundle schema/counter/length fields, dependency-node bytes, collection framing,
+`genesis_package`, `launch_closure_bundle_id`, `ChainLaunchManifestV1`, and launch authorization are
+excluded from `total_canonical_preimage_bytes_u64`; their bytes remain covered by the independent
+protocol-frozen total package/frame cap, avoiding a self-referential total.
+
+The protocol-frozen bundle grammar places the fixed-width count/total prefix and the seven explicit
+lengths before their variable slices; each supplementary entry likewise places its declared length
+before its bytes. A verifier first streaming-scans those length/count prefixes, uses checked
+arithmetic to enforce the exact equations plus launch count/byte/nesting/depth bounds, and confirms
+that the declared slices consume the exact enclosing frame. It does so without allocation, copying,
+hashing, nested decode, or profile-owned work. Only then may it materialize and verify artifacts.
+Every explicit and supplementary artifact occurs in exactly one
+`LaunchClosureDependencyNodeV1`; each typed artifact ID occurs exactly once, each dependency
+resolves to exactly one carried artifact, and every dependency has a strictly lower
+`topological_rank_u32` than its referrer. Duplicate IDs, duplicate semantic roles, self/forward
+references, unknown schemas, an unreachable extra, a missing reference, or an equation mismatch
 rejects before profile resolution. Thus the bundle is finite and acyclic; a content hash does not
 excuse an undeclared local database lookup.
+
+Powered launch-carrier controls increment and decrement each count and declared length, overflow
+each checked sum, double-count an embedded registry, alter a dependency edge total, truncate or
+append a slice, omit one preimage, and replace an embedded preimage with an unavailable locator.
+Every mutant rejects during preflight or closure verification before profile resolution.
 
 `TransitionSpecAtProfileV1` is an admission prerequisite, not an input to `CandidateProfileV1`;
 putting its digest back into the candidate preimage would create a candidate/specification
@@ -535,9 +635,11 @@ preallocation caps. It then recomputes, in this order, the domain-registry diges
 its byte-identical registry projection; `genesis_id`; candidate `profile_id` and every
 scope/genesis/lineage projection; transition-specification ID and deterministic candidate
 resolution; admission-manifest ID and complete passing evidence closure; parity-record ID and every
-initial typed root; admitted-release-record ID and authorization; closure-bundle ID; manifest ID and
-all its projections; and finally the detached launch authorization under the policy committed in
-`G_0`. Bootstrap and replay MUST complete this whole chain before resolving the first envelope.
+initial typed root; admitted-release core and core ID; trusted `G_0` release-authority resolution;
+exact release sign document and detached authorization; admitted-release-record ID;
+closure-bundle ID; manifest ID and all its projections; and finally the detached launch
+authorization under the policy committed in `G_0`. Bootstrap and replay MUST complete this whole
+chain before resolving the first envelope.
 No hash, signature, codec, artifact, policy, or ID found only in an ambient local map can satisfy
 that verification.
 
@@ -983,9 +1085,44 @@ The bytes needed to find authority cannot use a profile-owned parser, because th
 what selects the profile. The wire therefore starts with this fixed, profile-independent grammar:
 
 ```text
+AcceptedParentLookupPayloadV1 = FixedPreProfileCanonicalV1(
+    accepted_parent_lookup_payload_version_u16_be,
+    accepted_parent_lookup_namespace_tag,
+    accepted_record_type_tag,
+    block_id_type_tag,
+    genesis_id,
+    chain_launch_manifest_id,
+    envelope_owner_profile_id,
+    block_id_hash_suite_id,
+    block_id_digest_length_u16_be,
+    block_id_digest_bytes
+)
+
+accepted_parent_lookup_id = ProfileIdHashV1(
+    Domain("bitblock/accepted-parent-lookup/v1")
+ || LengthFrame(FixedPreProfileCanonicalV1(AcceptedParentLookupPayloadV1))
+)
+
 ParentOrLaunchLookupRefV1 =
-    AcceptedParentLookupV1(typed_parent_block_id_bytes)
+    AcceptedParentLookupV1(accepted_parent_lookup_id_bytes)
   | InitialLaunchLookupV1(chain_launch_manifest_id_bytes)
+
+FixedPreProfileEncodeRefPayloadV1(ref) =
+    match ref {
+        AcceptedParentLookupV1(lookup_id) => FixedWidthProfileIdHashBytes(lookup_id)
+        InitialLaunchLookupV1(manifest_id) => FixedWidthProfileIdHashBytes(manifest_id)
+    }
+
+ProposalInnerShallowFrameV1 = FixedPreProfileShallowFrameV1(
+    proposal_inner_magic,
+    proposal_inner_version_u16_be,
+    canonical_header_length_u64_be,
+    canonical_availability_payload_length_u64_be,
+    canonical_proposer_signature_length_u64_be,
+    opaque_canonical_header_bytes,
+    opaque_canonical_availability_payload_bytes,
+    opaque_canonical_proposer_signature_bytes
+)
 
 ProposalOuterV1 = FixedPreProfileFrameV1(
     proposal_outer_magic,
@@ -1012,16 +1149,31 @@ AcceptedRecordOuterV1 = FixedPreProfileFrameV1(
 )
 ```
 
-`FixedPreProfileFrameV1` has one protocol-frozen byte grammar: fixed magic and tag values,
-big-endian unsigned lengths, no optional spelling, no duplicate field, and no trailing byte. A
-protocol-frozen `OuterFrameBoundsV1` caps each length, their checked sum, and the total frame before
-allocation, copying, nested decode, lookup-dependent hashing, or cryptographic work. The accepted
-parent or complete authorized launch package may impose only equal or tighter limits. Unknown
-versions/tags, length overflow, truncation, excess bytes, or a segment above either bound rejects.
+`FixedPreProfileFrameV1`, `FixedPreProfileShallowFrameV1`, and
+`FixedPreProfileCanonicalV1` have one protocol-frozen byte grammar: fixed magic, namespace, type,
+version, and tag values; big-endian unsigned lengths; no optional spelling or duplicate field; and
+no trailing byte. A protocol-frozen `OuterFrameBoundsV1` caps each outer length, their checked sum,
+and the total frame before allocation, copying, nested decode, lookup-dependent hashing, or
+cryptographic work. Unknown versions/tags, a non-exact authority-reference length, integer overflow,
+truncation, excess bytes, or a segment above the global bound rejects.
 
-The outer authority value is only a bounded lookup key. `AcceptedParentLookupV1` must resolve to the
-exact locally verified accepted record whose profile-specific consensus status satisfies its
-active policy. `InitialLaunchLookupV1` instead must resolve the complete `chain_launch_package`,
+The accepted-parent outer value is a fixed-width `accepted_parent_lookup_id`, not a bare block
+digest. Its hashed payload binds the fixed lookup namespace and record/block types, exact
+genesis/launch identity, envelope-owner profile, block-ID hash suite, declared digest length, and
+digest bytes. `block_id_digest_length_u16_be` MUST equal both the carried byte length and the fixed
+output length registered for `block_id_hash_suite_id`. The launch-manifest ID transitively binds the
+chain identity through its genesis ID. `FixedPreProfileEncodeRefPayloadV1` is the complete ref
+encoding: the outer branch tag selects one of two exact, fixed-width `ProfileIdHashV1` outputs and no
+profile codec participates.
+
+The local accepted-parent index is keyed only by this typed lookup ID and MUST map it to exactly one
+byte-exact, locally verified `AcceptedBlockRecord`. Zero matches, multiple records, or two distinct
+payloads/records claiming one lookup ID rejects as an unresolved collision rather than selecting an
+arbitrary row. After retrieval, the verifier recomputes the parent's `block_id` with the retrieved
+envelope owner, reconstructs every field of `AcceptedParentLookupPayloadV1`, recomputes the lookup
+ID, and requires exact equality before consulting its status. Wrong launch/genesis, profile, suite,
+record or block type, digest length, digest, alias, or collision therefore fails before the parent
+can supply authority. `InitialLaunchLookupV1` instead must resolve the complete `chain_launch_package`,
 recompute its entire launch closure, and verify `ChainLaunchAuthorizationV1`; it is legal only for
 the manifest's `first_ledger_height`, `genesis_parent_block_id`, initial ordinary profile context,
 initial root, and history root. Launch authorization is not an accepted-parent consensus status and
@@ -1031,8 +1183,8 @@ before that record becomes accepted.
 ```text
 VerifiedEnvelopeAuthorityV1(lookup_ref) =
     match lookup_ref {
-        AcceptedParentLookupV1(parent_id) =>
-            VerifyAcceptedParentConsensusStatusV1(parent_id)
+        AcceptedParentLookupV1(lookup_id) =>
+            VerifyUniqueAcceptedParentByLookupIdAndConsensusStatusV1(lookup_id)
         InitialLaunchLookupV1(manifest_id) =>
             VerifyCompleteLaunchClosureAndAuthorizationV1(manifest_id)
     }
@@ -1046,20 +1198,36 @@ verified accepted parent supplies them thereafter. A rule written only for an ac
 not apply to the first-record branch unless it separately names the launch-authorized initial
 equivalent.
 
-After that branch selects the envelope owner, the verifier decodes each opaque segment under only
-the uniquely resolved codec/scheme, canonically re-encodes it, and requires byte equality with the
-same outer segment. The decoded proposal's parent or launch projection MUST equal the tagged outer
-lookup value. For `AcceptedRecordOuterV1`, its proposal segment MUST equal the standalone
-`ProposalOuterV1` inner bytes for that candidate, and the two evidence segments MUST be the exact
-canonical bytes that verify against that proposal. Thus outer hints cannot be substituted after
-inner verification, while an inner parser never gets to choose the authority or initial work
+Immediately after that branch selects the envelope owner, and before any profile-owned decode or
+hash, the verifier resolves `AuthorityOwnedParseAndWorkLimitsV1` from the verified parent or launch
+package. Candidate/header fields cannot select or widen it. The verifier then reads only the fixed
+three-length prefix of `ProposalInnerShallowFrameV1`, checks each slice and their sum against both
+the global outer cap and the equal-or-tighter authority-owned caps, and runs the selected codec's
+admission-tested streaming preflight over the header, availability-payload, and signature slices.
+That preflight must validate every nested length/count, nesting depth, declared decompressed size,
+collection element bound, proof/witness/signature size, and parser/work budget without allocating,
+copying, decompressing, materializing, hashing, canonically re-encoding, or verifying cryptography.
+A profile whose codec cannot provide this deterministic bounded preflight is not admissible.
+
+Only after preflight succeeds may the verifier materialize the three slices under the uniquely
+resolved owner codec/scheme. It canonically re-encodes each object, requires equality with its exact
+slice, rebuilds the fixed shallow frame, and requires equality with the complete outer inner
+segment. The decoded proposal's parent or launch projection MUST match the verified outer branch.
+For `AcceptedRecordOuterV1`, its proposal segment MUST equal the standalone `ProposalOuterV1` inner
+bytes for that candidate, and the two evidence segments MUST be the exact canonical bytes that later
+verify against it. Thus neither an inner parser nor a decoded header chooses authority or its work
 budget.
 
 Powered outer-frame controls include one accepted-parent proposal and one first-record launch
 proposal, then flip the branch tag, substitute either authority reference, mismatch each declared
 length, overflow the checked sum, append trailing bytes, change an inner byte after lookup, and try
 to pass launch authorization through the parent-consensus branch (and vice versa). Each malformed
-frame rejects before profile-owned parsing or expensive verification.
+frame rejects before profile-owned parsing or expensive verification. Lookup controls additionally
+mutate namespace, launch/genesis, profile, suite, record/block type, digest length, digest, index
+aliasing, and collision multiplicity. Shallow-frame controls place a body, receipt, witness,
+compressed value, nested count, or parser-work declaration below the global cap but above the active
+profile cap, then mutate each slice length and decompression/work declaration. Every such mutant
+rejects during lookup or allocation-free preflight, before materialization or hashing.
 
 Profile context and root context are explicit. Admission status is checked by the verifier and is
 not a bit that a candidate may set inside these bytes:
@@ -1082,7 +1250,9 @@ ProfileTransitionContextV1 =
   | InPlaceMigrationTransitionV1(
         old_active_profile_context,
         new_admitted_profile_context,
+        successor_profile_admission_manifest_id,
         migration_spec_id,
+        successor_activation_bundle_id,
         activation_authorization_id,
         activation_height
     )
@@ -1090,7 +1260,9 @@ ProfileTransitionContextV1 =
 EnvelopeOwnerProfileContextV1(profile_transition_context) =
     match profile_transition_context {
         OrdinaryProfileTransitionV1(active) => active,
-        InPlaceMigrationTransitionV1(old, new, spec, authorization, height) => old
+        InPlaceMigrationTransitionV1(
+            old, new, admission, spec, bundle, authorization, height
+        ) => old
     }
 
 EnvelopeResolutionV1(profile_transition_context) =
@@ -1123,6 +1295,126 @@ ExecutionRootRefV1 = Canonical(
     execution_state_root
 )
 
+SuccessorUpgradeEvidenceManifestV1 = Canonical(
+    successor_upgrade_evidence_manifest_schema_version,
+    predecessor_admitted_profile_id,
+    successor_candidate_profile_id,
+    successor_transition_spec_at_profile_id,
+    migration_spec_id,
+    old_execution_root_ref,
+    expected_new_execution_root_ref,
+    canonical_parameter_and_state_delta_digest,
+    powered_bounded_migration_replay_artifact_ids,
+    required_migration_implementation_artifact_ids,
+    upgrade_1_disposition
+)
+
+successor_upgrade_evidence_manifest_id = ProfileIdHashV1(
+    Domain("bitblock/successor-upgrade-evidence-manifest/v1")
+ || LengthFrame(Canonical(SuccessorUpgradeEvidenceManifestV1))
+)
+
+SupplementarySuccessorActivationArtifactV1 = Canonical(
+    typed_artifact_schema_id,
+    typed_artifact_id,
+    canonical_artifact_preimage_length_u64,
+    canonical_artifact_preimage_bytes
+)
+
+SuccessorActivationDependencyNodeV1 = Canonical(
+    topological_rank_u32,
+    typed_artifact_id,
+    canonical_sorted_unique_dependency_ids
+)
+
+SuccessorActivationBundleV1 = Canonical(
+    successor_activation_bundle_schema_version,
+    predecessor_admitted_profile_id,
+    successor_admitted_profile_id,
+    successor_profile_admission_manifest_id,
+    successor_transition_spec_at_profile_id,
+    successor_release_record_id,
+    migration_spec_id,
+    successor_upgrade_evidence_manifest_id,
+    complete_artifact_count_u32,
+    supplementary_artifact_count_u32,
+    complete_dependency_edge_count_u32,
+    total_canonical_preimage_bytes_u64,
+    explicit_preimage_lengths_u64[
+        successor_profile_scope,
+        successor_domain_registry,
+        successor_candidate_profile,
+        successor_transition_spec_at_profile,
+        successor_profile_admission_manifest,
+        successor_admitted_release_record,
+        successor_upgrade_evidence_manifest
+    ],
+    ProfileScopeV1,
+    DomainRegistryV1,
+    CandidateProfileV1,
+    TransitionSpecAtProfileV1,
+    ProfileAdmissionManifestV1,
+    AdmittedReleaseRecordV1,
+    SuccessorUpgradeEvidenceManifestV1,
+    CanonicalSortedUniqueByTypedArtifactId([
+        SuccessorActivationDependencyNodeV1...
+    ]),
+    CanonicalSortedUniqueByTypedArtifactId([
+        SupplementarySuccessorActivationArtifactV1...
+    ])
+)
+
+successor_activation_bundle_id = ProfileIdHashV1(
+    Domain("bitblock/successor-activation-bundle/v1")
+ || LengthFrame(Canonical(SuccessorActivationBundleV1))
+)
+
+SuccessorActivationSignDocV1 = Canonical(
+    successor_activation_sign_doc_schema_version,
+    chain_launch_manifest_id,
+    predecessor_accepted_parent_lookup_id,
+    old_active_profile_context,
+    new_admitted_profile_context,
+    successor_profile_admission_manifest_id,
+    migration_spec_id,
+    successor_activation_bundle_id,
+    activation_height,
+    activation_old_execution_root_ref,
+    activation_expected_new_execution_root_ref,
+    activation_authority_policy_id
+)
+
+successor_activation_sign_doc_id = EnvelopeHashV1(
+    OrdinaryProfileTransitionV1(old_active_profile_context),
+    "bitblock/successor-activation-sign-doc/v1",
+    SuccessorActivationSignDocV1
+)
+
+ActivationAuthorizationV1 = Canonical(
+    activation_authorization_schema_version,
+    SuccessorActivationSignDocV1,
+    successor_activation_sign_doc_id,
+    activation_authority_policy_id,
+    activation_authorization_scheme_id,
+    activation_authority_credential_set_id,
+    canonical_activation_authorization_bytes
+)
+
+activation_authorization_id = EnvelopeHashV1(
+    OrdinaryProfileTransitionV1(old_active_profile_context),
+    "bitblock/successor-activation-authorization/v1",
+    ActivationAuthorizationV1
+)
+
+SuccessorActivationCarrierV1 =
+    NoSuccessorActivationV1
+  | EmbeddedSuccessorActivationV1(
+        SuccessorActivationBundleV1,
+        successor_activation_bundle_id,
+        ActivationAuthorizationV1,
+        activation_authorization_id
+    )
+
 Body =
     OrdinaryBodyV1(
         ordered_signed_transactions,
@@ -1143,7 +1435,9 @@ Execute(state, block_context, body) =
                 transactions,
                 auxiliary_inputs
             )
-        (InPlaceMigrationTransitionV1(old, new, spec, authorization, height),
+        (InPlaceMigrationTransitionV1(
+             old, new, admission, spec, bundle, authorization, height
+         ),
          DedicatedMigrationBodyV1(empty_transactions, migration_inputs)) =>
             ExecuteDedicatedMigrationV1(
                 state,
@@ -1212,6 +1506,7 @@ receipts_root = EnvelopeCommitOrderedV1(
 AvailabilityPayload = Canonical(
     BlockContext,
     Body,
+    SuccessorActivationCarrierV1,
     all_transaction_and_system_receipts_in_execution_order,
     consensus_required_execution_witnesses
 )
@@ -1291,12 +1586,26 @@ proposer_signature = Sign[proposal_credential_resolution.signature_suite_id](
         proposal_signature_domain || block_id
     )
 )
-inner_proposal_bytes = Canonical[
+canonical_proposal_header_bytes = Canonical[
     EnvelopeResolutionV1(profile_transition_context).canonical_codec_id
-](
-    ProposalHeader,
-    AvailabilityPayload,
-    proposer_signature
+](ProposalHeader)
+canonical_availability_payload_bytes = Canonical[
+    EnvelopeResolutionV1(profile_transition_context).canonical_codec_id
+](AvailabilityPayload)
+canonical_proposer_signature_bytes = Canonical[
+    EnvelopeResolutionV1(profile_transition_context).canonical_codec_id
+](proposer_signature)
+inner_proposal_bytes = FixedPreProfileEncodeShallowFrameV1(
+    ProposalInnerShallowFrameV1(
+        proposal_inner_magic,
+        proposal_inner_version_u16_be,
+        Length(canonical_proposal_header_bytes),
+        Length(canonical_availability_payload_bytes),
+        Length(canonical_proposer_signature_bytes),
+        canonical_proposal_header_bytes,
+        canonical_availability_payload_bytes,
+        canonical_proposer_signature_bytes
+    )
 )
 ConsensusEvidence =
     DeterministicFinalityEvidence(block_id, ...)
@@ -1415,13 +1724,56 @@ root references MUST contain that exact context. For `InPlaceMigrationTransition
 MUST resolve to the parent-admitted profile, the distinct new context MUST resolve to the exact
 successor profile already admitted by `PROFILE-1` after consuming the concrete `UPGRADE-1`
 old-to-candidate migration evidence; both contexts MUST retain the same chain genesis and world,
-and the pre/post root references MUST respectively contain the old/new contexts. Admission does not
-activate that profile. The migration specification and activation authorization are
-parent-authorized inputs known before execution, and successful consensus acceptance of the
-migration activates the already admitted successor at its declared height. Candidate bytes,
-offline migration evidence, or admission alone cannot self-activate. An ordinary block cannot carry
-cross-profile roots, and a migration block cannot use the
-ordinary same-profile rule to relabel a root.
+and the pre/post root references MUST respectively contain the old/new contexts. The transition
+context's `successor_profile_admission_manifest_id` MUST be the exact `PROFILE-1` record for the new
+context, and its `successor_activation_bundle_id` MUST reproduce from the exact embedded bundle in
+`AvailabilityPayload`. Admission does not activate that profile. Candidate bytes, offline migration
+evidence, an admission manifest, a release record, or a bundle alone cannot self-activate. An
+ordinary block cannot carry cross-profile roots, and a migration block cannot use the ordinary
+same-profile rule to relabel a root.
+
+`SuccessorActivationBundleV1` is the canonical, protocol-frozen, embedded-only closure needed to
+verify one admitted successor without an ambient registry. Its seven explicit preimages are the
+successor scope, registry, candidate, resolved transition specification, admission manifest,
+admitted release, and concrete `SuccessorUpgradeEvidenceManifestV1`. The latter is the exact
+`UPGRADE-1` output: it binds predecessor and candidate, migration specification, typed old and
+expected-new roots, parameter/state deltas, powered bounded replay, required implementation
+artifacts, and the passing disposition. It is derived before `PROFILE-1`; the later admission
+manifest MUST name its ID in the evidence closure, avoiding a backward identifier edge. The bundle's
+supplementary sequence embeds every source, implementation, migration-specification, corpus, and
+other preimage transitively needed to verify `UPGRADE-1`, `PROFILE-1`, and `RELEASE-1`.
+
+The successor bundle uses the same exact checked equations, exclusions, prefix-first streaming
+preflight, unique dependency-node rule, and embedded-only/no-locator rule defined for
+`LaunchClosureBundleV1`, with its own seven-element explicit tuple. Every identifier in its fixed
+prefix MUST recompute from the corresponding carried preimage; every predecessor, successor,
+transition-specification, admission, release, migration-specification, evidence, root, and lineage
+projection MUST agree. The fixed `successor_activation_bundle_id` is derived with
+`ProfileIdHashV1`, not with a suite selected by the inactive successor.
+
+`SuccessorActivationSignDocV1` binds that bundle ID and exact target admission ID to the launch,
+unique accepted parent lookup ID, old and new contexts, migration specification, activation height,
+and exact old/expected-new typed roots. `ResolveParentAuthorizedActivationAuthorityV1` consumes the
+independently verified accepted parent and its committed governance/upgrade authority state, then
+returns the only allowed policy, codec, scheme, and credential set. Every corresponding field in
+`ActivationAuthorizationV1` is a byte-equal assertion against that resolver; neither the successor,
+bundle, sign document, nor authorization object selects its verifier. The authorization covers
+exactly `Domain("bitblock/successor-activation-sign-doc/v1") ||
+LengthFrame(Canonical(SuccessorActivationSignDocV1))`. Its final ID is derived under
+`OrdinaryProfileTransitionV1(old_active_profile_context)`, never the inactive new profile, and does
+not enter its own sign document. The sign document's parent lookup ID, old root, and expected-new
+root MUST byte-equal the verified outer parent and the proposal's typed pre/post root references.
+
+A migration payload MUST carry exactly one `EmbeddedSuccessorActivationV1` containing the complete
+bundle and authorization preimages plus their recomputed IDs. An ordinary payload MUST carry
+exactly `NoSuccessorActivationV1`. Because the canonical `AvailabilityPayload` is encoded and
+committed under `EnvelopeOwnerProfileContextV1`, the old profile's availability rule covers the
+bytes needed to verify its successor. Before migration execution, the verifier completes bundle
+preflight, closure/release/admission/upgrade verification, trusted activation-authorization
+resolution, signature/certificate verification, and every equality above. Missing, unavailable,
+substituted, duplicated, wrong-parent, wrong-admission, wrong-root, wrong-height, wrong-policy, or
+ambient-map-only data invalidates the proposal. Only later consensus acceptance of that exact
+migration block activates the admitted successor at its declared height.
 
 `EnvelopeOwnerProfileContextV1` is the sole codec and identifier owner for the proposal envelope. It
 is the active profile context for an ordinary block and the old parent-admitted profile context for
@@ -1447,8 +1799,10 @@ The first supported migration body is deliberately dedicated. For
 `InPlaceMigrationTransitionV1`, `Body` MUST be `DedicatedMigrationBodyV1`,
 `SignedTransactionSequence(Body)` MUST be the canonical empty sequence,
 `application_subtick_schedule` MUST be empty, and `system_transition_schedule` MUST contain exactly
-one `AuthorizedMigrationSystemTransitionV1(migration_spec_id, activation_authorization_id,
-activation_height)`. Its deterministic inputs are exactly those required by the admitted migration
+one `AuthorizedMigrationSystemTransitionV1(successor_profile_admission_manifest_id,
+migration_spec_id, successor_activation_bundle_id, activation_authorization_id,
+activation_height)`, with every field byte-equal to `ProfileTransitionContextV1`. Its deterministic
+inputs are exactly those required by the admitted migration
 specification, and execution emits exactly one position-specific migration system receipt and no
 transaction receipt. An ordinary context MUST use `OrdinaryBodyV1`. A future block that mixes user
 transactions with migration would require a separately versioned, profile/phase-tagged body and a
@@ -1478,8 +1832,11 @@ witnesses without those context bytes are not a complete replay payload.
 The powered transition corpus includes a valid ordinary case and a valid dedicated migration case,
 then removes the context, substitutes each repeated context projection and each schedule, swaps an
 ordinary/migration body, duplicates one deterministic value across context and body, appends an
-unconsumed input, and removes one required input. Every mutant must reject before root publication;
-no executor-local clock, cache, or default may make it pass.
+unconsumed input, and removes one required input. Successor controls also omit or substitute each
+bundle/authorization preimage and ID, change the target admission, predecessor, migration spec,
+activation height, old/new root, authority policy/scheme/credential, or make a required artifact
+available only through an ambient map. Every mutant must reject before execution or root
+publication; no executor-local clock, cache, registry, or default may make it pass.
 
 A reproducible `RELEASE-R1` candidate build does not satisfy either admission lookup, while artifact
 deployment separately requires a matching `RELEASE-1` record. Profile IDs remain outside logical
@@ -1547,36 +1904,49 @@ A valid proposal requires this explicit checklist to pass:
 1. apply the profile-independent bounded outer framing, fixed-width length/count checks, and checked
    preallocation arithmetic before nested decoding, hashing, signature/proof work, or allocation;
 2. resolve exactly one authority branch from the bounded outer reference. For an
-   `AcceptedParentLookupV1`, verify the referenced accepted parent's profile-specific consensus
-   status. For an `InitialLaunchLookupV1`, verify the complete launch closure and detached launch
-   authorization plus all first-height/genesis-parent/initial-root conditions, without applying an
-   accepted-parent consensus predicate;
-3. derive the expected `EnvelopeOwnerProfileContextV1` from that tagged authority, select its codec
-   and object-hash suite without consulting candidate-selected fields, and bounded-decode the inner
-   proposal under only that resolution, then re-encode it and require exact equality with the outer
-   opaque segment and lookup projection;
-4. verify launch-manifest identity, height, epoch, round/view, parent history,
+   `AcceptedParentLookupV1`, resolve exactly one indexed record, recompute its fixed lookup payload
+   and ID, and verify its profile-specific consensus status. For an `InitialLaunchLookupV1`, verify
+   the complete launch closure and detached launch authorization plus all
+   first-height/genesis-parent/initial-root conditions, without applying an accepted-parent
+   consensus predicate;
+3. derive the expected `EnvelopeOwnerProfileContextV1` from that tagged authority and immediately
+   resolve `AuthorityOwnedParseAndWorkLimitsV1`, the owner codec/object-hash suite, and the maximum
+   permitted suite-specific work without consulting candidate-selected fields;
+4. read the fixed `ProposalInnerShallowFrameV1` prefix and run allocation-free streaming preflight
+   over its independently length-framed header, availability-payload, and signature slices. Enforce
+   global and authority-owned byte/count/nesting/decompression/proof/witness/signature/work bounds
+   before materializing, copying, hashing, canonical re-encoding, decompression, or cryptographic
+   verification;
+5. materialize and bounded-decode only the canonical header slice, re-encode it to the identical
+   slice, and require its parent block ID and lookup-bound launch/genesis/profile/suite projections
+   to match the uniquely retrieved parent—or its genesis-parent projection to match the authorized
+   launch branch—then verify launch-manifest identity, height, epoch, round/view, parent history,
    chain/genesis/world continuity, ordinary-or-migration context, candidate lineage, and typed
    pre/post root projections;
-5. resolve the authority-selected resource limits, execution parameters, governance authority,
+6. resolve the authority-selected execution parameters, governance authority,
    validator schedule, consensus/availability policies, and allowed credential suites from the
    verified launch package at the first height or the verified accepted parent thereafter; require
    every corresponding header field to match before it can select work or interpretation;
-6. enforce all declared header, body, transaction, receipt, effect, witness, proof/signature,
-   state-growth, and execution bounds, then verify proposer eligibility and signature over the
-   bounded header;
-7. obtain and bounded-decode the complete availability payload: canonical `BlockContext`, `Body`,
-   claimed receipts/effects, and consensus-required witnesses;
-8. require every context projection to match the verified header and authority, recompute
+7. materialize and bounded-decode the already preflighted canonical availability-payload and
+   proposer-signature slices exactly once under those resolutions; enforce every semantic header,
+   body, transaction, receipt, effect, witness, proof/signature, state-growth, and execution bound;
+   re-encode each slice, rebuild the fixed shallow frame byte-for-byte, and verify proposer
+   eligibility and signature over the bounded header;
+8. for an ordinary transition require `NoSuccessorActivationV1`; for a migration require exactly
+   one embedded bundle and authorization, recompute both IDs, verify the complete successor
+   admission/release/upgrade/implementation closure and trusted parent-authorized sign document,
+   and reject any missing, substituted, unavailable, or ambient-only artifact before execution;
+9. require every `BlockContext`, `Body`, receipt/effect, witness, and successor-carrier projection to
+   match the verified header and authority, recompute
    `block_context_root` before execution, enforce the ordinary or dedicated-migration branch and
    one-owner input partition, and recompute candidate execution context, body/transaction roots,
    exact availability payload, and `data_availability_commitment` under the already verified
    policies;
-9. evaluate the one total `Execute(typed_pre_state, BlockContext, Body)` relation under the already
+10. evaluate the one total `Execute(typed_pre_state, BlockContext, Body)` relation under the already
    verified execution or migration policy;
-10. require its complete ordered effects and receipts to byte-equal the claimed payload, then
+11. require its complete ordered effects and receipts to byte-equal the claimed payload, then
     recompute `receipts_root`, typed post-state root, and `post_history_root`; and
-11. require optional-next-validator and every other explicitly permitted successor value to equal
+12. require optional-next-validator and every other explicitly permitted successor value to equal
     the recomputed post-state role. No pre-transition authority or policy check is deferred to this
     post-state phase.
 
@@ -1591,10 +1961,11 @@ partial successor.
 The accepted-record carrier has the same topological input discipline. Its profile-independent
 outer framing MUST bound the proposal, consensus-evidence, availability-assessment, proof/signature,
 and canonical-evidence byte lengths before nested decode, hashing, allocation, or verification.
-Only after proposal steps 1–8 establish the accepted parent or launch anchor, envelope owner,
-resource limits, context/root correspondence, and authority-selected consensus/availability
-policies may the verifier
-bounded-decode the two detached evidence objects under their uniquely resolved codecs and schemes.
+Immediately after the authority branch resolves, the same authority-owned limits MUST preflight the
+detached evidence slices before they are materialized. Only after the proposal path establishes the
+accepted parent or launch anchor, envelope owner, resource limits, context/root correspondence, and
+authority-selected consensus/availability policies may the verifier bounded-decode the two detached
+evidence objects under their uniquely resolved codecs and schemes.
 It then hashes and verifies them against the exact `block_id`, status, predicate, authority/epoch,
 and policy fields. No unverified evidence variant, scheme ID, codec ID, hash-suite ID, length, or
 status may select its own parser or verification work.
@@ -1706,13 +2077,16 @@ combination accepted by bootstrap and the first header.
 An upgrade is a deterministic, consensus-accepted state transition, not a changed constant in one
 binary. Its `InPlaceMigrationTransitionV1` and typed root references MUST bind the old and new
 protocol/profile/scope/registry contexts, activation height, migration specification or code hash,
-old root, expected new root, parameter deltas, and authorization proof. The old context remains the
-parent authority for proposer, governance, consensus, and availability policy during this dedicated
-transition unless an admitted upgrade framework specifies an equally explicit handoff. The concrete
-`UPGRADE-1` bounded replay is verified before `PROFILE-1` admits the successor. A migration-block
-validator then replays that already admitted dedicated transition from the exact parent root before
-accepting its new root; only consensus acceptance activates the successor. Bedrock, supply,
-ownership, and authorization changes must appear as explicit deltas
+old root, expected new root, parameter deltas, exact target admission-manifest ID,
+`successor_activation_bundle_id`, and detached parent-authorized activation proof. The old context
+remains the parent authority for envelope codec/hash, proposer, governance, consensus, availability,
+and bounded preflight during this dedicated transition unless an admitted upgrade framework
+specifies an equally explicit handoff. The concrete `UPGRADE-1` bounded replay is verified before
+`PROFILE-1` admits the successor. The old-envelope availability payload must then embed the complete
+successor closure and activation authorization; a migration-block validator verifies those bytes and
+replays that already admitted dedicated transition from the exact parent root before accepting its
+new root. Only consensus acceptance activates the successor. Bedrock, supply, ownership, and
+authorization changes must appear as explicit deltas
 rather than emerge from serialization drift. A cryptographic migration must prevent downgrade,
 define any dual-validation window, and preserve verification of historical blocks. Emergency and
 rollback policy cannot silently rewrite history that the selected rule treats as irreversible.
@@ -2226,7 +2600,7 @@ restart criteria, and a public post-incident account for any widened trust assum
 The single most important inherited property is replayability across every activated
 protocol version. Independent chain validation consumes the complete and authorized chain launch
 package, each canonical `AcceptedRecordOuterV1`—including its exact inner proposal,
-availability-covered `BlockContext`, body, full receipts/effects,
+availability-covered `BlockContext`, body, required successor-activation carrier, full receipts/effects,
 proposal signature, consensus evidence, and availability assessment—and an
 implementation/specification for every version referenced by that history:
 
@@ -2243,7 +2617,10 @@ implementation/specification for every version referenced by that history:
 
 Version activation, validator scheduling, committed randomness, rewards, governance, and
 migrations come from the accepted, availability-covered `BlockContext`/body/header state context.
-Replay checks every context projection and root, then evaluates the same total
+At every migration, replay verifies the embedded successor bundle, admitted release, target
+admission and `UPGRADE-1` evidence, parent-authorized sign document, and all required implementation
+preimages under the old envelope before execution; no ambient registry completes that input. Replay
+checks every context projection and root, then evaluates the same total
 `Execute(state, BlockContext, Body)` relation. Ordered user actions alone are not a
 complete replay input once any of those mechanisms exists. An execution-only replay may
 start from a supplied trusted parent and omit consensus evidence, but its claim MUST then say
@@ -2285,7 +2662,14 @@ same `profile_id` to a complete passing evidence closure may `RELEASE-1` publish
 metadata that also binds the typed profile-admission-manifest ID, exact source, features, genesis,
 binary, and
 configuration. A candidate build must never inherit “admitted” from reproducibility alone, and an
-admitted record must reject any semantic projection or binary that differs from its candidate. For
+admitted record must reject any semantic projection or binary that differs from its candidate.
+`RELEASE-1` first freezes `AdmittedReleaseCoreV1` and its fixed core ID, resolves the release policy,
+codec, scheme, and credential set from `G_0` for the initial profile or from the independently
+verified accepted predecessor for a successor, and verifies `ReleaseAuthorizationV1` over the exact
+`ReleaseSignDocV1`. It derives the final record ID only afterward. Omitting or zeroing the core ID;
+altering a source, binary, configuration, authority context, policy, scheme, credential, or signed
+byte; choosing a verifier from the release object; signing the final record ID; or accepting a
+non-canonical authorization encoding MUST fail powered controls. For
 the initial launch, `ChainLaunchManifestV1` then binds that exact `RELEASE-1` record alongside the
 admission, transition specification, and root-parity record; later release replacement cannot
 silently rewrite the launch anchor.

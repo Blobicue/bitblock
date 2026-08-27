@@ -8,9 +8,11 @@ while writing this file.
 Implemented/source claims were reconciled to source/proof snapshot
 `6545d8e7d60e75607445fda564bbf11610a62658`; source/proof/tool files remained unchanged through
 planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronology is checked through
-that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md) and the
-second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md). Those
-successor audits cover planning corrections only; neither silently extends or reruns the pinned
+that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md), the
+second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md), and the
+design-successor chronology through
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md).
+Those audits cover planning/proposed-protocol corrections only; none silently extends or reruns the
 checkpoint-0.3 paper audit. Changes to named source/proof files or this chronology stale the
 corresponding statements.
 
@@ -33,7 +35,10 @@ When memories disagree, use this order:
    research-carrier contracts.
 4. `PROJECT_INTENT.md` for the motive chain and `CAPABILITY_TREE.md` for future dependency/status
    planning; neither overrides current behavior.
-5. The Layer 1 paper for proposed protocol design and its pinned audit for the finite review result.
+5. The Layer 1 paper for proposed protocol design; the current Layer 1 audit file is the canonical
+   corrected reading copy of its finite checkpoint-0.3 result, while Git retains the original
+   result bytes and later errata separately. The frozen design-successor audits own review chronology
+   for subsequent paper/planning revisions.
 6. README, metrics, display documents, and `HANDOFF.md` as summaries owned by the authorities above.
 7. This transcript audit for chronology, original intent, rejected interpretations, and unresolved
    questions.
@@ -293,11 +298,15 @@ visible in `PROJECT_INTENT.md`.
 
 User intent: attack the paper repeatedly instead of accepting a persuasive first draft.
 
-Checkpoint-0.3 truth: `LAYER1_DESIGN_AUDIT.md` records two finite audit loops, findings F-01 through F-52,
-their prose patches, exact source/paper pins, checks run, and repository obligations left open.
-Those loops corrected circular identifiers, incomplete roots and receipts, execution/consensus/DA
-conflation, action-lane overclaims, supply correspondence, finality profiles, threat assumptions,
-upgrades, operations, and other design gaps. This is a **pinned documentation audit**.
+Checkpoint-0.3 truth: `LAYER1_DESIGN_AUDIT.md` records two finite audit loops, findings F-01 through
+F-52, their prose patches, exact source/paper pins, checks run, and repository obligations left
+open. Those loops corrected circular identifiers, incomplete roots and receipts,
+execution/consensus/DA conflation, action-lane overclaims, supply correspondence, finality profiles,
+threat assumptions, upgrades, operations, and other design gaps. The original result at commit
+`9eace50` had Git blob `ee2075547d7c7895c7d0ebaabfc64d1e09f5ba3a`; provenance and F-12 errata
+later produced the current canonical corrected reading copy, blob
+`124e066b418a61279abf90c1b1b2c2cc0604ef2a`, frozen from the fifth-successor correction onward.
+This is a **corrected historical documentation audit**, not a retrospectively immutable artifact.
 
 The audit does not prove its inventory complete, rerun Rust/Lean/network/crypto suites, or close any
 implementation obligation. Later docs link to it without silently changing its historical result.
@@ -461,12 +470,41 @@ omits body-owned inputs, missing pre-profile outer framing, two conditional-pred
 failures, a missing launch-closure capability owner, and stale presentation of the checkpoint-0.3
 paper audit as the latest review.
 
-`LAYER1_DESIGN_AUDIT.md` remains immutable historical evidence for checkpoint-0.3; it is not a
-review of later paper revisions. The immutable design-successor audits carry the current review
-chronology. This descendant correction still activates no runtime, network, authenticated trie,
-vector commitment, cryptocurrency, consensus, or Layer 1 capability. Broad Rust, Python-vector,
-headless, release, Lean, network, performance, and display tests remain gated on the next complete
-read-only sweep freezing a zero-new-material-gap result within its declared finite coverage.
+`LAYER1_DESIGN_AUDIT.md` remains historical evidence for checkpoint-0.3, but its current bytes are a
+corrected reading copy rather than the immutable original result; it is not a review of later paper
+revisions. The immutable design-successor audits carry the current review chronology. This
+descendant correction still activates no runtime, network, authenticated trie, vector commitment,
+cryptocurrency, consensus, or Layer 1 capability. Broad Rust, Python-vector, headless, release,
+Lean, network, performance, and display tests remain gated on the next complete read-only sweep
+freezing a zero-new-material-gap result within its declared finite coverage.
+
+### 31. Fifth bounded successor sweep and structured authority closure
+
+User intent: continue the same freeze-before-fix loop until one full independent finite-lens sweep
+finds no new material design gap, then begin actual broad tests.
+
+Current truth: the fourth correction is pinned at
+`2cb1cc02320d180ac9ee34bd103bd44459f128fa`, Git tree
+`60e9714c6d691f383fc75be03f6c9927c7665b84`. The next complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md) at
+first-addition commit `0d0122d9bf84664511db7588bb09d5c590a006f9`, with Git blob
+`519451b120b458735afaa59daa01aa23466e165e`. It records eight material gaps: an unavailable
+successor-activation closure; profile-specific work before authority limits; an under-defined
+fixed parent lookup; ambiguous launch-carrier counters; circular release authorization; prose
+misparsed as unconditional dependencies; unguarded secondary phase statuses; and the historical
+audit provenance error corrected above.
+
+The coordinated descendant correction proposes one availability-covered successor bundle bound by
+both its ID and the exact target admission ID, a fixed parent lookup identity, limits-before-work
+with shallow header/payload/signature framing, embedded-only launch inventory equations, and an
+authorization-free release core plus detached authorization. Capability planning now separates
+unconditional base dependencies from phase-specific edges and records every normative phase status
+as structured data. The new `SUCCESSOR-ACTIVATION-1` owner remains `LOCKED`; adding its artifact and
+testnet conditional edges does not admit it. These remain proposed protocol and planning/checker
+contracts: they activate no runtime, networking, storage, cryptography, trie, vector commitment,
+cryptocurrency, consensus, or Layer 1 capability. Broad Rust, Python-vector, headless, release,
+Lean, network, performance, and display tests remain gated on another complete sweep freezing zero
+new material gaps within its declared coverage.
 
 ## Semantic lessons that should survive future checkpoints
 

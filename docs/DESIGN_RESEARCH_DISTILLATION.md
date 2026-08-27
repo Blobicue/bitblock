@@ -12,7 +12,17 @@ against that first correction
 **Second correction:** `54926f52fa8ba9768e817ecb6139dcca41960e6a`
 **Third successor audit:**
 [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md), frozen
-against that second correction; its descendant remains a documentation/checker correction
+against that second correction
+**Third correction:** `b23ddc95e5075c35d0dbf918b89f353fcdd40ddd`
+**Fourth successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md), frozen
+against that third correction
+**Fourth correction:** `2cb1cc02320d180ac9ee34bd103bd44459f128fa`
+**Fifth successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md), frozen
+at first-addition commit `0d0122d9bf84664511db7588bb09d5c590a006f9`, Git blob
+`519451b120b458735afaa59daa01aa23466e165e`, against that fourth correction; its descendant remains
+a documentation/checker correction
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
 in `C:\Users\Owen\Downloads\design.txt`. The downloaded source remains untouched. It is a mixed
@@ -73,6 +83,15 @@ It removes or quarantines:
 | **OPEN** | A choice or claim that has no admitted answer. |
 | **REJECTED** | A formulation that is false, conflates objects, or exceeds its evidence. |
 | **SOURCE NEEDED** | Plausible external claim that must not enter a decision without a pinned primary source and measurement context. |
+
+Capability scheduling has its own structured boundary. In `CAPABILITY_TREE.md`, a node's prose
+`Depends on` field names only true unconditional base prerequisites. Phase- or instance-specific
+requirements live in the canonical phase-dependency manifest, and every normative base/secondary
+phase state lives in the canonical phase-status manifest. Negations, examples, hypothetical later
+work, and explanatory status prose are not dependency edges or status authority. This metadata is
+planning input only; a checker accepting its 72-node, 94-status-tuple, five-phase-edge, and
+44-conditional-instance manifests does not make a capability ready or implemented. In particular,
+the new `SUCCESSOR-ACTIVATION-1` owner remains `LOCKED`.
 
 ## Preserved question spine
 
@@ -147,7 +166,23 @@ admission manifest, genesis-root parity record, typed `RELEASE-1` record, and ev
 preimage transitively required to verify admission and release. A fresh verifier recomputes the
 whole genesis→registry/scope→candidate→specification→admission/parity/release→bundle→manifest→
 authorization chain under a unique, count/byte/depth-bounded inventory before selecting the first
-profile codec. A hash with no carried preimage or an ambient local mapping is not bootstrap input.
+profile codec. This launch carrier is embedded-only: each of the seven explicit preimages and each
+supplementary preimage is carried exactly once, its dependency node is carried exactly once, and
+`complete_artifact_count = 7 + supplementary_artifact_count = dependency_node_count`, the edge
+count is the checked sum of dependency-list lengths, and the canonical-preimage byte total is the
+checked sum of the seven explicit lengths plus the supplementary preimage lengths. Exact per-
+preimage lengths are also checked. Bundle/package/manifest/authorization framing, counters,
+dependency-node bytes, and nested bytes already included in a top-level preimage are not counted
+again. A hash with no carried preimage or an ambient local mapping is not bootstrap input.
+
+The carried release is likewise non-circular. An authorization-free canonical
+`AdmittedReleaseCoreV1` is identified first; a detached, tagged `ReleaseAuthorizationV1` authorizes
+the `ReleaseSignDocV1` that names that exact core ID and `ReleaseAuthorityContextRefV1`. Policy,
+scheme, credentials, codec, and verification rule are resolved from that pre-existing admitted
+authority context: the genesis authority record already committed in `G_0` for an initial release,
+or the exact governance-authority root of the independently verified accepted predecessor for a
+successor. The final release record and ID are derived only after authorization verifies. A
+candidate release cannot select its own verifier merely by naming a policy inside unverified bytes.
 
 Binding `D_n` makes replay inputs explicit; it does not prove an oracle value true, randomness
 unbiased, or acquisition honest.
@@ -177,20 +212,25 @@ invalid. The canonical context preimage is carried inside `AvailabilityPayload`,
 header/authority projections and `block_context_root` are checked before execution. Withheld or
 substituted context bytes make both replay and the availability claim fail.
 
-Its verifier rejects over-bound outer frames before nested materialization, resolves the accepted
-parent or first-launch authority and envelope owner before selecting any codec/hash/signature
-suite, checks every
-authority-selected limit/role/policy before execution, and only then decodes payloads, recomputes
-commitments, executes, and checks successor state. This is an ordering requirement, not evidence
-that the future implementation meets its budgets.
+Its verifier rejects over-bound outer frames before nested materialization, resolves one
+protocol-frozen `accepted_parent_lookup_id` or first-launch authority, and obtains the envelope owner
+plus `AuthorityOwnedParseAndWorkLimitsV1` before exercising any profile codec/hash/signature suite.
+`ProposalInnerShallowFrameV1` independently bounds the header, availability payload, and signature
+byte slices; all nested lengths, counts, decompression bounds, and work charges are streaming-
+preflighted before materialization, hashing, or whole-inner canonical equality. Only afterward may
+the verifier decode payloads, recompute commitments, execute, and check successor state. This is an
+ordering requirement, not evidence that the future implementation meets its budgets.
 
 That ordering is inhabited by fixed profile-independent `ProposalOuterV1` and
 `AcceptedRecordOuterV1` frames: protocol-frozen tags, capped fixed-width lengths, a bounded
-parent-or-launch lookup reference, and opaque inner byte ranges. An ordinary reference must resolve
-an accepted parent at its required consensus status. The first-record branch instead verifies the
-complete launch closure and detached launch authorization plus the manifest's first-record
-conditions; launch authorization is not coerced into parent consensus. After that branch selects
-the owner, every decoded inner object is re-encoded and required to equal its exact outer bytes.
+parent-or-launch lookup reference, and opaque inner byte ranges. An ordinary reference uses a
+fixed-hash `AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id` that binds chain/launch
+identity, envelope-owner profile, block-ID suite and type, and the exact bounded parent digest; a
+unique local index must return one accepted parent, and the lookup payload and ID are recomputed
+after retrieval. The first-record branch instead verifies the complete launch closure and detached
+launch authorization plus the manifest's first-record conditions; launch authorization is not
+coerced into parent consensus. After that branch selects the owner and its limits, every decoded
+inner object is re-encoded and required to equal its exact outer bytes.
 
 A payload commitment establishes byte identity, not retrieval. Consensus and availability evidence
 must each bind the candidate identifier, selected policy, applicable authority/epoch context, and
@@ -217,13 +257,21 @@ MigrationTransition(
 ```
 
 Touched-state openings cannot establish equality of untouched state across unrelated profiles. An
-admitted migration would additionally need parent-authorized activation, deterministic complete
-old/new correspondence, failure and restart semantics, retained old-profile verification context,
-and available migration material. Root correspondence alone would not authorize the upgrade or
-select its fork. Ordinary units carry one unchanged profile context; a migration unit carries the
-explicit old/new context while the old parent-admitted profile solely owns its envelope codec,
-object hashes, commitments, policies, and proposal credentials. The first migration form has an
-empty signed-transaction sequence, an empty application-subtick schedule, and exactly one
+admitted migration additionally needs parent-authorized activation, deterministic complete old/new
+correspondence, failure and restart semantics, retained old-profile verification context, and
+available migration material. The old envelope availability payload therefore carries a bounded
+`SuccessorActivationCarrierV1`. Its embedded branch carries `SuccessorActivationBundleV1` plus
+trusted-parent-resolved `ActivationAuthorizationV1`; the migration context and
+`SuccessorActivationSignDocV1` bind the bundle ID, authorization ID, exact
+`successor_profile_admission_manifest_id`, migration specification, height, and old/new roots. The
+bundle closes over the successor scope, registry, candidate, transition specification, admission,
+admitted release, `SuccessorUpgradeEvidenceManifestV1`, and all required implementation/evidence
+preimages, and must be completely verified before migration execution or activation. Root
+correspondence alone would not authorize the upgrade or select its fork. Ordinary units carry one
+unchanged profile context; a migration unit carries the explicit old/new context while the old
+parent-admitted profile solely owns its envelope codec, object hashes, commitments, policies,
+proposal credentials, and pre-activation parsing. The first migration form has an empty signed-
+transaction sequence, an empty application-subtick schedule, and exactly one
 authorized migration system transition and receipt. It uses the migration-specific commitment-set
 transition owned by the Layer 1 paper and authenticated-state plan. No mixed old/new ordinary-action
 interpretation is implied; such a form would require a separately versioned phase-tagged schema.

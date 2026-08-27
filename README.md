@@ -12,15 +12,21 @@ The forward-looking security architecture is documented in
 local deterministic world from the proposed identity, ownership, replication, consensus,
 availability, and Layer 1 requirements.
 
-The paper's historical checkpoint-0.3 gap review is pinned in
-[`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md). It distinguishes that checkpoint's
-prose fixes from repository obligations that remained unimplemented, but it is not the latest
-review of the subsequently changed paper. Current review chronology continues through the frozen
+The paper's historical checkpoint-0.3 gap review has a canonical corrected reading copy in
+[`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md). Its current Git blob
+`124e066b418a61279abf90c1b1b2c2cc0604ef2a` is frozen from the fifth-successor correction onward;
+the original audit-result blob at commit `9eace50` was
+`ee2075547d7c7895c7d0ebaabfc64d1e09f5ba3a`, before later provenance and F-12 errata. The corrected
+copy distinguishes that checkpoint's prose fixes from repository obligations that remained
+unimplemented, but it is not the latest review of the subsequently changed paper and is not
+claimed to have been retrospectively immutable. Current review chronology continues through the
+frozen
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
 and
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md)
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md)
 successor records.
 
 The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
@@ -63,7 +69,15 @@ correction and Git tree `3de2d45aa20b08318f1a1af4d93308daccf1f55e` is frozen at 
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
 whose first-addition Git blob is `350d1af6279d7f441f45fba2689481c0dbea79a5`. It records eight
 launch-closure, block-context availability, execution-input, outer-framing, conditional-predicate,
-capability-owner, and review-provenance gaps before this descendant correction.
+capability-owner, and review-provenance gaps before correction
+`2cb1cc02320d180ac9ee34bd103bd44459f128fa`. A fifth complete sweep of that correction and Git tree
+`60e9714c6d691f383fc75be03f6c9927c7665b84` is frozen at commit
+`0d0122d9bf84664511db7588bb09d5c590a006f9` in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
+whose first-addition Git blob is `519451b120b458735afaa59daa01aa23466e165e`. It records eight
+successor-activation-closure, pre-limit work, parent-lookup, launch-count, release-authorization,
+capability-dependency/status, and corrected-audit-provenance gaps before this coordinated
+descendant correction.
 None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
 cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
 deferred until a later complete sweep records zero new material design gaps.
