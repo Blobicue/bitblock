@@ -6,6 +6,7 @@ rust-version = "1.96"
 
 [features]
 default = []
+headless-console = []
 protocol-research = []
 
 [dependencies]
@@ -17,6 +18,7 @@ softbuffer = "=0.4.8"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
+    "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
@@ -28,3 +30,4 @@ windows-sys = { version = "=0.61.2", features = [
 [profile.release]
 lto = "thin"
 strip = true
+codegen-units = 1

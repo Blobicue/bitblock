@@ -441,7 +441,7 @@
 #bb.metric.render.barycentric-tolerance-admission-vector	#bb.metric-definition.sha256.zdsf3vpupbhulhjbkurctmody43lal34j75ma4bfid6p6k5umi3q	view	Barycentric tolerance admission vector
 #bb.metric.render.framebuffer-colorimetry-contract	#bb.metric-definition.sha256.g4kculqyvzayibahehz7hbjklzxarrg2ydhudndpv4rji2z4nliq	view	Framebuffer colorimetry contract
 #bb.metric.render.render-dirty-cause-set	#bb.metric-definition.sha256.w76wzn6zl7levt5fm5rl7rvwardamkkosu7aswt2mhpmvboeyvia	view	Render dirty cause set
-#bb.metric.render.produced-frame-disposition-relation	#bb.metric-definition.sha256.bnjlndbkecdosakyqqi6e43tr3x3f2hntcay7glabkcfbgd2jhka	view	Produced frame disposition relation
+#bb.metric.render.produced-frame-disposition-relation	#bb.metric-definition.sha256.g53izbrgvkouvhi4drdr4q6dxxrv2pmyijxurr3scezbqrc4tcuq	view	Produced frame disposition relation
 #bb.metric.input.mouse-capture-state	#bb.metric-definition.sha256.4orpavsxthp6ipdjg23sj5iu765ibdcmy2a3adhofxnokfttngfq	view	Mouse capture state
 #bb.metric.input.window-focus-state	#bb.metric-definition.sha256.qdjyskyw3ufp23bljlg7pupyazijn2lc7jrsu657aq5zst4t2t2q	view	Window focus state
 #bb.metric.input.cursor-grab-mode	#bb.metric-definition.sha256.mpqq2mgnxhhxkp5zvr7vikormw73yetwpwnl4ho23oja3cvkijoa	view	Cursor grab mode
@@ -603,9 +603,9 @@
 #bb.metric.visual.framebuffer-shape-coherence-violation-vector	#bb.metric-definition.sha256.dnmpfdjopqcqukkqh4v6efoebyua2ngyak5jbsrx6yawqvkadcyq	view	Framebuffer shape-coherence violation vector
 #bb.metric.visual.canonical-fragment-winner-violations	#bb.metric-definition.sha256.onkb74ldpxbcysyroriuhsgc62ji54o6gtenq3l3q3y4efmx5qla	view	Canonical fragment-winner violations
 #bb.metric.visual.mapped-surface-copy-mismatch-vector	#bb.metric-definition.sha256.yl4hegsrqnqx2a26j53h6tpp6duv4ozof43eyc5xm2as2k4af3uq	view	Mapped-surface copy mismatch vector
-#bb.metric.visual.compositor-capture-comparison	#bb.metric-definition.sha256.jcciaxrmp7sjkxmqepxixydbhh5m77ufqgfyxeirjqiccwuf6pma	view	Compositor-capture comparison
+#bb.metric.visual.compositor-capture-comparison	#bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq	view	Compositor-capture comparison
 #bb.metric.visual.physical-display-sensor-comparison	#bb.metric-definition.sha256.qwli27qiflba7t4gnems2qdjenswmnlxgwwys7vrplvhxaim5ufa	view	Physical-display sensor comparison
-#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector	#bb.metric-definition.sha256.ndpg6puukse3voujhfdxlk4s34pu5bhsz5yg3g4bdwp7f2b4zzra	view	Candidate/reference framebuffer mismatch vector
+#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector	#bb.metric-definition.sha256.sa4ylbjoqg5setnvlqk2qhmxofagznkqtqlbey5chagbjfsg2yfa	view	Candidate/reference framebuffer mismatch vector
 #bb.metric.visual.frame-provenance-dependency-cycle-vector	#bb.metric-definition.sha256.hywo5xn6tp2ub4kx2pisi4wngalg2y4f6t4opme42q4xmppsnxna	view	Frame-provenance dependency-cycle vector
 #bb.metric.visual.invalid-xrgb-unused-byte-vector	#bb.metric-definition.sha256.htayjq76cefnwuqrknknnn3usmseemasxps342rtgrfl52x2fbda	view	Invalid XRGB unused-byte vector
 #bb.metric.visual.canonical-frame-encoder-parity-vector	#bb.metric-definition.sha256.lraern7kyphlxquutuyykdkbrvej4grlmzeratwpr7h5tngnq52q	view	Canonical frame encoder parity vector
@@ -615,12 +615,12 @@
 #bb.metric.visual.sampled-raster-depth-residual-vector	#bb.metric-definition.sha256.5o4zsqxwf6bwdqvooysfyqzuyqejceo232vgqfgzbwmsi2uzo5da	view	Sampled raster depth residual vector
 #bb.metric.visual.raster-representation-invariance-vector	#bb.metric-definition.sha256.4oor37kcshpse77ke26uf2sbfbepb6qrmofjkgghvbm6uy42bxfa	view	Raster representation invariance vector
 #bb.metric.visual.render-input-output-binding-verdict	#bb.metric-definition.sha256.5vy4oiee7e75bxnwbsowhnrlimerw7amu5ffiwqdoptkkny5vaja	view	Render input/output binding verdict
-#bb.metric.visual.display-pipeline-state-vector	#bb.metric-definition.sha256.xamh5sj5wyi6bzsj47wa2vgqwkbrpki4se6m6hno5e4nktdfwt2q	view	Display pipeline state vector
+#bb.metric.visual.display-pipeline-state-vector	#bb.metric-definition.sha256.hs534mepahw52fx5ehpa2wuc365usry7akwnimknuavkc3gljyoa	view	Display pipeline state vector
 #bb.metric.visual.raycast-traversal-permutation-divergence	#bb.metric-definition.sha256.3obyp24stbcdwhmxdeflv5e2lv3kldhcl2vsedpjrzfrgjlkrjnq	view	Raycast traversal permutation divergence
-#bb.metric.visual.presentation-fate-relation	#bb.metric-definition.sha256.mfeta3tyqvaovhc2x2gpvadwdjg5t347yfaaupui6oq4tp4ihvma	view	Presentation fate relation
+#bb.metric.visual.presentation-fate-relation	#bb.metric-definition.sha256.onmlgqlhezpgwer7pm5jpzumrfsoyhfre2k6cmmemvyt74jryxbq	view	Presentation fate relation
 #bb.metric.visual.scanout-composition-witness-vector	#bb.metric-definition.sha256.p5s4hs2ucw5fhrdyl66cerntolhjqg6igishnjg7nabxsj3kk6ya	view	Scanout composition witness vector
 #bb.metric.visual.display-transform-provenance-relation	#bb.metric-definition.sha256.dxechflewjnmqyilex3hlxgkremu7em2cm6rqcxjp6zmb7i4fsna	view	Display transform provenance relation
-#bb.metric.visual.interaction-to-display-causal-path	#bb.metric-definition.sha256.bhcrnpyc6tafwpgvxq3nute6yzpzc3iwbxd4fhqf4f3psowmxflq	view	Interaction-to-display causal path
+#bb.metric.visual.interaction-to-display-causal-path	#bb.metric-definition.sha256.m4h4uqbedh3w76nxvyccjrras5pxgarftfvfhkjvv57dmhww3una	view	Interaction-to-display causal path
 #bb.metric.visual.raster-floating-point-environment-state	#bb.metric-definition.sha256.evc5inihmsxm7boar3g3gpegd2xzaew3fcwdp47syxf4ncju6z2a	view	Raster floating-point environment state
 #bb.metric.view.display-lifecycle-event	#bb.metric-definition.sha256.5snpukqdeudi6j25zwv5b6s57a67hf7qfiwlailrzhrggvl3s56a	view	Display lifecycle event
 #bb.metric.tick.tick-index	#bb.metric-definition.sha256.r6y6ivgw4itq5rjuj4p6csqmehwfoopdaqpmb57g5qvsp32jvyfq	system	Tick index
@@ -652,8 +652,8 @@
 #bb.metric.lang.canonical-source-bytes	#bb.metric-definition.sha256.x3zeuygwujrwdo2pnthhbctyig3h7x75kzfrfs3qpkob3bbx742a	system	Canonical source bytes
 #bb.metric.lang.canonicalization-byte-delta	#bb.metric-definition.sha256.wdnjfyskryeszw6rxjovh3xohh2c4z35p6vlshwn6jhsronbyzua	system	Canonicalization byte delta
 #bb.metric.lang.noncanonical-numeric-lexeme-count	#bb.metric-definition.sha256.xitoloy6b6o7mum62ekhoezkz5qdv6lotdk7ciffsatr67c2lewa	system	Noncanonical numeric lexeme count
-#bb.metric.lang.parse-outcome	#bb.metric-definition.sha256.abrpyjxlnpjekb6od2lyj74rxjogpzvr4hq5fqujwy4w5ed6bp3q	system	Parse outcome
-#bb.metric.lang.rejected-field-payload	#bb.metric-definition.sha256.y7ugslhcl5vxp3ojvlfq4257erfz3jr2xuxhf37fjqu5ihbhouwa	system	Rejected field payload
+#bb.metric.lang.parse-outcome	#bb.metric-definition.sha256.fbspkmipmdtshettyqhufncsrcosr6pevkdtuggaaxutqo7lnxhq	system	Parse outcome
+#bb.metric.lang.rejected-field-payload	#bb.metric-definition.sha256.pmcwz2dihdfybefqjtw376hgm4ocj5wkur3r3to3c5tqsafr4vaa	system	Rejected field payload
 #bb.metric.lang.all-diagnostics-vector	#bb.metric-definition.sha256.kp447cm7vot774p7dvtyzrhjsye77rocrp6dduioegensrdto3zq	system	All-diagnostics vector
 #bb.metric.lang.instruction-count	#bb.metric-definition.sha256.ha4ndkjvd37j22eypl5cvdahwrirdq7zjynoozqndsa5ck5cukba	system	Instruction count
 #bb.metric.lang.operation-vector	#bb.metric-definition.sha256.spiazf3gho2qgzk76rpb363wmju5acre2szptmo36ssfpkjsoxza	system	Operation vector
@@ -671,7 +671,7 @@
 #bb.metric.lang.named-chunk-coordinate-count	#bb.metric-definition.sha256.pji24m4bchfwtoxrn465loudsffe63jvmnwsht4aegtki4h3bbtq	system	Named chunk-coordinate count
 #bb.metric.lang.instruction-locality-base-events	#bb.metric-definition.sha256.o4gfwdnxyaxumdvuch3q5rdla57lusystsjdkye66cxqe4m22sqq	system	Instruction locality base events
 #bb.metric.lang.canonicalization-idempotence	#bb.metric-definition.sha256.nma26sop7dqnnqpyfhjzynngea62czdmxot5nscdtai4l32apbba	system	Canonicalization idempotence
-#bb.metric.lang.parse-display-round-trip	#bb.metric-definition.sha256.j6rg5zem54ybfvv2q43wcbn25bpakn6hlm7bkecrhnr5mau5ohla	system	Parse/display round trip
+#bb.metric.lang.parse-display-round-trip	#bb.metric-definition.sha256.sc5b2rs5dmlpaccdnujkrws6gbf7n6dpl5uzegzkbsjuyifhazra	system	Parse/display round trip
 #bb.metric.lang.ladderlang-bridge-identity	#bb.metric-definition.sha256.guqmhedy6bbyxij4hp35khu4lsr76xernwcjkdemwgq43jsdunsq	system	LadderLang bridge identity
 #bb.metric.lang.translated-term-node-vector	#bb.metric-definition.sha256.r7vpfymfyoo653eivl4jekiuwqsvwu7ewdt7vytbj3enulthp5ta	system	Translated term node vector
 #bb.metric.lang.translated-binder-depth	#bb.metric-definition.sha256.yfejpxxj7fkwyw4djxc73othsksoxarf6ow7tchr3lsvbwbcry2q	system	Translated binder depth
@@ -721,17 +721,17 @@
 #bb.metric.replay.retained-edit-count	#bb.metric-definition.sha256.3db2c4mv6jjt7xmyu6idxu5i4u7lhhqhjw2zlczb6ut2lqdihrsq	system	Retained edit count
 #bb.metric.replay.tick-coverage-interval	#bb.metric-definition.sha256.orsczdp6s3on4q76dfc2lxcuexedl3ry2oeg2zl2e45csjfdvynq	system	Tick coverage interval
 #bb.metric.replay.tick-gap-vector	#bb.metric-definition.sha256.hypxbjwyfghm3hnoos3j7gvue7qlkcqngfgcgvptcnezsrc6j3jq	system	Tick gap vector
-#bb.metric.replay.canonical-replay-bytes	#bb.metric-definition.sha256.yhwriypaqmgluqmvmwxluxrubxb4hmtsknqmwopdcldzs5n7xcaq	system	Canonical replay bytes
+#bb.metric.replay.canonical-replay-bytes	#bb.metric-definition.sha256.lqtx75tyv3ro3ifmcb5furmfelm7t53admqbvqrnjort2sfs66hq	system	Canonical replay bytes
 #bb.metric.replay.replay-transition-count	#bb.metric-definition.sha256.kzvnc667e67djssfkqgzgzt6duexg3wofwzai4ajlnh34j4lkuxa	system	Replay transition count
 #bb.metric.replay.replay-final-cardinality	#bb.metric-definition.sha256.qpwolr4gepvtjla34hpzksogudg7puzbwyr5ctldymmwra554qia	system	Replay final cardinality
 #bb.metric.replay.exact-replay-equality	#bb.metric-definition.sha256.z3hdha4mdkv5rpkdxm72dhiw4uqvfdyz2fkntdmp5ysojuoveujq	system	Exact replay equality
-#bb.metric.replay.replay-root-equality	#bb.metric-definition.sha256.vflctnsxypebnatjhlekbskarmyt2ieglsgxgjalm5bigyxjumaq	system	Replay root equality
+#bb.metric.replay.replay-root-equality	#bb.metric-definition.sha256.vxnrh2bjejekva6ityzzcm4hnmn4sf7ptkpyrhqcpiyqhkkbon2q	system	Replay root equality
 #bb.metric.replay.first-divergent-tick	#bb.metric-definition.sha256.34vtpy766gplsviumh2bbiyjec3peilr6tnsskz5rz55tauewiqa	system	First divergent tick
 #bb.metric.replay.first-divergent-edit	#bb.metric-definition.sha256.hdh4wamgn73fw25slkva2p3k7s2eqaigmsbqwnf754aufsj54jga	system	First divergent edit
 #bb.metric.replay.divergent-coordinate-count	#bb.metric-definition.sha256.p45qrgwbcwnn7ne6zrn2xdkyihnzj2664tpqlh7ynjp3ivahoyfq	system	Divergent-coordinate count
 #bb.metric.replay.verified-prefix-length	#bb.metric-definition.sha256.24nepn3qu543c777nhxhksdie2xzftr276hunqisg5uhnpjidiua	system	Verified prefix length
 #bb.metric.replay.append-law-check	#bb.metric-definition.sha256.kl4kmt65umh6evst7yh5cr6gcmprbpinhhcxkcwtncpqp7k5gi4q	system	Append-law check
-#bb.metric.replay.initial-world-identity	#bb.metric-definition.sha256.is5zy55yxq5voq36xlfjzsaywmclaqulnheax2jfxzuiznesw4oq	system	Initial-world identity
+#bb.metric.replay.initial-world-identity	#bb.metric-definition.sha256.ys6ur6xze7gigqe7akmrrf7fhe2vb3uifpk75znayxgv36wmmnwq	system	Initial-world identity
 #bb.metric.replay.state-boundary-retention-frequency	#bb.metric-definition.sha256.qjdudmyzzlbs42jrwj3atxdudkfk6avdhlozyo3fyl4qdf7y3nkq	system	State-boundary retention frequency
 #bb.metric.replay.rollback-reconstruction-work	#bb.metric-definition.sha256.vrbnn2ckrle2uskxk6slvqe2ldcgsm4urxr4ydyhpb2rtqtsdcoq	system	Rollback reconstruction work
 #bb.metric.replay.receipt-tick-gap-evidence-relation	#bb.metric-definition.sha256.jtz6cmdwr742iakptjfeqdmezqzp2hhwyeeaem2254ubnq4twpwa	system	Receipt tick-gap evidence relation
@@ -784,7 +784,7 @@
 #bb.metric.proof.declaration-dependency-relation	#bb.metric-definition.sha256.sxunwwsisqxsfa5xdur5cbpkvwavre5rqeoxfvja6dnqmiftw5cq	system	Declaration dependency relation
 #bb.metric.hash.canonical-encoding-version	#bb.metric-definition.sha256.ykhjevyp423wvwohyv7omxf63uebslqq7xou4wo5gv2llu7dntia	system	Canonical encoding version
 #bb.metric.hash.algorithm-identity	#bb.metric-definition.sha256.jvd5t3b4u5qv5pi7h3twttztksqakht6dxlgzn3dezrhogt5xojq	system	Algorithm identity
-#bb.metric.hash.domain-separation-identity	#bb.metric-definition.sha256.p7dtcjvcxdhernlypv27dsnoczzktp2dcpcrpo63exhv3ltmgkza	system	Domain-separation identity
+#bb.metric.hash.domain-separation-identity	#bb.metric-definition.sha256.4lv3fi6naepsomnyezxqqeoeormhdce6chc7eb4u5tarteldmz2q	system	Domain-separation identity
 #bb.metric.hash.canonical-world-encoding-bytes	#bb.metric-definition.sha256.eeplo5vye5hr27tdyvurbqobxpiggg6hmpfmup7bujrrh2xajexa	system	Canonical world encoding bytes
 #bb.metric.hash.per-chunk-content-digest	#bb.metric-definition.sha256.dvcbhp2p4evq6p3hc5swvxa3ovsvaay5jwubwstpcr3y6eifflea	system	Per-chunk content digest
 #bb.metric.hash.canonical-world-state-root	#bb.metric-definition.sha256.2wqnpxvk7usvvnwjhj4gm47zggllqguklkcexkt4sgpiwgbmhmca	system	Canonical world-state root
@@ -810,7 +810,7 @@
 #bb.metric.hash.hash-cache-event-vector	#bb.metric-definition.sha256.st5ik453q2meqs7vkil6a2qthrpokxfs5ytwdariexbrc4mprxyq	system	Hash-cache event vector
 #bb.metric.hash.dirty-hash-node-count	#bb.metric-definition.sha256.ejck5dlp5grfs2e5n6kcdtelesflugzn7y3uljun3fr2hkifqjcq	system	Dirty hash-node count
 #bb.metric.hash.root-commit-lag	#bb.metric-definition.sha256.3pmjulh6rhurtq6gosq6kmwj7lhzxdntxlvuxgoblcmvvp3qvakq	system	Root commit lag
-#bb.metric.hash.hash-input-bytes	#bb.metric-definition.sha256.zflelsqxc6j3vkadjr6on32os437s7yulzy7sn3e5zqcjyporvra	system	Hash input bytes
+#bb.metric.hash.hash-input-bytes	#bb.metric-definition.sha256.ktd33zqvdnbj2rd43bxmvvjw6bygul52dlp43up47kt327jxd7uq	system	Hash input bytes
 #bb.metric.hash.inclusion-proof-depth	#bb.metric-definition.sha256.wka33bqpdvo5tk3aavxogf4ypm6x5fo72pqrzglosj53ciamiciq	system	Inclusion proof depth
 #bb.metric.hash.inclusion-proof-bytes	#bb.metric-definition.sha256.zt6z2sjcgpxay3pr4mfvztef4gqoacvxgfzdm54kjwfcktjept2q	system	Inclusion proof bytes
 #bb.metric.hash.inclusion-proof-verdict	#bb.metric-definition.sha256.53t5cpvkbxgx6637jwdxbnqklmbipwyh7azpc32zasp2qqkqd6hq	system	Inclusion proof verdict
@@ -819,7 +819,7 @@
 #bb.metric.hash.avalanche-event	#bb.metric-definition.sha256.zes3mt7ch36y33ake75fzap4o4xlc5pwhmvrmx3rmnc7orn36qeq	system	Avalanche event
 #bb.metric.hash.avalanche-trial-identity-count	#bb.metric-definition.sha256.ifyqx5uyf45pmj5etdcm3wq7o46r3xvajku4kybqxx4euzf2h7tq	system	Avalanche trial identity/count
 #bb.metric.hash.empirical-collision-vector	#bb.metric-definition.sha256.ypaft7g2dqaejyiz5jzfoielaa52u2caefzq7ehyj4s7yna4rw3q	system	Empirical collision vector
-#bb.metric.hash.encoding-round-trip-check	#bb.metric-definition.sha256.7serkvxp6umyrruavnizzar7kngxdbpdg4stp5y2edhaqhk4rpzq	system	Encoding round-trip check
+#bb.metric.hash.encoding-round-trip-check	#bb.metric-definition.sha256.gduldun3htcmfiy2ymxah2uqi5ph2gbcvlmrzmvo6uozans4disa	system	Encoding round-trip check
 #bb.metric.hash.domain-separation-collision-vector	#bb.metric-definition.sha256.ahfq4evw3nud5emusncd5ijntzedhgf5knoneyhmufs4jqi2a4ra	system	Domain-separation collision vector
 #bb.metric.hash.receipt-signature-vector	#bb.metric-definition.sha256.vujymfxaikflcawcwry5wzmdlbphxix4w65uwfnzojqvfsjvb2ca	system	Receipt signature vector
 #bb.metric.hash.verified-signer-count	#bb.metric-definition.sha256.h66yzeep6pyvt35c724bihvyvtfh4y3il3szygpgedwtvaaalyja	system	Verified signer count
@@ -827,10 +827,10 @@
 #bb.metric.hash.external-anchor-event	#bb.metric-definition.sha256.cxvji5zlaen6hjim54u46gqmnr5egoyyliwuwotkp2ptrbpn2ghq	system	External anchor event
 #bb.metric.hash.external-anchor-verification	#bb.metric-definition.sha256.5nreaqzkzefny55rygkh5jlyagj3w3jcq54hpwwusi6nuammmzta	system	External anchor verification
 #bb.metric.hash.canonical-render-input-digest	#bb.metric-definition.sha256.jkyz4xxly7x5jcx3lxyik6rxufc2ytyozma2nlomndnabaifpy7a	system	Canonical render-input digest
-#bb.metric.hash.final-framebuffer-digest	#bb.metric-definition.sha256.ixlwaw2kirujvbr37yphwkyw62h2kvujlpy4pnvi3gwdhcilkhnq	system	Final framebuffer digest
-#bb.metric.hash.frame-provenance-receipt-digest	#bb.metric-definition.sha256.usv2hrln45vdwrgz4e4xraime7x53fjyjlv5mfkr6plukbzb5j4a	system	Frame-provenance receipt digest
-#bb.metric.hash.known-answer-vector-verdict	#bb.metric-definition.sha256.otvsq65p24hcmev5qeefmisee74kb2waspi3sz5ffyzeprnutkaq	system	Known-answer-vector verdict
-#bb.metric.hash.cross-implementation-digest-parity	#bb.metric-definition.sha256.wmmga7w3kg254myf3r4arktvczb4lnrjp7vcon3n77smmptwdldq	system	Cross-implementation digest parity
+#bb.metric.hash.final-framebuffer-digest	#bb.metric-definition.sha256.xrpzaixabwbivwbv2njwcc6br5pg6y7ugooqzfntp5rvlsiucsga	system	Final framebuffer digest
+#bb.metric.hash.frame-provenance-receipt-digest	#bb.metric-definition.sha256.ntg7gxatkwreu2rhm7g72hunnpka7arngljoagz3bpdfozblrtma	system	Frame-provenance receipt digest
+#bb.metric.hash.known-answer-vector-verdict	#bb.metric-definition.sha256.im56mg23da4rwnd2j5fmhukvppvdofh7yq4vaicrvubhb2ekcv6a	system	Known-answer-vector verdict
+#bb.metric.hash.cross-implementation-digest-parity	#bb.metric-definition.sha256.vpfuuupwg73zrzzup2zvqhjf652k2l5imxoy5j2cm2ntczse4oza	system	Cross-implementation digest parity
 #bb.metric.hash.representation-substrate-inventory	#bb.metric-definition.sha256.k2yta4hcdc5rikxvsg6ehok65fwhnsk2rlthv5arupcruzlnheiq	system	Representation-substrate inventory
 #bb.metric.hash.declared-parameter-liveness-vector	#bb.metric-definition.sha256.cqh735mertznhz7s4qbku65rumeeqicdrmkxtaxxy2z4nvewtmdq	system	Declared-parameter liveness vector
 #bb.metric.hash.round-map-image-cardinality	#bb.metric-definition.sha256.xa3z27fxdiezfzifllujbonidyp2fdarkn23pfqwrosgny7kkq2q	system	Round-map image cardinality
@@ -911,7 +911,7 @@
 #bb.metric.perf.phase-wall-duration-event	#bb.metric-definition.sha256.bkrgvgnbvfvdurt2fbe3tcwmaywinsmbhvkwyn22nejegiu3phpa	system	Phase wall duration event
 #bb.metric.perf.phase-cpu-duration-event	#bb.metric-definition.sha256.webooud3bmaytu62m6brywnu22ea4kvqudswkpk6ktbx3gitwiea	system	Phase CPU duration event
 #bb.metric.perf.tick-overrun-event	#bb.metric-definition.sha256.ckfisjn7ovza2c7rcjwbvd5rl5oyopja2zcnhajmq5xfsmpkb4ka	system	Tick overrun event
-#bb.metric.perf.work-unit-vector	#bb.metric-definition.sha256.fufciylehcrf3ioxl3krr35rskm6xut3nbw3srsn74xf3cucoa7a	system	Work-unit vector
+#bb.metric.perf.work-unit-vector	#bb.metric-definition.sha256.quistqq47z3lx57jlupj6rgtjcby2otxjkdmjzvgd3uykbi5imda	system	Work-unit vector
 #bb.metric.perf.phase-allocation-vector	#bb.metric-definition.sha256.4azkoo46htffllyitg5x5giemno5gmaymzgc7t2np6fkv27meviq	system	Phase allocation vector
 #bb.metric.perf.temporary-phase-peak-bytes	#bb.metric-definition.sha256.aiq2szyug2kbhajb5on5ofxmwq5gwocjb3oxbixrwtfpbaumovoa	system	Temporary phase peak bytes
 #bb.metric.perf.startup-milestone-timestamps	#bb.metric-definition.sha256.ecxpr4fobxfhxrui4ypcjtqbjadnxmpdo74jdxuki7tde6uuqena	system	Startup milestone timestamps
@@ -987,7 +987,7 @@
 #bb.metric.store.unflushed-wal-count	#bb.metric-definition.sha256.gfdk2li2i4eigiawolicmku2kid3dgmg7tiiaj6j5qouarrnip4a	system	Unflushed WAL count
 #bb.metric.store.wal-sequence-anomaly-vector	#bb.metric-definition.sha256.peaucgdbkzsz3nul2kbigno5kg7t75s2k76kg7ll3nlcstnkklpa	system	WAL sequence anomaly vector
 #bb.metric.store.recovery-replay-work	#bb.metric-definition.sha256.gyxf2xoj62xbnr4inujususzcfexdee56azqhke4nan3dooeu2mq	system	Recovery replay work
-#bb.metric.store.recovery-outcome	#bb.metric-definition.sha256.7wjixmc3nxielbaemrurfgfzplliul3lccixzqki2hxj7q5s7uuq	system	Recovery outcome
+#bb.metric.store.recovery-outcome	#bb.metric-definition.sha256.ma25hfuvb7h64lips6tvha72wdjdb36ioiq4bxwcnpm2ixw6jx7a	system	Recovery outcome
 #bb.metric.store.recovered-transition-vector	#bb.metric-definition.sha256.3peyyfzup42ajheejebvwj72bwy3exiwwi4gahalidzpmopy26ra	system	Recovered transition vector
 #bb.metric.store.rejected-tail-vector	#bb.metric-definition.sha256.2y5oqstualfq7d4liq6gfagi2vrgs7uuhihhxzjaedoumhglzszq	system	Rejected tail vector
 #bb.metric.store.durability-lag-base-pair	#bb.metric-definition.sha256.mc5hj3pmmhtsaliuqipht4vglrcxvsf2nkrgn4mazofe7xnwdfqa	system	Durability lag base pair
@@ -1062,7 +1062,7 @@
 #bb.metric.sync.consensus-transition-replay-outcome	#bb.metric-definition.sha256.vqojoxauocq4rajzw2gfyofuhbcnsy25pkt7ml2p4h4fd3vdd6aa	system	Consensus-transition replay outcome
 #bb.metric.sync.observed-network-reachability-relation	#bb.metric-definition.sha256.ryr5yj7e3hngzibzvh5ykwchozkijdevtvbwws4uqrpzclw4a4aa	system	Observed-network reachability relation
 #bb.metric.sync.pending-signed-intent-pool-relation	#bb.metric-definition.sha256.kwwzuq5zwis42as2f5v6js5tjicpfngwdonrwfqpga4uxyjfr4xa	system	Pending signed-intent pool relation
-#bb.metric.sync.deterministic-resource-admission-relation	#bb.metric-definition.sha256.gvzgepo2wob2j4e4vkoyusa57zhkiqcxcomhrjcnqgsvymqostaq	system	Deterministic resource-admission relation
+#bb.metric.sync.deterministic-resource-admission-relation	#bb.metric-definition.sha256.rrfid54dw5qpb5pe7fliu5wp6yzmn2podbjzdopbd4kzgyvf6lfa	system	Deterministic resource-admission relation
 #bb.metric.sync.randomness-generation-relation	#bb.metric-definition.sha256.akqub236njwl5lqf6pzkzuzkds4cflt3nieedahqwmndxlv3wu3a	system	Randomness-generation relation
 #bb.metric.sync.consensus-round-transition-relation	#bb.metric-definition.sha256.usk7vcwvkg3y2botbrvedhu4jnmtskd32tnoch2ujqoffd55vpdq	system	Consensus-round transition relation
 #bb.metric.sync.threat-model-obligation-relation	#bb.metric-definition.sha256.ifcpyoyt5lam76fpzcl77xe52ni5yykdjzzoslwtsj2pe56gf5la	system	Threat-model obligation relation
@@ -1100,7 +1100,7 @@
 #bb.metric.health.dependency-policy-violation-vector	#bb.metric-definition.sha256.l7herp5ec3xoixcdgjib7kkhzotbm6yyrunwciibfkbtp5vfhzuq	system	Dependency-policy violation vector
 #bb.metric.health.lock-toolchain-drift-vector	#bb.metric-definition.sha256.xzqgcn67hhksxej3wqa6y6bqfuzlm2gqbu3bsiykdvpnkqpozswa	system	Lock/toolchain drift vector
 #bb.metric.health.reproducible-build-agreement	#bb.metric-definition.sha256.mbgzdegnpdglzlkxkq7xj2d6lu6afta34r6jo53imkz4vpclivva	system	Reproducible-build agreement
-#bb.metric.health.binary-artifact-bytes-digest	#bb.metric-definition.sha256.o2zgmpdtkaqcdcduoos6njrfq2gbpxhdorr5ugmfxb3pim7lnufq	system	Binary artifact bytes/digest
+#bb.metric.health.binary-artifact-bytes-digest	#bb.metric-definition.sha256.x4o7eciktyat77nwgm4e2koqc47phpkwmnmychmbtnhk4i2vjusq	system	Binary artifact bytes/digest
 #bb.metric.health.validation-freshness	#bb.metric-definition.sha256.7c6saoaxvpbmrzflrsulmemtcxohwkh5opbzsnpf4yogc4w5cugq	system	Validation freshness
 #bb.metric.health.diagnostic-coverage-manifest	#bb.metric-definition.sha256.6vv5324l7dxlfbgftesdh3l6soyslfaiyotsdec2m5fpaybxx24a	system	Diagnostic coverage manifest
 #bb.metric.health.aggregate-system-state	#bb.metric-definition.sha256.nclcffzsc4fl6bt2bldraath6riwmdhnq5v635eztkk4fye62nnq	system	Aggregate system state

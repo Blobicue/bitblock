@@ -19,11 +19,11 @@ FIELDS = {
     "history": "#bb.receipt.sha256.awdyznfll2hsuap4u24kcrzg3tmuxy3bjox5wd2wumgvihial2fa",
     "frame_input": "#bb.frame-input.sha256.iu5e3slyn3txqtd5adk4ca7im2e3tcgo5q4qy5dhmvivzvdgg4wq",
     "game_frame": "#bb.frame.sha256.s2qnppnpaon4brmeosrufpurexk7mfctbiuy2rep6cckv5gxos7a",
-    "game_evidence": "#bb.receipt.sha256.qxwvrhf7qrqvpv2uqljlmojx5rlcrrpgsoby7daczln3dokynzhq",
-    "composite_input": "#bb.frame-input.sha256.h6p2xcfudpks5pkzojp243mdrjv6oazzbwmbahlqltajd6oabaja",
+    "game_evidence": "#bb.receipt.sha256.yr4vgqk3uz4slvbekyrsfmgf2qaspq252kcy2olqfqd6yporhhkq",
+    "composite_input": "#bb.frame-input.sha256.yfmxsloxa2tg5voxvetd6ygyfflquqfpmqidz6qcpszjgesf4mca",
     "composite_frame": "#bb.frame.sha256.isqpvp4w6kox3bcrmr53hvkfqqnnsvxgdy6yb77dwqwxjdwd2wha",
-    "composite_evidence": "#bb.receipt.sha256.pth2dviss6z3d7k3f3rdw46qqje7sfnszxorm4xgyffw2zqtrjia",
-    "display_receipt": "#bb.display-receipt.sha256.dtfnqhj7n3rixnhnl2fpy575lhuhhp4bittri4ww4cjnhobcckaq",
+    "composite_evidence": "#bb.receipt.sha256.n5y3jp4ahvhadzw7qbjxm2sxbnh7lwu4cmydyhkhvij367fshjfa",
+    "display_receipt": "#bb.display-receipt.sha256.pduqk6qosatdhgbw4mlbztq4re2ixwgyzawssj3cye5miulixzuq",
     "case": "#bb.registry.sha256.6d5golms4a3vk7vqvbmvhjksrw4vaihnmnkzjg3er7fekeky67aa",
     "initial_world": "#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca",
     "reference_impl": "#bb.registry.sha256.f26hjlfme5czij7hgkwel2dyusknugmnaqk6v2rkt24lhd4uut3a",
@@ -40,8 +40,8 @@ REJECTED_V2_FIELDS = {
     "display_receipt": "#bb.display-receipt.sha256.zo52e2varem4pr4hz3sajgkweouvrhnfg3fmdby3esuvxjixnunq",
 }
 
-EXPECTED_OUTPUT = "#bb.receipt.sha256.o3gvshgcgzi3e3xrr5zhwstrrur2fqvr4jsayfoetfz4ywiknu3a"
-EXPECTED_RECEIPT = "#bb.receipt.sha256.qnnz2rhcoeybcdh7fhm63k2pslayiw3mmmeqlnghnndpffb4lrqq"
+EXPECTED_OUTPUT = "#bb.receipt.sha256.ta633j5g7y5zhrxht5qml6sejmbjcdrsvd37whc4ykn3hgwgbs5q"
+EXPECTED_RECEIPT = "#bb.receipt.sha256.haywsy6jofj3k6gehasulniebg2kvzpdzoxwpys7fejucsaujmpa"
 REJECTED_V2_OUTPUT = "#bb.receipt.sha256.yclrpejhfo4pop4ldvowaomk4ywsfbodxj7436iil5amq7n7mkyq"
 REJECTED_V2_RECEIPT = "#bb.receipt.sha256.wxmct7gif5ygiueryxymilcsfdlwoncaya5ucxqj65tuvxqr5zta"
 

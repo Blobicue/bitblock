@@ -1,9 +1,13 @@
 //! A separately clipped, content-bound metrics panel and full-client compositor.
 //!
-//! The simulation renderer never sees the sidebar width. Its pixels are copied row-for-row into
-//! the left region, while text is rasterized only inside the right region. Dynamic sidebar data
-//! is a `MetricSnapshot`; the composite frame input binds that snapshot, the exact game frame,
-//! and the named layout policy without making a receipt depend on itself.
+//! The simulation renderer never sees the sidebar width. A full composition copies its pixels
+//! row-for-row into the left region; a sidebar-only composition reuses that left region only when
+//! it is bound to the exact selected game-frame tag. Text is rasterized only inside the right
+//! region. Dynamic sidebar data is a `MetricSnapshot`; the composite frame input binds that
+//! snapshot, the exact game frame, and the named layout policy without making a receipt depend on
+//! itself.
+
+use std::sync::OnceLock;
 
 use crate::camera::Vec3;
 use crate::frame::{FrameProtocolError, OverlayInput};
@@ -18,6 +22,13 @@ const SNAPSHOT_PAYLOAD_LEN: u64 = 368;
 const SIDEBAR_POLICY_SCHEMA: &[u8] = b"bitblock/sidebar/raster-policy/v1";
 const COMPOSITE_POLICY_SCHEMA: &[u8] = b"bitblock/sidebar/composite-policy/v1";
 const COMPOSITE_INPUT_SCHEMA: &[u8] = b"bitblock/sidebar/composite-frame-input/v1";
+const SIDEBAR_POLICY_TEXT: &[u8] =
+    b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1";
+const SIDEBAR_POLICY_FIXED_BYTES: u64 =
+    size_of::<u32>() as u64 + 5 * size_of::<u32>() as u64 + SIDEBAR_POLICY_TEXT.len() as u64;
+
+static SIDEBAR_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
+static COMPOSITE_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
 
 const PANEL_BACKGROUND: u32 = 0x0010_1318;
 const PANEL_RULE: u32 = 0x0038_424d;
@@ -121,11 +132,11 @@ pub const DISPLAYED_METRICS: &[MetricBinding] = &[
     ),
     binding!(
         "#bb.metric.hash.frame-provenance-receipt-digest",
-        "#bb.metric-definition.sha256.usv2hrln45vdwrgz4e4xraime7x53fjyjlv5mfkr6plukbzb5j4a"
+        "#bb.metric-definition.sha256.ntg7gxatkwreu2rhm7g72hunnpka7arngljoagz3bpdfozblrtma"
     ),
     binding!(
         "#bb.metric.visual.compositor-capture-comparison",
-        "#bb.metric-definition.sha256.jcciaxrmp7sjkxmqepxixydbhh5m77ufqgfyxeirjqiccwuf6pma"
+        "#bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq"
     ),
     binding!(
         "#bb.metric.sidebar.sidebar-visibility",
@@ -431,14 +442,59 @@ pub fn composite_overlay_input(snapshot: ContentTag) -> Result<OverlayInput, Fra
 }
 
 pub fn sidebar_policy_tag() -> ContentTag {
-    let mut payload = Vec::with_capacity(8_000);
+    *SIDEBAR_POLICY_TAG.get_or_init(|| {
+        hash_canonical(
+            TagKind::Policy,
+            SIDEBAR_POLICY_SCHEMA,
+            sidebar_policy_payload_len(),
+            feed_sidebar_policy,
+        )
+        .expect("sidebar policy byte length and exact encoding are fixed")
+    })
+}
+
+fn sidebar_policy_payload_len() -> u64 {
+    DISPLAYED_METRICS
+        .iter()
+        .fold(SIDEBAR_POLICY_FIXED_BYTES, |total, binding| {
+            let alias_len =
+                u64::try_from(binding.alias.len()).expect("metric alias length fits u64");
+            let definition_len =
+                u64::try_from(binding.definition.len()).expect("definition tag length fits u64");
+            total
+                .checked_add(size_of::<u16>() as u64 + alias_len)
+                .and_then(|value| value.checked_add(size_of::<u16>() as u64 + definition_len))
+                .expect("static sidebar policy length does not overflow")
+        })
+}
+
+fn feed_sidebar_policy(sink: &mut dyn FnMut(&[u8])) {
+    sink(&SIDEBAR_WIDTH.to_be_bytes());
+    for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
+        sink(&color.to_be_bytes());
+    }
+    sink(SIDEBAR_POLICY_TEXT);
+    for binding in DISPLAYED_METRICS {
+        let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
+        let definition_len =
+            u16::try_from(binding.definition.len()).expect("definition tag exceeds u16");
+        sink(&alias_len.to_be_bytes());
+        sink(binding.alias.as_bytes());
+        sink(&definition_len.to_be_bytes());
+        sink(binding.definition.as_bytes());
+    }
+}
+
+#[cfg(test)]
+fn sidebar_policy_payload_reference() -> Vec<u8> {
+    let mut payload = Vec::with_capacity(
+        usize::try_from(sidebar_policy_payload_len()).expect("static sidebar policy fits usize"),
+    );
     payload.extend_from_slice(&SIDEBAR_WIDTH.to_be_bytes());
     for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
         payload.extend_from_slice(&color.to_be_bytes());
     }
-    payload.extend_from_slice(
-        b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1",
-    );
+    payload.extend_from_slice(SIDEBAR_POLICY_TEXT);
     for binding in DISPLAYED_METRICS {
         let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
         let definition_len =
@@ -448,22 +504,18 @@ pub fn sidebar_policy_tag() -> ContentTag {
         payload.extend_from_slice(&definition_len.to_be_bytes());
         payload.extend_from_slice(binding.definition.as_bytes());
     }
-    hash_canonical(
-        TagKind::Policy,
-        SIDEBAR_POLICY_SCHEMA,
-        payload.len() as u64,
-        |sink| sink(&payload),
-    )
-    .expect("sidebar policy byte length is measured from its exact encoding")
+    payload
 }
 
 pub fn composite_policy_tag() -> ContentTag {
-    hash_canonical(TagKind::Policy, COMPOSITE_POLICY_SCHEMA, 96, |sink| {
-        sink(&renderer_profile_tag().digest());
-        sink(&crosshair_policy_tag().digest());
-        sink(&sidebar_policy_tag().digest());
+    *COMPOSITE_POLICY_TAG.get_or_init(|| {
+        hash_canonical(TagKind::Policy, COMPOSITE_POLICY_SCHEMA, 96, |sink| {
+            sink(&renderer_profile_tag().digest());
+            sink(&crosshair_policy_tag().digest());
+            sink(&sidebar_policy_tag().digest());
+        })
+        .expect("composite policy encoding has a fixed length")
     })
-    .expect("composite policy encoding has a fixed length")
 }
 
 pub struct FrameCompositor {
@@ -471,6 +523,17 @@ pub struct FrameCompositor {
     height: u32,
     simulation_width: u32,
     pixels: Vec<u32>,
+    /// Exact game frame whose row prefixes currently inhabit `pixels`.
+    ///
+    /// Sidebar-only composition is allowed only when its selected frame agrees with this value;
+    /// a resize or an unbound/failed full composition clears the cache rather than reusing stale
+    /// simulation pixels.
+    cached_game_frame: Option<ContentTag>,
+    /// Logical simulation-prefix words copied by the most recent composition.
+    ///
+    /// This counts requested CPU slice-copy payload words, not hardware memory traffic, timing,
+    /// cache activity, presentation work, or display output.
+    last_game_prefix_copy_words: u64,
 }
 
 impl FrameCompositor {
@@ -480,6 +543,8 @@ impl FrameCompositor {
             height: 0,
             simulation_width: 0,
             pixels: Vec::new(),
+            cached_game_frame: None,
+            last_game_prefix_copy_words: 0,
         };
         compositor.resize(width, height, simulation_width);
         compositor
@@ -491,6 +556,8 @@ impl FrameCompositor {
         self.height = height;
         self.simulation_width = simulation_width;
         self.pixels.resize(pixel_len(width, height), 0);
+        self.cached_game_frame = None;
+        self.last_game_prefix_copy_words = 0;
     }
 
     pub const fn width(&self) -> u32 {
@@ -513,11 +580,20 @@ impl FrameCompositor {
         &self.pixels
     }
 
+    /// Logical game-prefix words copied by the most recent composition.
+    pub const fn last_game_prefix_copy_words(&self) -> u64 {
+        self.last_game_prefix_copy_words
+    }
+
     pub fn compose(
         &mut self,
         game_pixels: &[u32],
+        game_frame: ContentTag,
         snapshot: &SidebarSnapshot,
     ) -> SidebarRasterFacts {
+        self.cached_game_frame = None;
+        self.last_game_prefix_copy_words = 0;
+        assert_eq!(game_frame.kind(), TagKind::Frame);
         assert_eq!(
             game_pixels.len(),
             pixel_len(self.simulation_width, self.height)
@@ -535,6 +611,42 @@ impl FrameCompositor {
             let game = &game_pixels[row * game_stride..(row + 1) * game_stride];
             output[..game_stride].copy_from_slice(game);
         }
+        self.last_game_prefix_copy_words =
+            u64::from(self.simulation_width) * u64::from(self.height);
+        let sidebar_width = self.sidebar_width();
+        let facts = raster_sidebar(
+            &mut self.pixels,
+            self.width,
+            self.simulation_width,
+            sidebar_width,
+            self.height,
+            snapshot,
+        );
+        self.cached_game_frame = Some(game_frame);
+        facts
+    }
+
+    /// Re-rasterizes only the sidebar after proving that the retained game prefix belongs to the
+    /// selected game frame. This preserves the complete output buffer while avoiding a redundant
+    /// simulation-region copy on sidebar-only ticks.
+    pub fn compose_sidebar_only(
+        &mut self,
+        game_frame: ContentTag,
+        snapshot: &SidebarSnapshot,
+    ) -> SidebarRasterFacts {
+        assert_eq!(game_frame.kind(), TagKind::Frame);
+        assert_eq!(
+            self.cached_game_frame,
+            Some(game_frame),
+            "sidebar-only composition requires the currently cached game-frame identity"
+        );
+        assert_eq!(snapshot.simulation_width, self.simulation_width);
+        assert_eq!(snapshot.simulation_height, self.height);
+        assert_eq!(snapshot.output_width, self.width);
+        assert_eq!(snapshot.output_height, self.height);
+        assert_eq!(snapshot.sidebar_width, self.sidebar_width());
+
+        self.last_game_prefix_copy_words = 0;
         let sidebar_width = self.sidebar_width();
         raster_sidebar(
             &mut self.pixels,
@@ -1249,6 +1361,12 @@ mod tests {
         (reference.pixels().to_vec(), facts)
     }
 
+    fn observed_game_tag(width: u32, height: u32, game_pixels: &[u32]) -> ContentTag {
+        FrameRef::new(width, height, game_pixels)
+            .unwrap()
+            .content_tag()
+    }
+
     fn assert_pixels_equal(case: &str, candidate: &[u32], reference: &[u32]) {
         assert_eq!(candidate.len(), reference.len(), "{case} length diverged");
         if let Some(index) = candidate
@@ -1600,12 +1718,26 @@ mod tests {
     fn sidebar_policies_match_independent_python_vectors() {
         assert_eq!(
             sidebar_policy_tag().to_string(),
-            "#bb.policy.sha256.64tvzqwugmd4ozi3ail36qnxgtqb22yffwmgis7uwcpvkwgsxe3q"
+            "#bb.policy.sha256.eg4egguiubrb5l45qbwvf76gwbkgtlb7pymc3zi4uq6jrqgl4b5q"
         );
         assert_eq!(
             composite_policy_tag().to_string(),
-            "#bb.policy.sha256.oplhffpxvhyz3t3a57ruelblclcosthaawz2o3rdemwz4k5ufdfa"
+            "#bb.policy.sha256.kyd57oandtrj4iuis54zozpv6pwgmcoy4hmsvlkp2fqvhy6noe5q"
         );
+    }
+
+    #[test]
+    fn streamed_sidebar_policy_matches_the_collected_reference_bytes() {
+        let reference = sidebar_policy_payload_reference();
+        assert_eq!(reference.len() as u64, sidebar_policy_payload_len());
+        let reference_tag = hash_canonical(
+            TagKind::Policy,
+            SIDEBAR_POLICY_SCHEMA,
+            reference.len() as u64,
+            |sink| sink(&reference),
+        )
+        .unwrap();
+        assert_eq!(sidebar_policy_tag(), reference_tag);
     }
 
     #[test]
@@ -1659,7 +1791,11 @@ mod tests {
             let (reference_pixels, reference_facts) =
                 compose_two_buffer_reference(width, height, simulation_width, &game, &snapshot);
             let mut candidate = FrameCompositor::new(width, height, simulation_width);
-            let candidate_facts = candidate.compose(&game, &snapshot);
+            let candidate_facts = candidate.compose(
+                &game,
+                observed_game_tag(simulation_width, height, &game),
+                &snapshot,
+            );
 
             assert_eq!(
                 candidate_facts, reference_facts,
@@ -1689,15 +1825,95 @@ mod tests {
         let mut hidden = visible.clone();
         hidden.visible = false;
         let mut candidate = FrameCompositor::new(width, height, simulation_width);
-        candidate.compose(&game, &visible);
+        let game_tag = observed_game_tag(simulation_width, height, &game);
+        candidate.compose(&game, game_tag, &visible);
         let (hidden_reference, hidden_facts) =
             compose_two_buffer_reference(width, height, simulation_width, &game, &hidden);
-        let candidate_facts = candidate.compose(&game, &hidden);
+        let candidate_facts = candidate.compose(&game, game_tag, &hidden);
         assert_eq!(candidate_facts, hidden_facts);
         assert_pixels_equal(
             "sequential hidden case",
             candidate.pixels(),
             &hidden_reference,
+        );
+    }
+
+    #[test]
+    fn sidebar_only_reuse_matches_the_frozen_full_compositor_and_skips_game_copy() {
+        let simulation_width = 801;
+        let height = 801;
+        let output_width = 1_201;
+        let game = (0_u32..simulation_width * height)
+            .map(|index| index.wrapping_mul(0x0001_0101) & 0x00ff_ffff)
+            .collect::<Vec<_>>();
+        let game_tag = observed_game_tag(simulation_width, height, &game);
+        let first = snapshot(simulation_width, height, output_width);
+        let mut reference =
+            TwoBufferReferenceCompositor::new(output_width, height, simulation_width);
+        let mut candidate = FrameCompositor::new(output_width, height, simulation_width);
+
+        let reference_first = reference.compose(&game, &first);
+        let candidate_first = candidate.compose(&game, game_tag, &first);
+        assert_eq!(candidate_first, reference_first);
+        assert_eq!(
+            candidate.last_game_prefix_copy_words(),
+            u64::from(simulation_width) * u64::from(height)
+        );
+        assert_pixels_equal("sidebar-only setup", candidate.pixels(), reference.pixels());
+
+        let mut second = first.clone();
+        second.tick_index += 1;
+        second.visible = false;
+        second.previous_raster = Some(candidate_first);
+        let reference_second = reference.compose(&game, &second);
+        let candidate_second = candidate.compose_sidebar_only(game_tag, &second);
+
+        assert_eq!(candidate_second, reference_second);
+        assert_eq!(candidate.last_game_prefix_copy_words(), 0);
+        assert_pixels_equal("sidebar-only reuse", candidate.pixels(), reference.pixels());
+        assert_eq!(
+            FrameRef::new(output_width, height, candidate.pixels())
+                .unwrap()
+                .observe(),
+            FrameRef::new(output_width, height, reference.pixels())
+                .unwrap()
+                .observe()
+        );
+    }
+
+    #[test]
+    fn sidebar_only_reuse_refuses_a_stale_identity_and_a_resized_cache() {
+        let simulation_width = 11;
+        let height = 7;
+        let output_width = 24;
+        let game_a = vec![0x0012_3456; pixel_len(simulation_width, height)];
+        let game_b = vec![0x0065_4321; pixel_len(simulation_width, height)];
+        let tag_a = observed_game_tag(simulation_width, height, &game_a);
+        let tag_b = observed_game_tag(simulation_width, height, &game_b);
+        let snapshot = snapshot(simulation_width, height, output_width);
+        let mut candidate = FrameCompositor::new(output_width, height, simulation_width);
+
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                candidate.compose_sidebar_only(tag_a, &snapshot)
+            }))
+            .is_err()
+        );
+
+        candidate.compose(&game_a, tag_a, &snapshot);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                candidate.compose_sidebar_only(tag_b, &snapshot)
+            }))
+            .is_err()
+        );
+
+        candidate.resize(output_width, height, simulation_width);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                candidate.compose_sidebar_only(tag_a, &snapshot)
+            }))
+            .is_err()
         );
     }
 
@@ -1710,7 +1926,11 @@ mod tests {
             .map(|index| index.wrapping_mul(0x0001_0101) & 0x00ff_ffff)
             .collect::<Vec<_>>();
         let mut compositor = FrameCompositor::new(output_width, height, width);
-        compositor.compose(&game, &snapshot(width, height, output_width));
+        compositor.compose(
+            &game,
+            observed_game_tag(width, height, &game),
+            &snapshot(width, height, output_width),
+        );
 
         for y in 0..height as usize {
             let source = &game[y * width as usize..(y + 1) * width as usize];
@@ -1728,7 +1948,7 @@ mod tests {
         let game = vec![0x0012_3456; pixel_len(width, height)];
         let game_tag = FrameRef::new(width, height, &game).unwrap().content_tag();
         let mut compositor = FrameCompositor::new(output_width, height, width);
-        compositor.compose(&game, &snapshot(width, height, output_width));
+        compositor.compose(&game, game_tag, &snapshot(width, height, output_width));
         let first = FrameRef::new(output_width, height, compositor.pixels())
             .unwrap()
             .content_tag();

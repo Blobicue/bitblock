@@ -120,12 +120,45 @@ Frame validity is layered:
 6. **OS-exposed desktop raster:** the opt-in GDI screen-DC audit checks its own
    API results and compares the complete visible client rectangle. This is one
    sampled OS raster, including occlusion; it is not guaranteed scanout.
-7. **Physical display:** a calibrated external sensor agrees within declared
-   uncertainty. Without that instrument this layer is `N/A`, not pass.
+7. **Physical display (future / currently N/A):** a physical-display claim would require a
+   separately retained, calibrated external instrument whose samples agree under a declared
+   uncertainty model. No such record is currently admitted, so this layer is `N/A`, not pass.
 
 The process cannot prove photons on the monitor from its own framebuffer. OS
 composition, scaling, color management, occlusion, cable, and panel behavior
 sit outside that trust boundary.
+
+### External-sensor observation carrier
+
+The feature-gated `PhysicalSensorObservation v1` carrier is a bounded bridge for a future
+external instrument, not a physical-display certificate. It serializes only `NotApplicable`,
+`Unavailable`, or `ReportedSamples`; no canonical payload can declare that it passed. A
+reported-sample object contains a full typed `PresentationOutputArtifact` tag, the fixed
+sensor-comparison policy tag, a declared profile tag and RGB16 tolerances, an ordered list of
+`(x, y, expected_XRGB)` challenge points, one RGB16 sample per point, and at most 64 KiB of raw
+attachment bytes. The attachment is hash-bound but is not parsed as a success witness.
+
+`verify_against(parent)` first re-verifies the carrier, then requires the caller-supplied parent
+to have the named full tag and pass its own display/timing/topology checks. It requires the
+nested display receipt to be `Match` at `Complete` capture stage, checks every challenge position
+against the parent's authoritative expected XRGB slice, and compares channels only in the integer
+relation `abs(sample_u16 - expected_u8 * 257) <= declared_tolerance_u16`. Any missing/wrong
+parent, nonexact desktop capture, challenge drift, out-of-bounds coordinate, count mismatch, or
+residual breach yields a named refusal. Only then may it return `BoundSampleMatch`.
+
+`BoundSampleMatch` means that supplied numbers satisfy the declared bounded comparison against
+named pixels of one already-matching OS-raster artifact. It does not establish the provenance of
+the numbers, an independently held/calibrated instrument, physical camera/panel mapping, timing,
+scanout, or photons. No external sensor record has been admitted, so the physical-display metric
+is still `N/A`.
+
+`RgbGradientChallenge::from_exact_presentation(parent, k)` is a deterministic optional selector
+for a future finite sample. It first requires the same verified `Match`/`Complete` parent, scans
+the parent expected XRGB pixels, scores each pixel from its existing right/lower RGB8 absolute
+differences, retains the top `k` with a declared stable tie rule, then emits the usual canonical
+row-major challenge points. The selector's policy and selected challenge both have full tags.
+It makes an eventual sample more discriminating for coordinate/color mismatches only; it does not
+measure a physical gradient, establish a sensor mapping, or strengthen the OS-raster boundary.
 
 The implemented frame chain separates input, output, and occurrence:
 
@@ -161,12 +194,15 @@ CompositeFrameReceipt v1 = parent composite receipt | nil
                            || canonical full-client Frame tag
 ```
 
-At the initial size, the compositor copies every row of the 801 x 801 game
+At the initial size, a full composition copies every row of the 801 x 801 game
 frame exactly to `x=0..800` and draws the 400 x 801 sidebar only at
-`x=801..1200`. The simulation renderer, camera projection, crosshair, and inner
-game-frame tag never receive the sidebar width. A separate powered test checks
-every copied word. One sidebar-pixel mutation changes the composite tag while
-leaving the inner game-frame tag unchanged.
+`x=801..1200`. A sidebar-only recomposition reuses that prefix only when its
+selected game-frame tag equals the compositor's cached full-composition tag;
+otherwise it fails closed. The simulation renderer, camera projection,
+crosshair, and inner game-frame tag never receive the sidebar width. Separate
+powered tests check every copied word, exact reuse against a frozen full-copy
+reference, stale-tag refusal, and resize invalidation. One sidebar-pixel mutation
+changes the composite tag while leaving the inner game-frame tag unchanged.
 
 Only a changed inner game frame whose composite backend submission returned
 success enters the inner chain. Sidebar-only F3 recomposition advances only the
@@ -715,8 +751,9 @@ maintaining a second spelling.
 
 Toggle is classified by its actual pre/post transition. A re-mint after a burn
 creates a new occurrence tag. The old mint and consuming burn remain in
-history. Circulating coordinate supply is `|W|-1 = |M|`; duplicate placement
-cannot inflate it and deletion of empty space cannot reduce it.
+history. The active mutable-coordinate count is `|W|-1`, equal to the cardinality
+of the active-mint map; duplicate placement cannot increase it and deletion of
+an empty coordinate cannot reduce it.
 
 The implemented unsigned coordinate receipt uses this exact canonical object:
 
@@ -739,7 +776,7 @@ only their full 32-byte digests are stored in this payload. The strict decoder
 checks the declared count, exact total length, nonzero count, every embedded
 edit, both zero reserved flags, and canonical re-encoding before admission. The
 parent supplies prestate. Replay derives state-change classification,
-mint/burn provenance, supply, final event, poststate, and the receipt tag; those
+mint/burn provenance, active-coordinate count, final event, poststate, and the receipt tag; those
 facts are not redundantly trusted as effects. Exact per-edit occurrence tags
 chain from the parent and prior edit, so repeated identical edit content still
 has distinct historical identity.
@@ -1072,11 +1109,12 @@ fork-choice, finality, and network machinery named; there is no admitted stake
 variant and a valid sequential transcript cannot satisfy that request. The
 refusal is unconditional and precedes history replay.
 
-Freely placeable blocks cannot safely be voting stake or scarce currency.
-Infinite coordinates and costless placement give one actor unlimited stake;
-unrestricted deletion permits third-party burns. Coordinate mints can be
-non-economic provenance tokens, or placement can consume/bond a separately
-scarce owner-authorized asset. A public Layer 1 claim additionally requires
+The current local history has neither actors nor authorization. Freely placeable
+coordinates therefore cannot represent voting stake or scarce currency: any
+process allowed to submit unconstrained edits can create and clear mutable
+occupancy without bound. “Mint” and “burn” remain local occupancy-event labels.
+Mapping placement to a separately scarce owner-authorized asset would require
+the missing ownership and authorization machinery. A public Layer 1 claim additionally requires
 independent nodes, networking, resource limits, ownership and transfers,
 replay protection, finality, availability, synchronization, key lifecycle,
 upgrade governance, and an explicit threat model.
@@ -1084,7 +1122,60 @@ upgrade governance, and an explicit threat model.
 Until those exist, the truthful name is **local content-addressed coordinate
 history protocol**, not cryptocurrency or Layer 1.
 
-## LadderLang and iota cost
+### CoordinateEpisodeEvidence v1
+
+The opt-in research module `src/coordinate_episode.rs` materializes the
+existing `#bb.metric.dyn.issuance-provenance-episode-relation` as one bounded,
+in-memory, canonical carrier. It first calls
+`verify_in_memory_history_with_limits(initial_world, history, limits)` and
+refuses before deriving anything if that replay does not reconstruct the full
+history genesis, effects, receipt/head, final world, and active mint
+provenance. Its policy tag is
+`bitblock/coordinate-episode-derivation-policy/v1`; the receipt-kind outer tag
+uses the distinct `bitblock/coordinate-episode-evidence/v1` schema. Decode,
+encode, and local verification admit only that exact static policy tag, not an
+arbitrary tag of the same kind.
+
+The canonical payload is:
+
+```text
+derivation-policy tag digest [32]
+history-genesis receipt tag digest [32]
+history-head receipt tag digest [32]
+verified final-world tag digest [32]
+episode count u64
+repeat receipt/effect order:
+    coordinate i64 × 3
+    mint event tag digest [32]
+    active marker | closed marker + consuming burn event tag digest [32]
+```
+
+The mint event tag is the episode identity. Codec counts, traversal positions,
+and signed coordinate lanes frame or locate bytes; they are not substitute
+asset IDs. A post-genesis `Mint` opens one episode; a `Burn` must consume that
+same open mint tag at the same coordinate and closes it. No-op edits create no
+episode. A mutable coordinate present at genesis maps to the history genesis
+tag, so deleting it closes no post-genesis episode; a later re-mint opens a
+new event-tagged episode. `verify_against` first checks the carrier tag, then
+derives the full relation again from a bounded verified history and requires
+exact equality. The 262,144 cap and allocation budget apply to emitted episodes,
+not raw history edits; replay has its own separately declared source-work bounds.
+
+The module is deliberately excluded from the default game binary. The Rust
+tests cover same-tick mint/burn/re-mint ordering, genesis separation, no-op
+head divergence, policy substitution, duplicate event tags, malformed codec
+states, source-field mutations, and replay limits. The stdlib-only known-answer
+check is:
+
+```powershell
+python -B tools/coordinate_episode_vectors.py
+```
+
+This records local provenance only. It does not create balances, ownership,
+transfers, scarcity, signatures, custody, stake, elapsed time, consensus,
+Proof-of-History, Proof-of-Stake, cryptocurrency, or Layer 1 authority.
+
+## LadderLang and static encoding upper bounds
 
 LadderLang's live definition is:
 
@@ -1107,10 +1198,12 @@ preimage, prefixes the nine ASCII bytes `bb-lam/v1`, and quotes all 112 bytes.
 The cost may rank already-valid equivalent representations; it may never trade
 away state or pixel validity.
 
-The audited bridge must call LadderLang's `Lam.costChecked`, which rejects open
-terms. It must not use the current tick-receipt token byte spelling because that
-spelling reduces variable indices modulo 256 and is non-injective. The frozen
-content-neutral policy instead uses two distinct equal-cost closed terms:
+The Rust bridge computes the stated closed-term formula after verifying the
+canonical source bytes; it does not link or execute LadderLang. The separate
+pinned parity assay calls LadderLang's `Lam.costChecked`, which rejects open
+terms. The bridge must not use the current tick-receipt token byte spelling
+because that spelling reduces variable indices modulo 256 and is non-injective.
+The frozen content-neutral policy instead uses two distinct equal-cost closed terms:
 
 ```text
 B0 = App I FALSE
@@ -1131,9 +1224,11 @@ ticks      = 736L + 5
 The standalone Lean capsule proves these formulas for every finite byte list
 and separates right/left PAIR, bit-order, and byte-list mutants. A second assay
 at pinned LadderLang commit `59042265167b8f40700a891d890fde8015bcade9`
-calls its own `Lam.costChecked`, reproduces primitive/byte/two-byte costs, and
-proves the powered open-term control is refused. Rust, Python, and an independent
-Node implementation agree on the Edit vector below:
+calls its own `Lam.costChecked`, reproduces primitive/byte/two-byte costs, runs
+the complete frozen 112-byte Edit quote at `20,722` atoms and `82,438` iota,
+rejects an off-by-one atom claim, and proves the powered open-term control is
+refused. Rust, Python, and an independent Node implementation agree on the Edit
+vector below:
 
 ```text
 source Edit tag      #bb.edit.sha256.l3qxygkk2tikiyma5zkvaznrgzvu46ulmtdse56c2tf4r24ugzdq
@@ -1171,7 +1266,7 @@ For each candidate change:
    proof over `i64^3` and floating-point views.
 4. Only after the correctness gate passes, compare source bytes, binary-section
    bytes, reachable tick/render code bytes, allocations, time, memory traffic,
-   energy, and iota cost.
+   energy, and the static iotaUpper encoding measure.
 5. Change one optimization at a time and retain the failing powered control that
    demonstrated the check could detect a real renderer defect.
 
@@ -1849,14 +1944,110 @@ bytes. A read-only string assay finds `bitblock/display-capture-artifact/v1` in
 the feature image and not in the default. These are linked-size facts, not a
 runtime memory, latency, sync-duration, or durability measurement.
 
+## Checked Win32 pixel-submission checkpoint
+
+Read-only inspection of the pinned Softbuffer 0.4.8 Windows backend exposed a
+proof seam: its internal `BitBlt` Boolean was discarded before the wrapper
+returned `Ok(())`. The frame protocol already described that return as backend
+acceptance, not monitor output, but there was no way to distinguish a failed
+underlying GDI call from a successful one.
+
+Windows now uses a project-owned top-down `0x00RRGGBB` buffer and one direct
+`SetDIBitsToDevice` occurrence. The buffer is fully allocated before replacing
+the prior resize state. Each present acquires the window DC, submits exactly the
+current width and height, captures the returned scanline count and Win32 error,
+releases the DC, and admits the frame pair only when the returned count equals
+the complete requested height. Zero, partial, and over-reported row counts are
+all refusal states. A failed `ReleaseDC` remains a separately reported cleanup
+fact after a full-row return, because rewriting an already accepted pixel call
+as non-submission would be false history.
+
+The checked policy is independently reconstructed by
+`tools/windows_present_vectors.py`:
+
+```text
+#bb.policy.sha256.opgpybj32tw72pep2xusit4lzzgsiozs5f5reppq67iiejueetvq
+```
+
+The Windows dependency graph is now `bitblock -> windows-sys + winit`; it has no
+Softbuffer node. Non-Windows targets retain Softbuffer as a target-specific
+backend. This changed the evidence status of two existing metric families but
+admitted no new family:
+
+```text
+backend submission event
+  #bb.metric-definition.sha256.ip6vniaztq3chlyhj6w5fdysj3fi3y7evaiaah3pt65xdoak2ufa
+mapped-surface copy mismatch vector
+  #bb.metric-definition.sha256.yl4hegsrqnqx2a26j53h6tpp6duv4ozof43eyc5xm2as2k4af3uq
+```
+
+The first live checked-backend assay retained a partial external-raster failure
+with 516,522 mismatches, first `(565,0)`. A second run retained a whole-client
+external-raster failure with 962,001 mismatches, then produced complete
+full-client passes in the same process. The first preserved exact pass was:
+
+```text
+#bb.display-receipt.sha256.2swl7ga2lqxiswavxqt4mznrxku4u7hcqfsxccvpjytt2hwfz2taq
+stage=Complete mismatches=0 first=None
+```
+
+A later minimized occurrence was explicitly unavailable rather than counted as
+a match. Exact failure and minimized receipts are preserved in
+`docs/DISPLAY_AUDIT.md`. The sequence establishes checked GDI acceptance plus a
+separate exact OS screen-raster sample for those occurrences. It does not settle
+the mechanism of the preceding external rasters and does not prove compositor
+attribution, scanout, cable/panel behavior, or emitted light.
+
+Two powered subject controls were observed failing before restoration:
+
+1. replacing complete-row equality with `actual >= 0` made the zero-row control
+   fail;
+2. changing the Rust policy revision changed its tag and made the independent
+   known-answer assertion fail.
+
+The complete gate passes 227 library and 29 application tests in the default
+all-target build, 227 library and 31 application tests with all research
+features, zero-test example targets, strict Clippy, formatting, all twelve
+independent Python vector programs, the exact 1,112-definition registry audit,
+and `lake build` (6 jobs). The deliberately failing powered controls are not
+counted as passes.
+
+The default executable is
+`target/checked-windows-present-default/release/bitblock.exe`, 1,031,168 bytes,
+SHA-256
+`4BC8528A5C9CA11D2F8EB6CB57F1D81BABA9819A56BA451834B294CF12D8D71A`.
+It is 89,600 bytes smaller than the preceding 1,120,768-byte default. Read-only
+PE comparison attributes the largest virtual-size reductions to `.text`
+(-71,456), `.xdata` (-8,696), `.rdata` (-6,256), and `.pdata` (-2,436), with
+smaller `.data` (-176) and `.reloc` (-276) reductions and `.idata` +4 bytes.
+The presenter policy and `SetDIBitsToDevice` strings are present; `softbuffer`
+and the research display-artifact schema are absent.
+
+The research executable is
+`target/checked-windows-present-research/release/bitblock.exe`, 1,122,304 bytes,
+SHA-256
+`6306D0158BE5C8D2C202B91CB0C2455B3D95E4948FE0F564409DEADF05633B47`.
+It is 88,576 bytes smaller than the preceding research image and 91,136 bytes
+larger than the same-source default. The display-artifact schema and checked
+presenter policy are both present. These are linked file/section facts, not
+runtime latency, energy, residency, or compositor evidence.
+
+`DwmGetCompositionTimingInfo` remains a possible diagnostic envelope, not the
+next pixel proof. Microsoft requires a null HWND on Windows 8.1 and later, so
+its timing/counter vector is compositor-session scoped and cannot name the
+Bitblock window or frame. Any future before/after pair must preserve attribution
+as `Unknown`; it may not promote counter movement into displayed/dropped fate.
+
 ## Open proof obligations
 
 - Canonical registry-patch and key codecs; durable decoders for the currently
   implemented world, frame-input, metric-snapshot, composite-input, overlay,
-  frame-receipt, and display-receipt-v1 encodings. DisplayReceipt v2 and
-  DisplayArtifact v1 have strict research codecs and a typed local
-  sync/reread/reopen journal, but no canonical journal-receipt codec,
-  sudden-power assay, external custody, or latest-prefix authority.
+  frame-receipt, and display-receipt-v1 encodings. DisplayReceipt v2,
+  DisplayArtifact v1, OutputTopology v1, and PresentationOutput v1 have strict
+  research codecs. The typed local journal now replays mixed legacy display
+  artifacts and presentation-output wrappers through one physical chain and
+  one embedded display-receipt chain, but has no canonical journal-receipt
+  codec, sudden-power assay, external custody, or latest-prefix authority.
 - Executable edit semantics and a compiler/refinement proof for the current
   representation-only Edit-to-LadderLang bridge; all other object kinds remain
   refused.
@@ -1899,9 +2090,10 @@ runtime memory, latency, sync-duration, or durability measurement.
   aggregate, subpixel-point, inside-bit, near-plane, arbitrary yaw/pitch/FOV,
   boundary-sensitive, larger corpus, and universal or theorem-backed raster
   semantics remain open.
-- Manual live Match/Mismatch/Unavailable sampling plus an intentional occluder
-  control across supported Windows display configurations; the feature-gated
-  observer path exists but has not been exercised in this checkpoint.
+- Repeated live Match/Mismatch/Unavailable sampling with intentional occluder,
+  display-mode, DPI, HDR, multi-monitor, and remote-session controls. The current
+  local assays cover exact pass, external-raster mismatch, and minimized
+  unavailable outcomes on one configuration only.
 - Calibrated scanout or physical-display instrumentation; GDI screen capture
   does not settle this boundary.
 - External head custody for rollback detection.
@@ -1910,3 +2102,719 @@ runtime memory, latency, sync-duration, or durability measurement.
 
 An unavailable obligation is reported as `N/A` or open. It is never inferred
 from a hash, a metric, or a successful local run.
+
+## Composition-timing envelope checkpoint
+
+`src/presentation.rs` adds a feature-gated, platform-neutral canonical object
+for raw Windows composition timing around one checked presentation. Its readable
+kind is `presentation-artifact`, its schema is
+`bitblock/composition-timing-envelope/v1`, and its payload is exactly 948
+big-endian bytes:
+
+| bytes | committed field |
+|---:|---|
+| 32 | composition-timing policy digest |
+| 130 | complete composite `FrameReceiptV2` canonical payload |
+| 52 | checked presenter policy and result facts |
+| 13 | QPC-frequency result |
+| 319 | pre-presentation DWM call, bracket, and optional snapshot |
+| 26 | checked-presenter QPC bracket |
+| 27 | `GdiFlush` result and QPC bracket |
+| 30 | `DwmFlush` HRESULT and QPC bracket |
+| 319 | post-presentation DWM call, bracket, and optional snapshot |
+
+Each successful DWM call stores all 288 bytes of documented timing fields in
+API order after omitting caller-owned `cbSize`. The codec encodes every integer
+explicitly; it never copies the packed Windows ABI struct. Failed calls retain
+their HRESULT, use an absent marker, and require zero canonical snapshot
+padding. Boolean markers, nested tag kinds, the composite stream selector,
+presenter row completeness, padding, payload length, and the cached outer tag
+all fail closed.
+
+`src/windows_timing.rs` is linked only by `protocol-research`. With
+`BITBLOCK_PRESENTATION_AUDIT=1`, the live Windows path executes this order:
+
+```text
+QPF
+{QPC, DwmGetCompositionTimingInfo(NULL), QPC}
+{QPC, checked SetDIBitsToDevice presenter, QPC}
+{QPC, GdiFlush, QPC}
+{QPC, DwmFlush, QPC}
+{QPC, DwmGetCompositionTimingInfo(NULL), QPC}
+```
+
+All post-presentation observation boundaries still run when another timing or
+barrier observation fails. Only failure of the checked presenter prevents frame
+admission. If construction of the observational envelope were unexpectedly
+refused after presenter success, the frame receipt remains published and the
+observation refusal is reported separately; an instrument may not roll back
+the event it observed.
+
+The derived session relation has only four values:
+
+- `Unavailable`: a missing/failed required observation, barrier failure, or
+  incomplete/nonmonotonic QPC interval;
+- `DiscontinuityOrReset`: both complete snapshots exist but configured timing
+  rates differ or a declared sequence lane regresses;
+- `ComparableNoProgress`: a complete stable pair contains no admitted progress;
+- `ComparableAdvanced`: a complete stable pair contains a sequence advance or
+  documented second-call interval activity.
+
+The exact-frame attribution type deliberately has only `Unknown`. Microsoft
+requires a null HWND on Windows 8.1 and later, so these counters describe the
+desktop composition session rather than the Bitblock window or receipt.
+Movement cannot be promoted into displayed, dropped, duplicated, scanout, or
+physical-light claims. The official API boundary is documented by
+[`DwmGetCompositionTimingInfo`](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmgetcompositiontiminginfo)
+and [`DWM_TIMING_INFO`](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ns-dwmapi-dwm_timing_info).
+
+`tools/composition_timing_vectors.py` independently reconstructs the full
+layout, Windows presenter policy, nested receipt payload, and content-tag
+framing. Rust and Python agree on:
+
+```text
+policy    #bb.policy.sha256.t2zuewerksnmvhhjyaaplmlmfb2poptubqxpc6czwvmuwufpanrq
+artifact  #bb.presentation-artifact.sha256.sw2i52veohfmc3lqe74tzd72n6ppwxxshejxmazclwikgniqx2sq
+```
+
+One powered subject control removed the GDI-barrier requirement from the
+derived comparison. The dedicated test failed with `ComparableAdvanced`
+instead of `Unavailable`; the exact production condition was restored and the
+test passed. A session-owned live run then emitted the content tag
+`#bb.presentation-artifact.sha256.pmvfnxmzcjnz5ag26wmpdkdhbpoiofv4grxmwigofifjxj57kgya`
+with QPF success, both DWM calls at `S_OK`, successful GDI/DWM barriers, derived
+`ComparableAdvanced`, and exact-frame attribution still `Unknown`. The process
+was stopped with Ctrl+C after the occurrence. Its raw 948-byte payload was not
+journaled, so this terminal receipt is not replayable object custody. This
+checkpoint does not yet query active-output topology, persist timing artifacts
+in the display journal, attribute a frame inside DWM, or observe scanout/light.
+
+The changed definitions remint these existing families without adding a new
+metric family:
+
+```text
+display pipeline state vector       #bb.metric-definition.sha256.ptv77nvnpcousi7k5dbv426xfo3ap6x5ypusdbq4cudatrxhfgkq
+presentation fate relation          #bb.metric-definition.sha256.zt5psfzfpfyjdhaz3lenuwab363purdwj5ivm4bqfmw7scyavi3a
+domain-separation identity           #bb.metric-definition.sha256.ihlgxhjgwamgu57eostm6m2w54gxlssazapkm5r6i5j77uk6m4pa
+encoding round-trip check            #bb.metric-definition.sha256.jyxxeqpzmsteqxuquyhlkagnqmjdmxaqxhfg4lyjb4p6erl3llya
+known-answer vector verdict          #bb.metric-definition.sha256.mymmhhznsxbc5zctdsyn6hx74bzfw3ofgbl6pc4li6lm6mt4twdq
+cross-implementation digest parity   #bb.metric-definition.sha256.jkedpqcfxrjvyq7xvzbnxvsexznxeprbvnw2eq76h7jnuyslucbq
+```
+
+The final gate passes 237 library and 29 application tests in the default
+build, 240 library and 31 application tests across all research targets, all
+zero-test example targets, strict Clippy for both feature sets, formatting,
+all thirteen independent Python vector programs, the exact 1,112-definition
+registry audit, and `lake build` (6 jobs). The deliberately failing powered
+control is not counted as a pass.
+
+The fresh default executable is
+`target/composition-timing-default/release/bitblock.exe`, 1,031,168 bytes,
+SHA-256
+`A4122AFA24BC56EA888A18B261160B8B00D73D150A53E44C9977A2DF4724C980`.
+It is exactly the same file size as the preceding checked-presenter default.
+The feature-gated timing implementation is absent, but reminted metric
+definition strings deliberately change `.rdata`; therefore equal size is not
+reported as byte identity.
+
+The research executable is
+`target/composition-timing-research/release/bitblock.exe`, 1,144,320 bytes,
+SHA-256
+`392968151D1BC114B91452588FDD1A533BD3A7CB4D77259D046226678B36739E`.
+It is 22,016 bytes larger than the preceding research artifact and 113,152
+bytes larger than the same-source default. Relative to the prior research
+image, PE virtual-size deltas are `.text +18,800`, `.rdata +2,816`, `.pdata
++120`, `.xdata +240`, `.idata +52`, `.reloc +80`, and zero for `.data` and
+`.bss`. These are linked-file facts, not runtime latency, energy, or residency
+measurements; the runtime queries execute only when the explicit audit variable
+is enabled.
+
+## Active-output topology and presentation-output checkpoint
+
+This checkpoint adds no metric family. The exact registry remains 1,112
+readable, uniquely tagged families: 489 system, 339 view, and 284 world. Active
+route count, acquisition-attempt count, retry rate, last topology error, route
+stability, and the new object digests are projections, labels, or carrier
+identities for observables already owned by the display-pipeline,
+compositor-capture, presentation-fate, provenance, and recovery families.
+
+### OutputTopology v1
+
+`src/output_topology.rs` defines the readable kind `output-topology` and schema
+`bitblock/output-topology-observation/v1`. The object has explicit `Available`
+and `Unavailable` forms. An available observation retains:
+
+- client, monitor, and work-area rectangles plus the exact GDI source name;
+- source position, dimensions, pixel format, status flags, and optional mode;
+- every matched target route, including exact target identity availability,
+  output technology, rotation, scaling, refresh/signal/scanline facts, path
+  flags, and optional desktop-image facts; and
+- the ordered acquisition-attempt transcript, including query profile,
+  outcome, error, and reported capacities.
+
+Windows UTF-16 code units are preserved exactly. Routes are canonically sorted,
+and two materially identical routes are refused even when only their friendly
+annotations differ. The payload is capped at 65,536 bytes, each retained UTF-16
+field at 8,192 code units, and both routes and attempts at 256. Transient HWND,
+HMONITOR, adapter LUID, source/target numeric IDs, clone-group IDs, and mode
+indices are deliberately absent; they are query-time joins rather than durable
+identity.
+
+`src/windows_topology.rs` maps the owned HWND to its monitor and GDI source, then
+uses `QueryDisplayConfig`. It first requests profile `0x52` and falls back once
+to `0x12` only for `ERROR_INVALID_PARAMETER`. Only
+`ERROR_INSUFFICIENT_BUFFER` can retry, with four total size/query cycles and
+allocation caps of 1,024 paths and 3,072 modes. The source-name join is exact,
+all active clone-target routes are retained, and target-name failure is an
+explicit route fact rather than silent omission. Production and fake-API paths
+apply the same material-duplicate refusal.
+
+The independent Rust/Python vectors agree on:
+
+```text
+available    #bb.output-topology.sha256.jbfwsd34kns7uwofvkj6w3u7tq7nlsbqdfw5b725pxpcg44c2h2q
+unavailable  #bb.output-topology.sha256.fw2l66z7jd2eu6suedannr77x5yrugb6sot7y3ojduamdiuemtpq
+```
+
+The independent oracle also refuses annotation-only material duplicates. A
+powered Rust subject control weakened the production comparator to ordinary
+struct equality; the annotation-only duplicate test then failed. Restoring the
+material comparator returned the test to green.
+
+### PresentationOutput v1, raw output color, and mixed replay
+
+`src/presentation_output.rs` defines kind `presentation-output-artifact` and
+schema `bitblock/presentation-output-artifact/v1`. Its canonical layout is:
+
+```text
+u64 display_len | DisplayArtifact
+948-byte CompositionTimingEnvelope
+u64 topology_before_len | OutputTopology before
+u64 topology_after_len  | OutputTopology after
+```
+
+The fixed outer overhead is 972 bytes. Admission requires exact equality of the
+complete nested `FrameReceiptV2`, equal successful timing/capture QPC
+frequencies, and a capture start QPC no earlier than the timing envelope's
+post-presentation call bracket. `Stable`, `Changed`, and `Unavailable` route
+stability are derived by comparing the two topology observations and are not
+encoded. The before/after positions record workflow order; without their own
+timestamps they do not prove the physical time at which topology changed.
+
+The independent outer vector is:
+
+```text
+#bb.presentation-output-artifact.sha256.fhc42zlstxtkh5mzyhpyjtlpuwo5dna5ryklwjithph577okripa
+```
+
+Twelve negative controls cover truncation/trailing bytes, nested kind and
+receipt substitution, timing/capture QPC-frequency mismatch, capture before the
+timing post-call, and malformed nested objects. `src/display_store.rs` now
+dispatches strictly by kind and schema and replays every adjacent transition:
+legacy-to-legacy, legacy-to-wrapper, wrapper-to-legacy, and wrapper-to-wrapper.
+The physical storage-parent chain remains separate from the unified embedded
+display-receipt-parent chain. Replay inventories the stored outer object plus
+its display, timing, topology, and derived-stability tags. It does not supply
+the referenced TickOutcome, FrameInput, or policy objects and therefore is not
+transitive content-reference closure.
+
+`src/output_color.rs` adds the separate `output-color-observation` v1 carrier.
+It binds an ordered raw Windows Advanced Color result to the exact canonical
+`OutputTopology` tag: each route carries either opaque `flags_raw`,
+`color_encoding_raw`, and `bits_per_color_channel` words or a query error. The
+object never retains transient target IDs, decodes a mode as HDR/WCG, or claims
+composition, scanout, emitted light, or physical pixels. Its stdlib-only Python
+oracle (`tools/output_color_vectors.py`) checks canonical tags and rejects
+malformed, changed-parent, and noncanonical candidates.
+
+`src/presentation_output_v2.rs` adds a schema-v2 wrapper under the existing
+`presentation-output-artifact` kind. Its payload retains byte-for-byte v1
+bytes plus exact pre/post `OutputColorObservation` bytes. Admission verifies
+each color object against its respective nested v1 topology. The only derived
+configuration relation is raw `Stable`, `Changed`, or `Unavailable`, and it is
+not serialized as a claimed display mode. Journal replay dispatches v1 versus
+v2 by exact schema and keeps the legacy/v1/v2 objects in one storage-parent and
+embedded display-receipt-parent chain. V1 inventory entries have no color tags;
+v2 entries retain their pre/post color tags and raw configuration relation.
+
+### F5 authority order and live assay
+
+F5 arms one observation of the next normally produced successful composite
+presentation. Arming requests a redraw only to service UI state; it does not
+advance a tick, render a new authoritative frame, or resubmit the current
+surface. An invalid or uncommitted frame leaves the request armed. A valid
+presentation consumes it exactly once in this order:
+
+```text
+checked presentation and committed composite receipt
+same-call CompositionTimingEnvelope
+paired OutputTopology and raw Advanced Color before capture
+one visible-client GDI capture
+paired OutputTopology and raw Advanced Color after capture
+canonical v2 wrapper admission and synchronized journal append
+```
+
+A nonpoisoning storage refusal retains the exact already-observed wrapper for a
+storage-only F5 retry; it does not resample timing, topology, raw configuration,
+or pixels. F4 and F5 are mutually exclusive while either request or retained
+object is pending.
+
+A fresh live Windows run used
+`target/live-f5-assay-20260826-02.bbj`. F5 first changed the title to
+`waiting for next changed presentation`; F3 then caused an ordinary sidebar
+recomposition. The immediate UI snapshot still carried the waiting title while
+the asynchronous observation was in flight. A new observation 1.5 seconds
+later read `presentation output stored 1`. The terminal and synchronized
+journal reported:
+
+```text
+timing             #bb.presentation-artifact.sha256.6m6xleoinmqxdxvfzbp3isk2czftvvn5t32ulr3uda7nrfxcxipa
+progress           ComparableAdvanced
+attribution        Unknown
+qpf                true
+pre_hr/post_hr     0 / 0
+gdi_flush          true
+dwm_flush_hr       0
+output             #bb.presentation-output-artifact.sha256.ylodhhwp46a643xiuxd4wnwesgrmrkmiprjclucmfi2qrqnio62q
+display            #bb.display-artifact.sha256.hcbzgr23hbk3y65uoevxnfcalbg5eqgkmr5ddu2rbrxvvd2pnria
+topology_before    #bb.output-topology.sha256.u7en2ajcy5cwiy2ugaozrhdjrko5e3i3apmlm6kafnpmq5s4ohca
+topology_after     #bb.output-topology.sha256.u7en2ajcy5cwiy2ugaozrhdjrko5e3i3apmlm6kafnpmq5s4ohca
+route_stability    Stable
+storage_record     #bb.storage-record.sha256.6zf3y3jxcwelftieje7toltjpeyv4kxpmgpb6svmvxcnlfcbqa2q
+record_range       [0, 3850988)
+artifact_count     1
+```
+
+After the process was stopped, the journal was 3,850,988 bytes with file
+SHA-256 `5617A4B05B698E874E8DAF37226B5B4FF4967D54F41779B5979A1BDACF7622CF`.
+The live append path synchronously reread its record and called `sync_all`; this
+run did not perform a separate anchored reopen or sudden-power interruption.
+Identical topology tags establish equality of the two retained route facts for
+this sample only. They do not establish continuous stability between samples.
+The null-HWND DWM relation remains session scoped, so exact-frame fate is still
+`Unknown`. The OS raster, compositor attribution, scanout, cable/panel state,
+and emitted light remain separate evidence boundaries.
+
+### Metric remint, policies, and final gates
+
+Nine existing definitions changed at that checkpoint; none was a new family.
+Four live registry pointers in this historical list were advanced again by the
+later InteractionTape checkpoint:
+
+```text
+compositor capture comparison       #bb.metric-definition.sha256.frvbp7vzozw7sag5klwkekaipni4peiv4lx4qswmmi7ypbfc7giq
+display pipeline state vector       #bb.metric-definition.sha256.hs534mepahw52fx5ehpa2wuc365usry7akwnimknuavkc3gljyoa
+presentation fate relation          #bb.metric-definition.sha256.onmlgqlhezpgwer7pm5jpzumrfsoyhfre2k6cmmemvyt74jryxbq
+domain-separation identity          #bb.metric-definition.sha256.b2uxj4hkepxslna7wlktcoe4thlszcxfqs43ze6judtsawi2ym6q
+encoding round-trip check            #bb.metric-definition.sha256.2npmiwjtmvulaeodwxgpk4wx2pzpzvvlbbnd4jjn7iozkwnzsv2a
+frame-provenance receipt digest      #bb.metric-definition.sha256.ntg7gxatkwreu2rhm7g72hunnpka7arngljoagz3bpdfozblrtma
+known-answer vector verdict          #bb.metric-definition.sha256.hgtisylvm66vgwhxo76austomilhsuntnigkrljhxqnok4tgpapa
+cross-implementation digest parity   #bb.metric-definition.sha256.e3twhjvyxiudc4mdldvvxkfh3ljog3gcltfarzxw7pknpnseisoa
+store recovery outcome               #bb.metric-definition.sha256.ma25hfuvb7h64lips6tvha72wdjdb36ioiq4bxwcnpm2ixw6jx7a
+```
+
+The derived sidebar and composite policies are respectively
+`#bb.policy.sha256.eg4egguiubrb5l45qbwvf76gwbkgtlb7pymc3zi4uq6jrqgl4b5q`
+and
+`#bb.policy.sha256.kyd57oandtrj4iuis54zozpv6pwgmcoy4hmsvlkp2fqvhy6noe5q`.
+The remint was propagated through the optimization-v3 game, composite-input,
+composite-evidence, display-receipt, output, and equivalence known-answer
+chain; no stale predecessor tag remains in the exact registry or vector suite.
+
+The final verification passes 290 tests in the default all-target build (261
+library, 29 application), 317 across all research targets (281 library, 36
+application), every zero-test example target, strict Clippy for both feature
+sets, formatting, all fifteen independent Python vector programs, the exact
+1,112-definition registry audit, and `lake build` (6 jobs).
+
+The fresh default executable is
+`target/presentation-output-default/release/bitblock.exe`, 1,031,168 bytes,
+SHA-256
+`6F6C320445FD4E4FD5337BE834C17DB0FC58E7760B1ABFF7474761EEAD71B70A`.
+The research executable is
+`target/presentation-output-research/release/bitblock.exe`, 1,277,952 bytes,
+SHA-256
+`963EF42F22A75C6DA7666A7A3FC3BAD72049C8BAA607A3365C76FAF20C7233A8`.
+It is 246,784 bytes larger than the same-source default. These are linked-file
+size and digest facts, not runtime latency, energy, or memory measurements.
+
+## Accepted-action InteractionTape and headless-fold checkpoint
+
+This checkpoint adds no metric family. The registry remains exactly 1,112
+readable aliases with 1,112 unique definition tags: 489 system, 339 view, and
+284 world. Tape identity, tick/action counts, opcodes, result tags, empty frame
+heads, and resource-refusal labels are carriers, projections, or closed labels
+owned by existing replay, input, hash, render, provenance, and deterministic
+resource-admission families.
+
+### InteractionTape v1
+
+`src/interaction.rs` defines schema `bitblock/interaction-tape/v1` under the
+existing readable `intent` kind. It records normalized actions already accepted
+by the application, not raw platform events. The canonical big-endian payload
+is:
+
+```text
+u64 record_count
+u64 total_action_count
+repeat record_count:
+    u64 ordinal
+    u32 action_count
+    repeat action_count:
+        u8 opcode | opcode payload
+```
+
+Ordinals must be exactly `0..record_count`; explicit empty records preserve idle
+ticks. Opcodes 0 through 9 are respectively move edge, look delta, wheel lines,
+aim delete, aim place, exact Edit, fit world, toggle sidebar, resize, and clear
+motion. Movement stores one closed control byte plus a canonical Boolean. Look
+and wheel store finite IEEE-754 `f64` bits, including signed zero, and resize
+stores two `u32` lanes. Exact Edit embeds the existing fixed 25-byte encoding.
+The decoder refuses undefined opcodes/controls, noncanonical Booleans,
+nonfinite floats, noncontiguous ordinals, impossible/truncated counts, trailing
+bytes, and any payload whose strict re-encoding differs.
+
+The text form begins every record with `tick`; subsequent source lines preserve
+accepted-action order until the next `tick`. Its commands are `move`, `look`,
+`wheel`, `delete`, `place`, `exact`, `fit`, `sidebar`, `resize`, and
+`clear-motion`. The `exact` command is explicitly a scripted Edit-channel lane;
+no current winit mouse or keyboard adapter emits it. F4/F5, presentation,
+topology, capture, and storage operations have no tape opcode.
+
+The closed codec caps are 16 MiB canonical payload, 16,384 records, 65,536
+actions per record, and 262,144 total actions. The CLI also bounds source reads
+to 16 MiB before UTF-8 decoding, so an oversized source is not first loaded
+without limit. Text parsing uses explicit fallible geometric capacity growth
+rather than requesting an exact one-element extension for every push. A
+maximum-sized action vector therefore has 17 bounded growth steps and the
+record vector has 15; a powered schedule test freezes both counts.
+
+The independent Rust/Python canonical vector fixes a 93-byte payload and tag:
+
+```text
+#bb.intent.sha256.zhqcq35tj65fukzzkpix6lo45nxsyfrqhzlun2ktpqsegsthiuwa
+```
+
+The Python oracle rejects 15/15 malformed controls spanning header/count,
+ordinal, opcode, control, Boolean, float, nested Edit, truncation, and trailing
+byte faults. An initially debug-only command-token consumption accidentally
+disappeared in optimized builds because it lived inside `debug_assert_eq!`.
+The parser now consumes the token unconditionally and only asserts its value;
+the release parser and release headless CLI are separately exercised.
+
+### Shared reducer and headless execution boundary
+
+Live winit adapters and the tape call one `App::apply_accepted_action` reducer.
+Every tape record then calls the production `fixed_tick` exactly once. The
+headless constructor pins the sidebar predecessor to `(none, 0, AuditDisabled)`
+and never consults `BITBLOCK_DISPLAY_AUDIT`; this removes machine/platform audit
+state from composite and TickOutcome tags. A child-process control runs the same
+tape with the environment absent and set to `1` and requires byte-identical
+stdout.
+
+The accepted-action boundary deliberately excludes device/window identity,
+focus and cursor-grab success, synthetic/repeat filtering, pixel-to-line wheel
+conversion, raw timestamps, click capture routing, redraw scheduling, and
+display evidence requests. It therefore simulates the sequence *after* those
+platform decisions, not the physical peripherals. A powered subject control
+temporarily mapped physical `W` to backward while the normalized tape retained
+forward; the adapter-equivalence test failed with divergent TickOutcome tags.
+Restoring the forward mapping returned it to green.
+
+Finite look lanes can still overflow when several individually finite deltas
+are accumulated. Both preflight and the shared reducer now use the same checked
+finite accumulator; a same-record pair of maximum finite deltas is refused with
+its tick/action address before `fixed_tick` can panic.
+
+The ordinary report exposes the tape tag, each tick's outcome/world/history/camera
+and optional game/composite CPU-frame commitments, then final world/history/camera
+state. It explicitly reports zero game/composite admissions, empty frame-receipt
+heads, and unavailable display evidence. In the ordinary build, the first line
+labels these values as `scope=fixed-tick-projection` and `run_receipt=unavailable`:
+stdout juxtaposition alone is not a canonical carrier binding tape, genesis,
+rules/build/policy, and result chain. TickOutcome also retains accumulated non-edit
+controls rather than the complete ordered non-edit action stream.
+
+### Local replay evidence v1
+
+`src/replay_evidence.rs` adds an opt-in research carrier under the new readable
+`replay-evidence` tag kind. `cargo run --release --features "headless-console
+protocol-research" -- --simulate-actions <tape>` samples bytes from the current executable
+path before the fold, executes the same bounded headless simulation, structurally verifies
+the carrier, and prints its outer tag plus selected component tags. The carrier remains in memory;
+the line declares `carrier=in-memory-only` rather than pretending the tag itself is a
+durable object.
+
+The schema is `bitblock/local-replay-evidence/v1`. Its exact byte length is
+`468 + N`, where `N` is the embedded canonical InteractionTape payload length. In order
+it contains an eight-byte executable length plus SHA-256 digest; three policy digests
+for fixed headless genesis, rules, and admission; an eight-byte tape length and all `N`
+tape bytes; an optional final TickOutcome tag; final World and coordinate-history Receipt tags;
+ten exact camera `u64` lanes; simulation/output dimensions; sidebar Boolean; and optional
+latest-produced game/composite `(FrameInput tag, Frame tag)` pairs. Empty tapes require all three
+optional endpoint fields absent; nonempty tapes require all three present. The decoder
+rejects caps, every proper prefix, a suffix, noncanonical option padding, invalid Boolean
+values, bad dimensions, and invalid embedded tape bytes before admitting a carrier.
+
+The executable tag names only the length and bytes read through the local process's pre-fold
+executable path. The check rejects a type or length change across the sample, but does not rule
+out a same-length concurrent replacement. It is not a source, compiler, operating-system,
+reproducible-build, custody, or executing-image identity. The three policy tags bind declarations used by the local verifier; they
+do not turn their host-local resource limits into protocol authority. The CLI constructs and
+structurally verifies only its fresh in-memory carrier; it has no supplied-carrier replay CLI or
+persistence format yet. A test-only local verifier first checks a carrier, recomputes its current
+local build/policies, then reruns the embedded tape and requires complete endpoint/carrier equality.
+Powered controls reject a changed build digest before replay and a structurally valid carrier whose
+endpoint belongs to another tape.
+
+An independent Python fixed-vector encoder/decoder has the fixed 506-byte vector:
+
+```text
+#bb.replay-evidence.sha256.r7ukwnl52rten5bwquqztobeuhfn362ywca7wrcudy5mvpache4q
+```
+
+The Rust codec round-trips the same carrier and checks that every decodable single-byte mutation
+changes its outer tag. The test-only semantic re-run shares the Rust simulation implementation
+with carrier construction, so it establishes local self-consistency rather than an independent
+replay implementation or authority. Persistence, cross-host float agreement, signature, ownership, consensus,
+Proof-of-History, Proof-of-Stake, Layer 1, elapsed time, window submission, display, scanout, and
+physical light all remain outside the carrier.
+
+The local replay-evidence checkpoint passed `cargo fmt --all -- --check`, 326 default
+all-target tests (284 library, 41 application, one integration), 355 all-feature
+all-target tests (304 library, 50 application, one integration), and strict default/all-feature
+Clippy. All 17 independent Python vector programs passed; the exact 1,112-definition metric
+registry audit passed; and `lake build` completed six proof jobs. The release headless
+place/delete tape replay ended with `on_bits=1` and `coordinate_receipts=2`; with the research
+feature it additionally constructed one 519-byte in-memory local carrier. These are local test
+and execution observations, not persistence, custody, or cross-host evidence.
+
+No backend call, OS raster observation, compositor attribution, scanout witness,
+or physical-light measurement occurs. CPU framebuffer tags name produced
+headless frames only. Exact host-`f64` bits are retained, but bitwise result
+agreement across architectures, compilers, or floating-point environments has
+not been established.
+
+On Windows, the ordinary optimized observer remains a GUI-subsystem executable.
+Automation that needs captured optimized stdout uses:
+
+```powershell
+cargo run --release --features headless-console -- --simulate-actions examples/observer_walk.tape
+```
+
+### Pre-mutation resource admission
+
+The entire tape is interpreted by a pure shadow before `App` construction. It
+tracks movement edges, look/wheel accumulation, clear-motion, dirty game/sidebar
+lanes, dimensions, possible/definite exact coordinates, exact sparse chunks,
+and monotone unresolved aimed placements. The possible/definite abstraction is
+required because an exact On/Toggle can be rejected when it would enclose the
+observer; it never lets possible population fall below a real continuation.
+Exact Off/Toggle also charges the current possible world before changing the
+abstract state, covering `World::recompute_bounds` amplification.
+
+The local fail-closed policy is:
+
+```text
+peak output pixels                 16,777,216
+cumulative resize pixel writes   268,435,456
+cumulative output pixel ticks    268,435,456
+cumulative raster sample bound 1,073,741,824  (12 cube triangles per possible bit)
+cumulative world coordinates     268,435,456
+cumulative edit coordinates      268,435,456
+cumulative sparse chunk words  1,073,741,824  (64 u64 words per possible chunk/scan)
+cumulative world ordering units 1,073,741,824  (N * ceil(log2 N) per world tag)
+peak possible sparse chunks           65,536
+```
+
+Every nonzero resize is charged even if a later action shrinks before the tick.
+Only dirty lanes are charged for raster/composition, so the full 16,384-record
+idle-tape allowance remains admissible. World scans use record-peak possible
+population and possible chunk count; world tags additionally charge a
+conservative ordering factor. Controls refuse repeated large resize, raster,
+aim/world-scan, bounds-recompute, repeated canonical-sort, and widely sparse
+chunk-word amplification before allocating the requested runtime state. These
+are untagged host-local policy limits, not consensus or Layer-1 authority.
+A direct boundary control supplies 65,536 unresolved placements: permanent
+bedrock makes the possible chunk count 65,537, and preflight refuses it against
+the 65,536 cap.
+
+### Example projection and metric remint
+
+The current live-input-reachable `examples/observer_walk.tape` has five records
+and seven actions. A release headless run reported:
+
+```text
+tape             #bb.intent.sha256.kq7nusohkdquulz4s3rvc3sopcpoewrdxtozzjkyoe2z7hlts7yq
+final world      #bb.world.sha256.vy2bmytgqk6a2gx2f33ne4r2zlty53dcg543xbcfewszp5lcmuwa
+final history    #bb.receipt.sha256.pjchsuc7isnai5ewfolrps763l235uo5y2jbdgo6ckpxi7y3yztq
+on bits          2
+history receipts 1
+game admissions  0
+composite admits 0
+receipt heads    none / none
+display evidence unavailable without window
+```
+
+Thirteen existing definitions advanced; no sidebar-selected definition changed,
+so sidebar/composite policy tags did not remint:
+
+```text
+parse outcome                            #bb.metric-definition.sha256.fbspkmipmdtshettyqhufncsrcosr6pevkdtuggaaxutqo7lnxhq
+rejected field payload                   #bb.metric-definition.sha256.pmcwz2dihdfybefqjtw376hgm4ocj5wkur3r3to3c5tqsafr4vaa
+parse/display round trip                 #bb.metric-definition.sha256.sc5b2rs5dmlpaccdnujkrws6gbf7n6dpl5uzegzkbsjuyifhazra
+canonical replay bytes                   #bb.metric-definition.sha256.e3ugirbax7epzvwgqiekws23w73lowmoezfshl3sn4lrnuu6bhiq
+domain-separation identity               #bb.metric-definition.sha256.b2uxj4hkepxslna7wlktcoe4thlszcxfqs43ze6judtsawi2ym6q
+hash input bytes                         #bb.metric-definition.sha256.ngktv3ej6seazabywg7rd637ynpwhjzsbiq7nzgp6c2fu3g6gnga
+encoding round-trip check                #bb.metric-definition.sha256.2npmiwjtmvulaeodwxgpk4wx2pzpzvvlbbnd4jjn7iozkwnzsv2a
+final framebuffer digest                 #bb.metric-definition.sha256.xrpzaixabwbivwbv2njwcc6br5pg6y7ugooqzfntp5rvlsiucsga
+known-answer vector verdict              #bb.metric-definition.sha256.hgtisylvm66vgwhxo76austomilhsuntnigkrljhxqnok4tgpapa
+cross-implementation digest parity       #bb.metric-definition.sha256.e3twhjvyxiudc4mdldvvxkfh3ljog3gcltfarzxw7pknpnseisoa
+deterministic resource admission         #bb.metric-definition.sha256.tolccwjudoe3vtikeycfrvgqzi4vrpe3x6iaj3civwj3qk7xlejq
+produced-frame disposition               #bb.metric-definition.sha256.wu26gvn6psqy6kha322wdl7z6md3undvaj5fh5pk25nvixtgrcgq
+interaction-to-display causal path       #bb.metric-definition.sha256.iz2hk6s5zejuemox72rs4l4dp4gup5az53e4i2le232qpm2un6nq
+```
+
+The subsequent local replay-evidence v1 checkpoint advances eight existing
+definitions and adds no metric family:
+
+```text
+canonical replay bytes                   #bb.metric-definition.sha256.lqtx75tyv3ro3ifmcb5furmfelm7t53admqbvqrnjort2sfs66hq
+domain-separation identity               #bb.metric-definition.sha256.4lv3fi6naepsomnyezxqqeoeormhdce6chc7eb4u5tarteldmz2q
+hash input bytes                         #bb.metric-definition.sha256.ktd33zqvdnbj2rd43bxmvvjw6bygul52dlp43up47kt327jxd7uq
+encoding round-trip check                #bb.metric-definition.sha256.gduldun3htcmfiy2ymxah2uqi5ph2gbcvlmrzmvo6uozans4disa
+known-answer vector verdict              #bb.metric-definition.sha256.im56mg23da4rwnd2j5fmhukvppvdofh7yq4vaicrvubhb2ekcv6a
+cross-implementation digest parity       #bb.metric-definition.sha256.vpfuuupwg73zrzzup2zvqhjf652k2l5imxoy5j2cm2ntczse4oza
+deterministic resource admission         #bb.metric-definition.sha256.rrfid54dw5qpb5pe7fliu5wp6yzmn2podbjzdopbd4kzgyvf6lfa
+interaction-to-display causal path       #bb.metric-definition.sha256.m4h4uqbedh3w76nxvyccjrras5pxgarftfvfhkjvv57dmhww3una
+```
+
+### Tag-bound sidebar-only compositor reuse
+
+The compositor now separates a full composition from a sidebar-only
+recomposition. A full composition copies the complete inner game prefix, then
+records the already-observed inner game-frame tag only after sidebar raster
+completion. A sidebar-only composition requires that exact cached tag; a stale
+selected tag, the absence of a completed full composition, or any resize is a
+refusal rather than permission to retain an arbitrary buffer prefix.
+
+At the default 801 x 801 simulation viewport, each skipped F3-only game-prefix
+copy is exactly 641,601 `u32` words: 2,566,404 payload bytes read and the same
+number written, or 5,132,808 logical source-plus-destination byte events. The
+new `#bb.metric.perf.work-unit-vector` definition is
+`#bb.metric-definition.sha256.quistqq47z3lx57jlupj6rgtjcby2otxjkdmjzvgd3uykbi5imda`.
+It counts logical work in the compositor; it is not a measurement of hardware
+memory traffic, elapsed time, energy, scanout, or physical display output.
+
+The complete 1,201 x 801 composite remains hashed and later copied for
+presentation, so this does not claim a full-render or executable-byte
+reduction. The candidate/reference mismatch definition advanced to
+`#bb.metric-definition.sha256.sa4ylbjoqg5setnvlqk2qhmxofagznkqtqlbey5chagbjfsg2yfa`:
+the powered assay compares every XRGB word, sidebar facts, and `FrameRef`
+observation from a full-then-same-game sidebar-only sequence against the frozen
+full-copy reference. Separate controls reject reuse before a full composition,
+for a distinct same-shape game tag, and after resize. The live F3 reducer test
+also checks that its game prefix remains word-identical to the renderer while
+the copy-work counter is zero.
+
+The existing five-tick, seven-action `observer_walk.tape` traverses that F3
+case headlessly. Two release replays produced byte-identical eight-line
+projections with tape tag
+`#bb.intent.sha256.kq7nusohkdquulz4s3rvc3sopcpoewrdxtozzjkyoe2z7hlts7yq`.
+This establishes repeatability of the accepted-action-to-fixed-tick projection
+on that build and host; it does not simulate raw peripherals, a window,
+backend submission, or display evidence.
+
+### Read-only retained display-journal verification
+
+The Windows research CLI now accepts:
+
+```powershell
+cargo run --release --features protocol-research,headless-console -- --verify-display-journal <display-session.bbj> '<#bb.storage-record.sha256...>'
+```
+
+It is intentionally a separate startup mode: it never opens an observer
+window, starts no simulation tick, submits no frame, requests no desktop capture,
+and opens no writable journal handle. The full lower-case canonical tag is parsed
+as a `storage-record` anchor, not a shortened hash or a readable alias. The
+regular input file is bounded by `StorageLimits`, has its length observed before
+and after the read, and is typed-replayed from supplied bytes.
+
+For a clean carrier, the verifier checks the caller-supplied anchor in the
+storage-parent chain, reconstructs every admitted `DisplayCaptureArtifact` or
+`PresentationOutputArtifact`, and emits its exact receipt, frame, policy,
+timing/topology, comparison-outcome, mismatch-count, and retained-head tags.
+Its printed `TickOutcome` and `FrameInput` values are references carried by the
+display artifact; this mode does not receive an InteractionTape, replay world
+history, or re-run the renderer.
+For a damaged carrier, it returns nonzero and reports only the typed valid
+prefix; the rejected suffix is explicitly excluded. A missing anchor also
+returns nonzero. It neither repairs nor truncates a file.
+
+This is a local typed-byte replay, not a current-branch or custody proof. A clean
+result says nothing about an unseen later prefix, external replication,
+independent DWM attribution, scanout, or physical light. It adds no metric
+family: it is an additional bounded readout for existing compositor-capture,
+pipeline-state, and presentation-fate definitions.
+
+The retained local F5 artifact
+`target/live-f5-assay-20260826-02.bbj`, anchored at
+`#bb.storage-record.sha256.6zf3y3jxcwelftieje7toltjpeyv4kxpmgpb6svmvxcnlfcbqa2q`,
+was read in this mode as one clean 3,850,988-byte typed record. Its stored
+observation reports `capture_outcome=Match`, `capture_stage=Complete`, zero
+mismatches, and an unchanged before/after route. Those facts remain one local
+OS desktop-raster sample, not scanout or light evidence.
+
+The current verifier checkpoint passed `cargo fmt --all`, 316 default
+all-target tests (275 library, 40 application, one integration), 344 all-feature
+all-target tests (295 library, 48 application, one integration), and strict
+default/all-feature Clippy. All sixteen independent Python vector programs
+passed; the metric registry audit remained 1,112 exact definitions; and
+`lake build` completed six proof jobs. The release Windows research CLI also
+cleanly replayed the retained F5 carrier above, while a different syntactically
+valid storage-record tag emitted `status=missing-required-ancestor` and exited
+nonzero.
+
+### Final verification and release artifacts
+
+The final all-target default pass runs 314 tests (273 library, 40 application,
+and one direct CLI integration test). The all-feature pass runs 341 tests (293
+library, 47 application, and the same integration test). Both feature sets pass
+strict Clippy; formatting is clean. All sixteen independent Python vector
+programs pass, including 15/15 malformed InteractionTape controls. The exact
+metric audit remains 1,112 definitions with no unresolved or malformed rows,
+and `lake build` completes all 6 proof jobs.
+
+Optimized InteractionTape parsing passes all 12 release interaction tests, and
+the optimized tape-to-fixed-tick equivalence test passes separately. The direct
+release CLI integration test also passes. Running the retained headless release
+with `BITBLOCK_DISPLAY_AUDIT` absent and then set to `1` produces byte-identical
+captured text: 8 lines and 4,557 UTF-8 bytes under the PowerShell comparison,
+with SHA-256
+`84276214A256D808D046C8EB8D31D72288533266B87BBC6F34C1C32964AEB9EB`.
+That digest is a test-observation of captured report text, not the canonical
+local replay-evidence carrier or a durable/authoritative run receipt.
+
+The retained same-source Windows release artifacts are:
+
+```text
+default observer
+  target/interaction-tape-default/release/bitblock.exe
+  1,111,552 bytes
+  SHA-256 C845E6A130AA6B9722E4FF4D38274D36FE24080EDCE4BA5E2EC4A9948B3CCE87
+
+protocol-research observer
+  target/interaction-tape-research/release/bitblock.exe
+  1,357,824 bytes
+  SHA-256 95662D2465617E7738612FE5A4D4139FD74A01E165D3C3278DA85D69C1950150
+
+headless-console observer/simulator
+  target/interaction-tape-headless-console/release/bitblock.exe
+  1,111,552 bytes
+  SHA-256 B49C5390E2C330BC3799F6E3DE69372C530C48AA4F0814DDFEE5059E446C6EEF
+```
+
+Equal file length between the default and headless-console executables is not
+binary equality; their hashes differ because the latter retains a Windows
+console subsystem for captured optimized reports. File sizes and hashes do not
+measure runtime speed, memory, or energy.

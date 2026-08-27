@@ -1,9 +1,11 @@
 //! Typed local persistence for canonical display-capture artifacts.
 //!
-//! Each physical storage record contains one complete [`DisplayCaptureArtifact`]. The storage
+//! Each physical storage record contains either one complete [`DisplayCaptureArtifact`] or one
+//! [`PresentationOutputArtifact`](crate::presentation_output::PresentationOutputArtifact) that
+//! embeds a display artifact, composition timing, and before/after output topology. The storage
 //! record parent orders physical appends; the embedded [`crate::display::DisplayReceiptV2`]
-//! parent independently orders display observations. Opening or recovering a journal replays and
-//! checks both chains before exposing any writable state.
+//! parent independently orders display observations across both record kinds. Opening or
+//! recovering a journal replays and checks both chains before exposing any writable state.
 //!
 //! A successful append proves only that the exact typed candidate passed before I/O,
 //! `File::sync_all` returned success, and the appended carrier bytes were reread through the
@@ -13,7 +15,10 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::display::{DisplayCapture, DisplayCaptureFacts, DisplayProtocolError, DisplayReceiptV2};
+use crate::display::{
+    CaptureStage, DisplayCapture, DisplayCaptureFacts, DisplayOutcome, DisplayProtocolError,
+    DisplayReceiptV2,
+};
 use crate::display_artifact::{
     CapturedPixelForm, DISPLAY_CAPTURE_ARTIFACT_SCHEMA, DisplayArtifactError,
     DisplayCaptureArtifact,
@@ -21,11 +26,19 @@ use crate::display_artifact::{
 use crate::frame::FrameRef;
 use crate::frame_v2::FrameReceiptV2;
 use crate::journal::{
-    AnchorPolicy, AppendSyncReceipt, CreateReceipt, Journal, JournalError, OpenJournal,
-    RecoveryJournal, RecoveryReport, ScanReport, TailDiscardReceipt,
+    AnchorPolicy, AppendSyncReceipt, ByteScan, CreateReceipt, Journal, JournalError, OpenJournal,
+    RecoveryJournal, RecoveryReport, ScanReport, TailDiscardReceipt, inspect_bytes,
+};
+use crate::presentation_output::{
+    PRESENTATION_OUTPUT_ARTIFACT_SCHEMA, PresentationOutputArtifact,
+    PresentationOutputArtifactError, RouteStability,
+};
+use crate::presentation_output_v2::{
+    PRESENTATION_OUTPUT_ARTIFACT_V2_SCHEMA, PresentationOutputArtifactV2,
+    PresentationOutputArtifactV2Error, ReportedColorState,
 };
 use crate::protocol::{ContentTag, TagKind};
-use crate::storage::{StorageError, StorageLimits, StorageRecord};
+use crate::storage::{StorageChain, StorageError, StorageLimits, StorageRecord};
 
 /// One semantically verified artifact and the hash-addressed references it carries.
 ///
@@ -38,7 +51,20 @@ use crate::storage::{StorageError, StorageLimits, StorageRecord};
 pub struct DisplayArtifactInventoryEntry {
     pub storage_record: ContentTag,
     pub storage_parent: Option<ContentTag>,
+    /// Exact object named by the enclosing storage record. For legacy records this equals
+    /// `artifact`; for presentation-output records it is the outer bundle tag.
+    pub stored_object: ContentTag,
     pub artifact: ContentTag,
+    pub timing_artifact: Option<ContentTag>,
+    pub topology_before: Option<ContentTag>,
+    pub topology_after: Option<ContentTag>,
+    pub route_stability: Option<RouteStability>,
+    /// Raw configuration observation bound to `topology_before`, present only in v2 bundles.
+    pub color_before: Option<ContentTag>,
+    /// Raw configuration observation bound to `topology_after`, present only in v2 bundles.
+    pub color_after: Option<ContentTag>,
+    /// Comparison of raw configuration only; never an HDR, scanout, or light claim.
+    pub reported_color_state: Option<ReportedColorState>,
     pub display_receipt: ContentTag,
     pub display_parent: Option<ContentTag>,
     pub frame_receipt: ContentTag,
@@ -48,6 +74,10 @@ pub struct DisplayArtifactInventoryEntry {
     pub expected_frame: ContentTag,
     pub captured_frame: Option<ContentTag>,
     pub policy: ContentTag,
+    pub capture_outcome: DisplayOutcome,
+    pub capture_stage: CaptureStage,
+    pub mismatch_count: u64,
+    pub first_mismatch: Option<u64>,
     pub captured_form: CapturedPixelForm,
     pub logical_payload_bytes: u64,
     pub physical_record_bytes: u64,
@@ -78,6 +108,10 @@ impl ReplayedDisplayArtifacts {
 
     pub fn artifact_head(&self) -> Option<ContentTag> {
         self.entries.last().map(|entry| entry.artifact)
+    }
+
+    pub fn stored_object_head(&self) -> Option<ContentTag> {
+        self.entries.last().map(|entry| entry.stored_object)
     }
 
     pub fn display_receipt_head(&self) -> Option<ContentTag> {
@@ -123,11 +157,66 @@ pub enum OpenDisplayArtifactJournal {
     },
 }
 
+/// Read-only typed reconstruction of supplied display-journal bytes.
+///
+/// `Clean` means every supplied byte formed one canonical parent-linked carrier and every stored
+/// object replayed through the display-artifact semantics. `NeedsRecovery` retains only the typed
+/// valid prefix; the rejected suffix has not been verified and must never be presented as display
+/// evidence. This inspection neither opens nor changes a journal file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReadOnlyDisplayArtifactInspection {
+    Clean {
+        carrier: ScanReport,
+        state: ReplayedDisplayArtifacts,
+    },
+    NeedsRecovery {
+        carrier: RecoveryReport,
+        state: ReplayedDisplayArtifacts,
+    },
+}
+
+impl ReadOnlyDisplayArtifactInspection {
+    pub const fn state(&self) -> &ReplayedDisplayArtifacts {
+        match self {
+            Self::Clean { state, .. } | Self::NeedsRecovery { state, .. } => state,
+        }
+    }
+
+    pub const fn is_clean(&self) -> bool {
+        matches!(self, Self::Clean { .. })
+    }
+}
+
 /// Evidence returned after one artifact was synchronized, reread, decoded, and published.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayArtifactAppendReceipt {
     pub carrier_append: AppendSyncReceipt,
     pub artifact: ContentTag,
+    pub display_receipt: ContentTag,
+    pub expected_frame: ContentTag,
+    pub captured_frame: Option<ContentTag>,
+    pub captured_form: CapturedPixelForm,
+    pub logical_payload_bytes: u64,
+    pub artifact_count: usize,
+}
+
+/// Evidence returned after one presentation-output bundle was synchronized, reread, and
+/// published through the same unified display-receipt chain as legacy display artifacts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PresentationOutputAppendReceipt {
+    pub carrier_append: AppendSyncReceipt,
+    pub presentation_output: ContentTag,
+    pub artifact: ContentTag,
+    pub timing_artifact: ContentTag,
+    pub topology_before: ContentTag,
+    pub topology_after: ContentTag,
+    pub route_stability: RouteStability,
+    /// Present only when the appended object used the v2 wrapper.
+    pub color_before: Option<ContentTag>,
+    /// Present only when the appended object used the v2 wrapper.
+    pub color_after: Option<ContentTag>,
+    /// Present only when the appended object used the v2 wrapper.
+    pub reported_color_state: Option<ReportedColorState>,
     pub display_receipt: ContentTag,
     pub expected_frame: ContentTag,
     pub captured_frame: Option<ContentTag>,
@@ -155,7 +244,25 @@ pub enum DisplayArtifactSemanticError {
         record_index: usize,
         source: DisplayArtifactError,
     },
+    PresentationOutputCodec {
+        record_index: usize,
+        source: PresentationOutputArtifactError,
+    },
+    PresentationOutputV2Codec {
+        record_index: usize,
+        source: PresentationOutputArtifactV2Error,
+    },
     ArtifactObjectTagMismatch {
+        record_index: usize,
+        expected: ContentTag,
+        actual: ContentTag,
+    },
+    PresentationOutputObjectTagMismatch {
+        record_index: usize,
+        expected: ContentTag,
+        actual: ContentTag,
+    },
+    PresentationOutputV2ObjectTagMismatch {
         record_index: usize,
         expected: ContentTag,
         actual: ContentTag,
@@ -189,7 +296,7 @@ impl fmt::Display for DisplayArtifactSemanticError {
                 actual,
             } => write!(
                 formatter,
-                "display carrier record {record_index} must contain a display-artifact, received {}",
+                "display carrier record {record_index} must contain an exact supported display object, received {}",
                 actual.name()
             ),
             Self::WrongSchema {
@@ -197,7 +304,7 @@ impl fmt::Display for DisplayArtifactSemanticError {
                 actual,
             } => write!(
                 formatter,
-                "display carrier record {record_index} schema is {:?}, expected {:?}",
+                "display carrier record {record_index} schema {:?} is not the exact schema for its display-object kind (legacy schema {:?})",
                 String::from_utf8_lossy(actual),
                 String::from_utf8_lossy(DISPLAY_CAPTURE_ARTIFACT_SCHEMA)
             ),
@@ -208,6 +315,20 @@ impl fmt::Display for DisplayArtifactSemanticError {
                 formatter,
                 "display carrier record {record_index} is not a canonical artifact: {source}"
             ),
+            Self::PresentationOutputCodec {
+                record_index,
+                source,
+            } => write!(
+                formatter,
+                "display carrier record {record_index} is not a canonical presentation-output artifact: {source}"
+            ),
+            Self::PresentationOutputV2Codec {
+                record_index,
+                source,
+            } => write!(
+                formatter,
+                "display carrier record {record_index} is not a canonical presentation-output v2 artifact: {source}"
+            ),
             Self::ArtifactObjectTagMismatch {
                 record_index,
                 expected,
@@ -215,6 +336,22 @@ impl fmt::Display for DisplayArtifactSemanticError {
             } => write!(
                 formatter,
                 "display carrier record {record_index} artifact is {expected}, carrier names {actual}"
+            ),
+            Self::PresentationOutputObjectTagMismatch {
+                record_index,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "display carrier record {record_index} presentation output is {expected}, carrier names {actual}"
+            ),
+            Self::PresentationOutputV2ObjectTagMismatch {
+                record_index,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "display carrier record {record_index} presentation output v2 is {expected}, carrier names {actual}"
             ),
             Self::DisplayParentMismatch {
                 record_index,
@@ -239,6 +376,8 @@ impl std::error::Error for DisplayArtifactSemanticError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ArtifactCodec { source, .. } => Some(source),
+            Self::PresentationOutputCodec { source, .. } => Some(source),
+            Self::PresentationOutputV2Codec { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -250,6 +389,8 @@ pub enum DisplayArtifactStoreError {
     StoragePreflight(StorageError),
     DisplayProtocol(DisplayProtocolError),
     Artifact(DisplayArtifactError),
+    PresentationOutput(PresentationOutputArtifactError),
+    PresentationOutputV2(PresentationOutputArtifactV2Error),
     Semantic(DisplayArtifactSemanticError),
     Poisoned,
     InventoryAllocationFailed,
@@ -275,6 +416,18 @@ impl fmt::Display for DisplayArtifactStoreError {
                 write!(formatter, "next display receipt was refused: {source}")
             }
             Self::Artifact(source) => write!(formatter, "display artifact was refused: {source}"),
+            Self::PresentationOutput(source) => {
+                write!(
+                    formatter,
+                    "presentation-output artifact was refused: {source}"
+                )
+            }
+            Self::PresentationOutputV2(source) => {
+                write!(
+                    formatter,
+                    "presentation-output v2 artifact was refused: {source}"
+                )
+            }
             Self::Semantic(source) => write!(formatter, "display journal replay failed: {source}"),
             Self::Poisoned => formatter
                 .write_str("display journal is poisoned; close and reopen through typed replay"),
@@ -305,6 +458,8 @@ impl std::error::Error for DisplayArtifactStoreError {
             Self::StoragePreflight(source) => Some(source),
             Self::DisplayProtocol(source) => Some(source),
             Self::Artifact(source) => Some(source),
+            Self::PresentationOutput(source) => Some(source),
+            Self::PresentationOutputV2(source) => Some(source),
             Self::Semantic(source) => Some(source),
             Self::Poisoned
             | Self::InventoryAllocationFailed
@@ -326,6 +481,18 @@ impl From<DisplayArtifactError> for DisplayArtifactStoreError {
     }
 }
 
+impl From<PresentationOutputArtifactError> for DisplayArtifactStoreError {
+    fn from(source: PresentationOutputArtifactError) -> Self {
+        Self::PresentationOutput(source)
+    }
+}
+
+impl From<PresentationOutputArtifactV2Error> for DisplayArtifactStoreError {
+    fn from(source: PresentationOutputArtifactV2Error) -> Self {
+        Self::PresentationOutputV2(source)
+    }
+}
+
 impl From<DisplayProtocolError> for DisplayArtifactStoreError {
     fn from(source: DisplayProtocolError) -> Self {
         Self::DisplayProtocol(source)
@@ -336,6 +503,63 @@ impl From<DisplayArtifactSemanticError> for DisplayArtifactStoreError {
     fn from(source: DisplayArtifactSemanticError) -> Self {
         Self::Semantic(source)
     }
+}
+
+/// Replays bounded journal bytes without opening a file or publishing a writable handle.
+///
+/// The supplied anchor is checked against the typed storage-record chain. A clean result has no
+/// hidden suffix. A recovery result describes only the replayed prefix and keeps the rejected
+/// bytes outside the returned evidence state.
+pub fn inspect_display_artifact_bytes(
+    bytes: &[u8],
+    limits: StorageLimits,
+    anchor: AnchorPolicy,
+) -> Result<ReadOnlyDisplayArtifactInspection, DisplayArtifactStoreError> {
+    match inspect_bytes(bytes, limits, anchor)? {
+        ByteScan::Clean(carrier) => {
+            let state = replay_display_artifact_prefix(bytes, carrier.valid_prefix_bytes, limits)?;
+            Ok(ReadOnlyDisplayArtifactInspection::Clean { carrier, state })
+        }
+        ByteScan::NeedsRecovery(carrier) => {
+            if let AnchorPolicy::RequireAncestor(required) = anchor
+                && !carrier.required_ancestor_seen
+            {
+                return Err(JournalError::RequiredAncestorMissing {
+                    required,
+                    observed_head: carrier.valid_head,
+                }
+                .into());
+            }
+            let state = replay_display_artifact_prefix(bytes, carrier.valid_prefix_bytes, limits)?;
+            Ok(ReadOnlyDisplayArtifactInspection::NeedsRecovery { carrier, state })
+        }
+    }
+}
+
+fn replay_display_artifact_prefix(
+    bytes: &[u8],
+    prefix_bytes: u64,
+    limits: StorageLimits,
+) -> Result<ReplayedDisplayArtifacts, DisplayArtifactStoreError> {
+    let prefix_len = usize::try_from(prefix_bytes).map_err(|_| {
+        DisplayArtifactSemanticError::LengthOverflow {
+            field: "valid prefix bytes",
+        }
+    })?;
+    let prefix = bytes
+        .get(..prefix_len)
+        .ok_or(DisplayArtifactSemanticError::LengthOverflow {
+            field: "valid prefix bytes",
+        })?;
+    let chain = StorageChain::decode_with_limits(prefix, limits)
+        .map_err(DisplayArtifactStoreError::StoragePreflight)?;
+    let state = replay_display_artifact_records(chain.records())?;
+    if state.physical_record_bytes() != prefix_bytes {
+        return Err(DisplayArtifactStoreError::PostAppendInvariant {
+            field: "read-only replayed physical length",
+        });
+    }
+    Ok(state)
 }
 
 impl DisplayArtifactJournal {
@@ -606,6 +830,337 @@ impl DisplayArtifactJournal {
             artifact_count: self.state.len(),
         })
     }
+
+    /// Appends one exact presentation-output bundle while advancing the same embedded
+    /// display-receipt chain used by [`Self::append_artifact`]. All nested decoding, storage
+    /// preflight, aggregate arithmetic, and inventory reservation complete before I/O.
+    pub fn append_presentation_output(
+        &mut self,
+        presentation: &PresentationOutputArtifact,
+    ) -> Result<PresentationOutputAppendReceipt, DisplayArtifactStoreError> {
+        if self.is_poisoned() {
+            return Err(DisplayArtifactStoreError::Poisoned);
+        }
+        presentation.verify()?;
+        let record_index = self.state.len();
+        let display = presentation.display();
+        let display_receipt = display.receipt();
+        let expected_parent = self.state.display_receipt_head();
+        if display_receipt.parent() != expected_parent {
+            return Err(DisplayArtifactSemanticError::DisplayParentMismatch {
+                record_index,
+                expected: expected_parent,
+                actual: display_receipt.parent(),
+            }
+            .into());
+        }
+
+        let payload = presentation.encode_canonical()?;
+        self.state
+            .entries
+            .try_reserve(1)
+            .map_err(|_| DisplayArtifactStoreError::InventoryAllocationFailed)?;
+
+        let expected_presentation = presentation.tag();
+        let expected_artifact = display.tag();
+        let expected_timing = presentation.timing().tag();
+        let expected_topology_before = presentation.pre_topology().tag();
+        let expected_topology_after = presentation.post_topology().tag();
+        let expected_stability = presentation.route_stability();
+        let candidate = StorageRecord::from_tagged_payload_with_limits(
+            self.carrier.head(),
+            expected_presentation,
+            PRESENTATION_OUTPUT_ARTIFACT_SCHEMA,
+            &payload,
+            self.limits,
+        )
+        .map_err(DisplayArtifactStoreError::StoragePreflight)?;
+        let entry = inventory_entry(
+            &candidate,
+            record_index,
+            self.state.storage_head(),
+            expected_parent,
+            self.state.physical_record_bytes,
+        )?;
+        let next_logical_payload_bytes = self
+            .state
+            .logical_payload_bytes
+            .checked_add(entry.logical_payload_bytes)
+            .ok_or(DisplayArtifactSemanticError::LengthOverflow {
+                field: "logical payload bytes",
+            })?;
+        drop(candidate);
+
+        let carrier_append = self.carrier.append_synced(
+            TagKind::PresentationOutputArtifact,
+            PRESENTATION_OUTPUT_ARTIFACT_SCHEMA,
+            &payload,
+        )?;
+        self.semantic_poisoned = true;
+
+        if carrier_append.object_tag != expected_presentation {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "presentation-output object tag",
+            ));
+        }
+        let Some(record) = self.carrier.records().last() else {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "published carrier record",
+            ));
+        };
+        if entry.storage_record != carrier_append.record_tag {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "storage-record tag",
+            ));
+        }
+        if entry.start_offset != carrier_append.start_offset
+            || entry.end_offset != carrier_append.end_offset
+            || entry.physical_record_bytes != carrier_append.encoded_bytes
+        {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "carrier byte range",
+            ));
+        }
+        if entry.stored_object != expected_presentation
+            || entry.artifact != expected_artifact
+            || entry.timing_artifact != Some(expected_timing)
+            || entry.topology_before != Some(expected_topology_before)
+            || entry.topology_after != Some(expected_topology_after)
+            || entry.route_stability != Some(expected_stability)
+            || entry.display_receipt != display_receipt.tag()
+            || entry.expected_frame != display_receipt.expected_frame()
+            || entry.captured_form != display.captured_form()
+        {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "preflight presentation-output facts",
+            ));
+        }
+        if record.record_tag() != entry.storage_record
+            || record.parent() != entry.storage_parent
+            || record.object_tag() != entry.stored_object
+            || record.object_schema() != PRESENTATION_OUTPUT_ARTIFACT_SCHEMA
+            || record.payload() != payload
+            || self.carrier.valid_bytes() != entry.end_offset
+        {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "published carrier candidate equality",
+            ));
+        }
+
+        self.state.logical_payload_bytes = next_logical_payload_bytes;
+        self.state.physical_record_bytes = entry.end_offset;
+        self.state.entries.push(entry);
+        self.semantic_poisoned = false;
+
+        Ok(PresentationOutputAppendReceipt {
+            carrier_append,
+            presentation_output: entry.stored_object,
+            artifact: entry.artifact,
+            timing_artifact: entry
+                .timing_artifact
+                .expect("presentation-output inventory retains timing tag"),
+            topology_before: entry
+                .topology_before
+                .expect("presentation-output inventory retains pre topology tag"),
+            topology_after: entry
+                .topology_after
+                .expect("presentation-output inventory retains post topology tag"),
+            route_stability: entry
+                .route_stability
+                .expect("presentation-output inventory retains route stability"),
+            color_before: None,
+            color_after: None,
+            reported_color_state: None,
+            display_receipt: entry.display_receipt,
+            expected_frame: entry.expected_frame,
+            captured_frame: entry.captured_frame,
+            captured_form: entry.captured_form,
+            logical_payload_bytes: entry.logical_payload_bytes,
+            artifact_count: self.state.len(),
+        })
+    }
+
+    /// Appends one v2 presentation-output wrapper while advancing the same embedded
+    /// display-receipt chain as legacy artifacts and immutable v1 presentation bundles.
+    ///
+    /// The v2 wrapper contributes only raw pre/post output-configuration observations bound to
+    /// the exact nested topology objects. It does not change the meaning of the nested v1 bytes.
+    pub fn append_presentation_output_v2(
+        &mut self,
+        presentation: &PresentationOutputArtifactV2,
+    ) -> Result<PresentationOutputAppendReceipt, DisplayArtifactStoreError> {
+        if self.is_poisoned() {
+            return Err(DisplayArtifactStoreError::Poisoned);
+        }
+        presentation.verify()?;
+        let record_index = self.state.len();
+        let v1 = presentation.v1();
+        let display = v1.display();
+        let display_receipt = display.receipt();
+        let expected_parent = self.state.display_receipt_head();
+        if display_receipt.parent() != expected_parent {
+            return Err(DisplayArtifactSemanticError::DisplayParentMismatch {
+                record_index,
+                expected: expected_parent,
+                actual: display_receipt.parent(),
+            }
+            .into());
+        }
+
+        let payload = presentation.encode_canonical()?;
+        self.state
+            .entries
+            .try_reserve(1)
+            .map_err(|_| DisplayArtifactStoreError::InventoryAllocationFailed)?;
+
+        let expected_presentation = presentation.tag();
+        let expected_artifact = display.tag();
+        let expected_timing = v1.timing().tag();
+        let expected_topology_before = v1.pre_topology().tag();
+        let expected_topology_after = v1.post_topology().tag();
+        let expected_stability = v1.route_stability();
+        let expected_color_before = presentation.pre_color().tag();
+        let expected_color_after = presentation.post_color().tag();
+        let expected_color_state = presentation.reported_color_state();
+        let candidate = StorageRecord::from_tagged_payload_with_limits(
+            self.carrier.head(),
+            expected_presentation,
+            PRESENTATION_OUTPUT_ARTIFACT_V2_SCHEMA,
+            &payload,
+            self.limits,
+        )
+        .map_err(DisplayArtifactStoreError::StoragePreflight)?;
+        let entry = inventory_entry(
+            &candidate,
+            record_index,
+            self.state.storage_head(),
+            expected_parent,
+            self.state.physical_record_bytes,
+        )?;
+        let next_logical_payload_bytes = self
+            .state
+            .logical_payload_bytes
+            .checked_add(entry.logical_payload_bytes)
+            .ok_or(DisplayArtifactSemanticError::LengthOverflow {
+                field: "logical payload bytes",
+            })?;
+        drop(candidate);
+
+        let carrier_append = self.carrier.append_synced(
+            TagKind::PresentationOutputArtifact,
+            PRESENTATION_OUTPUT_ARTIFACT_V2_SCHEMA,
+            &payload,
+        )?;
+        self.semantic_poisoned = true;
+
+        if carrier_append.object_tag != expected_presentation {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "presentation-output v2 object tag",
+            ));
+        }
+        let Some(record) = self.carrier.records().last() else {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "published carrier record",
+            ));
+        };
+        if entry.storage_record != carrier_append.record_tag {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "storage-record tag",
+            ));
+        }
+        if entry.start_offset != carrier_append.start_offset
+            || entry.end_offset != carrier_append.end_offset
+            || entry.physical_record_bytes != carrier_append.encoded_bytes
+        {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "carrier byte range",
+            ));
+        }
+        if entry.stored_object != expected_presentation
+            || entry.artifact != expected_artifact
+            || entry.timing_artifact != Some(expected_timing)
+            || entry.topology_before != Some(expected_topology_before)
+            || entry.topology_after != Some(expected_topology_after)
+            || entry.route_stability != Some(expected_stability)
+            || entry.color_before != Some(expected_color_before)
+            || entry.color_after != Some(expected_color_after)
+            || entry.reported_color_state != Some(expected_color_state)
+            || entry.display_receipt != display_receipt.tag()
+            || entry.expected_frame != display_receipt.expected_frame()
+            || entry.captured_form != display.captured_form()
+        {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "preflight presentation-output v2 facts",
+            ));
+        }
+        if record.record_tag() != entry.storage_record
+            || record.parent() != entry.storage_parent
+            || record.object_tag() != entry.stored_object
+            || record.object_schema() != PRESENTATION_OUTPUT_ARTIFACT_V2_SCHEMA
+            || record.payload() != payload
+            || self.carrier.valid_bytes() != entry.end_offset
+        {
+            return Err(persisted_but_unpublished(
+                &carrier_append,
+                "published carrier candidate equality",
+            ));
+        }
+
+        self.state.logical_payload_bytes = next_logical_payload_bytes;
+        self.state.physical_record_bytes = entry.end_offset;
+        self.state.entries.push(entry);
+        self.semantic_poisoned = false;
+
+        Ok(PresentationOutputAppendReceipt {
+            carrier_append,
+            presentation_output: entry.stored_object,
+            artifact: entry.artifact,
+            timing_artifact: entry
+                .timing_artifact
+                .expect("presentation-output v2 inventory retains timing tag"),
+            topology_before: entry
+                .topology_before
+                .expect("presentation-output v2 inventory retains pre topology tag"),
+            topology_after: entry
+                .topology_after
+                .expect("presentation-output v2 inventory retains post topology tag"),
+            route_stability: entry
+                .route_stability
+                .expect("presentation-output v2 inventory retains route stability"),
+            color_before: Some(
+                entry
+                    .color_before
+                    .expect("presentation-output v2 inventory retains pre color tag"),
+            ),
+            color_after: Some(
+                entry
+                    .color_after
+                    .expect("presentation-output v2 inventory retains post color tag"),
+            ),
+            reported_color_state: Some(
+                entry
+                    .reported_color_state
+                    .expect("presentation-output v2 inventory retains raw color state"),
+            ),
+            display_receipt: entry.display_receipt,
+            expected_frame: entry.expected_frame,
+            captured_frame: entry.captured_frame,
+            captured_form: entry.captured_form,
+            logical_payload_bytes: entry.logical_payload_bytes,
+            artifact_count: self.state.len(),
+        })
+    }
 }
 
 fn persisted_but_unpublished(
@@ -714,33 +1269,130 @@ fn inventory_entry(
             actual: record.parent(),
         });
     }
-    if record.object_tag().kind() != TagKind::DisplayArtifact {
-        return Err(DisplayArtifactSemanticError::WrongKind {
-            record_index,
-            actual: record.object_tag().kind(),
-        });
-    }
-    if record.object_schema() != DISPLAY_CAPTURE_ARTIFACT_SCHEMA {
-        return Err(DisplayArtifactSemanticError::WrongSchema {
-            record_index,
-            actual: record.object_schema().to_vec(),
-        });
-    }
-    let artifact =
-        DisplayCaptureArtifact::decode_canonical(record.payload()).map_err(|source| {
-            DisplayArtifactSemanticError::ArtifactCodec {
-                record_index,
-                source,
+    let (
+        stored_object,
+        artifact_tag,
+        timing_artifact,
+        topology_before,
+        topology_after,
+        route_stability,
+        color_before,
+        color_after,
+        reported_color_state,
+        display_receipt,
+        captured_form,
+    ) = match record.object_tag().kind() {
+        TagKind::DisplayArtifact => {
+            if record.object_schema() != DISPLAY_CAPTURE_ARTIFACT_SCHEMA {
+                return Err(DisplayArtifactSemanticError::WrongSchema {
+                    record_index,
+                    actual: record.object_schema().to_vec(),
+                });
             }
-        })?;
-    if artifact.tag() != record.object_tag() {
-        return Err(DisplayArtifactSemanticError::ArtifactObjectTagMismatch {
-            record_index,
-            expected: artifact.tag(),
-            actual: record.object_tag(),
-        });
-    }
-    let display_receipt = artifact.receipt();
+            let artifact =
+                DisplayCaptureArtifact::decode_canonical(record.payload()).map_err(|source| {
+                    DisplayArtifactSemanticError::ArtifactCodec {
+                        record_index,
+                        source,
+                    }
+                })?;
+            if artifact.tag() != record.object_tag() {
+                return Err(DisplayArtifactSemanticError::ArtifactObjectTagMismatch {
+                    record_index,
+                    expected: artifact.tag(),
+                    actual: record.object_tag(),
+                });
+            }
+            (
+                artifact.tag(),
+                artifact.tag(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                artifact.receipt(),
+                artifact.captured_form(),
+            )
+        }
+        TagKind::PresentationOutputArtifact => {
+            if record.object_schema() == PRESENTATION_OUTPUT_ARTIFACT_SCHEMA {
+                let presentation = PresentationOutputArtifact::decode_canonical(record.payload())
+                    .map_err(|source| {
+                    DisplayArtifactSemanticError::PresentationOutputCodec {
+                        record_index,
+                        source,
+                    }
+                })?;
+                if presentation.tag() != record.object_tag() {
+                    return Err(
+                        DisplayArtifactSemanticError::PresentationOutputObjectTagMismatch {
+                            record_index,
+                            expected: presentation.tag(),
+                            actual: record.object_tag(),
+                        },
+                    );
+                }
+                (
+                    presentation.tag(),
+                    presentation.display().tag(),
+                    Some(presentation.timing().tag()),
+                    Some(presentation.pre_topology().tag()),
+                    Some(presentation.post_topology().tag()),
+                    Some(presentation.route_stability()),
+                    None,
+                    None,
+                    None,
+                    presentation.display().receipt(),
+                    presentation.display().captured_form(),
+                )
+            } else if record.object_schema() == PRESENTATION_OUTPUT_ARTIFACT_V2_SCHEMA {
+                let presentation = PresentationOutputArtifactV2::decode_canonical(record.payload())
+                    .map_err(
+                        |source| DisplayArtifactSemanticError::PresentationOutputV2Codec {
+                            record_index,
+                            source,
+                        },
+                    )?;
+                if presentation.tag() != record.object_tag() {
+                    return Err(
+                        DisplayArtifactSemanticError::PresentationOutputV2ObjectTagMismatch {
+                            record_index,
+                            expected: presentation.tag(),
+                            actual: record.object_tag(),
+                        },
+                    );
+                }
+                let v1 = presentation.v1();
+                (
+                    presentation.tag(),
+                    v1.display().tag(),
+                    Some(v1.timing().tag()),
+                    Some(v1.pre_topology().tag()),
+                    Some(v1.post_topology().tag()),
+                    Some(v1.route_stability()),
+                    Some(presentation.pre_color().tag()),
+                    Some(presentation.post_color().tag()),
+                    Some(presentation.reported_color_state()),
+                    v1.display().receipt(),
+                    v1.display().captured_form(),
+                )
+            } else {
+                return Err(DisplayArtifactSemanticError::WrongSchema {
+                    record_index,
+                    actual: record.object_schema().to_vec(),
+                });
+            }
+        }
+        actual => {
+            return Err(DisplayArtifactSemanticError::WrongKind {
+                record_index,
+                actual,
+            });
+        }
+    };
     if display_receipt.parent() != expected_display_parent {
         return Err(DisplayArtifactSemanticError::DisplayParentMismatch {
             record_index,
@@ -749,6 +1401,7 @@ fn inventory_entry(
         });
     }
     let frame_receipt = display_receipt.expected_receipt();
+    let capture_facts = display_receipt.facts();
     let logical_payload_bytes = u64::try_from(record.payload().len()).map_err(|_| {
         DisplayArtifactSemanticError::LengthOverflow {
             field: "logical payload bytes",
@@ -768,7 +1421,15 @@ fn inventory_entry(
     Ok(DisplayArtifactInventoryEntry {
         storage_record: record.record_tag(),
         storage_parent: record.parent(),
-        artifact: artifact.tag(),
+        stored_object,
+        artifact: artifact_tag,
+        timing_artifact,
+        topology_before,
+        topology_after,
+        route_stability,
+        color_before,
+        color_after,
+        reported_color_state,
         display_receipt: display_receipt.tag(),
         display_parent: display_receipt.parent(),
         frame_receipt: frame_receipt.tag(),
@@ -776,12 +1437,13 @@ fn inventory_entry(
         tick_outcome: frame_receipt.outcome(),
         frame_input: frame_receipt.input(),
         expected_frame: frame_receipt.frame(),
-        captured_frame: display_receipt
-            .facts()
-            .captured
-            .map(|observation| observation.tag),
+        captured_frame: capture_facts.captured.map(|observation| observation.tag),
         policy: display_receipt.policy(),
-        captured_form: artifact.captured_form(),
+        capture_outcome: capture_facts.outcome,
+        capture_stage: capture_facts.stage,
+        mismatch_count: capture_facts.mismatch_count,
+        first_mismatch: capture_facts.first_mismatch,
+        captured_form,
         logical_payload_bytes,
         physical_record_bytes,
         start_offset,
@@ -803,6 +1465,13 @@ mod tests {
     use crate::frame::FrameRef;
     use crate::frame_v2::{FrameReceiptV2, FrameStream};
     use crate::journal::{AppendedBytesEvidence, JournalError, RejectionClass, SyncEvidence};
+    use crate::output_color::OutputColorObservation;
+    use crate::output_topology::{AcquisitionAttempt, AcquisitionFacts, OutputTopologyObservation};
+    use crate::presentation::{
+        CompositionTimingEnvelope, DwmFlushCall, DwmTimingCall, GdiFlushCall, PresenterEvidence,
+        QpcBracket, QpcFrequency, QpcRead,
+    };
+    use crate::presentation_output_v2::{PresentationOutputArtifactV2, ReportedColorState};
     use crate::protocol::hash_canonical;
     use crate::storage::{
         MAX_STORAGE_RECORD_BYTES, MAX_STORAGE_RECORDS, MAX_STORAGE_SCHEMA_BYTES,
@@ -957,6 +1626,102 @@ mod tests {
         DisplayCaptureArtifact::new(receipt, expected, None).unwrap()
     }
 
+    fn qpc(value: i64) -> QpcRead {
+        QpcRead {
+            succeeded: true,
+            value,
+            error_code: 0,
+        }
+    }
+
+    fn qpc_bracket(before: i64, after: i64) -> QpcBracket {
+        QpcBracket {
+            before: qpc(before),
+            after: qpc(after),
+        }
+    }
+
+    fn timing_for(artifact: &DisplayCaptureArtifact) -> CompositionTimingEnvelope {
+        CompositionTimingEnvelope::new(
+            artifact.receipt().expected_receipt(),
+            PresenterEvidence {
+                policy: tag(TagKind::Policy, b"presenter-policy"),
+                requested_scanlines: 1,
+                returned_scanlines: 1,
+                call_error_code: 0,
+                release_result: 1,
+                release_error_code: 0,
+            },
+            QpcFrequency {
+                succeeded: true,
+                counts_per_second: 10_000_000,
+                error_code: 0,
+            },
+            DwmTimingCall {
+                bracket: qpc_bracket(10, 11),
+                hresult: -1,
+                snapshot: None,
+            },
+            qpc_bracket(12, 13),
+            GdiFlushCall {
+                bracket: qpc_bracket(14, 15),
+                succeeded: true,
+            },
+            DwmFlushCall {
+                bracket: qpc_bracket(16, 17),
+                hresult: 0,
+            },
+            DwmTimingCall {
+                bracket: qpc_bracket(18, 19),
+                hresult: -1,
+                snapshot: None,
+            },
+        )
+        .unwrap()
+    }
+
+    fn unavailable_topology(profile: u32) -> OutputTopologyObservation {
+        OutputTopologyObservation::new_unavailable(
+            AcquisitionFacts {
+                profile_code_raw: profile,
+                request_flags_raw: 0x52,
+                attempts: vec![AcquisitionAttempt {
+                    operation_code_raw: 1,
+                    profile_code_raw: profile,
+                    request_flags_raw: 0x52,
+                    retry_ordinal: 0,
+                    outcome_code_raw: 1,
+                    error_code: 1168,
+                    reported_path_capacity: 0,
+                    reported_mode_capacity: 0,
+                }],
+            },
+            1,
+            1168,
+        )
+        .unwrap()
+    }
+
+    fn presentation_output(artifact: DisplayCaptureArtifact) -> PresentationOutputArtifact {
+        let timing = timing_for(&artifact);
+        PresentationOutputArtifact::new(
+            artifact,
+            timing,
+            unavailable_topology(1),
+            unavailable_topology(2),
+        )
+        .unwrap()
+    }
+
+    fn presentation_output_v2(artifact: DisplayCaptureArtifact) -> PresentationOutputArtifactV2 {
+        let v1 = presentation_output(artifact);
+        let pre_color =
+            OutputColorObservation::new_unavailable(v1.pre_topology(), 0x4354_4f50, 1168).unwrap();
+        let post_color =
+            OutputColorObservation::new_unavailable(v1.post_topology(), 0x4354_4f50, 1168).unwrap();
+        PresentationOutputArtifactV2::new(v1, pre_color, post_color).unwrap()
+    }
+
     #[test]
     fn transient_match_mismatch_and_unavailable_captures_append_as_one_typed_chain() {
         let path = TempJournalPath::new("live-adapter");
@@ -1085,6 +1850,107 @@ mod tests {
         assert!(journal.state().is_empty());
         assert_eq!(carrier_report.valid_record_count, 0);
         assert_eq!(carrier_report.valid_prefix_bytes, 0);
+    }
+
+    #[test]
+    fn read_only_inspection_replays_an_anchored_clean_chain_and_never_admits_a_tail() {
+        let (first, second) = artifact_pair();
+        let mut carrier = StorageChain::new();
+        let first_payload = first.encode_canonical().unwrap();
+        carrier
+            .append(
+                TagKind::DisplayArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &first_payload,
+            )
+            .unwrap();
+        let second_payload = second.encode_canonical().unwrap();
+        carrier
+            .append(
+                TagKind::DisplayArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &second_payload,
+            )
+            .unwrap();
+        let required = carrier.head().unwrap();
+        let bytes = carrier.encode();
+
+        let clean = inspect_display_artifact_bytes(
+            &bytes,
+            StorageLimits::DEFAULT,
+            AnchorPolicy::RequireAncestor(required),
+        )
+        .unwrap();
+        assert!(clean.is_clean());
+        assert_eq!(clean.state().len(), 2);
+        assert_eq!(clean.state().storage_head(), Some(required));
+        assert_eq!(clean.state().artifact_head(), Some(second.tag()));
+        assert_eq!(
+            clean.state().entries()[0].capture_outcome,
+            DisplayOutcome::Match
+        );
+        assert_eq!(
+            clean.state().entries()[1].capture_outcome,
+            DisplayOutcome::Mismatch
+        );
+        assert_eq!(clean.state().entries()[1].mismatch_count, 1);
+        assert!(matches!(
+            clean,
+            ReadOnlyDisplayArtifactInspection::Clean {
+                ref carrier,
+                ..
+            } if carrier.valid_prefix_bytes == bytes.len() as u64
+                && carrier.required_ancestor_seen
+        ));
+
+        let missing = tag(TagKind::StorageRecord, b"missing-anchor");
+        assert!(matches!(
+            inspect_display_artifact_bytes(
+                &bytes,
+                StorageLimits::DEFAULT,
+                AnchorPolicy::RequireAncestor(missing),
+            ),
+            Err(DisplayArtifactStoreError::Journal(JournalError::RequiredAncestorMissing {
+                required: observed_required,
+                observed_head: Some(actual),
+            })) if observed_required == missing && actual == required
+        ));
+
+        let mut tailed = bytes.clone();
+        tailed.push(0xff);
+        let recovery = inspect_display_artifact_bytes(
+            &tailed,
+            StorageLimits::DEFAULT,
+            AnchorPolicy::RequireAncestor(required),
+        )
+        .unwrap();
+        assert!(!recovery.is_clean());
+        assert_eq!(recovery.state().storage_head(), Some(required));
+        assert!(matches!(
+            recovery,
+            ReadOnlyDisplayArtifactInspection::NeedsRecovery {
+                ref carrier,
+                ..
+            } if carrier.valid_prefix_bytes == bytes.len() as u64
+                && carrier.rejected_tail_bytes == 1
+                && carrier.required_ancestor_seen
+        ));
+
+        let mut corrupt_required_record = bytes.clone();
+        *corrupt_required_record
+            .last_mut()
+            .expect("the two-record carrier is nonempty") ^= 0x01;
+        assert!(matches!(
+            inspect_display_artifact_bytes(
+                &corrupt_required_record,
+                StorageLimits::DEFAULT,
+                AnchorPolicy::RequireAncestor(required),
+            ),
+            Err(DisplayArtifactStoreError::Journal(JournalError::RequiredAncestorMissing {
+                required: observed_required,
+                ..
+            })) if observed_required == required
+        ));
     }
 
     #[test]
@@ -1243,7 +2109,29 @@ mod tests {
         assert_eq!(entry.frame_input, frame_receipt.input());
         assert_eq!(entry.policy, display_receipt.policy());
         assert_eq!(entry.captured_frame, None);
+        assert_eq!(entry.capture_outcome, DisplayOutcome::Unavailable);
         assert_eq!(entry.captured_form, CapturedPixelForm::Absent);
+
+        let mut carrier = StorageChain::new();
+        carrier
+            .append(
+                TagKind::DisplayArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &artifact.encode_canonical().unwrap(),
+            )
+            .unwrap();
+        let required = carrier.head().unwrap();
+        let inspection = inspect_display_artifact_bytes(
+            &carrier.encode(),
+            StorageLimits::DEFAULT,
+            AnchorPolicy::RequireAncestor(required),
+        )
+        .unwrap();
+        assert!(inspection.is_clean());
+        assert_eq!(
+            inspection.state().entries()[0].capture_outcome,
+            DisplayOutcome::Unavailable
+        );
     }
 
     #[test]
@@ -1292,6 +2180,47 @@ mod tests {
         assert!(matches!(
             replay_display_artifact_records(&[bad_codec]),
             Err(DisplayArtifactSemanticError::ArtifactCodec {
+                record_index: 0,
+                ..
+            })
+        ));
+
+        let presentation = presentation_output(first.clone());
+        let presentation_payload = presentation.encode_canonical().unwrap();
+        for crossed in [
+            StorageRecord::new(
+                None,
+                TagKind::PresentationOutputArtifact,
+                DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+                &presentation_payload,
+            )
+            .unwrap(),
+            StorageRecord::new(
+                None,
+                TagKind::DisplayArtifact,
+                PRESENTATION_OUTPUT_ARTIFACT_SCHEMA,
+                &first_payload,
+            )
+            .unwrap(),
+        ] {
+            assert!(matches!(
+                replay_display_artifact_records(&[crossed]),
+                Err(DisplayArtifactSemanticError::WrongSchema {
+                    record_index: 0,
+                    ..
+                })
+            ));
+        }
+        let presentation_kind_bad_codec = StorageRecord::new(
+            None,
+            TagKind::PresentationOutputArtifact,
+            PRESENTATION_OUTPUT_ARTIFACT_SCHEMA,
+            &first_payload,
+        )
+        .unwrap();
+        assert!(matches!(
+            replay_display_artifact_records(&[presentation_kind_bad_codec]),
+            Err(DisplayArtifactSemanticError::PresentationOutputCodec {
                 record_index: 0,
                 ..
             })
@@ -1572,5 +2501,167 @@ mod tests {
                 JournalError::RequiredAncestorMissing { required, .. }
             )) if required == second_append.carrier_append.record_tag
         ));
+    }
+
+    #[test]
+    fn legacy_and_presentation_outputs_share_one_exact_mixed_replay_chain() {
+        for (ordinal, (wrap_first, wrap_second)) in
+            [(false, false), (false, true), (true, false), (true, true)]
+                .into_iter()
+                .enumerate()
+        {
+            let path = TempJournalPath::new(&format!("mixed-{ordinal}"));
+            let (first, second) = artifact_pair();
+            let first_bundle = presentation_output(first.clone());
+            let second_bundle = presentation_output(second.clone());
+            let expected_first_stored = if wrap_first {
+                first_bundle.tag()
+            } else {
+                first.tag()
+            };
+            let expected_second_stored = if wrap_second {
+                second_bundle.tag()
+            } else {
+                second.tag()
+            };
+
+            let (mut journal, _) =
+                DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+            if wrap_first {
+                journal.append_presentation_output(&first_bundle).unwrap();
+            } else {
+                journal.append_artifact(&first).unwrap();
+            }
+            if wrap_second {
+                journal.append_presentation_output(&second_bundle).unwrap();
+            } else {
+                journal.append_artifact(&second).unwrap();
+            }
+            let storage_head = journal.state().storage_head().unwrap();
+            drop(journal);
+
+            let OpenDisplayArtifactJournal::Ready { journal, .. } =
+                DisplayArtifactJournal::open_existing(
+                    &path.0,
+                    StorageLimits::DEFAULT,
+                    AnchorPolicy::RequireAncestor(storage_head),
+                )
+                .unwrap()
+            else {
+                panic!("an exact mixed prefix unexpectedly required recovery")
+            };
+            let entries = journal.state().entries();
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0].stored_object, expected_first_stored);
+            assert_eq!(entries[1].stored_object, expected_second_stored);
+            assert_eq!(entries[0].artifact, first.tag());
+            assert_eq!(entries[1].artifact, second.tag());
+            assert_eq!(entries[1].storage_parent, Some(entries[0].storage_record));
+            assert_eq!(entries[1].display_parent, Some(entries[0].display_receipt));
+            assert_eq!(entries[0].timing_artifact.is_some(), wrap_first);
+            assert_eq!(entries[1].timing_artifact.is_some(), wrap_second);
+            assert_eq!(entries[0].topology_before.is_some(), wrap_first);
+            assert_eq!(entries[1].topology_after.is_some(), wrap_second);
+            assert_eq!(
+                entries[0].route_stability,
+                wrap_first.then_some(RouteStability::Unavailable)
+            );
+            assert_eq!(
+                entries[1].route_stability,
+                wrap_second.then_some(RouteStability::Unavailable)
+            );
+            assert_eq!(journal.state().artifact_head(), Some(second.tag()));
+            assert_eq!(
+                journal.state().stored_object_head(),
+                Some(expected_second_stored)
+            );
+        }
+    }
+
+    #[test]
+    fn v1_and_v2_presentation_outputs_share_the_display_receipt_chain() {
+        let path = TempJournalPath::new("presentation-v1-v2-mixed");
+        let (first, second) = artifact_pair();
+        let v1 = presentation_output(first.clone());
+        let v2 = presentation_output_v2(second.clone());
+        let expected_pre_color = v2.pre_color().tag();
+        let expected_post_color = v2.post_color().tag();
+
+        let (mut journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let v1_append = journal.append_presentation_output(&v1).unwrap();
+        let v2_append = journal.append_presentation_output_v2(&v2).unwrap();
+        let storage_head = journal.state().storage_head().unwrap();
+
+        assert_eq!(v1_append.color_before, None);
+        assert_eq!(v1_append.color_after, None);
+        assert_eq!(v1_append.reported_color_state, None);
+        assert_eq!(v2_append.presentation_output, v2.tag());
+        assert_eq!(v2_append.artifact, second.tag());
+        assert_eq!(v2_append.color_before, Some(expected_pre_color));
+        assert_eq!(v2_append.color_after, Some(expected_post_color));
+        assert_eq!(
+            v2_append.reported_color_state,
+            Some(ReportedColorState::Unavailable)
+        );
+        assert_eq!(v2_append.artifact_count, 2);
+        drop(journal);
+
+        let OpenDisplayArtifactJournal::Ready { journal, .. } =
+            DisplayArtifactJournal::open_existing(
+                &path.0,
+                StorageLimits::DEFAULT,
+                AnchorPolicy::RequireAncestor(storage_head),
+            )
+            .unwrap()
+        else {
+            panic!("v1/v2 presentation-output chain unexpectedly required recovery")
+        };
+        let entries = journal.state().entries();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].stored_object, v1.tag());
+        assert_eq!(entries[1].stored_object, v2.tag());
+        assert_eq!(entries[0].artifact, first.tag());
+        assert_eq!(entries[1].artifact, second.tag());
+        assert_eq!(entries[1].storage_parent, Some(entries[0].storage_record));
+        assert_eq!(entries[1].display_parent, Some(entries[0].display_receipt));
+        assert_eq!(entries[0].color_before, None);
+        assert_eq!(entries[0].color_after, None);
+        assert_eq!(entries[0].reported_color_state, None);
+        assert_eq!(entries[1].color_before, Some(expected_pre_color));
+        assert_eq!(entries[1].color_after, Some(expected_post_color));
+        assert_eq!(
+            entries[1].reported_color_state,
+            Some(ReportedColorState::Unavailable)
+        );
+    }
+
+    #[test]
+    fn presentation_output_payload_limit_refuses_before_io_without_poison() {
+        let path = TempJournalPath::new("presentation-payload-limit");
+        let artifact = standalone_artifact();
+        let presentation = presentation_output(artifact);
+        let max_payload = presentation.encoded_len() - 1;
+        let limits = StorageLimits::new(
+            MAX_STORAGE_RECORD_BYTES,
+            MAX_STORAGE_SCHEMA_BYTES,
+            max_payload,
+            MAX_STORAGE_RECORDS,
+            MAX_STORAGE_STREAM_BYTES,
+        )
+        .unwrap();
+        let (mut journal, _) = DisplayArtifactJournal::create_new(&path.0, limits).unwrap();
+
+        assert!(matches!(
+            journal.append_presentation_output(&presentation),
+            Err(DisplayArtifactStoreError::StoragePreflight(
+                StorageError::PayloadTooLarge { actual, max }
+            )) if actual == presentation.encoded_len() && max == max_payload
+        ));
+        assert!(journal.state().is_empty());
+        assert_eq!(journal.carrier_head(), None);
+        assert_eq!(journal.carrier_valid_bytes(), 0);
+        assert!(!journal.is_poisoned());
+        assert_eq!(fs::metadata(&path.0).unwrap().len(), 0);
     }
 }

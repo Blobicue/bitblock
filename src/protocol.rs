@@ -15,6 +15,8 @@ const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagKind {
     #[cfg(any(test, feature = "protocol-research"))]
+    Build,
+    #[cfg(any(test, feature = "protocol-research"))]
     DisplayArtifact,
     DisplayReceipt,
     Edit,
@@ -32,7 +34,19 @@ pub enum TagKind {
     LadderTerm,
     MetricDefinition,
     MetricSnapshot,
+    #[cfg(any(test, feature = "protocol-research"))]
+    OutputColorObservation,
+    #[cfg(any(test, feature = "protocol-research"))]
+    OutputTopology,
+    #[cfg(any(test, feature = "protocol-research"))]
+    PhysicalSensorObservation,
     Policy,
+    #[cfg(any(test, feature = "protocol-research"))]
+    PresentationArtifact,
+    #[cfg(any(test, feature = "protocol-research"))]
+    PresentationOutputArtifact,
+    #[cfg(any(test, feature = "protocol-research"))]
+    ReplayEvidence,
     Receipt,
     Registry,
     SequentialHistory,
@@ -45,6 +59,8 @@ pub enum TagKind {
 impl TagKind {
     pub const fn name(self) -> &'static str {
         match self {
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::Build => "build",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::DisplayArtifact => "display-artifact",
             Self::DisplayReceipt => "display-receipt",
@@ -63,7 +79,19 @@ impl TagKind {
             Self::LadderTerm => "ladder-term",
             Self::MetricDefinition => "metric-definition",
             Self::MetricSnapshot => "metric-snapshot",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::OutputColorObservation => "output-color-observation",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::OutputTopology => "output-topology",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::PhysicalSensorObservation => "physical-sensor-observation",
             Self::Policy => "policy",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::PresentationArtifact => "presentation-artifact",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::PresentationOutputArtifact => "presentation-output-artifact",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::ReplayEvidence => "replay-evidence",
             Self::Receipt => "receipt",
             Self::Registry => "registry",
             Self::SequentialHistory => "sequential-history",
@@ -77,6 +105,8 @@ impl TagKind {
     #[cfg(any(test, feature = "protocol-research"))]
     pub(crate) fn from_name(name: &[u8]) -> Option<Self> {
         Some(match name {
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"build" => Self::Build,
             #[cfg(any(test, feature = "protocol-research"))]
             b"display-artifact" => Self::DisplayArtifact,
             b"display-receipt" => Self::DisplayReceipt,
@@ -95,7 +125,19 @@ impl TagKind {
             b"ladder-term" => Self::LadderTerm,
             b"metric-definition" => Self::MetricDefinition,
             b"metric-snapshot" => Self::MetricSnapshot,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"output-color-observation" => Self::OutputColorObservation,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"output-topology" => Self::OutputTopology,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"physical-sensor-observation" => Self::PhysicalSensorObservation,
             b"policy" => Self::Policy,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"presentation-artifact" => Self::PresentationArtifact,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"presentation-output-artifact" => Self::PresentationOutputArtifact,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"replay-evidence" => Self::ReplayEvidence,
             b"receipt" => Self::Receipt,
             b"registry" => Self::Registry,
             b"sequential-history" => Self::SequentialHistory,
@@ -127,7 +169,84 @@ impl ContentTag {
     pub const fn digest(self) -> [u8; 32] {
         self.digest
     }
+
+    /// Parses one complete canonical content-tag display form.
+    ///
+    /// Parsing establishes only syntax and the named kind/digest pair. It does not recover or
+    /// validate the canonical object whose bytes the tag is intended to name.
+    #[cfg(any(test, feature = "protocol-research"))]
+    pub fn parse_full(text: &str) -> Result<Self, ContentTagParseError> {
+        let Some(rest) = text.strip_prefix("#bb.") else {
+            return Err(ContentTagParseError::InvalidPrefix);
+        };
+        let mut fields = rest.split('.');
+        let Some(kind_name) = fields.next() else {
+            return Err(ContentTagParseError::InvalidShape);
+        };
+        let Some(hash_suite) = fields.next() else {
+            return Err(ContentTagParseError::InvalidShape);
+        };
+        let Some(encoded_digest) = fields.next() else {
+            return Err(ContentTagParseError::InvalidShape);
+        };
+        if fields.next().is_some() {
+            return Err(ContentTagParseError::InvalidShape);
+        }
+        if hash_suite != "sha256" {
+            return Err(ContentTagParseError::UnexpectedHashSuite);
+        }
+        let kind =
+            TagKind::from_name(kind_name.as_bytes()).ok_or(ContentTagParseError::UnknownKind)?;
+        let digest = decode_base32_digest(encoded_digest)?;
+        let tag = Self { kind, digest };
+        if tag.to_string() != text {
+            return Err(ContentTagParseError::NonCanonical);
+        }
+        Ok(tag)
+    }
 }
+
+/// Why a complete textual content tag was refused.
+#[cfg(any(test, feature = "protocol-research"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContentTagParseError {
+    InvalidPrefix,
+    InvalidShape,
+    UnknownKind,
+    UnexpectedHashSuite,
+    DigestLength { actual: usize },
+    DigestCharacter { index: usize, byte: u8 },
+    NonCanonical,
+}
+
+#[cfg(any(test, feature = "protocol-research"))]
+impl fmt::Display for ContentTagParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::InvalidPrefix => formatter.write_str("content tag must start with '#bb.'"),
+            Self::InvalidShape => formatter
+                .write_str("content tag must contain exactly kind, hash suite, and digest fields"),
+            Self::UnknownKind => formatter.write_str("content tag has an unknown kind"),
+            Self::UnexpectedHashSuite => {
+                formatter.write_str("content tag must name the sha256 hash suite")
+            }
+            Self::DigestLength { actual } => write!(
+                formatter,
+                "content tag digest has {actual} base32 bytes, expected 52"
+            ),
+            Self::DigestCharacter { index, byte } => write!(
+                formatter,
+                "content tag digest byte {byte:#04x} at index {index} is not canonical base32"
+            ),
+            Self::NonCanonical => {
+                formatter.write_str("content tag is not in canonical display form")
+            }
+        }
+    }
+}
+
+#[cfg(any(test, feature = "protocol-research"))]
+impl std::error::Error for ContentTagParseError {}
 
 impl fmt::Display for ContentTag {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -326,6 +445,42 @@ fn base32_digest(digest: [u8; 32]) -> [u8; 52] {
     encoded
 }
 
+#[cfg(any(test, feature = "protocol-research"))]
+fn decode_base32_digest(encoded: &str) -> Result<[u8; 32], ContentTagParseError> {
+    let bytes = encoded.as_bytes();
+    if bytes.len() != 52 {
+        return Err(ContentTagParseError::DigestLength {
+            actual: bytes.len(),
+        });
+    }
+
+    let mut digest = [0_u8; 32];
+    let mut accumulator = 0_u16;
+    let mut bits = 0_u8;
+    let mut output = 0_usize;
+    for (index, &byte) in bytes.iter().enumerate() {
+        let Some(value) = BASE32.iter().position(|&candidate| candidate == byte) else {
+            return Err(ContentTagParseError::DigestCharacter { index, byte });
+        };
+        accumulator = (accumulator << 5) | value as u16;
+        bits += 5;
+        while bits >= 8 {
+            bits -= 8;
+            if output >= digest.len() {
+                return Err(ContentTagParseError::NonCanonical);
+            }
+            digest[output] = (accumulator >> bits) as u8;
+            output += 1;
+            accumulator &= (1_u16 << bits) - 1;
+        }
+    }
+
+    if output != digest.len() || bits != 4 || accumulator != 0 {
+        return Err(ContentTagParseError::NonCanonical);
+    }
+    Ok(digest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,6 +556,7 @@ mod tests {
     #[test]
     fn every_kind_name_has_one_canonical_inverse() {
         let kinds = [
+            TagKind::Build,
             TagKind::DisplayArtifact,
             TagKind::DisplayReceipt,
             TagKind::Edit,
@@ -415,7 +571,13 @@ mod tests {
             TagKind::LadderTerm,
             TagKind::MetricDefinition,
             TagKind::MetricSnapshot,
+            TagKind::OutputColorObservation,
+            TagKind::OutputTopology,
+            TagKind::PhysicalSensorObservation,
             TagKind::Policy,
+            TagKind::PresentationArtifact,
+            TagKind::PresentationOutputArtifact,
+            TagKind::ReplayEvidence,
             TagKind::Receipt,
             TagKind::Registry,
             TagKind::SequentialHistory,
@@ -456,5 +618,48 @@ mod tests {
         assert!(display.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'#' | b'.' | b'-')
         }));
+    }
+
+    #[test]
+    fn full_tag_parser_round_trips_and_refuses_noncanonical_forms() {
+        let tag = hash_canonical(TagKind::StorageRecord, b"tag-parser/v1", 3, |sink| {
+            sink(b"abc")
+        })
+        .unwrap();
+        let text = tag.to_string();
+        assert_eq!(ContentTag::parse_full(&text), Ok(tag));
+
+        assert_eq!(
+            ContentTag::parse_full(
+                "#bb.world.sha512.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+            Err(ContentTagParseError::UnexpectedHashSuite)
+        );
+        assert_eq!(
+            ContentTag::parse_full(
+                "#bb.World.sha256.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+            Err(ContentTagParseError::UnknownKind)
+        );
+        assert_eq!(
+            ContentTag::parse_full("#bb.world.sha256.a"),
+            Err(ContentTagParseError::DigestLength { actual: 1 })
+        );
+
+        let mut invalid_character = text.clone().into_bytes();
+        invalid_character["#bb.storage-record.sha256.".len()] = b'0';
+        let invalid_character = String::from_utf8(invalid_character).unwrap();
+        assert!(matches!(
+            ContentTag::parse_full(&invalid_character),
+            Err(ContentTagParseError::DigestCharacter { .. })
+        ));
+
+        let mut noncanonical_padding = text.into_bytes();
+        *noncanonical_padding.last_mut().unwrap() = b'b';
+        let noncanonical_padding = String::from_utf8(noncanonical_padding).unwrap();
+        assert_eq!(
+            ContentTag::parse_full(&noncanonical_padding),
+            Err(ContentTagParseError::NonCanonical)
+        );
     }
 }

@@ -754,6 +754,28 @@ impl fmt::Display for HistoryError {
 impl std::error::Error for HistoryError {}
 
 pub fn world_tag(world: &World) -> ContentTag {
+    let mut coords = Vec::with_capacity(world.len());
+    coords.extend(world.iter_on());
+    coords.sort_unstable();
+    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + coords.len() * 24;
+    hash_canonical(TagKind::World, WORLD_SCHEMA, payload_len as u64, |sink| {
+        let schema_len = u16::try_from(WORLD_SCHEMA.len()).expect("world schema exceeds u16");
+        sink(&schema_len.to_be_bytes());
+        sink(WORLD_SCHEMA);
+        sink(&(coords.len() as u64).to_be_bytes());
+        for coord in coords {
+            let mut encoded = [0_u8; 24];
+            encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
+            encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
+            encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
+            sink(&encoded);
+        }
+    })
+    .expect("canonical world length must match its encoder")
+}
+
+#[cfg(test)]
+fn world_tag_before_preallocation(world: &World) -> ContentTag {
     let mut coords: Vec<_> = world.iter_on().collect();
     coords.sort_unstable();
     let payload_len = 2 + WORLD_SCHEMA.len() + 8 + coords.len() * 24;
@@ -829,6 +851,37 @@ mod tests {
         history.commit_tick(transaction, world);
     }
 
+    fn parse_tag(text: &str) -> ContentTag {
+        ContentTag::parse_full(text).expect("known-answer tag must parse canonically")
+    }
+
+    fn apply_one_receipt(initial: &World, tick: u64, edits: &[Edit]) -> (World, History) {
+        let mut world = initial.clone();
+        let mut history = History::new(initial);
+        apply_tick(&mut history, &mut world, tick, edits);
+        assert_eq!(history.receipts().len(), 1);
+        (world, history)
+    }
+
+    fn effect_name(effect: TransitionEffect) -> &'static str {
+        match effect {
+            TransitionEffect::Mint { .. } => "mint",
+            TransitionEffect::Burn { .. } => "burn",
+            TransitionEffect::NoOp {
+                reason: NoOpReason::BedrockProtected,
+                ..
+            } => "bedrock-protected",
+            TransitionEffect::NoOp {
+                reason: NoOpReason::AlreadyOn,
+                ..
+            } => "already-on",
+            TransitionEffect::NoOp {
+                reason: NoOpReason::AlreadyOff,
+                ..
+            } => "already-off",
+        }
+    }
+
     #[test]
     fn world_tag_is_independent_of_sparse_hashmap_insertion_order() {
         let points = [P, Coord::new(-16, 17, 9), Coord::new(33, 0, -8)];
@@ -839,6 +892,32 @@ mod tests {
         }
         for &point in points.iter().rev() {
             reverse.set_on(point);
+        }
+        assert_eq!(world_tag(&forward), world_tag(&reverse));
+    }
+
+    #[test]
+    fn preallocated_world_tag_matches_the_prior_collection_path() {
+        let points = [
+            P,
+            Coord::new(-16, 17, 9),
+            Coord::new(33, 0, -8),
+            Coord::new(i64::MIN, 0, i64::MAX),
+            Coord::new(i64::MAX, -1, i64::MIN),
+        ];
+        let mut forward = World::new();
+        let mut reverse = World::new();
+        for &point in &points {
+            forward.set_on(point);
+        }
+        for &point in points.iter().rev() {
+            reverse.set_on(point);
+        }
+        assert!(forward.set_off(P));
+        assert!(reverse.set_off(P));
+
+        for world in [&World::new(), &forward, &reverse] {
+            assert_eq!(world_tag(world), world_tag_before_preallocation(world));
         }
         assert_eq!(world_tag(&forward), world_tag(&reverse));
     }
@@ -1131,5 +1210,215 @@ mod tests {
             Edit::new(Operation::On, Coord::new(4, 5, 6)),
         );
         let _ = history.preview_tick(&transaction, &world);
+    }
+
+    #[test]
+    fn independent_scalar_batch_vectors_match_live_history() {
+        // `tools/semantic_batch_vectors.py` reconstructs these values without importing Rust.
+        let initial_off = World::new();
+        let (cold_world, cold_history) = apply_one_receipt(
+            &initial_off,
+            4,
+            &[
+                Edit::new(Operation::On, P),
+                Edit::new(Operation::On, P),
+                Edit::new(Operation::Off, P),
+                Edit::new(Operation::Off, P),
+                Edit::new(Operation::Toggle, P),
+            ],
+        );
+        let cold = &cold_history.receipts()[0];
+        assert_eq!(
+            cold.tag(),
+            parse_tag("#bb.receipt.sha256.psal6njm4ndyap7wclfv55gnlxwwou4eq2rvfotazrxzragceusa")
+        );
+        assert_eq!(
+            cold.effects()[0].event(),
+            parse_tag("#bb.event.sha256.znebuddob7z4u2vwyqe7bwhclvyeqtgya7252fm5qq7hewauh2kq")
+        );
+        assert_eq!(
+            cold.effects()[4].event(),
+            parse_tag("#bb.event.sha256.6kcbq6sgg7zr5nymes5da5ksm4kt2y6fpytmfwlbs3xmn4zdsx5q")
+        );
+        assert_eq!(
+            cold.effects()
+                .iter()
+                .copied()
+                .map(effect_name)
+                .collect::<Vec<_>>(),
+            ["mint", "already-on", "burn", "already-off", "mint"]
+        );
+        assert!(matches!(
+            cold.effects()[2],
+            TransitionEffect::Burn { consumed_mint, .. } if consumed_mint == cold.effects()[0].event()
+        ));
+        assert!(cold_world.is_on(P));
+        assert_eq!(cold_history.active_mint(P), Some(cold.effects()[4].event()));
+        assert!(cold_history.verify(&initial_off).is_ok());
+
+        let (reuse_world, reuse_history) = apply_one_receipt(
+            &initial_off,
+            7,
+            &[
+                Edit::new(Operation::On, P),
+                Edit::new(Operation::Off, P),
+                Edit::new(Operation::On, P),
+                Edit::new(Operation::Off, P),
+            ],
+        );
+        let reuse = &reuse_history.receipts()[0];
+        assert_eq!(
+            reuse.tag(),
+            parse_tag("#bb.receipt.sha256.fakwjpoid3eqaztgfahmlepmfawgi7yffed345eovjysn2izuf5a")
+        );
+        assert_eq!(
+            reuse.effects()[0].event(),
+            parse_tag("#bb.event.sha256.h7rmaq3zvlig2btqavazt37nhrk7el2pwulowcvhzmzbm245i6ua")
+        );
+        assert_eq!(
+            reuse.effects()[2].event(),
+            parse_tag("#bb.event.sha256.zr3ehfiz5xxheosxvxydb27m4vpfibfbpjkg7cicuob6tsf46cja")
+        );
+        assert_eq!(
+            reuse
+                .effects()
+                .iter()
+                .copied()
+                .map(effect_name)
+                .collect::<Vec<_>>(),
+            ["mint", "burn", "mint", "burn"]
+        );
+        assert!(matches!(
+            reuse.effects()[1],
+            TransitionEffect::Burn { consumed_mint, .. } if consumed_mint == reuse.effects()[0].event()
+        ));
+        assert!(matches!(
+            reuse.effects()[3],
+            TransitionEffect::Burn { consumed_mint, .. } if consumed_mint == reuse.effects()[2].event()
+        ));
+        assert!(!reuse_world.is_on(P));
+        assert_eq!(reuse_history.active_mint(P), None);
+        assert!(reuse_history.verify(&initial_off).is_ok());
+
+        let mut initial_on = World::new();
+        initial_on.set_on(P);
+        let initial_mint = History::new(&initial_on).genesis();
+        let (warm_world, warm_history) =
+            apply_one_receipt(&initial_on, 9, &[Edit::new(Operation::Off, P)]);
+        let warm = &warm_history.receipts()[0];
+        assert_eq!(
+            warm.tag(),
+            parse_tag("#bb.receipt.sha256.v4rixvqu53nkaraowd4z26s2r55fv4rnz6qnq2dbtjaccxiljffq")
+        );
+        assert_eq!(
+            warm.effects()[0].event(),
+            parse_tag("#bb.event.sha256.gibrybl5w6zs3bq73t3e3qg6qjrhifcf2ce6xhnxyttsnukxvwma")
+        );
+        assert!(matches!(
+            warm.effects()[0],
+            TransitionEffect::Burn { consumed_mint, .. } if consumed_mint == initial_mint
+        ));
+        assert!(!warm_world.is_on(P));
+        assert_eq!(warm_history.active_mint(P), None);
+        assert!(warm_history.verify(&initial_on).is_ok());
+
+        let (noop_world, noop_history) = apply_one_receipt(
+            &initial_off,
+            11,
+            &[Edit::new(Operation::Off, P), Edit::new(Operation::On, P)],
+        );
+        let noop = &noop_history.receipts()[0];
+        assert_eq!(
+            noop.tag(),
+            parse_tag("#bb.receipt.sha256.kdqtkvuuljhq4xjmkft44bk46rd4rqnty2h6sbozjwg2o4nnjgmq")
+        );
+        assert_eq!(
+            noop.effects()
+                .iter()
+                .copied()
+                .map(effect_name)
+                .collect::<Vec<_>>(),
+            ["already-off", "mint"]
+        );
+        assert_ne!(
+            noop.effects()[1].event(),
+            event_tag(noop.parent(), 11, Edit::new(Operation::On, P))
+        );
+        assert!(noop_world.is_on(P));
+        assert_eq!(noop_history.active_mint(P), Some(noop.effects()[1].event()));
+        assert!(noop_history.verify(&initial_off).is_ok());
+
+        let (toggle_world, toggle_history) = apply_one_receipt(
+            &initial_off,
+            13,
+            &[
+                Edit::new(Operation::Toggle, P),
+                Edit::new(Operation::Toggle, P),
+            ],
+        );
+        let toggle = &toggle_history.receipts()[0];
+        assert_eq!(
+            toggle.tag(),
+            parse_tag("#bb.receipt.sha256.li2iopqyi652bk4hdt75ad356z5iqryugxmxkefhfroxvhtpetja")
+        );
+        assert_eq!(
+            toggle
+                .effects()
+                .iter()
+                .copied()
+                .map(effect_name)
+                .collect::<Vec<_>>(),
+            ["mint", "burn"]
+        );
+        assert!(!toggle_world.is_on(P));
+        assert_eq!(toggle_history.active_mint(P), None);
+        assert!(toggle_history.verify(&initial_off).is_ok());
+
+        let (bedrock_world, bedrock_history) = apply_one_receipt(
+            &initial_off,
+            17,
+            &[
+                Edit::new(Operation::On, BEDROCK_COORD),
+                Edit::new(Operation::Off, BEDROCK_COORD),
+                Edit::new(Operation::Toggle, BEDROCK_COORD),
+            ],
+        );
+        let bedrock = &bedrock_history.receipts()[0];
+        assert_eq!(
+            bedrock.tag(),
+            parse_tag("#bb.receipt.sha256.amsihpcd2ydi5243jdzuoa2g3a5tbh726k5zru6dfmyargeul6ja")
+        );
+        assert_eq!(
+            bedrock
+                .effects()
+                .iter()
+                .copied()
+                .map(effect_name)
+                .collect::<Vec<_>>(),
+            [
+                "bedrock-protected",
+                "bedrock-protected",
+                "bedrock-protected"
+            ]
+        );
+        assert!(bedrock_world.is_on(BEDROCK_COORD));
+        assert_eq!(bedrock_history.circulating_supply(), 0);
+        assert!(bedrock_history.verify(&initial_off).is_ok());
+
+        let edge = Coord::new(i64::MIN, 0, i64::MAX);
+        let (edge_world, edge_history) =
+            apply_one_receipt(&initial_off, 23, &[Edit::new(Operation::On, edge)]);
+        let edge_receipt = &edge_history.receipts()[0];
+        assert_eq!(
+            edge_receipt.tag(),
+            parse_tag("#bb.receipt.sha256.dzihycw2ucnfjaulmme6pqlgv3n4u65gn4bqi36xvzkmxymzn22q")
+        );
+        assert_eq!(effect_name(edge_receipt.effects()[0]), "mint");
+        assert!(edge_world.is_on(edge));
+        assert_eq!(
+            edge_history.active_mint(edge),
+            Some(edge_receipt.effects()[0].event())
+        );
+        assert!(edge_history.verify(&initial_off).is_ok());
     }
 }

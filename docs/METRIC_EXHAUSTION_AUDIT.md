@@ -1,9 +1,13 @@
 # Metric-exhaustion audit — 2026-08-26
 
 This checkpoint applied the uniqueness rule in [`METRICS.md`](../METRICS.md)
-again after the live TickOutcome/FrameReceipt-v2, typed DisplayReceipt-v2, and
-bounded independent RGB/depth renderer-oracle and explicit one-shot live
-display-artifact checkpoints. It admitted **zero new metric families**. The authoritative catalog
+again after the live TickOutcome/FrameReceipt-v2, typed DisplayReceipt-v2,
+bounded independent RGB/depth renderer oracle, explicit one-shot live
+display artifact, checked Win32 submission, canonical active-output topology,
+PresentationOutput wrapper, mixed display journal, F5 service, canonical
+InteractionTape-v1 headless replay, and the local replay-evidence-v1 carrier.
+It admitted
+**zero new metric families**. The authoritative catalog
 therefore remains 1,112 families: 489 system, 339 view, and 284 world.
 
 This is a bounded closure result. It covers the current Rust source plus the
@@ -19,7 +23,12 @@ collectors for an existing observable cannot.
   protocol boundary was compared against the three owning catalogs.
 - The renderer-to-physical-display path was traced separately through the CPU
   framebuffer, composite buffer, mapped surface, backend submission, Windows
-  screen raster, compositor/output state, scanout fate, and external sensor.
+  screen raster, bounded source/target route topology, compositor/output state,
+  scanout fate, and external sensor.
+- The input path was split at the normalized accepted-action boundary. Raw OS
+  routing/acceptance, tick-indexed tape bytes, fixed-tick outcomes, produced
+  CPU frames, backend receipts, and display observations were reviewed as
+  distinct evidence lanes.
 - Every candidate was compared to the closest admitted family. A candidate was
   rejected when it was derivable from that family, merely another closed label
   or carrier/schema version, or a missing collector for an already named value.
@@ -32,14 +41,14 @@ collectors for an existing observable cannot.
 | Observable boundary | Existing family or authority object | Remaining evidence gap |
 |---|---|---|
 | Complete post-overlay CPU XRGB slice and world-pass depth | `#bb.metric.render.final-framebuffer-storage-contract`, `#bb.metric.hash.final-framebuffer-digest`, `#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector` | A stdlib-only Python six-face oracle independently matches every XRGB word and depth class in two named direct-cube frames, with retained finite-depth bit residuals bounded to four ULP. The 934-pixel corpus excludes aggregate, point, inside-bit, near-plane, arbitrary-orientation/FOV, and cross-platform cases; it is not universal equivalence. |
-| Game/sidebar composition | `#bb.metric.visual.render-input-output-binding-verdict`, `#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector` | A bounded two-arm harness distinguishes the strided production compositor from the frozen two-buffer storage reference, but both compositor arms still share sidebar painter semantics. The independent six-face oracle covers world rendering and the fixed crosshair, not sidebar glyph semantics. |
+| Game/sidebar composition | `#bb.metric.visual.render-input-output-binding-verdict`, `#bb.metric.visual.candidate-reference-framebuffer-mismatch-vector`, `#bb.metric.perf.work-unit-vector` | A bounded two-arm harness distinguishes the strided production compositor from the frozen two-buffer storage reference and now compares a sequential full composition with a same-game cache-tag-verified sidebar-only reuse. Stale-tag and resized-cache controls refuse. Logical game-prefix copy words are exact work counters, not hardware traffic. Both compositor arms still share sidebar painter semantics; the independent six-face oracle covers world rendering and the fixed crosshair, not sidebar glyph semantics. |
 | Mapped backend surface before submission | `#bb.metric.visual.mapped-surface-copy-mismatch-vector` | Windows now owns the complete copy target, but mismatch witnesses and non-Windows internals remain separate instrumentation; the copy says nothing about later compositor behavior. |
 | Backend submission attempt/result | `#bb.metric.render.backend-submission-event` | Windows now checks the exact requested/returned `SetDIBitsToDevice` scanline count and error boundary before receipt publication. A durable event relation and other platform internals remain unimplemented. |
-| OS-exposed client raster | `#bb.metric.visual.compositor-capture-comparison` | The feature-gated F4 path now validates the current committed composite occurrence, constructs DisplayArtifact v1 from one Windows GDI/DWM sample, and locally syncs/rereads it through the typed journal. This checkpoint did not run that manual HWND assay, and any finite sample remains OS desktop-raster evidence rather than guaranteed scanout. |
-| DPI/ICC/HDR/output configuration and transforms | `#bb.metric.visual.display-pipeline-state-vector`, `#bb.metric.visual.display-transform-provenance-relation` | Configuration queries do not prove the transform actually emitted. |
-| Drop/duplicate/partial/mixed-frame scanout | `#bb.metric.visual.presentation-fate-relation`, `#bb.metric.visual.scanout-composition-witness-vector` | Requires independent compositor or high-speed capture evidence. |
+| OS-exposed client raster | `#bb.metric.visual.compositor-capture-comparison` | F4 validates and samples the current committed composite occurrence. F5 waits for the next normal successful composite presentation, binds its exact timing receipt, records paired pre-topology/raw-configuration, captures once, records the paired observations again, and persists one v2 outer wrapper. A live HWND assay retained one earlier v1 wrapper and synchronized journal; any finite sample remains OS desktop-raster evidence rather than guaranteed scanout. |
+| DPI/ICC/HDR/output configuration and transforms | `#bb.metric.visual.display-pipeline-state-vector`, `#bb.metric.visual.display-transform-provenance-relation` | The research timing envelope retains raw DWM session timing and barriers. A bounded Windows query now retains current GDI source/monitor geometry, source mode, every clone target route, target identity/signal/path facts, raw topology flags, an acquisition transcript or explicit unavailability, and opaque per-route Advanced Color flags, encoding word, and bits-per-channel (or query error). ICC/profile state, semantic HDR interpretation, and applied transform order remain unavailable; configured route fields would not prove the transform actually emitted. |
+| Drop/duplicate/partial/mixed-frame scanout | `#bb.metric.visual.presentation-fate-relation`, `#bb.metric.visual.scanout-composition-witness-vector` | The outer object now binds one exact composite receipt, null-HWND DWM timing, one screen raster, and before/after topology. Full receipt and QPC-frequency equality prevent cross-occurrence substitution, but session-scoped timing and untimestamped topology cannot attribute compositor movement to the frame. Fate remains `Unknown`; independent compositor attribution or high-speed capture is still required. |
 | Panel RGB/luminance or emitted light | `#bb.metric.visual.physical-display-sensor-comparison` | `N/A` without a calibrated external instrument. |
-| Durable availability of referenced expected/captured pixels | `#bb.metric.store.receipt-object-persistence-inventory`, `#bb.metric.hash.content-reference-closure` | The explicit live path can locally sync/reread the artifact's embedded receipt and pixel bytes, but referenced policy, TickOutcome, and FrameInput objects are not supplied. No manual live sample or sudden-power assay was run here; transitive closure, external custody, and latest-prefix authority remain open. |
+| Durable availability of referenced expected/captured pixels | `#bb.metric.store.receipt-object-persistence-inventory`, `#bb.metric.hash.content-reference-closure` | Exact mixed replay retains legacy, v1, or v2 wrapper carrier bytes, the nested display receipt and pixels, and wrapper timing/topology/raw-configuration tags through one physical and one display-parent chain. A live v1 sample retained one synchronized 3,850,988-byte wrapper record, but referenced policy, TickOutcome, and FrameInput objects are not supplied. No anchored reopen or sudden-power assay was run; transitive closure, external custody, and latest-prefix authority remain open. |
 
 The tempting name `literal-displayed-pixels` was rejected because it conflates
 three distinct observations: an OS screen raster, scanout composition, and
@@ -54,6 +63,15 @@ physical panel output. Those boundaries must remain separate.
 | Paired-publication atomicity counter | The prepare/reserve/backend/publication outcome is already part of frame provenance plus `#bb.metric.render.backend-submission-event`. |
 | Frame/display ledger head or length per epoch | Head and length are projections of the ordered receipt relation; schema version is provenance, not a new observation. |
 | DisplayReceipt-v2 digest as a standalone metric | It is the content-addressed carrier for compositor comparison and presentation fate. |
+| OutputTopology, OutputColor, or PresentationOutput digest as a standalone metric | Each is a content-addressed carrier for already named pipeline, capture, provenance, and recovery observables. |
+| InteractionTape tag, payload bytes, tick/action/opcode counts, or first/last ordinal as standalone families | The tag/payload are the current accepted-action carrier for canonical replay bytes and hash-input/domain identity; counts and ordinals are projections of existing replay coverage, retained-batch, and input families. |
+| Headless simulation/result digest as a new family | The default stdout still juxtaposes existing tape, outcome, world, history, camera, render-input, and framebuffer tags. The opt-in local replay-evidence v1 carrier canonically binds its embedded tape, local executable fingerprint, declared policies, and endpoint, but remains one carrier inside the existing replay/provenance/hash families—not a new observable or authority. |
+| LocalReplayBuild tag or 64 MiB executable cap as a new family | The tag is a bounded local binary-byte sample within existing binary-artifact, hash, and deterministic-resource-admission families. It does not identify source, toolchain, reproducibility, custody, or the executing image, and a same-length concurrent replacement remains outside the sample check. |
+| Headless frame/admission/receipt counts | Produced CPU frames use final-framebuffer and produced-frame-disposition families; zero admissions and empty heads are projections of the existing frame-provenance relation, not display evidence. |
+| One metric per interaction opcode, parser refusal, or preflight budget lane | Opcodes are closed input labels, parser reasons belong to parse outcome/rejected payload, and resize/composition/raster/world/chunk/order charges are dimensions of deterministic resource admission. |
+| Active route count, topology retry count/rate, or last topology error | Counts, rates, extrema, and labels are projections of the complete `#bb.metric.visual.display-pipeline-state-vector` acquisition/route observation. |
+| Stable/changed/unavailable route result | Derived comparison of two pipeline-state vectors; it is intentionally not encoded as an independent observation. |
+| Before/after topology or raw-configuration pair | Two pipeline observations inside the existing compositor-capture comparison and presentation-fate relation, not a new semantic dimension. |
 | Display mismatch count, first index, bounds, rate, stage, or capture duration | Counts, extrema, labels, bounds, and timestamp arithmetic are views of the complete compositor comparison. |
 | Frame RGB means, ratios, popcount, or nonblack ratio | Deterministic summaries of the exact final palette/pixel distribution; invalid high bytes already have their own witness vector. |
 | One metric per protocol/storage/display error variant | Error kind is a dimension of the relevant admission or failure relation. |

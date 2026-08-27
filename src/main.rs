@@ -1,7 +1,11 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(not(debug_assertions), not(feature = "headless-console")),
+    windows_subsystem = "windows"
+)]
 
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::io;
+use std::io::{self, Read};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,6 +17,8 @@ use bitblock::display::{CaptureStage, DisplayCapture, DisplayLedgerV2, DisplayOu
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::display_store::{
     DisplayArtifactAppendReceipt, DisplayArtifactJournal, DisplayArtifactStoreError,
+    PresentationOutputAppendReceipt, ReadOnlyDisplayArtifactInspection,
+    inspect_display_artifact_bytes,
 };
 use bitblock::frame::{
     FrameInput, FrameLedger, FrameObservation, FrameProtocolError, FrameReceipt, FrameRef,
@@ -23,11 +29,34 @@ use bitblock::frame_v2::{
     FrameReceiptV2AdmissionError, FrameReceiptV2Error, FrameStream, admit_frame_pair_derived,
 };
 use bitblock::history::{History, world_tag};
+use bitblock::interaction::{
+    AcceptedAction, InteractionTape, MAX_INTERACTION_TAPE_PAYLOAD_BYTES, MoveControl,
+};
+#[cfg(feature = "protocol-research")]
+use bitblock::interaction::{
+    MAX_INTERACTION_ACTIONS_PER_RECORD, MAX_INTERACTION_TAPE_RECORDS, MAX_INTERACTION_TOTAL_ACTIONS,
+};
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::journal::AnchorPolicy;
+#[cfg(all(test, windows, feature = "protocol-research"))]
+use bitblock::output_topology::{OutputTopologyError, OutputTopologyObservation};
 use bitblock::program::{Edit as WorldEdit, Operation, Program, TickBatch};
+use bitblock::protocol::ContentTag;
+#[cfg(feature = "protocol-research")]
+use bitblock::protocol::{TagKind, hash_canonical};
+#[cfg(feature = "protocol-research")]
+use bitblock::render::crosshair_policy_tag;
 use bitblock::render::{
     Renderer, bounds_aabb, coord_containing, crosshair_overlay_input, raycast,
     renderer_profile_tag, sweep_point,
 };
+#[cfg(feature = "protocol-research")]
+use bitblock::replay_evidence::{
+    LocalReplayBuild, LocalReplayContext, LocalReplayEndpoint, LocalReplayEvidence,
+    ReplayFrameCommitment,
+};
+#[cfg(feature = "protocol-research")]
+use bitblock::sidebar::composite_policy_tag;
 use bitblock::sidebar::{
     CompositeFrameInput, DisplayStatus, FrameCompositor, SIDEBAR_WIDTH, SidebarRasterFacts,
     SidebarSnapshot, composite_overlay_input,
@@ -38,11 +67,21 @@ use bitblock::tick::{
 };
 #[cfg(windows)]
 use bitblock::windows_present::WindowsPixelSurface;
-#[cfg(test)]
-use bitblock::world::BEDROCK_COORD;
-use bitblock::world::World;
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::windows_timing::observe_checked_present;
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::windows_topology::{
+    ActiveOutputObservationError, ActiveOutputWithColor, observe_active_output_with_color,
+};
+use bitblock::world::{BEDROCK_COORD, CHUNK_SIDE, CHUNK_WORDS, Coord, World};
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::{display_artifact::DisplayCaptureArtifact, storage::StorageLimits};
+#[cfg(all(windows, feature = "protocol-research"))]
+use bitblock::{
+    presentation::{CompositionTimingEnvelope, PresentationProtocolError},
+    presentation_output::PresentationOutputArtifact,
+    presentation_output_v2::PresentationOutputArtifactV2,
+};
 #[cfg(not(windows))]
 use softbuffer::{Context, Surface};
 #[cfg(windows)]
@@ -70,16 +109,75 @@ const MAX_FRAME_GAP: Duration = Duration::from_millis(250);
 const MAX_TICKS_PER_FRAME: usize = 15;
 const BLOCK_FILL_DISTANCE: f64 = 0.25;
 const OBSERVER_COLLISION_CLEARANCE: f64 = 1.0e-6;
+const HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS: u64 = 16_777_216;
+const HEADLESS_SIMULATION_MAX_RESIZE_PIXEL_WRITES: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS: u128 = 1_073_741_824;
+const HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS: u128 = 1_073_741_824;
+const HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS: u128 = 1_073_741_824;
+const HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS: u128 = 65_536;
+const HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND: u128 = 12;
+const HEADLESS_SIMULATION_MAX_SOURCE_BYTES: usize = MAX_INTERACTION_TAPE_PAYLOAD_BYTES;
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_MAX_EXECUTABLE_BYTES: u64 = 64 * 1024 * 1024;
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_GENESIS_SCHEMA: &[u8] = b"bitblock/local-replay-genesis/headless-v1";
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_RULES_SCHEMA: &[u8] = b"bitblock/local-replay-rules/headless-v1";
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_ADMISSION_SCHEMA: &[u8] =
+    b"bitblock/local-replay-admission-policy/headless-v1";
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
+#[cfg(all(windows, feature = "protocol-research"))]
+const PRESENTATION_AUDIT_ENV: &str = "BITBLOCK_PRESENTATION_AUDIT";
+#[cfg(all(windows, feature = "protocol-research"))]
+const RESEARCH_WINDOW_TITLE: &str = "bitblock — F3 metrics · F4 pixels · F5 presentation evidence";
+#[cfg(all(windows, feature = "protocol-research"))]
+const PRESENTATION_EVIDENCE_WAITING_TITLE: &str =
+    "bitblock — F5 armed · waiting for next changed presentation";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let program = load_startup_program()?;
-    let mut app = App::with_program(program);
-    configure_display_artifact_journal(&mut app)?;
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(ControlFlow::Wait);
-    event_loop.run_app(&mut app)?;
+    match load_startup_mode()? {
+        StartupMode::Observe(program) => {
+            let mut app = App::with_program(program);
+            configure_display_artifact_journal(&mut app)?;
+            let event_loop = EventLoop::new()?;
+            event_loop.set_control_flow(ControlFlow::Wait);
+            event_loop.run_app(&mut app)?;
+        }
+        StartupMode::Simulate(tape) => {
+            #[cfg(feature = "protocol-research")]
+            {
+                let (summary, evidence) =
+                    simulate_interaction_tape_with_local_replay_evidence(&tape)?;
+                print_headless_summary(&summary);
+                print_local_replay_evidence(&evidence);
+            }
+            #[cfg(not(feature = "protocol-research"))]
+            {
+                let summary = simulate_interaction_tape(&tape)?;
+                print_headless_summary(&summary);
+            }
+        }
+        #[cfg(all(windows, feature = "protocol-research"))]
+        StartupMode::VerifyDisplayJournal {
+            path,
+            required_ancestor,
+        } => verify_display_journal(&path, required_ancestor)?,
+    }
     Ok(())
+}
+
+enum StartupMode {
+    Observe(Program),
+    Simulate(InteractionTape),
+    #[cfg(all(windows, feature = "protocol-research"))]
+    VerifyDisplayJournal {
+        path: PathBuf,
+        required_ancestor: ContentTag,
+    },
 }
 
 #[cfg(all(windows, feature = "protocol-research"))]
@@ -130,25 +228,323 @@ fn configure_display_artifact_journal(_app: &mut App) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-fn load_startup_program() -> Result<Program, Box<dyn Error>> {
+fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
     let mut arguments = std::env::args_os().skip(1);
-    let Some(path) = arguments.next().map(PathBuf::from) else {
-        return Ok(Program::new());
+    let Some(first) = arguments.next() else {
+        return Ok(StartupMode::Observe(Program::new()));
     };
+
+    if first == "--verify-display-journal" {
+        #[cfg(all(windows, feature = "protocol-research"))]
+        {
+            let Some(path) = arguments.next().map(PathBuf::from) else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+                )
+                .into());
+            };
+            let Some(required_text) = arguments.next() else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+                )
+                .into());
+            };
+            if arguments.next().is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+                )
+                .into());
+            }
+            let required_text = required_text.to_str().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "the required storage-record tag must be UTF-8",
+                )
+            })?;
+            let required_ancestor = ContentTag::parse_full(required_text).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("invalid required storage-record tag: {error}"),
+                )
+            })?;
+            if required_ancestor.kind() != TagKind::StorageRecord {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "required journal anchor must be a storage-record tag, received {}",
+                        required_ancestor.kind().name()
+                    ),
+                )
+                .into());
+            }
+            return Ok(StartupMode::VerifyDisplayJournal {
+                path,
+                required_ancestor,
+            });
+        }
+        #[cfg(not(all(windows, feature = "protocol-research")))]
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "--verify-display-journal requires Windows and --features protocol-research",
+            )
+            .into());
+        }
+    }
+
+    if first == "--simulate-actions" {
+        let Some(path) = arguments.next().map(PathBuf::from) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: bitblock --simulate-actions <interaction.tape>",
+            )
+            .into());
+        };
+        if arguments.next().is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: bitblock --simulate-actions <interaction.tape>",
+            )
+            .into());
+        }
+        let source = read_bounded_utf8(&path, HEADLESS_SIMULATION_MAX_SOURCE_BYTES)?;
+        let tape = InteractionTape::parse(&source).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: {error}", path.display()),
+            )
+        })?;
+        return Ok(StartupMode::Simulate(tape));
+    }
+
+    let path = PathBuf::from(first);
     if arguments.next().is_some() {
-        return Err(
-            io::Error::new(io::ErrorKind::InvalidInput, "usage: bitblock [program.bb]").into(),
-        );
+        return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: bitblock [program.bb] | bitblock --simulate-actions <interaction.tape> | bitblock --verify-display-journal <display-session.bbj> <#bb.storage-record.sha256...>",
+        )
+        .into());
     }
 
     let source = std::fs::read_to_string(&path)?;
-    Program::parse(&source).map_err(|error| {
+    Program::parse(&source)
+        .map(StartupMode::Observe)
+        .map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: {error}", path.display()),
+            )
+            .into()
+        })
+}
+
+fn read_bounded_utf8(path: &std::path::Path, maximum: usize) -> Result<String, io::Error> {
+    let file = std::fs::File::open(path)?;
+    let limit = u64::try_from(maximum)
+        .expect("the interaction source limit fits u64")
+        .checked_add(1)
+        .expect("the interaction source limit has one-byte headroom");
+    let mut bytes = Vec::new();
+    file.take(limit).read_to_end(&mut bytes)?;
+    if bytes.len() > maximum {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("interaction source exceeds the bounded {maximum}-byte input policy"),
+        ));
+    }
+    String::from_utf8(bytes).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("{}: {error}", path.display()),
+            format!("interaction source is not UTF-8: {error}"),
         )
-        .into()
     })
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn verify_display_journal(
+    path: &std::path::Path,
+    required_ancestor: ContentTag,
+) -> Result<(), Box<dyn Error>> {
+    let bytes = read_bounded_display_journal(path, StorageLimits::DEFAULT.max_stream_bytes())?;
+    let inspection = inspect_display_artifact_bytes(
+        &bytes,
+        StorageLimits::DEFAULT,
+        AnchorPolicy::RequireAncestor(required_ancestor),
+    );
+    match inspection {
+        Ok(ReadOnlyDisplayArtifactInspection::Clean { carrier, state }) => {
+            print_display_journal_verification(&carrier, &state, required_ancestor);
+            Ok(())
+        }
+        Ok(ReadOnlyDisplayArtifactInspection::NeedsRecovery { carrier, state }) => {
+            print_display_journal_recovery(&carrier, &state, required_ancestor);
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "display journal has an unverified suffix; no complete verification claim was emitted",
+            )
+            .into())
+        }
+        Err(DisplayArtifactStoreError::Journal(
+            bitblock::journal::JournalError::RequiredAncestorMissing { observed_head, .. },
+        )) => {
+            println!(
+                "display-journal-verification\tstatus=missing-required-ancestor\tscope=typed-local-replay\tcausal_ancestry=references-only\trequired_ancestor={}\tobserved_head={}",
+                required_ancestor,
+                optional_tag(observed_head),
+            );
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the supplied required storage-record ancestor is absent from the admitted journal prefix",
+            )
+            .into())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn read_bounded_display_journal(
+    path: &std::path::Path,
+    maximum: usize,
+) -> Result<Vec<u8>, io::Error> {
+    let mut file = std::fs::File::open(path)?;
+    let before = file.metadata()?;
+    if !before.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "display journal input must be a regular file",
+        ));
+    }
+    let before_len = before.len();
+    let maximum_u64 = u64::try_from(maximum).expect("storage byte cap fits u64");
+    if before_len > maximum_u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("display journal exceeds the bounded {maximum}-byte input policy"),
+        ));
+    }
+    let expected_len = usize::try_from(before_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "display journal length is not addressable on this host",
+        )
+    })?;
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(expected_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            format!("could not reserve {expected_len} display-journal bytes"),
+        )
+    })?;
+    let limit = maximum_u64
+        .checked_add(1)
+        .expect("storage byte cap has one-byte headroom");
+    (&mut file).take(limit).read_to_end(&mut bytes)?;
+    if bytes.len() > maximum {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("display journal exceeds the bounded {maximum}-byte input policy"),
+        ));
+    }
+    let after_len = file.metadata()?.len();
+    if after_len != before_len || bytes.len() as u64 != before_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "display journal length changed during read: before {before_len}, bytes {}, after {after_len}",
+                bytes.len()
+            ),
+        ));
+    }
+    Ok(bytes)
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn print_display_journal_verification(
+    carrier: &bitblock::journal::ScanReport,
+    state: &bitblock::display_store::ReplayedDisplayArtifacts,
+    required_ancestor: ContentTag,
+) {
+    println!("{}", display_journal_verification_header(required_ancestor));
+    println!(
+        "display-journal-inventory\tfile_bytes={}\tvalid_bytes={}\tobjects={}\tlogical_payload_bytes={}\tphysical_record_bytes={}\tstorage_head={}\tdisplay_head={}\tartifact_head={}\tstored_object_head={}",
+        carrier.file_bytes,
+        carrier.valid_prefix_bytes,
+        carrier.valid_record_count,
+        state.logical_payload_bytes(),
+        state.physical_record_bytes(),
+        optional_tag(state.storage_head()),
+        optional_tag(state.display_receipt_head()),
+        optional_tag(state.artifact_head()),
+        optional_tag(state.stored_object_head()),
+    );
+    for entry in state.entries() {
+        println!(
+            "display-journal-evidence\tstorage={}\tobject={}\tartifact={}\tdisplay_receipt={}\tframe_receipt={}\ttick_outcome={}\tframe_input={}\texpected_frame={}\tcaptured_frame={}\tpolicy={}\tcapture_outcome={:?}\tcapture_stage={:?}\tmismatches={}\tfirst_mismatch={}\tcaptured_form={:?}\ttiming={}\ttopology_before={}\ttopology_after={}\troute_stability={:?}\tcolor_before={}\tcolor_after={}\treported_color_state={:?}",
+            entry.storage_record,
+            entry.stored_object,
+            entry.artifact,
+            entry.display_receipt,
+            entry.frame_receipt,
+            entry.tick_outcome,
+            entry.frame_input,
+            entry.expected_frame,
+            optional_tag(entry.captured_frame),
+            entry.policy,
+            entry.capture_outcome,
+            entry.capture_stage,
+            entry.mismatch_count,
+            optional_u64(entry.first_mismatch),
+            entry.captured_form,
+            optional_tag(entry.timing_artifact),
+            optional_tag(entry.topology_before),
+            optional_tag(entry.topology_after),
+            entry.route_stability,
+            optional_tag(entry.color_before),
+            optional_tag(entry.color_after),
+            entry.reported_color_state,
+        );
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn display_journal_verification_header(required_ancestor: ContentTag) -> String {
+    format!(
+        "display-journal-verification\tstatus=clean\tscope=typed-local-replay\tpixel_evidence=retained-capture-claim-per-entry\tcausal_ancestry=references-only\tscanout=unobserved\tphysical_light=unobserved\tcustody=local-only\tconsensus=none\trequired_ancestor={required_ancestor}"
+    )
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn print_display_journal_recovery(
+    carrier: &bitblock::journal::RecoveryReport,
+    state: &bitblock::display_store::ReplayedDisplayArtifacts,
+    required_ancestor: ContentTag,
+) {
+    println!(
+        "display-journal-verification\tstatus=needs-recovery\tscope=typed-valid-prefix-only\tpixel_evidence=unverified-suffix-excluded\tcausal_ancestry=references-only\trequired_ancestor={}\tvalid_bytes={}\trejected_tail_bytes={}\trejected_tail={}\trejection_class={:?}\tvalid_head={}",
+        required_ancestor,
+        carrier.valid_prefix_bytes,
+        carrier.rejected_tail_bytes,
+        carrier.rejected_tail_tag,
+        carrier.rejection_class,
+        optional_tag(carrier.valid_head),
+    );
+    println!(
+        "display-journal-prefix\tobjects={}\tstorage_head={}\tdisplay_head={}\tartifact_head={}\tstored_object_head={}",
+        state.len(),
+        optional_tag(state.storage_head()),
+        optional_tag(state.display_receipt_head()),
+        optional_tag(state.artifact_head()),
+        optional_tag(state.stored_object_head()),
+    );
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn optional_u64(value: Option<u64>) -> String {
+    value.map_or_else(|| "none".to_owned(), |value| value.to_string())
 }
 
 #[cfg(windows)]
@@ -216,9 +612,28 @@ struct PendingRenderedFrame {
 }
 
 #[cfg(all(windows, feature = "protocol-research"))]
+enum PendingPresentationOutput {
+    #[cfg(test)]
+    V1(Box<PresentationOutputArtifact>),
+    V2(Box<PresentationOutputArtifactV2>),
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+impl PendingPresentationOutput {
+    const fn tag(&self) -> ContentTag {
+        match self {
+            #[cfg(test)]
+            Self::V1(presentation) => presentation.tag(),
+            Self::V2(presentation) => presentation.tag(),
+        }
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
 struct LiveDisplayArtifactArchive {
     journal: DisplayArtifactJournal,
     pending_artifact: Option<DisplayCaptureArtifact>,
+    pending_presentation_output: Option<PendingPresentationOutput>,
     faulted: bool,
 }
 
@@ -235,18 +650,27 @@ impl LiveDisplayArtifactArchive {
         Self {
             journal,
             pending_artifact: None,
+            pending_presentation_output: None,
             faulted: false,
         }
     }
 
     fn can_capture_new(&self) -> bool {
-        !self.faulted && self.pending_artifact.is_none()
+        !self.faulted
+            && self.pending_artifact.is_none()
+            && self.pending_presentation_output.is_none()
     }
 
     fn pending_artifact(&self) -> Option<bitblock::protocol::ContentTag> {
         self.pending_artifact
             .as_ref()
             .map(DisplayCaptureArtifact::tag)
+    }
+
+    fn pending_presentation_output(&self) -> Option<bitblock::protocol::ContentTag> {
+        self.pending_presentation_output
+            .as_ref()
+            .map(PendingPresentationOutput::tag)
     }
 
     fn prepare_and_append(
@@ -294,6 +718,144 @@ impl LiveDisplayArtifactArchive {
                 Err(LiveDisplayArtifactFailure {
                     error: Box::new(error),
                     artifact: Some(artifact_tag),
+                    poisoned,
+                })
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn prepare_and_append_presentation_output(
+        &mut self,
+        expected_receipt: FrameReceiptV2,
+        expected: FrameRef<'_>,
+        capture: &DisplayCapture,
+        timing: CompositionTimingEnvelope,
+        pre_topology: bitblock::output_topology::OutputTopologyObservation,
+        post_topology: bitblock::output_topology::OutputTopologyObservation,
+    ) -> Result<PresentationOutputAppendReceipt, LiveDisplayArtifactFailure> {
+        debug_assert!(self.can_capture_new());
+        let display =
+            match self
+                .journal
+                .prepare_capture_artifact(expected_receipt, expected, capture)
+            {
+                Ok(artifact) => artifact,
+                Err(error) => {
+                    self.faulted = true;
+                    return Err(LiveDisplayArtifactFailure {
+                        error: Box::new(error),
+                        artifact: None,
+                        poisoned: self.journal.is_poisoned(),
+                    });
+                }
+            };
+        let presentation =
+            match PresentationOutputArtifact::new(display, timing, pre_topology, post_topology) {
+                Ok(artifact) => artifact,
+                Err(error) => {
+                    self.faulted = true;
+                    return Err(LiveDisplayArtifactFailure {
+                        error: Box::new(DisplayArtifactStoreError::from(error)),
+                        artifact: None,
+                        poisoned: self.journal.is_poisoned(),
+                    });
+                }
+            };
+        self.pending_presentation_output =
+            Some(PendingPresentationOutput::V1(Box::new(presentation)));
+        self.append_pending_presentation_output()
+    }
+
+    fn prepare_and_append_presentation_output_v2(
+        &mut self,
+        expected_receipt: FrameReceiptV2,
+        expected: FrameRef<'_>,
+        capture: &DisplayCapture,
+        timing: CompositionTimingEnvelope,
+        pre_output: ActiveOutputWithColor,
+        post_output: ActiveOutputWithColor,
+    ) -> Result<PresentationOutputAppendReceipt, LiveDisplayArtifactFailure> {
+        debug_assert!(self.can_capture_new());
+        let display =
+            match self
+                .journal
+                .prepare_capture_artifact(expected_receipt, expected, capture)
+            {
+                Ok(artifact) => artifact,
+                Err(error) => {
+                    self.faulted = true;
+                    return Err(LiveDisplayArtifactFailure {
+                        error: Box::new(error),
+                        artifact: None,
+                        poisoned: self.journal.is_poisoned(),
+                    });
+                }
+            };
+        let v1 = match PresentationOutputArtifact::new(
+            display,
+            timing,
+            pre_output.topology().clone(),
+            post_output.topology().clone(),
+        ) {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                self.faulted = true;
+                return Err(LiveDisplayArtifactFailure {
+                    error: Box::new(DisplayArtifactStoreError::from(error)),
+                    artifact: None,
+                    poisoned: self.journal.is_poisoned(),
+                });
+            }
+        };
+        let presentation = match PresentationOutputArtifactV2::new(
+            v1,
+            pre_output.color().clone(),
+            post_output.color().clone(),
+        ) {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                self.faulted = true;
+                return Err(LiveDisplayArtifactFailure {
+                    error: Box::new(DisplayArtifactStoreError::from(error)),
+                    artifact: None,
+                    poisoned: self.journal.is_poisoned(),
+                });
+            }
+        };
+        self.pending_presentation_output =
+            Some(PendingPresentationOutput::V2(Box::new(presentation)));
+        self.append_pending_presentation_output()
+    }
+
+    fn append_pending_presentation_output(
+        &mut self,
+    ) -> Result<PresentationOutputAppendReceipt, LiveDisplayArtifactFailure> {
+        let presentation = self
+            .pending_presentation_output
+            .as_ref()
+            .expect("an explicit F5 retry requires one retained presentation-output artifact");
+        let presentation_tag = presentation.tag();
+        let append = match presentation {
+            #[cfg(test)]
+            PendingPresentationOutput::V1(presentation) => {
+                self.journal.append_presentation_output(presentation)
+            }
+            PendingPresentationOutput::V2(presentation) => {
+                self.journal.append_presentation_output_v2(presentation)
+            }
+        };
+        match append {
+            Ok(receipt) => {
+                self.pending_presentation_output = None;
+                Ok(receipt)
+            }
+            Err(error) => {
+                let poisoned = self.journal.is_poisoned();
+                self.faulted |= poisoned;
+                Err(LiveDisplayArtifactFailure {
+                    error: Box::new(error),
+                    artifact: Some(presentation_tag),
                     poisoned,
                 })
             }
@@ -392,6 +954,263 @@ fn report_display_artifact_result(
                 "display-artifact-refused\tdisposition={disposition}\tartifact={:?}\t{}",
                 failure.artifact, failure.error
             );
+        }
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+enum LivePresentationOutputFailure {
+    MissingTiming,
+    Timing(PresentationProtocolError),
+    TimingReceiptMismatch {
+        presented: bitblock::protocol::ContentTag,
+        timing: bitblock::protocol::ContentTag,
+    },
+    MissingWindowHandle,
+    #[cfg(test)]
+    Topology {
+        stage: &'static str,
+        error: OutputTopologyError,
+    },
+    OutputObservation {
+        stage: &'static str,
+        error: ActiveOutputObservationError,
+    },
+    Store(LiveDisplayArtifactFailure),
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+#[cfg(test)]
+fn attempt_presentation_output_observation<ObserveTopology, Capture>(
+    archive: &mut LiveDisplayArtifactArchive,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'_>,
+    timing: CompositionTimingEnvelope,
+    mut observe_topology: ObserveTopology,
+    capture: Capture,
+) -> Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>
+where
+    ObserveTopology:
+        FnMut(&'static str) -> Result<OutputTopologyObservation, LivePresentationOutputFailure>,
+    Capture: FnOnce() -> DisplayCapture,
+{
+    if timing.receipt() != presented.receipt_v2 {
+        return Err(LivePresentationOutputFailure::TimingReceiptMismatch {
+            presented: presented.receipt_v2.tag(),
+            timing: timing.receipt().tag(),
+        });
+    }
+    let pre_topology = observe_topology("before-capture")?;
+    let capture = capture();
+    let post_topology = observe_topology("after-capture")?;
+    archive
+        .prepare_and_append_presentation_output(
+            presented.receipt_v2,
+            expected,
+            &capture,
+            timing,
+            pre_topology,
+            post_topology,
+        )
+        .map_err(LivePresentationOutputFailure::Store)
+}
+
+/// Captures one F5 candidate from paired topology/color observations collected immediately
+/// before and after the GDI capture. A retained storage retry reuses the complete v2 wrapper and
+/// never samples a later Windows configuration.
+#[cfg(all(windows, feature = "protocol-research"))]
+fn attempt_presentation_output_v2_observation<ObserveOutput, Capture>(
+    archive: &mut LiveDisplayArtifactArchive,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'_>,
+    timing: CompositionTimingEnvelope,
+    mut observe_output: ObserveOutput,
+    capture: Capture,
+) -> Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>
+where
+    ObserveOutput:
+        FnMut(&'static str) -> Result<ActiveOutputWithColor, LivePresentationOutputFailure>,
+    Capture: FnOnce() -> DisplayCapture,
+{
+    if timing.receipt() != presented.receipt_v2 {
+        return Err(LivePresentationOutputFailure::TimingReceiptMismatch {
+            presented: presented.receipt_v2.tag(),
+            timing: timing.receipt().tag(),
+        });
+    }
+    let pre_output = observe_output("before-capture")?;
+    let capture = capture();
+    let post_output = observe_output("after-capture")?;
+    archive
+        .prepare_and_append_presentation_output_v2(
+            presented.receipt_v2,
+            expected,
+            &capture,
+            timing,
+            pre_output,
+            post_output,
+        )
+        .map_err(LivePresentationOutputFailure::Store)
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn service_presentation_output_request_with<'a, Attempt>(
+    requested: &mut bool,
+    archive: &mut LiveDisplayArtifactArchive,
+    composite_ledger: &FrameLedgerV2,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'a>,
+    attempt: Attempt,
+) -> Option<Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>>
+where
+    Attempt: FnOnce(
+        &mut LiveDisplayArtifactArchive,
+        PresentedFrameObservation,
+        FrameRef<'a>,
+    ) -> Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>,
+{
+    if !*requested || !archive.can_capture_new() {
+        return None;
+    }
+    current_committed_composite_frame(
+        composite_ledger,
+        presented,
+        expected.width(),
+        expected.height(),
+        expected.pixels(),
+    )?;
+
+    // F5 owns one exact post-presentation observation attempt. Any later storage retry retains
+    // the complete wrapper and performs no timing, topology/color, capture, or pixel calls.
+    *requested = false;
+    Some(attempt(archive, presented, expected))
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn service_presentation_output_request(
+    requested: &mut bool,
+    archive: &mut LiveDisplayArtifactArchive,
+    composite_ledger: &FrameLedgerV2,
+    window: &Window,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'_>,
+    timing: Option<Result<CompositionTimingEnvelope, PresentationProtocolError>>,
+) -> Option<Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>> {
+    service_presentation_output_request_with(
+        requested,
+        archive,
+        composite_ledger,
+        presented,
+        expected,
+        |archive, presented, expected| {
+            let timing = match timing {
+                Some(Ok(timing)) => timing,
+                Some(Err(error)) => return Err(LivePresentationOutputFailure::Timing(error)),
+                None => return Err(LivePresentationOutputFailure::MissingTiming),
+            };
+            let mut cached_hwnd = None;
+            attempt_presentation_output_v2_observation(
+                archive,
+                presented,
+                expected,
+                timing,
+                |stage| {
+                    let hwnd = match cached_hwnd {
+                        Some(hwnd) => hwnd,
+                        None => {
+                            let Some(hwnd) = win32_hwnd(window) else {
+                                return Err(LivePresentationOutputFailure::MissingWindowHandle);
+                            };
+                            cached_hwnd = Some(hwnd);
+                            hwnd
+                        }
+                    };
+                    // SAFETY: winit owns this HWND on the event-loop thread for the duration of
+                    // each synchronous observation. The collector retains no handle or transient
+                    // numeric join key.
+                    unsafe { observe_active_output_with_color(hwnd) }.map_err(|error| {
+                        LivePresentationOutputFailure::OutputObservation { stage, error }
+                    })
+                },
+                || capture_visible_client(window, expected),
+            )
+        },
+    )
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn report_presentation_output_result(
+    window: &Window,
+    result: Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>,
+) {
+    match result {
+        Ok(receipt) => {
+            window.set_title(&format!(
+                "bitblock — presentation output stored {}",
+                receipt.artifact_count
+            ));
+            eprintln!(
+                "presentation-output-stored\toutput={}\tdisplay={}\ttiming={}\ttopology_before={}\ttopology_after={}\tstability={:?}\tcolor_before={}\tcolor_after={}\treported_color_state={:?}\trecord={}\trange=[{}, {})\tcount={}",
+                receipt.presentation_output,
+                receipt.artifact,
+                receipt.timing_artifact,
+                receipt.topology_before,
+                receipt.topology_after,
+                receipt.route_stability,
+                optional_tag(receipt.color_before),
+                optional_tag(receipt.color_after),
+                receipt.reported_color_state,
+                receipt.carrier_append.record_tag,
+                receipt.carrier_append.start_offset,
+                receipt.carrier_append.end_offset,
+                receipt.artifact_count,
+            );
+        }
+        Err(LivePresentationOutputFailure::Store(failure)) => {
+            let disposition = if failure.poisoned {
+                "reopen-required"
+            } else if failure.artifact.is_some() {
+                "retained-f5-retry"
+            } else {
+                "bundle-admission-fault"
+            };
+            window.set_title(&format!("bitblock — presentation output {disposition}"));
+            eprintln!(
+                "presentation-output-refused\tdisposition={disposition}\toutput={:?}\t{}",
+                failure.artifact, failure.error
+            );
+        }
+        Err(LivePresentationOutputFailure::Timing(error)) => {
+            window.set_title("bitblock — presentation timing refused");
+            eprintln!("presentation-output-refused\tdisposition=timing-admission-fault\t{error}");
+        }
+        Err(LivePresentationOutputFailure::TimingReceiptMismatch { presented, timing }) => {
+            window.set_title("bitblock — presentation receipt mismatch");
+            eprintln!(
+                "presentation-output-refused\tdisposition=timing-receipt-mismatch\tpresented={}\ttiming={}",
+                presented, timing,
+            );
+        }
+        #[cfg(test)]
+        Err(LivePresentationOutputFailure::Topology { stage, error }) => {
+            window.set_title("bitblock — output topology refused");
+            eprintln!(
+                "presentation-output-refused\tdisposition=topology-admission-fault\tstage={stage}\t{error}"
+            );
+        }
+        Err(LivePresentationOutputFailure::OutputObservation { stage, error }) => {
+            window.set_title("bitblock — output configuration refused");
+            eprintln!(
+                "presentation-output-refused\tdisposition=output-configuration-admission-fault\tstage={stage}\t{error}"
+            );
+        }
+        Err(LivePresentationOutputFailure::MissingTiming) => {
+            window.set_title("bitblock — presentation timing missing");
+            eprintln!("presentation-output-refused\tdisposition=internal-missing-timing");
+        }
+        Err(LivePresentationOutputFailure::MissingWindowHandle) => {
+            window.set_title("bitblock — output topology unavailable");
+            eprintln!("presentation-output-refused\tdisposition=missing-window-handle");
         }
     }
 }
@@ -683,6 +1502,70 @@ impl Inputs {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AcceptedActionApplyError {
+    NonFiniteLane {
+        field: &'static str,
+        bits: u64,
+    },
+    NonFiniteAccumulation {
+        field: &'static str,
+        prior_bits: u64,
+        delta_bits: u64,
+    },
+}
+
+impl std::fmt::Display for AcceptedActionApplyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::NonFiniteLane { field, bits } => {
+                write!(
+                    formatter,
+                    "accepted {field} lane is nonfinite: {bits:#018x}"
+                )
+            }
+            Self::NonFiniteAccumulation {
+                field,
+                prior_bits,
+                delta_bits,
+            } => write!(
+                formatter,
+                "accepted {field} accumulation is nonfinite: prior={prior_bits:#018x} delta={delta_bits:#018x}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AcceptedActionApplyError {}
+
+fn checked_accepted_accumulation(
+    field: &'static str,
+    prior: f64,
+    delta: f64,
+) -> Result<f64, AcceptedActionApplyError> {
+    if !delta.is_finite() {
+        return Err(AcceptedActionApplyError::NonFiniteLane {
+            field,
+            bits: delta.to_bits(),
+        });
+    }
+    let next = prior + delta;
+    if !next.is_finite() {
+        return Err(AcceptedActionApplyError::NonFiniteAccumulation {
+            field,
+            prior_bits: prior.to_bits(),
+            delta_bits: delta.to_bits(),
+        });
+    }
+    Ok(next)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AppMode {
+    Live,
+    Headless,
+}
+
 struct App {
     display: Option<Display>,
     world: World,
@@ -694,6 +1577,7 @@ struct App {
     mouse_captured: bool,
     cursor_position: Option<PhysicalPosition<f64>>,
     sidebar_visible: bool,
+    display_predecessor_override: Option<DisplayStatus>,
     last_frame: Instant,
     next_tick: Instant,
     accumulator: Duration,
@@ -718,6 +1602,41 @@ struct App {
     display_artifact_archive: Option<LiveDisplayArtifactArchive>,
     #[cfg(all(windows, feature = "protocol-research"))]
     display_artifact_capture_requested: bool,
+    #[cfg(all(windows, feature = "protocol-research"))]
+    presentation_output_capture_requested: bool,
+    #[cfg(all(windows, feature = "protocol-research"))]
+    presentation_audit_enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HeadlessTickSummary {
+    ordinal: u64,
+    outcome: ContentTag,
+    post_world: ContentTag,
+    post_history: ContentTag,
+    camera_bits: [u64; 10],
+    game_input: Option<ContentTag>,
+    game_frame: Option<ContentTag>,
+    composite_input: Option<ContentTag>,
+    composite_frame: Option<ContentTag>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HeadlessSimulationSummary {
+    tape: ContentTag,
+    action_count: usize,
+    ticks: Vec<HeadlessTickSummary>,
+    final_world: ContentTag,
+    final_history: ContentTag,
+    final_camera_bits: [u64; 10],
+    on_bits: usize,
+    coordinate_receipts: usize,
+    game_admissions: usize,
+    composite_admissions: usize,
+    game_receipt_head: Option<ContentTag>,
+    composite_receipt_head: Option<ContentTag>,
+    #[cfg(feature = "protocol-research")]
+    local_replay_endpoint: LocalReplayEndpoint,
 }
 
 impl App {
@@ -727,6 +1646,14 @@ impl App {
     }
 
     fn with_program(program: Program) -> Self {
+        Self::with_program_mode(program, AppMode::Live)
+    }
+
+    fn for_headless_simulation() -> Self {
+        Self::with_program_mode(Program::new(), AppMode::Headless)
+    }
+
+    fn with_program_mode(program: Program, mode: AppMode) -> Self {
         let now = Instant::now();
         let mut inputs = Inputs::default();
         inputs
@@ -749,6 +1676,8 @@ impl App {
             mouse_captured: false,
             cursor_position: None,
             sidebar_visible: true,
+            display_predecessor_override: (mode == AppMode::Headless)
+                .then_some(DisplayStatus::AuditDisabled),
             last_frame: now,
             next_tick: now,
             accumulator: Duration::ZERO,
@@ -768,12 +1697,77 @@ impl App {
             last_presented_output: None,
             last_presented_sidebar_facts: None,
             #[cfg(windows)]
-            display_ledger: display_audit_enabled().then(DisplayLedgerV2::default),
+            display_ledger: (mode == AppMode::Live && display_audit_enabled())
+                .then(DisplayLedgerV2::default),
             #[cfg(all(windows, feature = "protocol-research"))]
             display_artifact_archive: None,
             #[cfg(all(windows, feature = "protocol-research"))]
             display_artifact_capture_requested: false,
+            #[cfg(all(windows, feature = "protocol-research"))]
+            presentation_output_capture_requested: false,
+            #[cfg(all(windows, feature = "protocol-research"))]
+            presentation_audit_enabled: mode == AppMode::Live && presentation_audit_enabled(),
         }
+    }
+
+    /// Applies one normalized action that has already passed the platform adapter.
+    ///
+    /// Live winit input and headless tapes both enter through this method. Raw device routing,
+    /// mouse-grab success, synthetic-event filtering, redraw, and all display observations stay
+    /// outside this accepted-action boundary.
+    fn apply_accepted_action(
+        &mut self,
+        action: AcceptedAction,
+    ) -> Result<(), AcceptedActionApplyError> {
+        match action {
+            AcceptedAction::MoveEdge(control, pressed) => match control {
+                MoveControl::Forward => self.inputs.forward = pressed,
+                MoveControl::Backward => self.inputs.backward = pressed,
+                MoveControl::Left => self.inputs.left = pressed,
+                MoveControl::Right => self.inputs.right = pressed,
+                MoveControl::Up => self.inputs.up = pressed,
+                MoveControl::Down => self.inputs.down = pressed,
+            },
+            AcceptedAction::LookDelta(x, y) => {
+                let next_x = checked_accepted_accumulation("look_x", self.inputs.mouse_x, x)?;
+                let next_y = checked_accepted_accumulation("look_y", self.inputs.mouse_y, y)?;
+                self.inputs.mouse_x = next_x;
+                self.inputs.mouse_y = next_y;
+            }
+            AcceptedAction::WheelLines(lines) => {
+                if !lines.is_finite() {
+                    return Err(AcceptedActionApplyError::NonFiniteLane {
+                        field: "wheel",
+                        bits: lines.to_bits(),
+                    });
+                }
+                self.inputs.wheel = (self.inputs.wheel + lines).clamp(-64.0, 64.0);
+            }
+            AcceptedAction::AimDelete => {
+                self.inputs.edits.push(PendingEdit::Aim(AimEdit::Delete));
+            }
+            AcceptedAction::AimPlace => {
+                self.inputs.edits.push(PendingEdit::Aim(AimEdit::Place));
+            }
+            AcceptedAction::ExactEdit(edit) => {
+                self.inputs.edits.push(PendingEdit::Exact(edit));
+            }
+            AcceptedAction::FitWorld => self.inputs.fit_world = true,
+            AcceptedAction::ToggleSidebar => {
+                self.sidebar_visible = !self.sidebar_visible;
+                self.needs_sidebar_render = true;
+            }
+            AcceptedAction::Resize(width, height) => {
+                self.resize(PhysicalSize::new(width, height));
+            }
+            AcceptedAction::ClearMotion => self.inputs.clear_motion(),
+        }
+        Ok(())
+    }
+
+    fn apply_infallible_accepted_action(&mut self, action: AcceptedAction) {
+        self.apply_accepted_action(action)
+            .expect("a non-analog accepted action cannot fail finite aggregation");
     }
 
     fn capture_mouse(&mut self, capture: bool) {
@@ -793,7 +1787,7 @@ impl App {
             let _ = display.window.set_cursor_grab(CursorGrabMode::None);
             display.window.set_cursor_visible(true);
             self.mouse_captured = false;
-            self.inputs.clear_motion();
+            self.apply_infallible_accepted_action(AcceptedAction::ClearMotion);
         }
     }
 
@@ -810,7 +1804,9 @@ impl App {
         if !self.mouse_captured && self.pointer_in_sidebar() {
             return;
         }
-        self.inputs.wheel = (self.inputs.wheel + lines).clamp(-64.0, 64.0);
+        if let Err(error) = self.apply_accepted_action(AcceptedAction::WheelLines(lines)) {
+            eprintln!("accepted-action-refused\t{error}");
+        }
     }
 
     fn resize(&mut self, size: PhysicalSize<u32>) {
@@ -954,6 +1950,9 @@ impl App {
     fn sidebar_display_predecessor(
         &self,
     ) -> (Option<bitblock::protocol::ContentTag>, u64, DisplayStatus) {
+        if let Some(status) = self.display_predecessor_override {
+            return (None, 0, status);
+        }
         let Some(ledger) = self.display_ledger.as_ref() else {
             return (None, 0, DisplayStatus::AuditDisabled);
         };
@@ -974,6 +1973,9 @@ impl App {
     fn sidebar_display_predecessor(
         &self,
     ) -> (Option<bitblock::protocol::ContentTag>, u64, DisplayStatus) {
+        if let Some(status) = self.display_predecessor_override {
+            return (None, 0, status);
+        }
         (None, 0, DisplayStatus::Unsupported)
     }
 
@@ -1121,12 +2123,14 @@ impl App {
         }
 
         let batch = TickBatch::new(self.tick, attempts, transaction.edits().iter().copied());
-        self.history.commit_tick(transaction, &self.world);
+        let post_world = match self.history.commit_tick(transaction, &self.world) {
+            Some(receipt) => receipt.post_world(),
+            None => pre_world,
+        };
         self.last_tick_batch = Some(batch);
-        let post_world = world_tag(&self.world);
-        assert_eq!(
+        debug_assert_eq!(
+            world_tag(&self.world),
             post_world,
-            self.history.current_world(),
             "live world diverged from coordinate-history identity after fixed-tick edits"
         );
 
@@ -1155,13 +2159,13 @@ impl App {
             .expect("renderer state must use canonical nested tag kinds");
             self.renderer.render(&self.world, &self.camera);
             self.renderer.draw_crosshair(overlay);
-            let game_frame = FrameRef::new(
-                self.renderer.width(),
-                self.renderer.height(),
-                self.renderer.pixels(),
-            )
-            .expect("renderer produced an invalid game-frame shape")
-            .observe();
+            let (game_frame, palette_audit) = self.renderer.observe_final_game_frame();
+            assert!(
+                palette_audit.is_valid(),
+                "renderer produced {} illegal final RGB colors; first={:?}",
+                palette_audit.illegal_rgb_count(),
+                palette_audit.first_illegal(),
+            );
             produced_game = Some((input.tag(), game_frame));
             produced_game_context = Some((renderer_profile, overlay_input));
         }
@@ -1192,7 +2196,12 @@ impl App {
                 self.compositor.width(),
                 self.compositor.height(),
             );
-            let sidebar_facts = self.compositor.compose(self.renderer.pixels(), &snapshot);
+            let sidebar_facts = if game_rendered {
+                self.compositor
+                    .compose(self.renderer.pixels(), game.1.tag, &snapshot)
+            } else {
+                self.compositor.compose_sidebar_only(game.1.tag, &snapshot)
+            };
             let output_frame = FrameRef::new(
                 self.compositor.width(),
                 self.compositor.height(),
@@ -1373,6 +2382,11 @@ impl App {
         #[cfg(not(windows))]
         copy_exact(&mut buffer, frame).expect("surface does not match framebuffer shape");
 
+        #[cfg(all(windows, feature = "protocol-research"))]
+        let presentation_audit_enabled =
+            self.presentation_audit_enabled || self.presentation_output_capture_requested;
+        #[cfg(all(windows, feature = "protocol-research"))]
+        let mut presentation_timing = None;
         #[cfg(windows)]
         let submitted = submit_live_frame_pair(
             &self.tick_outcomes,
@@ -1383,7 +2397,20 @@ impl App {
                 .expect("v2 frame ledgers cannot disappear during one presentation"),
             game_pending,
             output_pending,
-            |_| {
+            |_receipts| {
+                #[cfg(feature = "protocol-research")]
+                if presentation_audit_enabled {
+                    let observation = observe_checked_present(|| display.surface.present())?;
+                    if !observation.presenter.release_succeeded() {
+                        eprintln!(
+                            "windows-present-release\tresult={}\terror={}",
+                            observation.presenter.release_result,
+                            observation.presenter.release_error_code
+                        );
+                    }
+                    presentation_timing = Some(observation.bind(_receipts.composite()));
+                    return Ok(());
+                }
                 display.surface.present().map(|facts| {
                     if !facts.release_succeeded() {
                         eprintln!(
@@ -1414,6 +2441,29 @@ impl App {
         } = submitted;
         debug_assert_eq!(game_pending.is_some(), presented_game.is_some());
         debug_assert_eq!(presented_output.receipt_v2.stream(), FrameStream::Composite);
+        #[cfg(all(windows, feature = "protocol-research"))]
+        if let Some(timing) = presentation_timing {
+            match timing {
+                Ok(envelope) => {
+                    debug_assert_eq!(envelope.receipt(), presented_output.receipt_v2);
+                    eprintln!(
+                        "composition-timing\tartifact={}\tpolicy={}\tprogress={:?}\tattribution={:?}\tqpf={}\tpre_hr={}\tgdi_flush={}\tdwm_flush_hr={}\tpost_hr={}",
+                        envelope.tag(),
+                        envelope.timing_policy(),
+                        envelope.progress(),
+                        envelope.frame_attribution(),
+                        envelope.qpc_frequency().succeeded,
+                        envelope.pre().hresult,
+                        envelope.gdi_flush().succeeded,
+                        envelope.dwm_flush().hresult,
+                        envelope.post().hresult,
+                    );
+                }
+                Err(error) => {
+                    eprintln!("composition-timing-refused\t{error}");
+                }
+            }
+        }
 
         // Presentation authority is already committed. Publish that state and clear the pending
         // submission before any observational capture or filesystem work can refuse afterward.
@@ -1426,6 +2476,25 @@ impl App {
         self.pending_output_frame = None;
         self.pending_sidebar_facts = None;
         self.needs_present = false;
+
+        #[cfg(all(windows, feature = "protocol-research"))]
+        if self.presentation_output_capture_requested
+            && let (Some(ledgers), Some(archive)) = (
+                self.frame_ledgers_v2.as_ref(),
+                self.display_artifact_archive.as_mut(),
+            )
+            && let Some(result) = service_presentation_output_request(
+                &mut self.presentation_output_capture_requested,
+                archive,
+                &ledgers.composite,
+                &display.window,
+                presented_output,
+                frame,
+                presentation_timing,
+            )
+        {
+            report_presentation_output_result(&display.window, result);
+        }
 
         #[cfg(windows)]
         if let Some(display_ledger) = self.display_ledger.as_mut() {
@@ -1502,6 +2571,12 @@ impl App {
                 eprintln!("display-artifact-disabled\tjournal requires explicit typed reopen");
                 return;
             }
+            if self.presentation_output_capture_requested
+                || archive.pending_presentation_output().is_some()
+            {
+                eprintln!("display-artifact-request\tbusy=presentation-output");
+                return;
+            }
             if archive.pending_artifact().is_some() {
                 let result = archive.append_pending();
                 if let Some(display) = self.display.as_ref() {
@@ -1525,29 +2600,1013 @@ impl App {
         );
     }
 
+    fn request_presentation_output_capture(&mut self) {
+        #[cfg(all(windows, feature = "protocol-research"))]
+        {
+            let Some(archive) = self.display_artifact_archive.as_mut() else {
+                eprintln!(
+                    "presentation-output-disabled\tset {DISPLAY_JOURNAL_ENV} to a fresh path before startup"
+                );
+                return;
+            };
+            if archive.faulted {
+                eprintln!("presentation-output-disabled\tjournal requires explicit typed reopen");
+                return;
+            }
+            if self.display_artifact_capture_requested || archive.pending_artifact().is_some() {
+                eprintln!("presentation-output-request\tbusy=display-artifact");
+                return;
+            }
+            if archive.pending_presentation_output().is_some() {
+                let result = archive.append_pending_presentation_output();
+                if let Some(display) = self.display.as_ref() {
+                    report_presentation_output_result(
+                        &display.window,
+                        result.map_err(LivePresentationOutputFailure::Store),
+                    );
+                }
+                return;
+            }
+            if self.presentation_output_capture_requested {
+                eprintln!("presentation-output-request\tcoalesced");
+                return;
+            }
+            self.presentation_output_capture_requested = true;
+            eprintln!("presentation-output-request\tarmed-next-presentation");
+            if let Some(display) = self.display.as_ref() {
+                // A redraw services UI state but does not forge a frame, tick, or resubmit the
+                // current surface. The request stays armed until a normal presentation exists.
+                display
+                    .window
+                    .set_title(PRESENTATION_EVIDENCE_WAITING_TITLE);
+                display.window.request_redraw();
+            }
+        }
+        #[cfg(not(all(windows, feature = "protocol-research")))]
+        eprintln!(
+            "presentation-output-disabled\tF5 requires Windows and --features protocol-research"
+        );
+    }
+
     fn key(&mut self, code: KeyCode, pressed: bool) {
         match code {
-            KeyCode::KeyW => self.inputs.forward = pressed,
-            KeyCode::KeyS => self.inputs.backward = pressed,
-            KeyCode::KeyA => self.inputs.left = pressed,
-            KeyCode::KeyD => self.inputs.right = pressed,
-            KeyCode::Space => self.inputs.up = pressed,
-            KeyCode::ShiftLeft | KeyCode::ShiftRight => self.inputs.down = pressed,
-            KeyCode::KeyF if pressed => self.inputs.fit_world = true,
+            KeyCode::KeyW => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Forward,
+                pressed,
+            )),
+            KeyCode::KeyS => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Backward,
+                pressed,
+            )),
+            KeyCode::KeyA => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Left,
+                pressed,
+            )),
+            KeyCode::KeyD => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Right,
+                pressed,
+            )),
+            KeyCode::Space => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Up,
+                pressed,
+            )),
+            KeyCode::ShiftLeft | KeyCode::ShiftRight => self.apply_infallible_accepted_action(
+                AcceptedAction::MoveEdge(MoveControl::Down, pressed),
+            ),
+            KeyCode::KeyF if pressed => {
+                self.apply_infallible_accepted_action(AcceptedAction::FitWorld);
+            }
             KeyCode::F3 if pressed => {
-                self.sidebar_visible = !self.sidebar_visible;
-                self.needs_sidebar_render = true;
+                self.apply_infallible_accepted_action(AcceptedAction::ToggleSidebar);
             }
             KeyCode::F4 if pressed => self.request_display_artifact_capture(),
+            KeyCode::F5 if pressed => self.request_presentation_output_capture(),
             KeyCode::Escape if pressed => self.capture_mouse(false),
             _ => {}
         }
     }
 }
 
+fn headless_pixel_shape(width: u32, height: u32) -> Result<(u128, u128), io::Error> {
+    let output_pixels = u128::from(width)
+        .checked_mul(u128::from(height))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pixel count overflow"))?;
+    if output_pixels > u128::from(HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "headless resize {width}x{height} requires {output_pixels} output pixels; policy limit is {HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS}"
+            ),
+        ));
+    }
+    let sidebar_width = SIDEBAR_WIDTH.min(width.saturating_sub(1));
+    let simulation_pixels = u128::from(width - sidebar_width)
+        .checked_mul(u128::from(height))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "simulation pixel count overflow",
+            )
+        })?;
+    Ok((output_pixels, simulation_pixels))
+}
+
+fn checked_headless_charge(
+    accumulated: &mut u128,
+    addition: u128,
+    limit: u128,
+    lane: &str,
+    tick: u64,
+) -> Result<(), io::Error> {
+    let next = accumulated.checked_add(addition).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("headless {lane} overflow at tick {tick}"),
+        )
+    })?;
+    if next > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "headless {lane} policy exceeded at tick {tick}: required {next}, limit {limit}"
+            ),
+        ));
+    }
+    *accumulated = next;
+    Ok(())
+}
+
+fn headless_possible_world_bits(
+    possible_exact_bits: usize,
+    unresolved_aim_place_bits: u128,
+) -> Result<u128, io::Error> {
+    (possible_exact_bits as u128)
+        .checked_add(unresolved_aim_place_bits)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "possible world population overflow",
+            )
+        })
+}
+
+type HeadlessChunkKey = (i64, i64, i64);
+
+fn headless_chunk_key(coord: Coord) -> HeadlessChunkKey {
+    (
+        coord.x.div_euclid(CHUNK_SIDE),
+        coord.y.div_euclid(CHUNK_SIDE),
+        coord.z.div_euclid(CHUNK_SIDE),
+    )
+}
+
+fn headless_insert_possible_exact(
+    possible_exact_bits: &mut HashSet<Coord>,
+    possible_exact_chunk_counts: &mut HashMap<HeadlessChunkKey, usize>,
+    coord: Coord,
+) -> Result<(), io::Error> {
+    if possible_exact_bits.insert(coord) {
+        let count = possible_exact_chunk_counts
+            .entry(headless_chunk_key(coord))
+            .or_default();
+        *count = count.checked_add(1).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "possible exact chunk population overflow",
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn headless_remove_possible_exact(
+    possible_exact_bits: &mut HashSet<Coord>,
+    possible_exact_chunk_counts: &mut HashMap<HeadlessChunkKey, usize>,
+    coord: Coord,
+) {
+    if !possible_exact_bits.remove(&coord) {
+        return;
+    }
+    let key = headless_chunk_key(coord);
+    let remove_chunk = {
+        let count = possible_exact_chunk_counts
+            .get_mut(&key)
+            .expect("a possible exact bit must retain its chunk count");
+        *count = count
+            .checked_sub(1)
+            .expect("a possible exact chunk count must be positive");
+        *count == 0
+    };
+    if remove_chunk {
+        possible_exact_chunk_counts.remove(&key);
+    }
+}
+
+fn headless_possible_chunk_count(
+    possible_exact_chunks: usize,
+    unresolved_aim_place_bits: u128,
+) -> Result<u128, io::Error> {
+    (possible_exact_chunks as u128)
+        .checked_add(unresolved_aim_place_bits)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "possible chunk population overflow",
+            )
+        })
+}
+
+fn headless_chunk_word_units(possible_chunks: u128) -> Result<u128, io::Error> {
+    possible_chunks
+        .checked_mul(CHUNK_WORDS as u128)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "chunk-word charge overflow"))
+}
+
+fn headless_world_ordering_units(population: u128) -> Result<u128, io::Error> {
+    let levels = if population <= 1 {
+        1
+    } else {
+        u128::BITS - (population - 1).leading_zeros()
+    };
+    population
+        .checked_mul(u128::from(levels))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "world-ordering charge overflow"))
+}
+
+/// Refuses an expensive tape before constructing or mutating the simulation.
+///
+/// The accounting follows a pure dirty-state shadow while conservatively assuming that requested
+/// movement succeeds. Exact edits update possible/definite coordinate sets, unresolved aimed
+/// placements only raise the possible population, and each voxel can cover the complete viewport
+/// once per cube triangle. Every nonzero resize is charged separately because repeated grow/shrink
+/// actions allocate and clear buffers even when the final dimensions are small.
+fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
+    let mut width = INITIAL_OUTPUT_WIDTH;
+    let mut height = INITIAL_VIEWPORT;
+    let mut possible_exact_bits = HashSet::from([BEDROCK_COORD]);
+    let mut possible_exact_chunk_counts =
+        HashMap::from([(headless_chunk_key(BEDROCK_COORD), 1_usize)]);
+    let mut definite_exact_bits = HashSet::from([BEDROCK_COORD]);
+    let mut unresolved_aim_place_bits = 0_u128;
+    let mut movement = [false; 6];
+    let mut resize_pixel_writes = 0_u128;
+    let mut output_pixel_ticks = 0_u128;
+    let mut raster_sample_tests = 0_u128;
+    let mut world_coordinate_tests = 0_u128;
+    let mut edit_coordinate_tests = 0_u128;
+    let mut chunk_word_tests = 0_u128;
+    let mut world_ordering_units = 0_u128;
+
+    for record in tape.records() {
+        let mut record_peak_possible_bits =
+            headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+        let mut record_peak_possible_chunks = headless_possible_chunk_count(
+            possible_exact_chunk_counts.len(),
+            unresolved_aim_place_bits,
+        )?;
+        let mut aim_actions = 0_u128;
+        let mut wheel = 0.0_f64;
+        let mut look_x = 0.0_f64;
+        let mut look_y = 0.0_f64;
+        let mut has_edit_action = false;
+        let mut has_resize = false;
+        let mut fit_requested = false;
+        let mut game_dirty = record.ordinal() == 0;
+        let mut sidebar_dirty = false;
+        for (action_index, &action) in record.actions().iter().enumerate() {
+            match action {
+                AcceptedAction::MoveEdge(control, pressed) => {
+                    let index = match control {
+                        MoveControl::Forward => 0,
+                        MoveControl::Backward => 1,
+                        MoveControl::Left => 2,
+                        MoveControl::Right => 3,
+                        MoveControl::Up => 4,
+                        MoveControl::Down => 5,
+                    };
+                    movement[index] = pressed;
+                }
+                AcceptedAction::LookDelta(x, y) => {
+                    let map_error = |error: AcceptedActionApplyError| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "interaction tick {} action {action_index} was refused during preflight: {error}",
+                                record.ordinal()
+                            ),
+                        )
+                    };
+                    let next_x =
+                        checked_accepted_accumulation("look_x", look_x, x).map_err(map_error)?;
+                    let next_y =
+                        checked_accepted_accumulation("look_y", look_y, y).map_err(map_error)?;
+                    look_x = next_x;
+                    look_y = next_y;
+                }
+                AcceptedAction::WheelLines(lines) => {
+                    wheel = (wheel + lines).clamp(-64.0, 64.0);
+                }
+                AcceptedAction::Resize(next_width, next_height)
+                    if next_width != 0 && next_height != 0 =>
+                {
+                    let (output_pixels, simulation_pixels) =
+                        headless_pixel_shape(next_width, next_height)?;
+                    let resize_charge = simulation_pixels
+                        .checked_mul(2)
+                        .and_then(|simulation_buffers| {
+                            output_pixels.checked_add(simulation_buffers)
+                        })
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "resize pixel-write charge overflow",
+                            )
+                        })?;
+                    checked_headless_charge(
+                        &mut resize_pixel_writes,
+                        resize_charge,
+                        HEADLESS_SIMULATION_MAX_RESIZE_PIXEL_WRITES,
+                        "resize-pixel-write",
+                        record.ordinal(),
+                    )?;
+                    width = next_width;
+                    height = next_height;
+                    has_resize = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::AimDelete => {
+                    aim_actions = aim_actions.checked_add(1).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "aim-action count overflow")
+                    })?;
+                    has_edit_action = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::AimPlace => {
+                    aim_actions = aim_actions.checked_add(1).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "aim-action count overflow")
+                    })?;
+                    unresolved_aim_place_bits =
+                        unresolved_aim_place_bits.checked_add(1).ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "possible aimed-placement population overflow",
+                            )
+                        })?;
+                    has_edit_action = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::ExactEdit(edit) => {
+                    let possible_before = headless_possible_world_bits(
+                        possible_exact_bits.len(),
+                        unresolved_aim_place_bits,
+                    )?;
+                    let possible_chunks_before = headless_possible_chunk_count(
+                        possible_exact_chunk_counts.len(),
+                        unresolved_aim_place_bits,
+                    )?;
+                    if matches!(edit.operation, Operation::Off | Operation::Toggle) {
+                        checked_headless_charge(
+                            &mut edit_coordinate_tests,
+                            possible_before,
+                            HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS,
+                            "edit-coordinate-test",
+                            record.ordinal(),
+                        )?;
+                        checked_headless_charge(
+                            &mut chunk_word_tests,
+                            headless_chunk_word_units(possible_chunks_before)?,
+                            HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+                            "chunk-word-test",
+                            record.ordinal(),
+                        )?;
+                    }
+                    if edit.coord != BEDROCK_COORD {
+                        match edit.operation {
+                            Operation::On => {
+                                headless_insert_possible_exact(
+                                    &mut possible_exact_bits,
+                                    &mut possible_exact_chunk_counts,
+                                    edit.coord,
+                                )?;
+                            }
+                            Operation::Off => {
+                                headless_remove_possible_exact(
+                                    &mut possible_exact_bits,
+                                    &mut possible_exact_chunk_counts,
+                                    edit.coord,
+                                );
+                                definite_exact_bits.remove(&edit.coord);
+                            }
+                            Operation::Toggle => {
+                                if definite_exact_bits.remove(&edit.coord) {
+                                    headless_remove_possible_exact(
+                                        &mut possible_exact_bits,
+                                        &mut possible_exact_chunk_counts,
+                                        edit.coord,
+                                    );
+                                } else {
+                                    headless_insert_possible_exact(
+                                        &mut possible_exact_bits,
+                                        &mut possible_exact_chunk_counts,
+                                        edit.coord,
+                                    )?;
+                                }
+                            }
+                        }
+                    }
+                    has_edit_action = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::FitWorld => {
+                    fit_requested = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::ToggleSidebar => sidebar_dirty = true,
+                AcceptedAction::ClearMotion => {
+                    movement.fill(false);
+                    look_x = 0.0;
+                    look_y = 0.0;
+                }
+                _ => {}
+            }
+            record_peak_possible_bits = record_peak_possible_bits.max(
+                headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?,
+            );
+            let possible_chunks = headless_possible_chunk_count(
+                possible_exact_chunk_counts.len(),
+                unresolved_aim_place_bits,
+            )?;
+            if possible_chunks > HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "headless possible-chunk-count policy exceeded at tick {}: required {possible_chunks}, limit {HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS}",
+                        record.ordinal()
+                    ),
+                ));
+            }
+            record_peak_possible_chunks = record_peak_possible_chunks.max(possible_chunks);
+        }
+
+        let possible_world_bits =
+            headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+        let (output_pixels, simulation_pixels) = headless_pixel_shape(width, height)?;
+        let movement_active =
+            movement[0] != movement[1] || movement[2] != movement[3] || movement[4] != movement[5];
+        game_dirty |= look_x != 0.0 || look_y != 0.0 || movement_active || wheel != 0.0;
+        if game_dirty || sidebar_dirty {
+            checked_headless_charge(
+                &mut output_pixel_ticks,
+                output_pixels,
+                HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS,
+                "output-pixel-tick",
+                record.ordinal(),
+            )?;
+        }
+        if game_dirty {
+            let tick_raster_sample_tests = simulation_pixels
+                .checked_mul(possible_world_bits)
+                .and_then(|candidate_pixels| {
+                    candidate_pixels.checked_mul(HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND)
+                })
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "raster-sample test charge overflow",
+                    )
+                })?;
+            checked_headless_charge(
+                &mut raster_sample_tests,
+                tick_raster_sample_tests,
+                HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS,
+                "raster-sample-test",
+                record.ordinal(),
+            )?;
+        }
+
+        // Two baseline scans cover the pre/post world commitments. The remaining terms bound a
+        // possible edit-receipt commitment, render traversal, raycasts, collision sweeps, and the
+        // debug invariant sweeps performed by movement, wheel, resize-refit, and explicit fit.
+        let world_scans = 2_u128
+            .checked_add(u128::from(has_edit_action))
+            .and_then(|scans| scans.checked_add(u128::from(game_dirty)))
+            .and_then(|scans| scans.checked_add(u128::from(has_resize)))
+            .and_then(|scans| scans.checked_add(u128::from(fit_requested)))
+            .and_then(|scans| {
+                aim_actions
+                    .checked_mul(2)
+                    .and_then(|aim_scans| scans.checked_add(aim_scans))
+            })
+            .and_then(|scans| scans.checked_add(if movement_active { 2 } else { 0 }))
+            .and_then(|scans| scans.checked_add(if wheel != 0.0 { 2 } else { 0 }))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "world-scan count overflow")
+            })?;
+        let tick_world_coordinate_tests = world_scans
+            .checked_mul(record_peak_possible_bits)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "world-coordinate test charge overflow",
+                )
+            })?;
+        checked_headless_charge(
+            &mut world_coordinate_tests,
+            tick_world_coordinate_tests,
+            HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
+            "world-coordinate-test",
+            record.ordinal(),
+        )?;
+        let tick_chunk_word_tests = headless_chunk_word_units(record_peak_possible_chunks)?
+            .checked_mul(world_scans)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "chunk-word charge overflow")
+            })?;
+        checked_headless_charge(
+            &mut chunk_word_tests,
+            tick_chunk_word_tests,
+            HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+            "chunk-word-test",
+            record.ordinal(),
+        )?;
+        let world_tag_scans = 2_u128
+            .checked_add(u128::from(has_edit_action))
+            .and_then(|scans| scans.checked_add(u128::from(game_dirty)))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "world-tag scan count overflow")
+            })?;
+        let tick_world_ordering_units = headless_world_ordering_units(record_peak_possible_bits)?
+            .checked_mul(world_tag_scans)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "world-ordering charge overflow")
+            })?;
+        checked_headless_charge(
+            &mut world_ordering_units,
+            tick_world_ordering_units,
+            HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS,
+            "world-ordering",
+            record.ordinal(),
+        )?;
+    }
+    let final_tick = tape.records().last().map_or(0, |record| record.ordinal());
+    let possible_world_bits =
+        headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+    let possible_chunks = headless_possible_chunk_count(
+        possible_exact_chunk_counts.len(),
+        unresolved_aim_place_bits,
+    )?;
+    checked_headless_charge(
+        &mut world_coordinate_tests,
+        possible_world_bits,
+        HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
+        "world-coordinate-test",
+        final_tick,
+    )?;
+    checked_headless_charge(
+        &mut chunk_word_tests,
+        headless_chunk_word_units(possible_chunks)?,
+        HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+        "chunk-word-test",
+        final_tick,
+    )?;
+    checked_headless_charge(
+        &mut world_ordering_units,
+        headless_world_ordering_units(possible_world_bits)?,
+        HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS,
+        "world-ordering",
+        final_tick,
+    )?;
+    Ok(())
+}
+
+#[cfg(feature = "protocol-research")]
+fn local_replay_policy_tag(schema: &[u8], payload: &[u8]) -> ContentTag {
+    hash_canonical(TagKind::Policy, schema, payload.len() as u64, |sink| {
+        sink(payload)
+    })
+    .expect("local replay policy payload length is measured from its exact encoding")
+}
+
+/// Declares the deterministic initial state of the fixed headless fold.
+///
+/// The executable fingerprint in the surrounding context is still required: this policy tag is
+/// a transparent state declaration, not a hash of the implementation that obeyed it.
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_genesis_policy_tag() -> ContentTag {
+    let app = App::for_headless_simulation();
+    let mut payload = Vec::with_capacity(192);
+    payload.extend_from_slice(&1_u16.to_be_bytes());
+    payload.extend_from_slice(&world_tag(&app.world).digest());
+    payload.extend_from_slice(&app.history.genesis().digest());
+    for bits in TickCameraState::capture(&app.camera).bits() {
+        payload.extend_from_slice(&bits.to_be_bytes());
+    }
+    payload.extend_from_slice(&app.renderer.width().to_be_bytes());
+    payload.extend_from_slice(&app.renderer.height().to_be_bytes());
+    payload.extend_from_slice(&app.compositor.width().to_be_bytes());
+    payload.extend_from_slice(&app.compositor.height().to_be_bytes());
+    payload.extend_from_slice(&app.compositor.simulation_width().to_be_bytes());
+    payload.extend_from_slice(&app.tick.to_be_bytes());
+    payload.push(u8::from(app.sidebar_visible));
+    payload.push(u8::from(app.needs_render));
+    payload.push(u8::from(app.needs_sidebar_render));
+    payload.push(u8::from(app.needs_present));
+    payload.push(u8::from(app.inputs.edits.is_empty()));
+    payload.push(
+        app.display_predecessor_override
+            .expect("headless simulation has an explicit display-audit-disabled predecessor")
+            as u8,
+    );
+    local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_GENESIS_SCHEMA, &payload)
+}
+
+/// Declares the fixed-tick and renderer/compositor policies used by one headless replay.
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_rules_policy_tag() -> ContentTag {
+    let mut payload = Vec::with_capacity(192);
+    payload.extend_from_slice(&1_u16.to_be_bytes());
+    payload.extend_from_slice(&TICK_RATE.to_bits().to_be_bytes());
+    payload.extend_from_slice(&(TICK_DURATION.as_nanos()).to_be_bytes());
+    payload.extend_from_slice(&DEFAULT_DOLLY_LOG_STEP.to_bits().to_be_bytes());
+    payload.extend_from_slice(&DEFAULT_MOUSE_SENSITIVITY.to_bits().to_be_bytes());
+    payload.extend_from_slice(&BLOCK_FILL_DISTANCE.to_bits().to_be_bytes());
+    payload.extend_from_slice(&OBSERVER_COLLISION_CLEARANCE.to_bits().to_be_bytes());
+    payload.extend_from_slice(&renderer_profile_tag().digest());
+    payload.extend_from_slice(&crosshair_policy_tag().digest());
+    payload.extend_from_slice(&composite_policy_tag().digest());
+    local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_RULES_SCHEMA, &payload)
+}
+
+/// Declares the bounded input and work-admission policy before a tape is replayed.
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_admission_policy_tag() -> ContentTag {
+    let mut payload = Vec::with_capacity(256);
+    payload.extend_from_slice(&1_u16.to_be_bytes());
+    for value in [
+        MAX_INTERACTION_TAPE_PAYLOAD_BYTES as u64,
+        MAX_INTERACTION_TAPE_RECORDS as u64,
+        MAX_INTERACTION_ACTIONS_PER_RECORD as u64,
+        MAX_INTERACTION_TOTAL_ACTIONS as u64,
+        HEADLESS_SIMULATION_MAX_SOURCE_BYTES as u64,
+        HEADLESS_LOCAL_REPLAY_MAX_EXECUTABLE_BYTES,
+        HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS,
+        HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND as u64,
+    ] {
+        payload.extend_from_slice(&value.to_be_bytes());
+    }
+    for value in [
+        HEADLESS_SIMULATION_MAX_RESIZE_PIXEL_WRITES,
+        HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS,
+        HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS,
+        HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
+        HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS,
+        HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+        HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS,
+        HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS,
+    ] {
+        payload.extend_from_slice(&value.to_be_bytes());
+    }
+    local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_ADMISSION_SCHEMA, &payload)
+}
+
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_build() -> Result<LocalReplayBuild, io::Error> {
+    let executable = std::env::current_exe()?;
+    let mut file = std::fs::File::open(&executable)?;
+    let before = file.metadata()?;
+    if !before.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "current local replay executable is not a regular file: {}",
+                executable.display()
+            ),
+        ));
+    }
+    let build = LocalReplayBuild::fingerprint_reader(
+        &mut file,
+        before.len(),
+        HEADLESS_LOCAL_REPLAY_MAX_EXECUTABLE_BYTES,
+    )
+    .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not fingerprint local replay executable: {error}"),
+        )
+    })?;
+    let after = file.metadata()?;
+    if !after.is_file() || after.len() != before.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "local replay executable changed while fingerprinting: {}",
+                executable.display()
+            ),
+        ));
+    }
+    Ok(build)
+}
+
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_context() -> Result<LocalReplayContext, io::Error> {
+    LocalReplayContext::new(
+        headless_local_replay_build()?,
+        headless_local_replay_genesis_policy_tag(),
+        headless_local_replay_rules_policy_tag(),
+        headless_local_replay_admission_policy_tag(),
+    )
+    .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not construct local replay context: {error}"),
+        )
+    })
+}
+
+#[cfg(feature = "protocol-research")]
+fn simulate_interaction_tape_with_local_replay_evidence(
+    tape: &InteractionTape,
+) -> Result<(HeadlessSimulationSummary, LocalReplayEvidence), io::Error> {
+    // Capture the build and declared policies before the fold. This is a local binding, not
+    // source/build provenance or a claim that the executable cannot change concurrently.
+    let context = headless_local_replay_context()?;
+    let summary = simulate_interaction_tape(tape)?;
+    let evidence = LocalReplayEvidence::new(context, tape.clone(), summary.local_replay_endpoint)
+        .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not construct local replay evidence: {error}"),
+        )
+    })?;
+    evidence.verify().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("constructed local replay evidence did not verify: {error}"),
+        )
+    })?;
+    Ok((summary, evidence))
+}
+
+#[cfg(all(test, feature = "protocol-research"))]
+fn verify_local_replay_evidence(
+    evidence: &LocalReplayEvidence,
+) -> Result<HeadlessSimulationSummary, io::Error> {
+    evidence.verify().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("local replay evidence structural verification failed: {error}"),
+        )
+    })?;
+    let current_context = headless_local_replay_context()?;
+    if evidence.context() != current_context {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "local replay evidence context differs from this executable or its declared headless policies",
+        ));
+    }
+    let summary = simulate_interaction_tape(evidence.tape())?;
+    let expected = LocalReplayEvidence::new(
+        current_context,
+        evidence.tape().clone(),
+        summary.local_replay_endpoint,
+    )
+    .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not reconstruct local replay evidence: {error}"),
+        )
+    })?;
+    if expected != *evidence {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "local replay evidence endpoint differs from replay of its embedded action tape",
+        ));
+    }
+    Ok(summary)
+}
+
+fn simulate_interaction_tape(
+    tape: &InteractionTape,
+) -> Result<HeadlessSimulationSummary, io::Error> {
+    preflight_headless_tape(tape)?;
+    let mut app = App::for_headless_simulation();
+    let mut ticks = Vec::new();
+    ticks.try_reserve(tape.len()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            "could not reserve headless tick summaries",
+        )
+    })?;
+    #[cfg(feature = "protocol-research")]
+    let mut latest_game = None;
+    #[cfg(feature = "protocol-research")]
+    let mut latest_composite = None;
+
+    for record in tape.records() {
+        for (action_index, &action) in record.actions().iter().enumerate() {
+            app.apply_accepted_action(action).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "interaction tick {} action {action_index} was refused: {error}",
+                        record.ordinal()
+                    ),
+                )
+            })?;
+        }
+        app.fixed_tick();
+        let outcome = app
+            .tick_outcomes
+            .last()
+            .expect("one interaction-tape record must emit exactly one fixed-tick outcome");
+        assert_eq!(
+            outcome.tick(),
+            record.ordinal(),
+            "interaction-tape ordinal diverged from the fixed-tick fold"
+        );
+        let game = outcome.game();
+        let composite = outcome.composite();
+        #[cfg(feature = "protocol-research")]
+        if let Some(game) = game {
+            latest_game = Some(
+                ReplayFrameCommitment::new(game.input(), game.frame())
+                    .expect("fixed tick game commitment has canonical nested kinds"),
+            );
+        }
+        #[cfg(feature = "protocol-research")]
+        if let Some(composite) = composite {
+            latest_composite = Some(
+                ReplayFrameCommitment::new(composite.input(), composite.frame())
+                    .expect("fixed tick composite commitment has canonical nested kinds"),
+            );
+        }
+        ticks.push(HeadlessTickSummary {
+            ordinal: outcome.tick(),
+            outcome: outcome.tag(),
+            post_world: outcome.post_world(),
+            post_history: outcome.post_history(),
+            camera_bits: outcome.post_camera().bits(),
+            game_input: game.map(TickFrameCommitment::input),
+            game_frame: game.map(TickFrameCommitment::frame),
+            composite_input: composite.map(TickFrameCommitment::input),
+            composite_frame: composite.map(TickFrameCommitment::frame),
+        });
+    }
+
+    let (game_admissions, composite_admissions, game_receipt_head, composite_receipt_head) = app
+        .frame_ledgers_v2
+        .as_ref()
+        .map_or((0, 0, None, None), |ledgers| {
+            (
+                ledgers.game.admissions().len(),
+                ledgers.composite.admissions().len(),
+                ledgers.game.head(),
+                ledgers.composite.head(),
+            )
+        });
+    if game_admissions != 0
+        || composite_admissions != 0
+        || game_receipt_head.is_some()
+        || composite_receipt_head.is_some()
+        || !app.frame_ledger.is_empty()
+        || !app.output_frame_ledger.is_empty()
+    {
+        return Err(io::Error::other(
+            "headless interaction fold unexpectedly published a frame receipt",
+        ));
+    }
+
+    // `commit_tick` derives this root from an independent coordinate scan. No mutation follows
+    // the fold, so the already-committed root is the canonical final-world identity for both
+    // consumers below. The per-tick world_tag checks remain the divergence guard.
+    let final_world = app.history.current_world();
+
+    #[cfg(feature = "protocol-research")]
+    let local_replay_endpoint = LocalReplayEndpoint::new(
+        app.tick_outcomes.last().map(TickOutcome::tag),
+        final_world,
+        app.history.head(),
+        TickCameraState::capture(&app.camera).bits(),
+        app.renderer.width(),
+        app.renderer.height(),
+        app.compositor.width(),
+        app.compositor.height(),
+        app.sidebar_visible,
+        latest_game,
+        latest_composite,
+    )
+    .expect("headless fixed fold produces a structurally valid replay endpoint");
+
+    Ok(HeadlessSimulationSummary {
+        tape: tape.content_tag(),
+        action_count: tape.total_actions(),
+        ticks,
+        final_world,
+        final_history: app.history.head(),
+        final_camera_bits: TickCameraState::capture(&app.camera).bits(),
+        on_bits: app.world.len(),
+        coordinate_receipts: app.history.receipts().len(),
+        game_admissions,
+        composite_admissions,
+        game_receipt_head,
+        composite_receipt_head,
+        #[cfg(feature = "protocol-research")]
+        local_replay_endpoint,
+    })
+}
+
+fn optional_tag(tag: Option<ContentTag>) -> String {
+    tag.map_or_else(|| "none".to_owned(), |tag| tag.to_string())
+}
+
+fn camera_bits_text(bits: [u64; 10]) -> String {
+    bits.into_iter()
+        .map(|bits| format!("{bits:016x}"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn print_headless_summary(summary: &HeadlessSimulationSummary) {
+    #[cfg(feature = "protocol-research")]
+    println!(
+        "interaction-simulation\ttape={}\tticks={}\tactions={}\tscope=fixed-tick-projection\trun_receipt=separate-local-replay-evidence-line",
+        summary.tape,
+        summary.ticks.len(),
+        summary.action_count,
+    );
+    #[cfg(not(feature = "protocol-research"))]
+    println!(
+        "interaction-simulation\ttape={}\tticks={}\tactions={}\tscope=fixed-tick-projection\trun_receipt=unavailable",
+        summary.tape,
+        summary.ticks.len(),
+        summary.action_count,
+    );
+    for tick in &summary.ticks {
+        println!(
+            "interaction-tick\tordinal={}\toutcome={}\tworld={}\thistory={}\tgame_input={}\tgame_frame={}\tcomposite_input={}\tcomposite_frame={}\tcamera_bits={}",
+            tick.ordinal,
+            tick.outcome,
+            tick.post_world,
+            tick.post_history,
+            optional_tag(tick.game_input),
+            optional_tag(tick.game_frame),
+            optional_tag(tick.composite_input),
+            optional_tag(tick.composite_frame),
+            camera_bits_text(tick.camera_bits),
+        );
+    }
+    println!(
+        "interaction-final\tworld={}\thistory={}\ton_bits={}\tcoordinate_receipts={}\tcamera_bits={}",
+        summary.final_world,
+        summary.final_history,
+        summary.on_bits,
+        summary.coordinate_receipts,
+        camera_bits_text(summary.final_camera_bits),
+    );
+    println!(
+        "interaction-boundary\tgame_admissions={}\tcomposite_admissions={}\tgame_receipt_head={}\tcomposite_receipt_head={}\tdisplay_evidence=unavailable-without-window",
+        summary.game_admissions,
+        summary.composite_admissions,
+        optional_tag(summary.game_receipt_head),
+        optional_tag(summary.composite_receipt_head),
+    );
+}
+
+/// Reports the in-memory carrier emitted for a research-enabled action simulation.
+///
+/// The line intentionally names only local replay bindings. It does not turn the carrier into
+/// durable storage or attribute it to a display, clock, remote peer, owner, or consensus rule.
+#[cfg(feature = "protocol-research")]
+fn print_local_replay_evidence(evidence: &LocalReplayEvidence) {
+    let context = evidence.context();
+    let endpoint = evidence.endpoint();
+    println!(
+        "interaction-local-replay-evidence\ttag={}\tcarrier_bytes={}\tcarrier=in-memory-only\tscope=canonical-local-replay\tbuild={}\tgenesis_policy={}\trules_policy={}\tadmission_policy={}\ttape={}\toutcome={}\tworld={}\thistory={}\tgame_frame={}\tcomposite_frame={}\tnot_claimed=persistence,custody,signature,ownership,consensus,clock,display,scanout,light",
+        evidence.tag(),
+        evidence.encoded_len(),
+        context.build().tag(),
+        context.genesis_policy(),
+        context.rules_policy(),
+        context.admission_policy(),
+        evidence.tape().content_tag(),
+        optional_tag(endpoint.outcome()),
+        endpoint.world(),
+        endpoint.history(),
+        optional_tag(endpoint.game().map(ReplayFrameCommitment::frame)),
+        optional_tag(endpoint.composite().map(ReplayFrameCommitment::frame)),
+    );
+}
+
 #[cfg(windows)]
 fn display_audit_enabled() -> bool {
     std::env::var("BITBLOCK_DISPLAY_AUDIT").is_ok_and(|value| {
+        value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("on")
+    })
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+fn presentation_audit_enabled() -> bool {
+    std::env::var(PRESENTATION_AUDIT_ENV).is_ok_and(|value| {
         value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("on")
     })
 }
@@ -1609,7 +3668,7 @@ impl ApplicationHandler for App {
 
         #[cfg(all(windows, feature = "protocol-research"))]
         let title = if self.display_artifact_archive.is_some() {
-            "bitblock — F3 metrics · F4 archive"
+            RESEARCH_WINDOW_TITLE
         } else {
             "bitblock — F3 metrics"
         };
@@ -1655,7 +3714,7 @@ impl ApplicationHandler for App {
                 window,
             });
         }
-        self.resize(size);
+        self.apply_infallible_accepted_action(AcceptedAction::Resize(size.width, size.height));
         let now = Instant::now();
         self.last_frame = now;
         self.next_tick = now + TICK_DURATION;
@@ -1692,7 +3751,12 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => self.resize(size),
+            WindowEvent::Resized(size) => {
+                self.apply_infallible_accepted_action(AcceptedAction::Resize(
+                    size.width,
+                    size.height,
+                ));
+            }
             WindowEvent::Focused(false) => self.capture_mouse(false),
             WindowEvent::KeyboardInput {
                 event,
@@ -1700,7 +3764,7 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if let PhysicalKey::Code(code) = event.physical_key
-                    && !(event.repeat && code == KeyCode::F4)
+                    && !(event.repeat && matches!(code, KeyCode::F4 | KeyCode::F5))
                 {
                     self.key(code, event.state == ElementState::Pressed);
                 }
@@ -1727,10 +3791,10 @@ impl ApplicationHandler for App {
                 } else {
                     match button {
                         MouseButton::Left => {
-                            self.inputs.edits.push(PendingEdit::Aim(AimEdit::Delete))
+                            self.apply_infallible_accepted_action(AcceptedAction::AimDelete)
                         }
                         MouseButton::Right => {
-                            self.inputs.edits.push(PendingEdit::Aim(AimEdit::Place))
+                            self.apply_infallible_accepted_action(AcceptedAction::AimPlace)
                         }
                         _ => {}
                     }
@@ -1766,9 +3830,10 @@ impl ApplicationHandler for App {
         if !self.mouse_captured {
             return;
         }
-        if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
-            self.inputs.mouse_x += x;
-            self.inputs.mouse_y += y;
+        if let DeviceEvent::MouseMotion { delta: (x, y) } = event
+            && let Err(error) = self.apply_accepted_action(AcceptedAction::LookDelta(x, y))
+        {
+            eprintln!("accepted-action-refused\t{error}");
         }
     }
 }
@@ -1864,6 +3929,143 @@ mod tests {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Err(error) => panic!("could not remove live display-journal test file: {error}"),
             }
+        }
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_qpc(value: i64) -> bitblock::presentation::QpcRead {
+        bitblock::presentation::QpcRead {
+            succeeded: true,
+            value,
+            error_code: 0,
+        }
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_qpc_bracket(before: i64, after: i64) -> bitblock::presentation::QpcBracket {
+        bitblock::presentation::QpcBracket {
+            before: test_qpc(before),
+            after: test_qpc(after),
+        }
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_timing(receipt: FrameReceiptV2) -> CompositionTimingEnvelope {
+        use bitblock::presentation::{
+            DwmFlushCall, DwmTimingCall, GdiFlushCall, PresenterEvidence, QpcFrequency,
+        };
+
+        let policy = bitblock::protocol::hash_canonical(
+            bitblock::protocol::TagKind::Policy,
+            b"bitblock/test-presenter-policy/v1",
+            0,
+            |_| {},
+        )
+        .unwrap();
+        CompositionTimingEnvelope::new(
+            receipt,
+            PresenterEvidence {
+                policy,
+                requested_scanlines: 1,
+                returned_scanlines: 1,
+                call_error_code: 0,
+                release_result: 1,
+                release_error_code: 0,
+            },
+            QpcFrequency {
+                succeeded: true,
+                counts_per_second: 10_000_000,
+                error_code: 0,
+            },
+            DwmTimingCall {
+                bracket: test_qpc_bracket(10, 11),
+                hresult: -1,
+                snapshot: None,
+            },
+            test_qpc_bracket(12, 13),
+            GdiFlushCall {
+                bracket: test_qpc_bracket(14, 15),
+                succeeded: true,
+            },
+            DwmFlushCall {
+                bracket: test_qpc_bracket(16, 17),
+                hresult: 0,
+            },
+            DwmTimingCall {
+                bracket: test_qpc_bracket(18, 19),
+                hresult: -1,
+                snapshot: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_unavailable_topology(
+        profile: u32,
+    ) -> bitblock::output_topology::OutputTopologyObservation {
+        use bitblock::output_topology::{AcquisitionAttempt, AcquisitionFacts};
+
+        bitblock::output_topology::OutputTopologyObservation::new_unavailable(
+            AcquisitionFacts {
+                profile_code_raw: profile,
+                request_flags_raw: 0x52,
+                attempts: vec![AcquisitionAttempt {
+                    operation_code_raw: 1,
+                    profile_code_raw: profile,
+                    request_flags_raw: 0x52,
+                    retry_ordinal: 0,
+                    outcome_code_raw: 1,
+                    error_code: 1168,
+                    reported_path_capacity: 0,
+                    reported_mode_capacity: 0,
+                }],
+            },
+            1,
+            1168,
+        )
+        .unwrap()
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_output_with_color(profile: u32) -> ActiveOutputWithColor {
+        let topology = test_unavailable_topology(profile);
+        let color = bitblock::output_color::OutputColorObservation::new_unavailable(
+            &topology,
+            0x4354_4f50,
+            1168,
+        )
+        .unwrap();
+        ActiveOutputWithColor::new(topology, color).unwrap()
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_complete_capture(expected: FrameRef<'_>) -> DisplayCapture {
+        let rect = bitblock::display::CaptureRect {
+            left: 0,
+            top: 0,
+            right: expected.width() as i32,
+            bottom: expected.height() as i32,
+        };
+        DisplayCapture {
+            facts: bitblock::display::DisplayCaptureFacts {
+                outcome: DisplayOutcome::Match,
+                stage: CaptureStage::Complete,
+                error_code: 0,
+                flush_before: true,
+                compositor_flush: true,
+                flush_after: true,
+                rect_before: rect,
+                rect_after: rect,
+                dpi: 96,
+                qpc_start: 100,
+                qpc_end: 120,
+                qpc_frequency: 10_000_000,
+                captured: Some(expected.observe()),
+                mismatch_count: 0,
+                first_mismatch: None,
+            },
+            pixels: Some(expected.pixels().to_vec()),
         }
     }
 
@@ -2038,6 +4240,33 @@ mod tests {
         verify_successor(Some(&first), &second).unwrap();
         assert_eq!(app.tick_outcomes, [first, second]);
         assert_eq!(app.tick, 2);
+    }
+
+    #[test]
+    fn fixed_tick_reuses_the_history_world_root_for_idle_and_edit_ticks() {
+        let mut app = App::new();
+
+        assert!(app.fixed_tick());
+        let idle = app.tick_outcomes.last().cloned().unwrap();
+        assert_eq!(idle.pre_world(), idle.post_world());
+        assert_eq!(idle.post_world(), world_tag(&app.world));
+        assert_eq!(idle.post_world(), app.history.current_world());
+
+        let placed = WorldEdit::new(Operation::On, Coord::new(7, -8, 9));
+        app.apply_infallible_accepted_action(AcceptedAction::ExactEdit(placed));
+        assert!(app.fixed_tick());
+
+        let edited = app.tick_outcomes.last().cloned().unwrap();
+        assert_eq!(edited.pre_world(), idle.post_world());
+        assert_ne!(edited.post_world(), edited.pre_world());
+        assert_eq!(edited.post_world(), world_tag(&app.world));
+        assert_eq!(edited.post_world(), app.history.current_world());
+        assert_eq!(
+            app.history.receipts().last().unwrap().post_world(),
+            edited.post_world()
+        );
+        let replayed = app.history.verify(&World::new()).unwrap();
+        assert_eq!(world_tag(&replayed), world_tag(&app.world));
     }
 
     #[test]
@@ -2453,6 +4682,393 @@ mod tests {
 
     #[cfg(all(windows, feature = "protocol-research"))]
     #[test]
+    fn f5_labels_wait_for_evidence_without_claiming_output_proof() {
+        for title in [RESEARCH_WINDOW_TITLE, PRESENTATION_EVIDENCE_WAITING_TITLE] {
+            let normalized = title.to_ascii_lowercase();
+            assert!(!normalized.contains("proof"));
+            assert!(!normalized.contains("scanout"));
+            assert!(!normalized.contains("displayed"));
+        }
+        assert!(RESEARCH_WINDOW_TITLE.contains("presentation evidence"));
+        assert!(PRESENTATION_EVIDENCE_WAITING_TITLE.contains("armed"));
+        assert!(PRESENTATION_EVIDENCE_WAITING_TITLE.contains("next changed presentation"));
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f5_arms_the_next_presentation_without_forging_tick_or_render_authority() {
+        let path = TempDisplayJournal::new("f5-authority");
+        let (journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let mut app = App::new();
+        assert!(app.fixed_tick());
+        app.display_artifact_archive = Some(LiveDisplayArtifactArchive::new(journal));
+
+        let before_world = world_tag(&app.world);
+        let before_history = app.history.head();
+        let before_history_len = app.history.receipts().len();
+        let before_camera = app.camera.clone();
+        let before_tick = app.tick;
+        let before_outcomes = app.tick_outcomes.clone();
+        let before_v1_game = app.frame_ledger.clone();
+        let before_v1_output = app.output_frame_ledger.clone();
+        let before_v2 = app.frame_ledgers_v2.clone();
+        let before_pending_game = app.pending_frame;
+        let before_pending_output = app.pending_output_frame;
+        let before_pending_sidebar = app.pending_sidebar_facts;
+        let before_render_flags = (
+            app.needs_render,
+            app.needs_sidebar_render,
+            app.needs_present,
+        );
+
+        app.key(KeyCode::F5, true);
+
+        assert!(app.presentation_output_capture_requested);
+        assert!(!app.display_artifact_capture_requested);
+        assert_eq!(world_tag(&app.world), before_world);
+        assert_eq!(app.history.head(), before_history);
+        assert_eq!(app.history.receipts().len(), before_history_len);
+        assert_eq!(app.camera, before_camera);
+        assert_eq!(app.tick, before_tick);
+        assert_eq!(app.tick_outcomes, before_outcomes);
+        assert_eq!(app.frame_ledger, before_v1_game);
+        assert_eq!(app.output_frame_ledger, before_v1_output);
+        assert_eq!(app.frame_ledgers_v2, before_v2);
+        assert_eq!(app.pending_frame, before_pending_game);
+        assert_eq!(app.pending_output_frame, before_pending_output);
+        assert_eq!(app.pending_sidebar_facts, before_pending_sidebar);
+        assert_eq!(
+            (
+                app.needs_render,
+                app.needs_sidebar_render,
+                app.needs_present,
+            ),
+            before_render_flags
+        );
+        let archive = app.display_artifact_archive.as_ref().unwrap();
+        assert!(archive.can_capture_new());
+        assert_eq!(archive.pending_artifact(), None);
+        assert_eq!(archive.pending_presentation_output(), None);
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f5_service_gate_and_observation_order_are_explicit() {
+        let path = TempDisplayJournal::new("f5-service-order");
+        let (journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let mut archive = LiveDisplayArtifactArchive::new(journal);
+
+        let mut app = App::new();
+        app.resize(PhysicalSize::new(3, 2));
+        assert!(app.fixed_tick());
+        let submitted = submit_live_frame_pair(
+            &app.tick_outcomes,
+            &mut app.frame_ledger,
+            &mut app.output_frame_ledger,
+            app.frame_ledgers_v2.as_mut().unwrap(),
+            Some(app.pending_frame.unwrap()),
+            app.pending_output_frame.unwrap(),
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let presented = submitted.output;
+        let receipt = presented.receipt_v2;
+        let expected = FrameRef::new(
+            app.compositor.width(),
+            app.compositor.height(),
+            app.compositor.pixels(),
+        )
+        .unwrap();
+        let composite_ledger = &app.frame_ledgers_v2.as_ref().unwrap().composite;
+
+        let invalid_pixels = [0_u32];
+        let invalid_frame = FrameRef::new(1, 1, &invalid_pixels).unwrap();
+        let invalid_calls = std::cell::Cell::new(0_u32);
+        let mut requested = true;
+        let invalid = service_presentation_output_request_with(
+            &mut requested,
+            &mut archive,
+            composite_ledger,
+            presented,
+            invalid_frame,
+            |_, _, _| {
+                invalid_calls.set(invalid_calls.get() + 1);
+                Err(LivePresentationOutputFailure::MissingTiming)
+            },
+        );
+        assert!(invalid.is_none());
+        assert!(requested);
+        assert_eq!(invalid_calls.get(), 0);
+
+        let valid_calls = std::cell::Cell::new(0_u32);
+        let consumed = service_presentation_output_request_with(
+            &mut requested,
+            &mut archive,
+            composite_ledger,
+            presented,
+            expected,
+            |_, _, _| {
+                valid_calls.set(valid_calls.get() + 1);
+                Err(LivePresentationOutputFailure::MissingTiming)
+            },
+        );
+        assert!(matches!(
+            consumed,
+            Some(Err(LivePresentationOutputFailure::MissingTiming))
+        ));
+        assert!(!requested);
+        assert_eq!(valid_calls.get(), 1);
+
+        let alternate_receipt = FrameReceiptV2::new(
+            Some(receipt.tag()),
+            receipt.stream(),
+            receipt.outcome(),
+            receipt.input(),
+            receipt.frame(),
+        )
+        .unwrap();
+        let mismatch_events = std::cell::RefCell::new(Vec::new());
+        let mismatch = attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(alternate_receipt),
+            |stage| {
+                mismatch_events.borrow_mut().push(stage);
+                Ok(test_unavailable_topology(1))
+            },
+            || {
+                mismatch_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            mismatch,
+            Err(LivePresentationOutputFailure::TimingReceiptMismatch { .. })
+        ));
+        assert!(mismatch_events.borrow().is_empty());
+
+        let pre_events = std::cell::RefCell::new(Vec::new());
+        let pre_failure = attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                pre_events.borrow_mut().push(stage);
+                Err(LivePresentationOutputFailure::Topology {
+                    stage,
+                    error: OutputTopologyError::DuplicateRoute,
+                })
+            },
+            || {
+                pre_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            pre_failure,
+            Err(LivePresentationOutputFailure::Topology {
+                stage: "before-capture",
+                ..
+            })
+        ));
+        assert_eq!(*pre_events.borrow(), ["before-capture"]);
+
+        let post_events = std::cell::RefCell::new(Vec::new());
+        let post_calls = std::cell::Cell::new(0_u32);
+        let post_failure = attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                post_events.borrow_mut().push(stage);
+                let call = post_calls.get();
+                post_calls.set(call + 1);
+                if call == 0 {
+                    Ok(test_unavailable_topology(1))
+                } else {
+                    Err(LivePresentationOutputFailure::Topology {
+                        stage,
+                        error: OutputTopologyError::DuplicateRoute,
+                    })
+                }
+            },
+            || {
+                post_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            post_failure,
+            Err(LivePresentationOutputFailure::Topology {
+                stage: "after-capture",
+                ..
+            })
+        ));
+        assert_eq!(
+            *post_events.borrow(),
+            ["before-capture", "capture", "after-capture"]
+        );
+        assert!(archive.journal.state().is_empty());
+
+        let success_events = std::cell::RefCell::new(Vec::new());
+        let success_calls = std::cell::Cell::new(0_u32);
+        let stored = match attempt_presentation_output_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                success_events.borrow_mut().push(stage);
+                let call = success_calls.get();
+                success_calls.set(call + 1);
+                Ok(test_unavailable_topology(call + 1))
+            },
+            || {
+                success_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        ) {
+            Ok(stored) => stored,
+            Err(_) => panic!("complete injected presentation observation must store"),
+        };
+        assert_eq!(
+            *success_events.borrow(),
+            ["before-capture", "capture", "after-capture"]
+        );
+        assert_eq!(stored.artifact_count, 1);
+        assert_eq!(archive.journal.state().len(), 1);
+        assert!(archive.can_capture_new());
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f5_v2_pairs_color_with_each_topology_before_and_after_capture() {
+        let path = TempDisplayJournal::new("f5-v2-paired-order");
+        let (journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let mut archive = LiveDisplayArtifactArchive::new(journal);
+
+        let mut app = App::new();
+        app.resize(PhysicalSize::new(3, 2));
+        assert!(app.fixed_tick());
+        let submitted = submit_live_frame_pair(
+            &app.tick_outcomes,
+            &mut app.frame_ledger,
+            &mut app.output_frame_ledger,
+            app.frame_ledgers_v2.as_mut().unwrap(),
+            Some(app.pending_frame.unwrap()),
+            app.pending_output_frame.unwrap(),
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let presented = submitted.output;
+        let receipt = presented.receipt_v2;
+        let expected = FrameRef::new(
+            app.compositor.width(),
+            app.compositor.height(),
+            app.compositor.pixels(),
+        )
+        .unwrap();
+
+        let mismatch_events = std::cell::RefCell::new(Vec::new());
+        let mismatch = attempt_presentation_output_v2_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                mismatch_events.borrow_mut().push(stage);
+                Err(LivePresentationOutputFailure::OutputObservation {
+                    stage,
+                    error: ActiveOutputObservationError::Topology(
+                        OutputTopologyError::DuplicateRoute,
+                    ),
+                })
+            },
+            || {
+                mismatch_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            mismatch,
+            Err(LivePresentationOutputFailure::OutputObservation {
+                stage: "before-capture",
+                ..
+            })
+        ));
+        assert_eq!(*mismatch_events.borrow(), ["before-capture"]);
+
+        let events = std::cell::RefCell::new(Vec::new());
+        let calls = std::cell::Cell::new(0_u32);
+        let stored = match attempt_presentation_output_v2_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                events.borrow_mut().push(stage);
+                let call = calls.get();
+                calls.set(call + 1);
+                Ok(test_output_with_color(call + 1))
+            },
+            || {
+                events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        ) {
+            Ok(stored) => stored,
+            Err(_) => panic!("complete paired output observation must store"),
+        };
+        assert_eq!(
+            *events.borrow(),
+            ["before-capture", "capture", "after-capture"]
+        );
+        assert!(stored.color_before.is_some());
+        assert!(stored.color_after.is_some());
+        assert_eq!(
+            stored.reported_color_state,
+            Some(bitblock::presentation_output_v2::ReportedColorState::Unavailable)
+        );
+        assert_eq!(stored.artifact_count, 1);
+        let entry = &archive.journal.state().entries()[0];
+        assert_eq!(entry.color_before, stored.color_before);
+        assert_eq!(entry.color_after, stored.color_after);
+        assert_eq!(entry.reported_color_state, stored.reported_color_state);
+        assert!(archive.can_capture_new());
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn f4_and_f5_requests_are_mutually_exclusive_without_state_conversion() {
+        let f5_path = TempDisplayJournal::new("f5-blocks-f4");
+        let (f5_journal, _) =
+            DisplayArtifactJournal::create_new(&f5_path.0, StorageLimits::DEFAULT).unwrap();
+        let mut f5_first = App::new();
+        f5_first.display_artifact_archive = Some(LiveDisplayArtifactArchive::new(f5_journal));
+        f5_first.key(KeyCode::F5, true);
+        f5_first.key(KeyCode::F4, true);
+        assert!(f5_first.presentation_output_capture_requested);
+        assert!(!f5_first.display_artifact_capture_requested);
+
+        let f4_path = TempDisplayJournal::new("f4-blocks-f5");
+        let (f4_journal, _) =
+            DisplayArtifactJournal::create_new(&f4_path.0, StorageLimits::DEFAULT).unwrap();
+        let mut f4_first = App::new();
+        f4_first.display_artifact_archive = Some(LiveDisplayArtifactArchive::new(f4_journal));
+        f4_first.key(KeyCode::F4, true);
+        f4_first.key(KeyCode::F5, true);
+        assert!(f4_first.display_artifact_capture_requested);
+        assert!(!f4_first.presentation_output_capture_requested);
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
     fn refused_append_retains_one_exact_artifact_for_retry_without_recapture() {
         let path = TempDisplayJournal::new("exact-retry");
         let default_limits = StorageLimits::DEFAULT;
@@ -2505,8 +5121,8 @@ mod tests {
                 rect_before: rect,
                 rect_after: rect,
                 dpi: 96,
-                qpc_start: 10,
-                qpc_end: 20,
+                qpc_start: 100,
+                qpc_end: 120,
                 qpc_frequency: 10_000_000,
                 captured: Some(expected.observe()),
                 mismatch_count: 0,
@@ -2527,6 +5143,101 @@ mod tests {
         assert!(!retry_failure.poisoned);
         assert_eq!(retry_failure.artifact, Some(retained));
         assert_eq!(archive.pending_artifact(), Some(retained));
+        assert!(!archive.faulted);
+        assert_eq!(archive.journal.carrier_valid_bytes(), 0);
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn refused_f5_append_retains_the_exact_full_wrapper_for_storage_only_retry() {
+        let path = TempDisplayJournal::new("f5-exact-retry");
+        let default_limits = StorageLimits::DEFAULT;
+        let zero_record_limits = StorageLimits::new(
+            default_limits.max_record_bytes(),
+            default_limits.max_schema_bytes(),
+            default_limits.max_payload_bytes(),
+            0,
+            default_limits.max_stream_bytes(),
+        )
+        .unwrap();
+        let (journal, _) = DisplayArtifactJournal::create_new(&path.0, zero_record_limits).unwrap();
+        let mut archive = LiveDisplayArtifactArchive::new(journal);
+
+        let mut app = App::new();
+        app.resize(PhysicalSize::new(3, 2));
+        assert!(app.fixed_tick());
+        let game = app.pending_frame.unwrap();
+        let output = app.pending_output_frame.unwrap();
+        let submitted = submit_live_frame_pair(
+            &app.tick_outcomes,
+            &mut app.frame_ledger,
+            &mut app.output_frame_ledger,
+            app.frame_ledgers_v2.as_mut().unwrap(),
+            Some(game),
+            output,
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let expected = FrameRef::new(
+            app.compositor.width(),
+            app.compositor.height(),
+            app.compositor.pixels(),
+        )
+        .unwrap();
+        let rect = bitblock::display::CaptureRect {
+            left: 0,
+            top: 0,
+            right: expected.width() as i32,
+            bottom: expected.height() as i32,
+        };
+        let capture = DisplayCapture {
+            facts: bitblock::display::DisplayCaptureFacts {
+                outcome: DisplayOutcome::Match,
+                stage: CaptureStage::Complete,
+                error_code: 0,
+                flush_before: true,
+                compositor_flush: true,
+                flush_after: true,
+                rect_before: rect,
+                rect_after: rect,
+                dpi: 96,
+                qpc_start: 100,
+                qpc_end: 120,
+                qpc_frequency: 10_000_000,
+                captured: Some(expected.observe()),
+                mismatch_count: 0,
+                first_mismatch: None,
+            },
+            pixels: Some(expected.pixels().to_vec()),
+        };
+        let receipt = submitted.output.receipt_v2;
+        let first_failure = archive
+            .prepare_and_append_presentation_output_v2(
+                receipt,
+                expected,
+                &capture,
+                test_timing(receipt),
+                test_output_with_color(1),
+                test_output_with_color(2),
+            )
+            .unwrap_err();
+        assert!(!first_failure.poisoned);
+        assert_eq!(
+            first_failure.artifact,
+            archive.pending_presentation_output()
+        );
+        assert_eq!(archive.pending_artifact(), None);
+        assert!(matches!(
+            archive.pending_presentation_output.as_ref(),
+            Some(PendingPresentationOutput::V2(_))
+        ));
+        let retained = archive.pending_presentation_output().unwrap();
+        drop(capture);
+
+        let retry_failure = archive.append_pending_presentation_output().unwrap_err();
+        assert!(!retry_failure.poisoned);
+        assert_eq!(retry_failure.artifact, Some(retained));
+        assert_eq!(archive.pending_presentation_output(), Some(retained));
         assert!(!archive.faulted);
         assert_eq!(archive.journal.carrier_valid_bytes(), 0);
     }
@@ -2557,6 +5268,16 @@ mod tests {
         assert!(app.fixed_tick());
 
         assert!(app.pending_frame.is_none());
+        assert_eq!(app.compositor.last_game_prefix_copy_words(), 0);
+        let simulation_width = app.renderer.width() as usize;
+        let output_width = app.compositor.width() as usize;
+        for row in 0..app.renderer.height() as usize {
+            assert_eq!(
+                &app.compositor.pixels()[row * output_width..row * output_width + simulation_width],
+                &app.renderer.pixels()[row * simulation_width..(row + 1) * simulation_width],
+                "sidebar-only recomposition changed the cached game prefix in row {row}"
+            );
+        }
         let outcome = app.tick_outcomes.last().unwrap();
         assert!(outcome.input().flags().sidebar_dirty());
         assert_eq!(outcome.game(), None);
@@ -2849,5 +5570,398 @@ mod tests {
         for pair in app.tick_outcomes.windows(2) {
             verify_successor(Some(&pair[0]), &pair[1]).unwrap();
         }
+    }
+
+    #[test]
+    fn parsed_interaction_tape_drives_the_same_fixed_fold_as_accepted_actions() {
+        let tape = InteractionTape::parse(
+            "\
+tick
+move forward down
+look 1.5 -0.25
+wheel -3
+tick
+move forward up
+place
+sidebar
+tick
+exact on 7 -8 9
+fit
+",
+        )
+        .unwrap();
+        let summary = simulate_interaction_tape(&tape).unwrap();
+
+        let mut direct = App::for_headless_simulation();
+        let mut direct_tags = Vec::new();
+        for record in tape.records() {
+            for &action in record.actions() {
+                direct.apply_accepted_action(action).unwrap();
+            }
+            direct.fixed_tick();
+            direct_tags.push(direct.tick_outcomes.last().unwrap().tag());
+        }
+
+        assert_eq!(
+            summary
+                .ticks
+                .iter()
+                .map(|tick| tick.outcome)
+                .collect::<Vec<_>>(),
+            direct_tags
+        );
+        assert_eq!(summary.final_world, world_tag(&direct.world));
+        #[cfg(feature = "protocol-research")]
+        assert_eq!(
+            summary.local_replay_endpoint.world(),
+            world_tag(&direct.world)
+        );
+        assert_eq!(summary.final_history, direct.history.head());
+        assert_eq!(
+            summary.final_camera_bits,
+            TickCameraState::capture(&direct.camera).bits()
+        );
+    }
+
+    #[test]
+    fn ui_reachable_place_delete_example_returns_to_bedrock_only() {
+        let tape =
+            InteractionTape::parse(include_str!("../examples/observer_place_delete.tape")).unwrap();
+        assert_eq!(tape.len(), 2);
+        assert_eq!(
+            tape.records()[0].actions(),
+            &[AcceptedAction::WheelLines(-10.0), AcceptedAction::AimPlace]
+        );
+        assert_eq!(tape.records()[1].actions(), &[AcceptedAction::AimDelete]);
+
+        let summary = simulate_interaction_tape(&tape).unwrap();
+        let origin_only = App::for_headless_simulation();
+        assert_eq!(summary.on_bits, 1);
+        assert_eq!(summary.coordinate_receipts, 2);
+        assert_eq!(summary.final_world, world_tag(&origin_only.world));
+    }
+
+    #[cfg(feature = "protocol-research")]
+    #[test]
+    fn local_replay_evidence_replays_the_embedded_tape_and_refuses_context_or_endpoint_swaps() {
+        let tape =
+            InteractionTape::parse(include_str!("../examples/observer_place_delete.tape")).unwrap();
+        let (summary, evidence) =
+            simulate_interaction_tape_with_local_replay_evidence(&tape).unwrap();
+        assert_eq!(verify_local_replay_evidence(&evidence).unwrap(), summary);
+
+        let different_tape = InteractionTape::parse("tick\nwheel 1\n").unwrap();
+        let wrong_endpoint =
+            LocalReplayEvidence::new(evidence.context(), different_tape, evidence.endpoint())
+                .unwrap();
+        let endpoint_error = verify_local_replay_evidence(&wrong_endpoint).unwrap_err();
+        assert_eq!(endpoint_error.kind(), io::ErrorKind::InvalidData);
+        assert!(endpoint_error.to_string().contains("endpoint differs"));
+
+        let mut changed_build = evidence.encode_canonical();
+        changed_build[size_of::<u64>()] ^= 1;
+        let wrong_context = LocalReplayEvidence::decode_canonical(&changed_build).unwrap();
+        let context_error = verify_local_replay_evidence(&wrong_context).unwrap_err();
+        assert_eq!(context_error.kind(), io::ErrorKind::InvalidData);
+        assert!(context_error.to_string().contains("context differs"));
+
+        let context = evidence.context();
+        let changed_policy = |policy: ContentTag| {
+            let digest = policy.digest();
+            hash_canonical(
+                TagKind::Policy,
+                b"bitblock/test/local-replay-policy-context-swap/v1",
+                digest.len() as u64,
+                |sink| sink(&digest),
+            )
+            .unwrap()
+        };
+        for (name, changed_context) in [
+            (
+                "genesis",
+                LocalReplayContext::new(
+                    context.build(),
+                    changed_policy(context.genesis_policy()),
+                    context.rules_policy(),
+                    context.admission_policy(),
+                )
+                .unwrap(),
+            ),
+            (
+                "rules",
+                LocalReplayContext::new(
+                    context.build(),
+                    context.genesis_policy(),
+                    changed_policy(context.rules_policy()),
+                    context.admission_policy(),
+                )
+                .unwrap(),
+            ),
+            (
+                "admission",
+                LocalReplayContext::new(
+                    context.build(),
+                    context.genesis_policy(),
+                    context.rules_policy(),
+                    changed_policy(context.admission_policy()),
+                )
+                .unwrap(),
+            ),
+        ] {
+            let structurally_valid = LocalReplayEvidence::new(
+                changed_context,
+                evidence.tape().clone(),
+                evidence.endpoint(),
+            )
+            .unwrap();
+            let decoded =
+                LocalReplayEvidence::decode_canonical(&structurally_valid.encode_canonical())
+                    .unwrap();
+            decoded.verify().unwrap();
+            let error = verify_local_replay_evidence(&decoded).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData, "{name}");
+            assert!(
+                error.to_string().contains("context differs"),
+                "{name}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn physical_w_key_adapter_and_normalized_tape_map_to_the_same_action() {
+        let mut live_adapter = App::for_headless_simulation();
+        live_adapter.key(KeyCode::KeyW, true);
+        live_adapter.fixed_tick();
+
+        let tape = InteractionTape::parse("tick\nmove forward down\n").unwrap();
+        let simulated = simulate_interaction_tape(&tape).unwrap();
+
+        assert_eq!(simulated.ticks.len(), 1);
+        assert_eq!(
+            simulated.ticks[0].outcome,
+            live_adapter.tick_outcomes[0].tag()
+        );
+        assert_eq!(
+            simulated.final_camera_bits,
+            TickCameraState::capture(&live_adapter.camera).bits()
+        );
+    }
+
+    #[test]
+    fn tape_preserves_per_event_wheel_clamping_instead_of_summing_first() {
+        let ordered = InteractionTape::parse("tick\nwheel 100\nwheel -100\n").unwrap();
+        let collapsed = InteractionTape::parse("tick\nwheel 0\n").unwrap();
+
+        let ordered = simulate_interaction_tape(&ordered).unwrap();
+        let collapsed = simulate_interaction_tape(&collapsed).unwrap();
+
+        assert_ne!(ordered.ticks[0].outcome, collapsed.ticks[0].outcome);
+        assert_ne!(ordered.final_camera_bits, collapsed.final_camera_bits);
+    }
+
+    #[test]
+    fn headless_tape_emits_tick_and_frame_commitments_but_no_frame_receipts() {
+        let tape = InteractionTape::parse("tick\ntick\nsidebar\n").unwrap();
+        let summary = simulate_interaction_tape(&tape).unwrap();
+
+        assert_eq!(summary.ticks.len(), 2);
+        assert!(summary.ticks[0].game_frame.is_some());
+        assert!(summary.ticks[0].composite_frame.is_some());
+        assert!(summary.ticks[1].game_frame.is_none());
+        assert!(summary.ticks[1].composite_frame.is_some());
+        assert_eq!(summary.game_admissions, 0);
+        assert_eq!(summary.composite_admissions, 0);
+        assert_eq!(summary.game_receipt_head, None);
+        assert_eq!(summary.composite_receipt_head, None);
+    }
+
+    #[test]
+    fn headless_resize_policy_refuses_before_allocating_the_requested_surface() {
+        let tape = InteractionTape::parse("tick\nresize 4294967295 4294967295\n").unwrap();
+        let error = simulate_interaction_tape(&tape).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("policy limit"));
+    }
+
+    #[test]
+    fn headless_display_predecessor_is_platform_neutral_and_overrides_live_audit_state() {
+        let baseline = App::for_headless_simulation();
+        assert_eq!(
+            baseline.sidebar_display_predecessor(),
+            (None, 0, DisplayStatus::AuditDisabled)
+        );
+
+        #[cfg(windows)]
+        {
+            let mut audit_enabled = App::for_headless_simulation();
+            audit_enabled.display_ledger = Some(DisplayLedgerV2::default());
+            assert_eq!(
+                baseline.sidebar_snapshot(0).tag(),
+                audit_enabled.sidebar_snapshot(0).tag()
+            );
+        }
+    }
+
+    #[test]
+    fn headless_preflight_refuses_finite_look_values_whose_sum_is_nonfinite() {
+        let tape = InteractionTape::parse(
+            "tick\nlook 1.7976931348623157e308 0\nlook 1.7976931348623157e308 0\n",
+        )
+        .unwrap();
+        let error = simulate_interaction_tape(&tape).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("action 1"));
+        assert!(error.to_string().contains("accumulation is nonfinite"));
+    }
+
+    #[test]
+    fn headless_preflight_preserves_the_full_idle_record_allowance() {
+        let tape = InteractionTape::parse(&"tick\n".repeat(16_384)).unwrap();
+        preflight_headless_tape(&tape).unwrap();
+
+        let toggles = format!("tick\n{}", "exact toggle 1 0 0\n".repeat(140));
+        let toggles = InteractionTape::parse(&toggles).unwrap();
+        preflight_headless_tape(&toggles).unwrap();
+    }
+
+    #[test]
+    fn headless_preflight_charges_each_resize_even_when_the_tape_shrinks_before_tick() {
+        let source = format!("tick\n{}resize 1 1\n", "resize 4096 4096\n".repeat(6));
+        let tape = InteractionTape::parse(&source).unwrap();
+        let error = preflight_headless_tape(&tape).unwrap_err();
+
+        assert!(error.to_string().contains("resize-pixel-write"));
+    }
+
+    #[test]
+    fn headless_preflight_refuses_the_possible_chunk_boundary_directly() {
+        let source = format!("tick\n{}", "place\n".repeat(65_536));
+        let tape = InteractionTape::parse(&source).unwrap();
+        let error = preflight_headless_tape(&tape).unwrap_err();
+
+        assert!(error.to_string().contains("possible-chunk-count"));
+        assert!(error.to_string().contains("required 65537, limit 65536"));
+    }
+
+    #[test]
+    fn headless_preflight_bounds_composition_raster_and_world_scan_lanes() {
+        let composition_source =
+            format!("tick\nresize 4096 4096\n{}", "tick\nsidebar\n".repeat(16));
+        let composition = InteractionTape::parse(&composition_source).unwrap();
+        assert!(
+            preflight_headless_tape(&composition)
+                .unwrap_err()
+                .to_string()
+                .contains("output-pixel-tick")
+        );
+
+        let raster_source = "tick\nresize 4096 4096\nexact on 1 0 0\nexact on 2 0 0\nexact on 3 0 0\nexact on 4 0 0\nexact on 5 0 0\n";
+        let raster = InteractionTape::parse(raster_source).unwrap();
+        assert!(
+            preflight_headless_tape(&raster)
+                .unwrap_err()
+                .to_string()
+                .contains("raster-sample-test")
+        );
+
+        let exact_coordinates = (1..=5_000)
+            .map(|x| format!("exact on {x} 0 0\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        let world_scan_source = format!(
+            "tick\nresize 1 1\n{}{}",
+            exact_coordinates,
+            "delete\n".repeat(60_000)
+        );
+        let world_scan = InteractionTape::parse(&world_scan_source).unwrap();
+        assert!(
+            preflight_headless_tape(&world_scan)
+                .unwrap_err()
+                .to_string()
+                .contains("world-coordinate-test")
+        );
+
+        let packed_coord = |index: i64| {
+            let chunk = index.div_euclid(16 * 16 * 16);
+            let local = index.rem_euclid(16 * 16 * 16);
+            (
+                chunk * CHUNK_SIDE + local.rem_euclid(CHUNK_SIDE),
+                local.div_euclid(CHUNK_SIDE).rem_euclid(CHUNK_SIDE),
+                local.div_euclid(CHUNK_SIDE * CHUNK_SIDE),
+            )
+        };
+        let ascending = (1_i64..=25_000)
+            .map(|index| {
+                let (x, y, z) = packed_coord(index);
+                format!("exact on {x} {y} {z}\n")
+            })
+            .collect::<Vec<_>>()
+            .concat();
+        let descending = (1_i64..=25_000)
+            .rev()
+            .map(|index| {
+                let (x, y, z) = packed_coord(index);
+                format!("exact off {x} {y} {z}\n")
+            })
+            .collect::<Vec<_>>()
+            .concat();
+        let edit_scan_source = format!("tick\nresize 1 1\n{ascending}{descending}");
+        let edit_scan = InteractionTape::parse(&edit_scan_source).unwrap();
+        assert!(
+            preflight_headless_tape(&edit_scan)
+                .unwrap_err()
+                .to_string()
+                .contains("edit-coordinate-test")
+        );
+
+        let ordering_coordinates = (1..=10_000)
+            .map(|x| format!("exact on {x} 0 0\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        let ordering_source = format!(
+            "tick\nresize 1 1\n{ordering_coordinates}{}",
+            "tick\n".repeat(4_000)
+        );
+        let ordering = InteractionTape::parse(&ordering_source).unwrap();
+        assert!(
+            preflight_headless_tape(&ordering)
+                .unwrap_err()
+                .to_string()
+                .contains("world-ordering")
+        );
+
+        let sparse_chunks = (1..=10_000)
+            .map(|x| format!("exact on {} 0 0\n", i64::from(x) * CHUNK_SIDE))
+            .collect::<Vec<_>>()
+            .concat();
+        let chunk_scan_source = format!(
+            "tick\nresize 1 1\n{sparse_chunks}{}",
+            "tick\n".repeat(1_000)
+        );
+        let chunk_scan = InteractionTape::parse(&chunk_scan_source).unwrap();
+        assert!(
+            preflight_headless_tape(&chunk_scan)
+                .unwrap_err()
+                .to_string()
+                .contains("chunk-word-test")
+        );
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
+    fn clean_display_journal_report_does_not_promote_capture_or_causal_references() {
+        let required = ContentTag::parse_full(
+            "#bb.storage-record.sha256.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        .unwrap();
+        let report = display_journal_verification_header(required);
+
+        assert!(report.contains("status=clean"));
+        assert!(report.contains("pixel_evidence=retained-capture-claim-per-entry"));
+        assert!(report.contains("causal_ancestry=references-only"));
+        assert!(!report.contains("os-desktop-raster-sample"));
+        assert!(report.contains(&format!("required_ancestor={required}")));
     }
 }

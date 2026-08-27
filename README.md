@@ -8,17 +8,32 @@ Bitblock is a binary coordinate space observed through a free camera.
 - The observer is camera state, not an entity.
 - There is no gravity, body, terrain, inventory, or autonomous simulation.
 - The observer is a point that cannot enter or tunnel through an on block.
-- The framebuffer is written as physical pixels.
+- The CPU renderer writes an XRGB client raster.
+- Each final game frame also receives a CPU-side exact RGB palette-membership audit after the
+  crosshair is drawn. It checks renderer output only; it is not evidence of OS composition,
+  scanout, monitor light, or observer perception.
 - On Windows, the app owns that XRGB slice and admits a submission only when
   `SetDIBitsToDevice` reports every requested scanline; this is checked GDI acceptance,
   not compositor or monitor proof.
+- A research-only Windows timing audit can bind that exact composite receipt to raw
+  before/after DWM session timing, QPC brackets, and barrier outcomes. Its per-frame
+  attribution is always `Unknown`; it does not claim displayed, dropped, scanout, or light.
+- A one-shot research bundle can additionally retain bounded active-output topology and raw
+  Windows Advanced Color configuration before and after one OS screen-raster capture. The raw
+  flags, encoding word, and bits-per-channel are configuration reports only: stable routes or
+  matching configuration do not prove HDR presentation, per-frame DWM attribution, scanout, or
+  physical light.
+- A feature-gated physical-sensor carrier can retain a full presentation tag, declared integer
+  RGB tolerance profile, ordered XRGB challenge positions, and caller-supplied RGB16 values. It
+  has no device collector, source attestation, or physical observation yet: `N/A`, unavailable,
+  and unbound states remain first-class, and a synthetic codec test is not a monitor-light result.
 - One fixed 60 Hz tick consumes input, changes observer/world state, and produces changed frames;
   the window layer only presents pixels produced by that tick.
 - Scroll moves logarithmically between the one-pixel view and a block-filling view.
 
 ## Controls
 
-- Crosshair: the hollow center is the exact aimed physical pixel
+- Crosshair: the hollow center is the exact aimed client-raster pixel
 - Mouse: look
 - `W A S D`: move
 - `Space` / `Left Shift`: move up / down
@@ -30,6 +45,9 @@ Bitblock is a binary coordinate space observed through a free camera.
 - `F3`: show or hide the metrics page without changing the simulation viewport
 - `F4`: with a fresh research display journal configured, archive one exact committed composite
   frame and one Windows desktop-raster observation without creating a simulation tick
+- `F5`: arm the next normally changed successful presentation, then archive its exact receipt,
+  composition timing, paired pre/post active-output topology/raw configuration, and one
+  desktop-raster observation; an idle request waits visibly and does not resubmit the old surface
 - `Escape`: release the mouse; click to capture it again
 
 ## Shared edit language
@@ -59,6 +77,101 @@ the rejected instruction and its named disposition without executing it.
 This is deliberately an **edit language**, not yet a self-executing programming
 language. Blocks are memory and ticks are the execution clock; transformation
 rules will be a later checkpoint.
+
+## Headless interaction tapes
+
+An interaction tape can now execute a specific observer-action sequence without opening or
+controlling a window. Each `tick` starts one contiguous fixed-tick record; the lines below it are
+the ordered actions accepted before that tick. Empty records are meaningful idle ticks.
+
+```text
+tick
+move forward down
+look 2.5 -1.25
+
+tick
+move forward up
+wheel -10
+place
+sidebar
+```
+
+The commands are `move <forward|backward|left|right|up|down> <down|up>`, `look <x> <y>`,
+`wheel <lines>`, `delete`, `place`, `fit`, `sidebar`, `resize <width> <height>`, and
+`clear-motion`. `exact <on|off|toggle> <x> <y> <z>` is also available as an explicitly scripted
+Edit-channel action; no current mouse or keyboard adapter emits it. Comments and blank lines are
+ignored. Parsing is all-or-nothing, finite floating-point bit patterns and action order are
+preserved, and the canonical binary tape is named by a `#bb.intent.sha256...` content tag.
+
+This boundary begins *after* platform input acceptance. It does not claim to reproduce device or
+window identity, focus/capture success, synthetic/repeat filtering, pixel-wheel conversion, raw
+timestamps, redraw scheduling, or F4/F5 evidence capture. Live input and tapes do share the same
+accepted-action reducer and fixed-tick function.
+
+For a smaller source-semantics check, run:
+
+```powershell
+python -B tools/semantic_batch_vectors.py
+```
+
+For longer scripted interaction checks, use a structured sequence:
+
+```powershell
+python -B tools/simulate_sequence.py examples/observer_walk_sequence.json --verbose
+```
+
+The script converts each `ticks[i]` entry into one fixed tick on the accepted-action side:
+
+- each tick is a list of action strings, or an object with `actions` (or `commands`),
+- command text is passed through to the tape parser exactly as text,
+- optional `expected` fields can be checked with `--expect`.
+
+Example JSON schema:
+
+```json
+{
+  "name": "observer_walk_sequence",
+  "ticks": [
+    [],
+    ["wheel -10", "place"],
+    ["move right down", "look 2.5 -1.25"]
+  ],
+  "expected": {
+    "final": {
+      "on_bits": 1
+    }
+  }
+}
+```
+
+It independently reconstructs eight bounded one-coordinate history cases (mint, burn, no-op,
+bedrock, same-tick reuse, and coordinate extremes) without importing or launching Bitblock. The
+Rust history test compares the same frozen known-answer tags. This is evidence for those finite
+cases only; it is not a general proof, an executed LadderLang bridge, or a blockchain claim.
+
+Headless runs always start from the empty program, permanent bedrock, observer spawn, visible
+sidebar, and the default 1201 x 801 output. Before state is constructed, a pure shadow interpreter
+checks the complete tape against payload/action limits and cumulative resize, composition, raster,
+world-coordinate, sparse-chunk-word, edit, and canonical-ordering work budgets. Invalid finite
+accumulation and over-budget work fail closed.
+
+The ordinary `headless-console` report contains the tape tag, per-tick
+outcome/world/history/camera and CPU-frame commitments, and the final state. Those lines remain
+lightweight reproducible projections. With the opt-in `protocol-research` feature, the same
+command additionally constructs and structurally verifies one in-memory
+`#bb.replay-evidence.sha256...` v1 carrier. It embeds the complete canonical tape, a streamed
+fingerprint of the current local executable, declared headless genesis/rules/admission policy
+tags, and the exact final fixed-tick/world/history/camera/latest-frame endpoint. It is not written
+to a file, signed, or treated as custody, ownership, consensus, time, display, scanout, or
+physical-light evidence. The research command is:
+
+```powershell
+cargo run --release --features "headless-console protocol-research" -- --simulate-actions examples/observer_place_delete.tape
+```
+
+Headless frames are intentionally unsubmitted: frame admissions and receipt heads remain empty,
+and no OS raster, scanout, or physical-light evidence is produced. The default build does not
+include the local-replay carrier code.
 
 The app retains the most recent tick's resolved, ordered integer-coordinate
 batch in memory. That batch can be replayed without the camera or renderer and
@@ -128,8 +241,23 @@ requires typed reopen. The default observer does not link this path, and no mode
 records continuously. Local sync/reread is not sudden-power durability,
 latest-prefix authority, external custody, scanout, or physical-light evidence.
 
+The same journal can mix legacy display artifacts with `PresentationOutput` v1
+and v2 records. F5 waits for the next normal successful composite presentation and
+uses the timing envelope produced around that exact backend call even when the
+continuous timing logger is disabled. It then records bounded active-output
+topology plus raw Advanced Color configuration, captures the visible client once,
+records the paired observations again, and admits one outer object only when the
+nested display and timing receipts are exactly equal, their QPC frequencies agree,
+and capture did not begin before the timing post-call bracket. The v2 wrapper
+binds each raw configuration report to its exact pre/post topology; it does not
+interpret those raw words as HDR, color-managed output, scanout, or light. F4 and
+F5 are mutually exclusive. A nonpoisoning F5 storage refusal retains the exact
+whole wrapper for a storage-only retry; it never recaptures or resamples
+timing/topology/configuration. The live mode remains create-only, so a poisoned
+journal needs external typed recovery rather than an in-process retry.
+
 A separate stdlib-only Python oracle now checks a bounded renderer corpus without
-calling the Rust renderer: it intersects six cube-face planes per physical-pixel
+calling the Rust renderer: it intersects six cube-face planes per client-raster-pixel
 ray, while production projects faces and rasterizes triangles. Rust reconstructs
 the oracle's complete implicit background/infinite-depth complement and compares
 all 934 post-overlay XRGB words, every depth class, and every finite depth-bit
@@ -153,7 +281,7 @@ later pages and offline analysis. This checkpoint does not pretend to collect
 all 1,112 values at runtime. Expensive metrics remain explicitly separated from
 values safe to snapshot only when a changed composite is needed.
 
-The initial client is 1201 x 801 physical pixels: the original 801 x 801 game
+The initial client raster is 1201 x 801 XRGB pixels: the original 801 x 801 game
 frame is copied exactly into the left region and the sidebar is rasterized
 directly into the right 400-pixel strided region of the same final buffer,
 without a second sidebar scratch buffer. Camera projection and the crosshair
@@ -169,7 +297,7 @@ canonical framebuffer bytes, semantic content tags and name registries,
 mint/burn provenance, the bounded storage envelope, the Windows
 exclusive-writer/recovery journal, typed coordinate-history admission and
 publication gating, receipt modes, the verifier-first
-Edit-to-LadderLang/iota-cost bridge, and the
+representation-only Edit-to-LadderLang/static-iotaUpper bridge, and the
 requirements that remain open before any Proof-of-History, Proof-of-Stake,
 currency, or Layer 1 claim would be truthful.
 
@@ -186,6 +314,22 @@ cannot alias distinct histories. This proves only that those local bytes replay 
 it does not prove elapsed time, an unavoidable sequential lower bound, the
 latest branch, Proof of History, stake, consensus, or Layer 1 status. The
 closed mode boundary always refuses a stake-consensus request.
+
+The same opt-in surface now materializes the existing issuance-provenance
+episode metric as `CoordinateEpisodeEvidence` v1. Each post-genesis mutable
+placement is named by its existing `#bb.event.sha256...` mint tag; a deletion
+records the exact consumed mint tag, and a re-placement receives a distinct
+tag. The carrier binds a derivation-policy tag plus verified history genesis,
+head, final-world, and receipt-ordered episodes—there are no numeric episode
+identifiers, balances, owners, transfers, or asset tags. Initially occupied
+mutable coordinates remain separately genesis-provenanced rather than being
+rewritten as new issuance. This is local history evidence only, not a currency,
+Proof-of-History, Proof-of-Stake, consensus, or Layer 1. Its independent
+canonical vector is:
+
+```powershell
+python -B tools/coordinate_episode_vectors.py
+```
 
 The storage, journal, and LadderLang bridge modules are research/proof surfaces,
 not hot render-path dependencies. The sequential transcript follows the same
@@ -205,18 +349,28 @@ coordinates. It proves the one-bedrock initial state, bedrock preservation over
 every instruction and replay, the universal membership meaning of every
 instruction, on/off idempotence, toggle involution, finite support, and ordered
 replay composition. A separate representation theorem proves the exact S/K/I,
-atom, iota, and tick formulas for every finite quoted byte list, with powered
+atom, iotaUpper, and derived tick-count formulas for every finite quoted byte list, with powered
 association and bit-order mutants. `proof/LadderLangQuotedByteParity.lean`
-additionally runs against the pinned LadderLang checkout's own
-`Lam.costChecked`.
+additionally runs the complete frozen 112-byte quote against the pinned
+LadderLang checkout's own `Lam.costChecked`, including an off-by-one rejection
+control.
+
+`proof/ladderlang-transition-v1/` is a separate frozen two-source executable
+capsule. It copies and SHA-256 verifies only the pinned `Ladderlang.Core` and
+`Ladderlang.Entries` sources, then uses their real bounded reducer to check the
+finite mutable `on/off/toggle × on/off` truth table, valid immutable-origin
+rows, and explicit `RAN`/`GREW` resource controls. Run `verify.ps1` inside that
+directory. It establishes only that finite target under its declared reducer
+and Lean dependencies; it does not yet prove that Rust executes a translated
+program or establish iota execution cost.
 
 ```powershell
 cd proof
 lake build
 ```
 
-The capsule does not prove that the chunked Rust implementation refines the
-world model or that quoted bytes execute Edit semantics. It makes no claim
+The capsules do not prove that the chunked Rust implementation refines the
+world model or that quoted bytes execute Edit semantics. They make no claim
 about camera floats, rendering, hashing, wall-clock scheduling, currency, or
 consensus.
 
@@ -245,17 +399,38 @@ cargo run --release
 # Start from the origin and apply a text program during tick zero
 cargo run --release -- examples/first.bb
 
+# Replay normalized observer actions without opening a window
+cargo run -- --simulate-actions examples/observer_walk.tape
+
+# Windows release builds need the console feature for a reliable captured report
+cargo run --release --features headless-console -- --simulate-actions examples/observer_walk.tape
+
+# Replay one UI-reachable place/delete cycle without opening a window.
+# It ends with only the protected origin on: one local occupancy-on (Mint) event and one
+# local occupancy-off (Burn) event.
+cargo run --release --features headless-console -- --simulate-actions examples/observer_place_delete.tape
+
 # Opt in to an expensive full-client OS screen-raster audit on each changed frame.
 # Use a debug run to retain the detailed terminal receipt; the window title also
 # reports Match, Mismatch, or Unavailable.
 $env:BITBLOCK_DISPLAY_AUDIT = "1"
 cargo run
 
-# Create a fresh bounded display-artifact journal. The target must not exist,
+# Create a fresh bounded display-evidence journal. The target must not exist,
 # and this mode is mutually exclusive with BITBLOCK_DISPLAY_AUDIT. Press F4 to
-# archive the current committed composite occurrence without creating a tick.
+# archive the current committed composite occurrence, or press F5 and then make
+# one normal visual change (movement/edit/F3) to archive the next presentation.
 Remove-Item Env:BITBLOCK_DISPLAY_AUDIT -ErrorAction SilentlyContinue
 $env:BITBLOCK_DISPLAY_JOURNAL_NEW = "$PWD\display-session.bbj"
+cargo run --features protocol-research
+
+# Re-read a retained F4/F5 journal without opening the observer window. Quote the
+# complete storage-record tag printed by the original archive report.
+cargo run --release --features protocol-research,headless-console -- --verify-display-journal "$PWD\display-session.bbj" '#bb.storage-record.sha256...'
+
+# Opt in to one raw composition-timing envelope around every checked presentation.
+# This writes content-tagged observations to stderr; the cheap default does not link it.
+$env:BITBLOCK_PRESENTATION_AUDIT = "1"
 cargo run --features protocol-research
 ```
 
@@ -271,3 +446,76 @@ create-only: it performs the same bounded GDI/DWM observation, constructs the
 canonical artifact, synchronizes one typed record, and rereads it before
 reporting `display-artifact-stored`. It does not silently reopen, rotate,
 truncate, or overwrite a prior journal.
+
+`--verify-display-journal` is a separate, read-only replay of retained F4/F5
+bytes. It requires a full, prior `storage-record` tag as an anchor, rechecks the
+complete typed parent-linked carrier and embedded artifact semantics, and prints
+the complete retained inventory only for a clean supplied file. A damaged suffix
+returns nonzero and any reported valid prefix excludes that suffix. This is local
+retained-byte verification only: it
+does not prove the file is newest, externally held, compositor-attributed,
+scanned out, or visible as physical light. The printed tick-outcome and
+frame-input tags are retained references, not a replay of an interaction tape,
+world history, or renderer.
+
+The presentation-timing audit calls `DwmGetCompositionTimingInfo(NULL, ...)`
+before and after the checked presenter, with every API occurrence bracketed by
+`QueryPerformanceCounter`. It also retains `GdiFlush` and `DwmFlush` outcomes.
+The resulting fixed 948-byte artifact can classify only session-level timing as
+unavailable, comparable without progress, comparable with progress, or
+discontinuous/reset. Modern Windows exposes this query at desktop-composition
+session scope rather than Bitblock-frame scope, so counter movement never changes
+the exact frame's fate from `Unknown`.
+
+F5 also queries the active route set and raw Advanced Color configuration before
+and after capture. The canonical
+observation retains exact UTF-16 source/target names, source/monitor geometry,
+mode and signal words, every clone target route, raw flags, and a bounded query
+attempt transcript, while excluding transient HWND/HMONITOR/LUID/source/target
+join identifiers. The v2 wrapper additionally preserves opaque per-route
+Advanced Color flags, encoding word, and bits-per-channel (or explicit query
+unavailability) in the same canonical route order. Query failure is explicit.
+The derived route and raw-configuration results are `Stable`, `Changed`, or
+`Unavailable`; neither is encoded as a claimed display mode and neither by
+itself establishes collection time or displayed-frame fate. ICC/profile state,
+applied transform order, scanout, and panel light remain unobserved.
+
+## External-sensor boundary
+
+`physical_sensor` is an opt-in research protocol module, not a hardware driver. Its canonical
+`PhysicalSensorObservation` has only three serialized states: `NotApplicable`, `Unavailable`,
+and `ReportedSamples`. The record names a full `PresentationOutputArtifact` tag, a fixed policy
+tag, a declared (not independently certified) sensor profile, ordered framebuffer coordinates
+with expected XRGB words, bounded raw source bytes, and one RGB16 triplet per challenge point.
+It does not contain a self-declared “pass.”
+
+A separate `verify_against(parent)` call can return `BoundSampleMatch` only when the caller
+supplies the exact named presentation artifact, that artifact structurally verifies and records
+an exact complete OS desktop-raster match, every challenge XRGB word equals the artifact's
+expected framebuffer word, and every caller-supplied RGB16 channel is within its declared integer
+tolerance of `channel8 * 257`. Missing/wrong parents, unavailable GDI captures, bad challenges,
+and residuals outside the bound stay `Unbound`, `ChallengeMismatch`, or `SampleMismatch`.
+
+For a future finite sensor assay, `RgbGradientChallenge::from_exact_presentation(parent, k)`
+derives up to `k` canonical row-major positions from the already verified expected XRGB slice.
+It ranks each pixel by the sum of RGB8 absolute-difference scores to its existing right and lower
+neighbours, with score-descending then row/column tie breaking. This makes a small sensor sample
+more diagnostic of a wrong pixel mapping; it is not a continuous renderer gradient, a depth or
+light measurement, or extra evidence beyond the fully named parent raster. Its separate
+stdlib-only vector check is:
+
+```powershell
+python -B tools/rgb_gradient_challenge_vectors.py
+```
+
+That narrow result still proves neither that an external device produced the numbers nor that
+they came from the panel. Device identity, calibration custody, camera-to-panel geometry,
+temporal synchronization, ICC/HDR transforms, scanout, and emitted light remain outside the
+current evidence. The physical-display-sensor metric therefore remains `N/A` until an actual
+external instrument is bound under a future protocol.
+
+The codec's independent, stdlib-only tag vectors can be checked with:
+
+```powershell
+python -B tools/physical_sensor_vectors.py
+```

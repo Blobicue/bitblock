@@ -176,6 +176,70 @@ pub struct ProjectedPoint {
     pub depth: f64,
 }
 
+/// Immutable camera and viewport state shared by every projection in one render.
+///
+/// It preserves the arithmetic in [`Camera::project`] while avoiding repeated basis and focal
+/// setup for each cube vertex.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CameraProjection {
+    position: Vec3,
+    basis: CameraBasis,
+    focal_length: f64,
+    half_width: f64,
+    half_height: f64,
+}
+
+#[cfg(test)]
+thread_local! {
+    static PROJECTION_CONTEXT_BUILD_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_projection_context_build_count() {
+    PROJECTION_CONTEXT_BUILD_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn projection_context_build_count() -> usize {
+    PROJECTION_CONTEXT_BUILD_COUNT.with(std::cell::Cell::get)
+}
+
+impl CameraProjection {
+    pub(crate) fn position(self) -> Vec3 {
+        self.position
+    }
+
+    pub(crate) fn project(self, point: Vec3) -> Option<ProjectedPoint> {
+        if !point.is_finite() {
+            return None;
+        }
+
+        let relative = point - self.position;
+        let depth = relative.dot(self.basis.forward);
+        if !depth.is_finite() || depth <= 0.0 {
+            return None;
+        }
+
+        let x = self.half_width + self.focal_length * relative.dot(self.basis.right) / depth;
+        let y = self.half_height - self.focal_length * relative.dot(self.basis.up) / depth;
+
+        (x.is_finite() && y.is_finite()).then_some(ProjectedPoint { x, y, depth })
+    }
+
+    pub(crate) fn bounds_fit_one_pixel(self, min: Vec3, max: Vec3) -> bool {
+        if !bounds_are_valid(min, max) {
+            return false;
+        }
+
+        bounds_corners(min, max).into_iter().all(|corner| {
+            self.project(corner).is_some_and(|projected| {
+                (projected.x - self.half_width).abs() <= 0.5 + ONE_PIXEL_EPSILON
+                    && (projected.y - self.half_height).abs() <= 0.5 + ONE_PIXEL_EPSILON
+            })
+        })
+    }
+}
+
 /// Free observer state. It has no body, collision volume, gravity, or other entity semantics.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
@@ -425,6 +489,26 @@ impl Camera {
         f64::from(viewport_height) / (2.0 * (self.vertical_fov_radians * 0.5).tan())
     }
 
+    /// Captures the invariant setup shared by projections in one nonzero viewport.
+    pub(crate) fn projection_for_viewport(
+        &self,
+        viewport_width: u32,
+        viewport_height: u32,
+    ) -> Option<CameraProjection> {
+        if viewport_width == 0 || viewport_height == 0 {
+            return None;
+        }
+        #[cfg(test)]
+        PROJECTION_CONTEXT_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+        Some(CameraProjection {
+            position: self.position,
+            basis: self.basis(),
+            focal_length: self.viewport_focal_length(viewport_height),
+            half_width: f64::from(viewport_width) * 0.5,
+            half_height: f64::from(viewport_height) * 0.5,
+        })
+    }
+
     pub fn center_ray(&self) -> Ray {
         Ray {
             origin: self.position,
@@ -474,18 +558,9 @@ impl Camera {
             return None;
         }
 
-        let basis = self.basis();
-        let relative = point - self.position;
-        let depth = relative.dot(basis.forward);
-        if !depth.is_finite() || depth <= 0.0 {
-            return None;
-        }
-
-        let focal_length = self.viewport_focal_length(viewport_height);
-        let x = f64::from(viewport_width) * 0.5 + focal_length * relative.dot(basis.right) / depth;
-        let y = f64::from(viewport_height) * 0.5 - focal_length * relative.dot(basis.up) / depth;
-
-        (x.is_finite() && y.is_finite()).then_some(ProjectedPoint { x, y, depth })
+        self.projection_for_viewport(viewport_width, viewport_height)
+            .expect("nonzero projection viewport must produce a projection context")
+            .project(point)
     }
 
     /// Distance from the current anchor at which `bounds` fit inside the central physical pixel.
@@ -540,15 +615,9 @@ impl Camera {
             return false;
         }
 
-        let center_x = f64::from(viewport_width) * 0.5;
-        let center_y = f64::from(viewport_height) * 0.5;
-        bounds_corners(min, max).into_iter().all(|corner| {
-            self.project(corner, viewport_width, viewport_height)
-                .is_some_and(|projected| {
-                    (projected.x - center_x).abs() <= 0.5 + ONE_PIXEL_EPSILON
-                        && (projected.y - center_y).abs() <= 0.5 + ONE_PIXEL_EPSILON
-                })
-        })
+        self.projection_for_viewport(viewport_width, viewport_height)
+            .expect("nonzero projection viewport must produce a projection context")
+            .bounds_fit_one_pixel(min, max)
     }
 
     fn fit_distance_from_anchor(
@@ -815,6 +884,58 @@ mod tests {
         assert!(
             camera
                 .project(ray.origin - ray.direction, 800, 600)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn projection_context_matches_public_projection_bit_for_bit() {
+        let camera =
+            Camera::from_position(Vec3::new(2.0, -4.0, 1.0), 0.8125, -0.4375, 9.0, FRAC_PI_3);
+        let forward = camera.forward();
+        let right = camera.right();
+        let up = camera.up();
+        let points = [
+            camera.position() + forward * 17.0,
+            camera.position() + forward * 17.0 + right * 63.0 - up * 41.0,
+            camera.position() - forward,
+            Vec3::new(1.0e12, -1.0e12, 5.0e11),
+        ];
+
+        for (width, height) in [(1, 1), (801, 801), (1_201, 801), (817, 509)] {
+            let context = camera.projection_for_viewport(width, height).unwrap();
+            for point in points {
+                let direct = camera.project(point, width, height).map(|projected| {
+                    [
+                        projected.x.to_bits(),
+                        projected.y.to_bits(),
+                        projected.depth.to_bits(),
+                    ]
+                });
+                let cached = context.project(point).map(|projected| {
+                    [
+                        projected.x.to_bits(),
+                        projected.y.to_bits(),
+                        projected.depth.to_bits(),
+                    ]
+                });
+                assert_eq!(cached, direct, "viewport {width}x{height}, point {point:?}");
+            }
+
+            let min = Vec3::new(-8.0, 2.0, -3.0);
+            let max = Vec3::new(5.0, 9.0, 11.0);
+            assert_eq!(
+                context.bounds_fit_one_pixel(min, max),
+                camera.bounds_fit_one_pixel(min, max, width, height)
+            );
+        }
+
+        assert!(camera.projection_for_viewport(0, 1).is_none());
+        assert!(camera.projection_for_viewport(1, 0).is_none());
+        assert!(camera.project(Vec3::ZERO, 0, 1).is_none());
+        assert!(
+            camera
+                .project(Vec3::new(f64::NAN, 0.0, 0.0), 1, 1)
                 .is_none()
         );
     }
