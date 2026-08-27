@@ -53,10 +53,15 @@ DOC_FILES = (
     PROOF / "README.md",
 )
 
-# `crate::foo` -- the digit is load-bearing. Without it `frame_v2` truncates to
-# `frame_v`, which is not a module, and the graph silently grows a phantom node.
-# Gate A re-checks every target against the declared module set for that reason.
-RE_CRATE_DEP = re.compile(r"crate::([a-z0-9_]+)")
+# `crate::foo` and `bitblock::foo` are the same edge. The binary reaches the
+# library through its public name rather than `crate::`, so matching only the
+# latter reports main.rs -- 5,967 lines over 22 modules -- as a leaf that
+# depends on nothing.
+#
+# The digit is load-bearing too: without it `frame_v2` truncates to `frame_v`,
+# which is not a module, and the graph silently grows a phantom node. Gate A
+# re-checks every target against the declared module set for exactly that.
+RE_CRATE_DEP = re.compile(r"(?:crate|bitblock)::([a-z0-9_]+)")
 RE_PUB_MOD = re.compile(r"^\s*pub mod ([a-z0-9_]+);", re.M)
 RE_CFG = re.compile(r'^#\[cfg\((.+)\)\]\s*$')
 RE_SCHEMA_LIT = re.compile(r'b"(bitblock/[a-z0-9/_-]+)"')
@@ -142,17 +147,34 @@ def summarize_doc_comment(text: str) -> tuple[str, str]:
     return first, body
 
 
+def test_scope_line(text: str) -> int:
+    """Line at which a file's `#[cfg(test)]` module begins, or a large number.
+
+    Schemas declared past it are fixtures, not protocol surface. Without this
+    distinction `bitblock/test-object/v1` -- a throwaway name that frame.rs and
+    storage.rs each happen to use in their own tests -- becomes a shared
+    subsystem joining two unrelated modules, and it inflates the count of
+    protocol objects lacking independent vectors with objects that should not
+    have any.
+    """
+    for num, line in enumerate(text.splitlines(), 1):
+        if line.strip() == "#[cfg(test)]":
+            return num
+    return 1 << 30
+
+
 def schema_declarations(text: str, path: Path) -> list[dict]:
     """Every canonical `bitblock/...` schema string a Rust file declares.
 
-    Constants are recorded with their Rust name; bare literals (test fixtures,
-    inline domains) are recorded without one. Both are real occurrences, and
-    Gate B needs to tell them apart.
+    Constants are recorded with their Rust name; bare literals (inline domains)
+    are recorded without one. Both are real occurrences, and Gate B needs to
+    tell them apart.
     """
     out: list[dict] = []
     named: dict[str, str] = {}
     for match in RE_CONST_SCHEMA.finditer(text):
         named[match.group(2)] = match.group(1)
+    boundary = test_scope_line(text)
     seen: set[str] = set()
     for num, line in enumerate(text.splitlines(), 1):
         for match in RE_SCHEMA_LIT.finditer(line):
@@ -165,6 +187,7 @@ def schema_declarations(text: str, path: Path) -> list[dict]:
                     "schema": schema,
                     "const": named.get(schema),
                     "at": "%s:%d" % (rel(path), num),
+                    "in_tests": num > boundary,
                 }
             )
     return out
@@ -210,6 +233,7 @@ def extract_modules() -> list[dict]:
                 "deps": deps,
                 "declares": [s["schema"] for s in schemas],
                 "declared_at": {s["schema"]: s["at"] for s in schemas},
+                "test_scope": sorted(s["schema"] for s in schemas if s["in_tests"]),
                 "schema_consts": {s["schema"]: s["const"] for s in schemas if s["const"]},
                 "terms": terms,
             }
@@ -397,10 +421,16 @@ def extract_schemas(modules: list[dict], tools: list[dict]) -> list[dict]:
                     "declared_at": [],
                     "consts": [],
                     "vectored_by": [],
+                    "fixture": True,
                 },
             )
             entry["declared_by"].append(mod["id"])
             entry["declared_at"].append(mod["declared_at"][schema])
+            # A schema is protocol surface if ANY module declares it outside
+            # test scope. One module using a name in its tests does not demote
+            # an object another module publishes.
+            if schema not in mod["test_scope"]:
+                entry["fixture"] = False
             const = mod["schema_consts"].get(schema)
             if const:
                 entry["consts"].append(const)
@@ -416,7 +446,8 @@ def extract_schemas(modules: list[dict], tools: list[dict]) -> list[dict]:
         entry["summary"] = "%s, declared by %s%s" % (
             entry["version"],
             ", ".join(m.split(":", 1)[1] for m in entry["declared_by"]) or "nothing",
-            "" if entry["vectored_by"] else ", NO independent vectors",
+            " (test fixture)" if entry["fixture"]
+            else "" if entry["vectored_by"] else ", NO independent vectors",
         )
         entry["terms"] = sorted(set(tokens(schema.replace("/", " ").replace("-", " "))))
         out.append(entry)
@@ -556,9 +587,12 @@ def stage_link(nodes: list[dict]) -> list[dict]:
     # Subsystems group modules that move together. Unlike rust-index, where a
     # category's members are mutual ALTERNATIVES, membership here means these
     # collaborate -- the set an agent has to read before editing any of them.
+    fixtures = {n["name"] for n in nodes if n["kind"] == "schema" and n["fixture"]}
     subsystems: dict[str, set[str]] = {}
     for mod in modules:
         for schema in mod["declares"]:
+            if schema in fixtures:
+                continue
             subsystems.setdefault(schema.split("/")[1], set()).add(mod["id"])
     grouped = [
         {
@@ -649,7 +683,8 @@ def stage_audit(nodes: list[dict]) -> int:
             "schemas declared independent of src/ now appear there: %s"
             % ", ".join(breached)
         )
-    uncovered = sorted(s["name"] for s in schemas if not s["vectored_by"])
+    surface = [s for s in schemas if not s["fixture"]]
+    uncovered = sorted(s["name"] for s in surface if not s["vectored_by"])
 
     # -- Gate C: metric accounting -----------------------------------------
     # registry.tsv rows == metric_registry.py's own parse == METRICS.md's claim,
@@ -702,8 +737,9 @@ def stage_audit(nodes: list[dict]) -> int:
         "modules_by_gate": tally(m["gate"] for m in modules),
         "source_lines": sum(m["lines"] for m in modules),
         "tests": sum(m["tests"] for m in modules),
-        "schemas": len(schemas),
-        "schemas_vectored": len(schemas) - len(uncovered),
+        "schemas": len(surface),
+        "schemas_fixtures": len(schemas) - len(surface),
+        "schemas_vectored": len(surface) - len(uncovered),
         "schemas_uncovered": uncovered,
         "schemas_tool_local": sorted(local_by_schema),
         "metrics": len(metrics),
@@ -721,8 +757,10 @@ def stage_audit(nodes: list[dict]) -> int:
     print("audit")
     print("    modules      %d in %d lines, %d tests" % (
         coverage["modules"], coverage["source_lines"], coverage["tests"]))
-    print("    schemas      %d, %d with independent vectors, %d without" % (
-        len(schemas), coverage["schemas_vectored"], len(uncovered)))
+    print("    schemas      %d protocol objects (+%d test fixtures)"
+          % (len(surface), len(schemas) - len(surface)))
+    print("                 %d with independent vectors, %d without"
+          % (coverage["schemas_vectored"], len(uncovered)))
     print("    metrics      %d across %d owners" % (
         len(metrics), len(coverage["metrics_by_owner"])))
     for name, ok in gates.items():

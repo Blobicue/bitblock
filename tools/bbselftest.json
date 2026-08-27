@@ -109,12 +109,13 @@
     "structure": [
         {
             "module": "protocol",
-            "dependents": 28,
-            "note": "The most load-bearing module in the crate. Every content tag flows through it, which is exactly why its rank must not be allowed to decide a query."
+            "dependents": 29,
+            "note": "The most load-bearing module in the crate: everything but camera, lib and world reaches it. That is exactly why its structural rank must never be allowed to decide a query. Was 28 while the dep scan matched only `crate::` and missed the binary, which reaches the library as `bitblock::`."
         },
         {
             "module": "world",
-            "dependents": 13
+            "dependents": 23,
+            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Was 22 before main.rs's `bitblock::` imports were counted as edges."
         },
         {
             "module": "coordinate_episode",

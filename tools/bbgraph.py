@@ -48,7 +48,6 @@ import math
 import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -325,10 +324,10 @@ def cmd_ask(query: str) -> int:
             elif node["kind"] == "schema":
                 vec = node["vectored_by"]
                 print("      %s" % (
-                    "independently vectored by "
-                    + ", ".join(v.split(":", 1)[1] for v in vec)
-                    if vec else
-                    "NO independent vectors -- nothing reimplements this payload"))
+                    "test fixture, not protocol surface" if node["fixture"]
+                    else "independently vectored by "
+                    + ", ".join(v.split(":", 1)[1] for v in vec) if vec
+                    else "NO independent vectors -- nothing reimplements this payload"))
             elif node["kind"] == "metric":
                 print("      %s  (owner %s)" % (node["alias"], node["owner"]))
             elif describe(node):
@@ -419,6 +418,9 @@ def cmd_node(name: str) -> int:
         print("  declared  %s" % ", ".join(node["declared_at"]))
         if node["consts"]:
             print("  const     %s" % ", ".join(node["consts"]))
+        if node["fixture"]:
+            print("  scope     test fixture -- declared only inside #[cfg(test)],")
+            print("            not part of the protocol surface")
         vec = node["vectored_by"]
         print("  vectors   %s" % (
             ", ".join(v.split(":", 1)[1] for v in vec) if vec
@@ -560,10 +562,12 @@ def cmd_gates() -> int:
     runs in CI. bitblock has no CI, so it runs here instead: regenerate into a
     temp tree and compare bytes."""
     print("ACCOUNTING GATES")
+    before = {p.name: p.read_bytes() for p in sorted(INDEX.glob("*")) if p.is_file()}
     result = subprocess.run(
         [sys.executable, str(ROOT / "tools" / "bbindex.py")],
         capture_output=True, text=True,
     )
+    after = {p.name: p.read_bytes() for p in sorted(INDEX.glob("*")) if p.is_file()}
     for line in result.stdout.splitlines():
         if "gate" in line or "!" in line:
             print(" " + line.strip())
@@ -571,24 +575,19 @@ def cmd_gates() -> int:
         print(result.stderr.rstrip())
     accounting = result.returncode == 0
 
+    # Staleness. The reference method runs this as a CI job that regenerates the
+    # artifacts and fails on any diff; bitblock has no CI, so it runs here.
+    # The run above already regenerated index/ in place, so this compares the
+    # bytes as they were on entry against the bytes the tree produces now. A
+    # failure therefore leaves the tree ALREADY corrected -- the fix is to
+    # commit the diff, not to re-run anything.
     print("\nSTALENESS GATE")
-    committed = {p.name: p.read_bytes() for p in sorted(INDEX.glob("*")) if p.is_file()}
-    with tempfile.TemporaryDirectory() as tmp:
-        shadow = Path(tmp) / "index"
-        shadow.mkdir()
-        # bbindex writes to index/ by design; snapshot, regenerate, compare, restore.
-        subprocess.run(
-            [sys.executable, str(ROOT / "tools" / "bbindex.py")],
-            capture_output=True, text=True,
-        )
-        regenerated = {p.name: p.read_bytes() for p in sorted(INDEX.glob("*")) if p.is_file()}
     drifted = sorted(
-        name for name in set(committed) | set(regenerated)
-        if committed.get(name) != regenerated.get(name)
+        name for name in set(before) | set(after) if before.get(name) != after.get(name)
     )
     if drifted:
-        print("  FAIL  index/ does not match the tree: %s" % ", ".join(drifted))
-        print("        Run: python tools/bbindex.py   and commit the diff.")
+        print("  FAIL  index/ did not match the tree: %s" % ", ".join(drifted))
+        print("        It has just been regenerated. Commit the diff.")
     else:
         print("  pass  index/ regenerates byte-identically from the tree")
     fresh = not drifted
@@ -609,7 +608,7 @@ def cmd_stats() -> int:
     print("\nmodules         %d in %s lines, %d tests"
           % (coverage["modules"], "{:,}".format(coverage["source_lines"]), coverage["tests"]))
     for gate, count in coverage["modules_by_gate"].items():
-        print("  cfg(%-18s) %3d" % (gate, count))
+        print("  %-46s %3d" % ("cfg(%s)" % gate, count))
     print("\nprotocol        %d schemas, %d independently vectored, %d not"
           % (coverage["schemas"], coverage["schemas_vectored"],
              len(coverage["schemas_uncovered"])))
@@ -635,7 +634,10 @@ def cmd_selftest() -> int:
     for case in spec.get("queries", []):
         checks += 1
         scored, _qt, _cov, _anch, _named, _w = rank(nodes, subs, dag, case["q"])
-        top = scored[0][1]["name"] if scored else None
+        # The leading MODULE, not the leading node: for a code question that is
+        # the file the caller opens, and it does not churn when a doc section
+        # is reworded.
+        top = next((n["name"] for _s, n in scored if n["kind"] == "module"), None)
         if top != case["top"]:
             failures.append("ask %r -> %r, expected %r" % (case["q"], top, case["top"]))
 

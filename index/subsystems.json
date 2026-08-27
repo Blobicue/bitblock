@@ -24,30 +24,6 @@
   ]
  },
  {
-  "id": "sub:compositor-implementation-manifest",
-  "members": [
-   "module:optimization"
-  ],
-  "name": "compositor-implementation-manifest",
-  "terms": [
-   "compositor",
-   "implementation",
-   "manifest"
-  ]
- },
- {
-  "id": "sub:compositor-stride-case",
-  "members": [
-   "module:optimization"
-  ],
-  "name": "compositor-stride-case",
-  "terms": [
-   "case",
-   "compositor",
-   "stride"
-  ]
- },
- {
   "id": "sub:content-tag",
   "members": [
    "module:protocol"
@@ -96,19 +72,6 @@
   ]
  },
  {
-  "id": "sub:display-artifact-test",
-  "members": [
-   "module:display_artifact",
-   "module:display_store"
-  ],
-  "name": "display-artifact-test",
-  "terms": [
-   "artifact",
-   "display",
-   "test"
-  ]
- },
- {
   "id": "sub:display-capture-artifact",
   "members": [
    "module:display_artifact"
@@ -144,20 +107,8 @@
   ]
  },
  {
-  "id": "sub:display-test",
-  "members": [
-   "module:display"
-  ],
-  "name": "display-test",
-  "terms": [
-   "display",
-   "test"
-  ]
- },
- {
   "id": "sub:edit",
   "members": [
-   "module:ladder_bridge",
    "module:program"
   ],
   "name": "edit",
@@ -199,17 +150,6 @@
   ]
  },
  {
-  "id": "sub:history",
-  "members": [
-   "module:history",
-   "module:history_store"
-  ],
-  "name": "history",
-  "terms": [
-   "history"
-  ]
- },
- {
   "id": "sub:history-mode",
   "members": [
    "module:sequential"
@@ -239,18 +179,6 @@
   "name": "journal",
   "terms": [
    "journal"
-  ]
- },
- {
-  "id": "sub:journal-test-object",
-  "members": [
-   "module:journal"
-  ],
-  "name": "journal-test-object",
-  "terms": [
-   "journal",
-   "object",
-   "test"
   ]
  },
  {
@@ -336,29 +264,6 @@
   ]
  },
  {
-  "id": "sub:optimization-test",
-  "members": [
-   "module:optimization"
-  ],
-  "name": "optimization-test",
-  "terms": [
-   "optimization",
-   "test"
-  ]
- },
- {
-  "id": "sub:optimization-test-executable",
-  "members": [
-   "module:optimization"
-  ],
-  "name": "optimization-test-executable",
-  "terms": [
-   "executable",
-   "optimization",
-   "test"
-  ]
- },
- {
   "id": "sub:output-color-observation",
   "members": [
    "module:output_color"
@@ -429,31 +334,6 @@
   ]
  },
  {
-  "id": "sub:physical-sensor-test",
-  "members": [
-   "module:physical_sensor"
-  ],
-  "name": "physical-sensor-test",
-  "terms": [
-   "physical",
-   "sensor",
-   "test"
-  ]
- },
- {
-  "id": "sub:physical-sensor-vector-parent",
-  "members": [
-   "module:physical_sensor"
-  ],
-  "name": "physical-sensor-vector-parent",
-  "terms": [
-   "parent",
-   "physical",
-   "sensor",
-   "vector"
-  ]
- },
- {
   "id": "sub:presentation-output-artifact",
   "members": [
    "module:presentation_output",
@@ -464,43 +344,6 @@
    "artifact",
    "output",
    "presentation"
-  ]
- },
- {
-  "id": "sub:presentation-output-test",
-  "members": [
-   "module:presentation_output"
-  ],
-  "name": "presentation-output-test",
-  "terms": [
-   "output",
-   "presentation",
-   "test"
-  ]
- },
- {
-  "id": "sub:presentation-output-v2-test",
-  "members": [
-   "module:presentation_output_v2"
-  ],
-  "name": "presentation-output-v2-test",
-  "terms": [
-   "output",
-   "presentation",
-   "test"
-  ]
- },
- {
-  "id": "sub:reference-renderer-corpus-receipt",
-  "members": [
-   "module:render"
-  ],
-  "name": "reference-renderer-corpus-receipt",
-  "terms": [
-   "corpus",
-   "receipt",
-   "reference",
-   "renderer"
   ]
  },
  {
@@ -573,40 +416,6 @@
   ]
  },
  {
-  "id": "sub:test",
-  "members": [
-   "module:main"
-  ],
-  "name": "test",
-  "terms": [
-   "test"
-  ]
- },
- {
-  "id": "sub:test-object",
-  "members": [
-   "module:frame",
-   "module:storage"
-  ],
-  "name": "test-object",
-  "terms": [
-   "object",
-   "test"
-  ]
- },
- {
-  "id": "sub:test-presenter-policy",
-  "members": [
-   "module:main"
-  ],
-  "name": "test-presenter-policy",
-  "terms": [
-   "policy",
-   "presenter",
-   "test"
-  ]
- },
- {
   "id": "sub:tick-outcome",
   "members": [
    "module:tick"
@@ -628,28 +437,6 @@
    "policy",
    "present",
    "windows"
-  ]
- },
- {
-  "id": "sub:world",
-  "members": [
-   "module:history"
-  ],
-  "name": "world",
-  "terms": [
-   "world"
-  ]
- },
- {
-  "id": "sub:wrong-display-artifact",
-  "members": [
-   "module:display_store"
-  ],
-  "name": "wrong-display-artifact",
-  "terms": [
-   "artifact",
-   "display",
-   "wrong"
   ]
  }
 ]
