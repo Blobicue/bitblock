@@ -22,6 +22,11 @@ The second loop attacked paper/audit input
 `034b7b2b5f129625f9c6dcec3e14038b7c4aee5f`. Those pins make this audit stale as soon as
 the relevant source/proof files or paper change.
 
+The shared working tree acquired intermediate commit
+`018ca52f43309c8ca6b30831e28c815bc8a7f3f5` during the loop. That commit banked the
+then-uncommitted paper edits; it is not a separate audit result. The result identified above
+is the cumulative `dd19c5f..034b7b2` paper state and supersedes that intermediate snapshot.
+
 Three independent read-only lenses checked protocol/security completeness, internal formal
 composition, and repository truth. The inspected set included `src/lib.rs`, `src/main.rs`,
 `src/history.rs`, `src/coordinate_episode.rs`, `src/tick.rs`, `src/interaction.rs`,

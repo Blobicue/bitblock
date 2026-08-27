@@ -10,6 +10,8 @@ semantic history.
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
 - The prior published documentation checkpoint was `dd19c5f` (`docs: audit and close Layer 1 paper gaps`).
+- `018ca52` is an intermediate shared-worktree bank of the in-progress checkpoint-0.3 paper;
+  do not treat it as the reviewed result.
 - The hardened checkpoint-0.3 Layer 1 paper is pinned at `034b7b2`; the second-loop
   audit/handoff revision supersedes the earlier audit at the branch tip.
 - The branch contains the full non-build local checkpoint plus the semantic and transcript
