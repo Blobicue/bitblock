@@ -2,9 +2,10 @@
 
 Bitblock is a binary coordinate space observed through a free camera.
 
-For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md), then read
-[`docs/SEMANTICS.md`](docs/SEMANTICS.md) and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md)
-before changing the simulation boundary.
+For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md). The broader motive chain is in
+[`docs/PROJECT_INTENT.md`](docs/PROJECT_INTENT.md), and the dependency-gated future plan is in
+[`docs/CAPABILITY_TREE.md`](docs/CAPABILITY_TREE.md). Read [`docs/SEMANTICS.md`](docs/SEMANTICS.md)
+and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md) before changing the simulation boundary.
 
 Rather than reading 52,000 lines of Rust, query the generated index:
 
@@ -26,9 +27,105 @@ The forward-looking security architecture is documented in
 local deterministic world from the proposed identity, ownership, replication, consensus,
 availability, and Layer 1 requirements.
 
-The paper's latest gap review is recorded in
-[`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md); it distinguishes prose fixes
-from repository obligations that remain unimplemented.
+The paper's historical checkpoint-0.3 gap review has a canonical corrected reading copy in
+[`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md). Its current Git blob
+`124e066b418a61279abf90c1b1b2c2cc0604ef2a` is frozen from the fifth-successor correction onward;
+the original audit-result blob at commit `9eace50` was
+`ee2075547d7c7895c7d0ebaabfc64d1e09f5ba3a`, before later provenance and F-12 errata. The corrected
+copy distinguishes that checkpoint's prose fixes from repository obligations that remained
+unimplemented, but it is not the latest review of the subsequently changed paper and is not
+claimed to have been retrospectively immutable. Current review chronology continues through the
+frozen
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
+and
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md)
+successor records.
+
+The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
+encoding and the still-open comparison between a constrained binary Merkle Patricia trie and a
+192-level sparse Merkle tree—is isolated in
+[`docs/AUTHENTICATED_STATE_PLAN.md`](docs/AUTHENTICATED_STATE_PLAN.md). No authenticated trie or
+proof codec is implemented in the current runtime. Verkle is recorded there as a separate,
+cryptography-gated feasibility lane; it is not selected and does not share the two hash candidates'
+`NodeHash` assay.
+
+The immutable first finite audit is [`docs/FUTURE_PLAN_AUDIT.md`](docs/FUTURE_PLAN_AUDIT.md). The
+latest second-loop audit, including the Verkle disposition and its own frozen input, is
+[`docs/FUTURE_PLAN_AUDIT_LOOP2.md`](docs/FUTURE_PLAN_AUDIT_LOOP2.md). They audit specifications and
+dependencies, not implementation or security evidence.
+
+The large state/Verkle/tick/proof research conversation from `design.txt` is source-receipted and
+compressed in
+[`docs/DESIGN_RESEARCH_DISTILLATION.md`](docs/DESIGN_RESEARCH_DISTILLATION.md). That file is a
+notes-only question map with corrected boundaries, rejected claims, and candidate research lanes;
+it does not activate a capability-tree node or change the runtime.
+Its first bounded successor review is frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md), and the
+external input identity/count method is pinned by
+[`docs/design-source-receipt-v1.json`](docs/design-source-receipt-v1.json). The audit corrects notes
+and checker coverage only; it is not cryptographic or implementation validation.
+
+The first correction is pinned at `ea9294ba08b5e4bd339f82894ecb761461f5af13`. A second complete
+read-only sweep of that corrected state is frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md).
+It records 11 successor type, dependency, provenance, checker, and CI gaps before their one
+coordinated documentation/tooling correction at
+`54926f52fa8ba9768e817ecb6139dcca41960e6a`. A third complete read-only sweep of that correction is
+frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md).
+It records eight launch-anchor, migration-envelope/body, validation-order, Verkle-admission,
+checkout-EOL, authority-inventory, and successor-scope gaps before correction
+`b23ddc95e5075c35d0dbf918b89f353fcdd40ddd`. A fourth complete read-only sweep of that exact
+correction and Git tree `3de2d45aa20b08318f1a1af4d93308daccf1f55e` is frozen at commit
+`8a5743595a0aa8ff13ede576f282b92540db5d9b` in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
+whose first-addition Git blob is `350d1af6279d7f441f45fba2689481c0dbea79a5`. It records eight
+launch-closure, block-context availability, execution-input, outer-framing, conditional-predicate,
+capability-owner, and review-provenance gaps before correction
+`2cb1cc02320d180ac9ee34bd103bd44459f128fa`. A fifth complete sweep of that correction and Git tree
+`60e9714c6d691f383fc75be03f6c9927c7665b84` is frozen at commit
+`0d0122d9bf84664511db7588bb09d5c590a006f9` in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
+whose first-addition Git blob is `519451b120b458735afaa59daa01aa23466e165e`. It records eight
+successor-activation-closure, pre-limit work, parent-lookup, launch-count, release-authorization,
+capability-dependency/status, and corrected-audit-provenance gaps before correction
+`1821f37d1f042115a4ffb3bd50292885e581d812`. A sixth complete sweep of that correction and Git tree
+`9b8c08b10c611dd62ac8dbd7b4e46d1b0a02bf90` is frozen at commit
+`80b58e0a40408e03f16e2d0c739c177e05c22903` in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
+whose first-addition Git blob is `5374b160424b78bd516ffc598e9bbd3b29392227`. It records four
+accepted-parent evidence-multiplicity, protocol-identity-hash failure, external-genesis-root, and
+phase-status-projection gaps before correction `62afdd24a8525704f5949584859bd7cbad300d4d`.
+A seventh complete sweep of that correction and Git tree
+`ee346fb3aa9bc54591f851dcb482fd92be9da84a` is frozen at first-addition commit
+`78d5494f930c7412c2d60162b44c0b72050f9f22`, whose Git tree is
+`07aa851e422a5da9453d4409f91b62ad9442a7d5`, in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md),
+whose first-addition Git blob is `dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2`. It records eight
+proposal-credential, live-authority-compromise, availability-dependency, replay, launch-DAG,
+successor-equation, unlock-frontier, and handoff-projection gaps before this coordinated descendant
+correction.
+The descendant proposal makes the indexed accepted core signature-free, separates the bounded
+no-double-weight `AcceptedProposalCredentialSetV1` from accepted evidence, pairs consensus-entailed
+availability through `SameWrapperConsensusDependencyWitnessV1`, and replays one parent-ordered
+`AcceptedCoreReplayEntryV1` sequence whose entries carry `NormalizedAcceptedEvidenceSnapshotV1` or
+`RetainedAcceptedEligibilityWitnessV1` under an explicit `ReplayEvidenceCutoffV1`.
+`PreventiveProfileOwnedCryptographicMigrationV1` is distinct from
+safe-halt/recovery after a live
+authority-binding compromise. Launch now uses the actual combined scope/registry/genesis/candidate
+DAG with one counted outer genesis artifact at a nonzero checked rank, while successor activation
+uses exact internal-only seven-plus-supplementary equations relative to an already verified semantic
+predecessor context. These are proposed byte and verifier contracts, not implemented behavior.
+None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
+cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
+deferred until a complete Loop 8 sweep records zero new material design gaps and no falsely closed
+material residual within its declared
+finite lenses.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.

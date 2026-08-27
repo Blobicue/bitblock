@@ -1,0 +1,30 @@
+{
+  "schema": "bitblock/design-source-receipt/v1",
+  "authority": "Byte identity and count-method receipt only; not source truth, speaker attribution, or completeness evidence.",
+  "external_source": {
+    "path_hint": "C:\\Users\\Owen\\Downloads\\design.txt",
+    "repository_copy": false,
+    "hash_algorithm": "SHA-256",
+    "raw_bytes": 71583,
+    "sha256": "eeda72adcf153f027c38ac8be6669f668c33e4b11d03b19d34fef2f9f228352f",
+    "observed_mtime": "2026-08-27T02:13:54.4299684-07:00",
+    "text_interpretation": {
+      "decoder": ".NET System.IO.File.ReadAllText default UTF-8 with BOM detection",
+      "decoded_utf16_code_units": 71080,
+      "whitespace_word_count": 10673,
+      "word_method": ".NET Regex \\S+ match count",
+      "line_count": 125,
+      "line_method": "LF code-unit count plus one"
+    }
+  },
+  "audited_distillation_input": {
+    "commit": "694650f4028f5c1fb715384597326e0b0e31f0e1",
+    "git_blob_sha1": "97f2d855113479435030d55f02459f01ee9914a0",
+    "hash_algorithm": "SHA-256",
+    "sha256": "fa408ef8532a8b144c183e336b5746c205ec8598962daf2005474bc52c725191",
+    "raw_bytes": 32893,
+    "decoded_utf16_code_units": 32837,
+    "whitespace_word_count": 4403,
+    "line_count": 492
+  }
+}

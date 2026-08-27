@@ -1,5 +1,20 @@
-# Generated index artifacts are written with LF and compared byte-for-byte by
-# the staleness gate. Without this, autocrlf rewrites them on checkout and every
-# regeneration shows a whole-file diff.
+# Anything a gate compares byte-for-byte must check out with LF. Without this,
+# autocrlf rewrites the file on checkout and every regeneration reports a
+# whole-file diff that has nothing to do with its contents.
+
+# Generated index artifacts, compared by the staleness gate.
 /index/*.json text eol=lf
 /index/*.jsonl text eol=lf
+
+# Planning documents and their receipt, hashed by tools/check_planning_docs.py.
+docs/FUTURE_PLAN_AUDIT.md text eol=lf
+docs/FUTURE_PLAN_AUDIT_LOOP2.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md text eol=lf
+docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md text eol=lf
+docs/LAYER1_DESIGN_AUDIT.md text eol=lf
+docs/design-source-receipt-v1.json text eol=lf

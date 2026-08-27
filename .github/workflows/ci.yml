@@ -2,7 +2,6 @@ name: ci
 
 on:
   push:
-    branches: [main, timeline-2]
   pull_request:
 
 jobs:
@@ -31,10 +30,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: powered planning-document checks
+        run: python3 tools/check_planning_docs.py --self-test
       - name: standalone vector tools
         run: |
           set -e
           # Not bare validators, so they are not run here:
+          #   check_planning_docs runs its own --self-test step above
           #   metric_registry   wants a subcommand (its own step runs the audit)
           #   mirror_timeline1  needs the retired timeline-1 source directory
           #   simulate_sequence takes a scenario argument
@@ -42,13 +46,15 @@ jobs:
           #   bbverify          is a local sweep of these same checks
           #   bbmutate          rewrites src/ on purpose and must never run here
           #   bbtime            spends ~30s profiling every test
-          skip="metric_registry mirror_timeline1 simulate_sequence bbindex bbgraph bbverify bbmutate bbtime"
+          skip="check_planning_docs metric_registry mirror_timeline1 simulate_sequence bbindex bbgraph bbverify bbmutate bbtime"
           for t in tools/*.py; do
             name=$(basename "$t" .py)
             case " $skip " in *" $name "*) continue ;; esac
             echo "== $t"
             python3 "$t" > /dev/null
           done
+      - name: expectation-checked interaction scenario
+        run: python3 tools/simulate_sequence.py examples/observer_walk_sequence.json --expect > /dev/null
       - name: metric registry audit
         run: python3 tools/metric_registry.py audit
 

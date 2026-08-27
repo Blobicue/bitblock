@@ -1415,6 +1415,13 @@
 {"from": "doc:docs/HANDOFF.md#file-ownership-map", "kind": "documents", "to": "module:sidebar"}
 {"from": "doc:docs/HANDOFF.md#file-ownership-map", "kind": "documents", "to": "module:tick"}
 {"from": "doc:docs/HANDOFF.md#file-ownership-map", "kind": "documents", "to": "module:world"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:coordinate_episode"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:history"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:interaction"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:lib"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:main"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:replay_evidence"}
+{"from": "doc:docs/LAYER1_DESIGN_AUDIT.md#method-and-evidence-boundary", "kind": "documents", "to": "module:tick"}
 {"from": "doc:docs/PROTOCOL.md#bounded-storage-record-envelope", "kind": "documents", "to": "module:storage"}
 {"from": "doc:docs/PROTOCOL.md#canonical-framebuffer", "kind": "documents", "to": "module:frame"}
 {"from": "doc:docs/PROTOCOL.md#composition-timing-envelope-checkpoint", "kind": "documents", "to": "module:presentation"}
