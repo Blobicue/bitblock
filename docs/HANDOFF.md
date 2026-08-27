@@ -9,11 +9,14 @@ semantic history.
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
-- The prior published documentation checkpoint was `dd19c5f` (`docs: audit and close Layer 1 paper gaps`).
+- `7075c54` is the motive/capability-tree documentation checkpoint: it adds the project-intent
+  owner, the dependency DAG, the MPT/SMT research plan, and transcript checkpoints 16–23.
+- `88fcf55` is that checkpoint's clean input tip and preserves the concurrent-paper provenance
+  note.
 - `018ca52` is an intermediate shared-worktree bank of the in-progress checkpoint-0.3 paper;
   do not treat it as the reviewed result.
-- The hardened checkpoint-0.3 Layer 1 paper is pinned at `034b7b2`; the second-loop
-  audit/handoff revision supersedes the earlier audit at the branch tip.
+- The hardened checkpoint-0.3 Layer 1 paper is pinned at `034b7b2`; its second-loop audit is
+  `9eace50`. Later motive/tree docs link to that pinned result without silently re-auditing it.
 - The branch contains the full non-build local checkpoint plus the semantic and transcript
   handoffs. Generated `target`, Lean `.lake`, and Python cache files are intentionally absent.
 - The original non-Git working folder was preserved separately; a new agent should clone the
@@ -30,12 +33,15 @@ git status --short --branch
 Read in this order:
 
 1. `docs/HANDOFF.md` (this file)
-2. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-3. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-4. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
-5. `docs/LAYER1_DESIGN_AUDIT.md` (paper gap findings and residual repository obligations)
-6. `README.md` (controls, commands, and feature boundaries)
-7. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+2. `docs/PROJECT_INTENT.md` (why Bitblock exists and what must remain separate)
+3. `docs/CAPABILITY_TREE.md` (dependency DAG, statuses, artifacts, gates, and non-claims)
+4. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+5. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+6. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT comparison checkpoint)
+7. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
+8. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
+9. `README.md` (controls, commands, and feature boundaries)
+10. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
 
 ## What is implemented
 
@@ -83,7 +89,12 @@ self-verified. Neither path produces physical display evidence.
 - `tools/`: independent vector/oracle scripts and the scenario runner.
 - `proof/`: bounded Lean world/representation capsules and the separate pinned LadderLang
   transition capsule.
-- `docs/METRICS*` and `docs/metrics/`: the metric catalog and the cheap runtime subset.
+- `METRICS.md`, `docs/METRIC_EXHAUSTION_AUDIT.md`, and `docs/metrics/`: the metric catalog and the
+  cheap runtime subset.
+- `docs/PROJECT_INTENT.md`: durable motive chain and architectural separations.
+- `docs/CAPABILITY_TREE.md`: capability dependencies, unlock gates, and current frontier.
+- `docs/AUTHENTICATED_STATE_PLAN.md`: unimplemented authenticated-map comparison and integration
+  constraints.
 
 ## Claims that are safe to make
 
@@ -107,6 +118,9 @@ self-verified. Neither path produces physical display evidence.
   identified in this repository.
 - Do not call the text edit language a self-executing programming language; no autonomous block
   transformation rules exist.
+- Do not call local mint/burn provenance a cryptocurrency, ownership system, or balance ledger.
+- Do not claim a Merkle Patricia trie or sparse Merkle tree is selected or implemented; both are
+  research candidates, and the legacy `world_tag` remains the current full-set identity.
 - Do not interpret the earlier zoomed-out multi-pixel observation as a hidden fractal without a
   captured state/frame artifact.
 - Do not claim that the full 1,112-metric registry is collected on every frame; the sidebar shows a
@@ -114,23 +128,30 @@ self-verified. Neither path produces physical display evidence.
 
 ## Recommended next work order
 
-Ask the user which checkpoint they want to see next, then make one semantic change at a time
-and update `docs/SEMANTICS.md` and `docs/TRANSCRIPT_AUDIT.md` in the same checkpoint.
+The motive and skill-tree checkpoint has been selected and documented. For later work, use the
+node gates in `docs/CAPABILITY_TREE.md`, make one semantic change at a time, and update
+`docs/SEMANTICS.md`, `docs/TRANSCRIPT_AUDIT.md`, and this handoff when their truth changes.
 
-1. If continuing the Layer 1 path, start with checkpoint A in
-   `docs/LAYER1_DESIGN_PAPER.md`: reconcile the complete action/result lanes, then promote the
-   feature-gated coordinate-episode prototype into an optional durable local ledger. Do not
-   add networking, ownership, and economics in the same change.
-2. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
+1. The preferred next semantic implementation node is `ACCOUNT-1`: reconcile submitted, admitted,
+   executed, rejected, no-op, camera/control, edit-miss/overlap, and idle action/result lanes. This
+   precedes durable episodes, signed actors, and executable rules.
+2. `COMMIT-R1` can proceed as a research-only checkpoint: freeze the common key/node/proof/resource
+   profiles and compare fixed-key binary Patricia with a 192-level sparse Merkle tree. Do not hook
+   either into `World`, history publication, receipts, rendering, or collision until the shared
+   assay passes and `LEDGER-1` exists.
+3. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-3. Measure the current renderer/collision cost before designing a hierarchical chunk/LOD path.
+4. Run `SCALE-1`/`COST-1` measurements before designing a hierarchical chunk/LOD path.
    The present below-saturation renderer traverses on bits; no “near-infinite performance” claim
    is licensed yet.
-4. Locate the user's intended balanced-trit hashing implementation and write down its exact
-   input/output and security contract. Preserve the recorded disqualification of the examined
+5. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
+   then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
+   recorded disqualification of the examined
    Aethor TSH/PDH constructions and IterHash; do not conflate them with a different missing design.
-5. Only after the baseline is stable, add one finite local transformation rule as an explicit
-   tick-scoped mode. Preserve deterministic `(initial state, accepted tape)` replay.
+6. Only after `ACCOUNT-1`, consider `RULE-1`: one finite opt-in local transformation rule with a
+   named neighborhood, ordering, resource bound, and deterministic
+   `(initial state, accepted tape, rule version)` replay. Do not combine it with asset or network
+   authority.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
@@ -146,6 +167,9 @@ cd proof/ladderlang-transition-v1
 .\verify.ps1
 ```
 
-The last documentation checkpoint ran `git diff --check` and published cleanly. It did not rerun
-the Cargo/Lean suites; report any fresh command's exit status explicitly rather than inheriting a
-historical “passed” label.
+Checkpoint `7075c54` is documentation-only. It passed cached `git diff --check`, balanced-fence,
+duplicate-heading, relative-link, table-pipe, fixed-node-field, undefined-node-reference, and
+52-node DAG checks. Three read-only audit lenses reviewed motive coverage, dependency circularity,
+and authenticated-state security; their material findings were patched before the commit. Rust and
+Lean suites were not rerun because no runtime/proof source changed. Report any fresh command's exit
+status explicitly rather than inheriting a historical “passed” label.
