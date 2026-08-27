@@ -24,7 +24,7 @@ from pathlib import Path
 
 SOURCE = Path(r"C:/Users/Owen/bitblock")
 REPO = Path(r"C:/Users/Owen/bitblock-t2")
-WORKTREE = REPO / "mirror-worktree"
+WORKTREE = REPO / "mirror-wt-gm"
 BRANCH = "mirror/timeline-1"
 
 # The same exclusions the fork used, so mirror trees diff cleanly against
@@ -32,8 +32,13 @@ BRANCH = "mirror/timeline-1"
 # pointer file inside the worktree from /MIR's dest-side deletion.
 ROBOCOPY_ARGS = [
     "robocopy", str(SOURCE), str(WORKTREE),
-    "/MIR", "/NFL", "/NDL", "/NJH", "/NP", "/NC", "/NS", "/NP",
-    "/XD", "target", "__pycache__", ".lake",
+    "/MIR", "/NFL", "/NDL", "/NJH", "/NP", "/NC", "/NS",
+    # .git must be in /XD (directories), not only /XF (files): when timeline-1
+    # gained its own .git directory (2026-08-27 ~05:08), /XF alone let robocopy
+    # copy their repo OVER the worktree's .git pointer file, converting the
+    # worktree into a clone of timeline-1 mid-run - the "parallel session" that
+    # was never there.
+    "/XD", "target", "__pycache__", ".lake", ".git",
     "/XF", ".git",
 ]
 
@@ -53,13 +58,21 @@ def main() -> None:
     branches = git("branch", "--list", BRANCH)
     if not branches.strip():
         git("branch", BRANCH, "inherited-state")
-    if not WORKTREE.is_dir():
-        git("worktree", "add", str(WORKTREE), BRANCH)
-    else:
-        # The worktree exists; make sure it is on the mirror branch.
+    if WORKTREE.is_dir():
+        # IDENTITY GUARD (2026-08-27): a parallel session once replaced the worktree
+        # directory with a fresh repository mid-run, and this tool committed into the
+        # foreign history. Refuse unless the directory is a worktree of THIS repo.
+        common = git("rev-parse", "--path-format=absolute", "--git-common-dir",
+                     cwd=WORKTREE).strip()
+        if Path(common).resolve() != (REPO / ".git").resolve():
+            sys.exit(f"mirror: {WORKTREE} is not a worktree of {REPO} (common dir "
+                     f"{common}) - a parallel session may have replaced it. Refusing; "
+                     f"the observation must be recovered by hand.")
         head = git("branch", "--show-current", cwd=WORKTREE).strip()
         if head != BRANCH:
-            sys.exit(f"mirror: {WORKTREE} is on '{head}', expected '{BRANCH}' — refusing")
+            sys.exit(f"mirror: {WORKTREE} is on '{head}', expected '{BRANCH}' - refusing")
+    else:
+        git("worktree", "add", str(WORKTREE), BRANCH)
 
     # Copy the exact source state over the worktree.
     r = subprocess.run(ROBOCOPY_ARGS, capture_output=True, text=True)
@@ -83,7 +96,15 @@ def main() -> None:
               f"as at the fork). Produced by tools/mirror_timeline1.py.",
         cwd=WORKTREE,
     )
+    # POST-COMMIT VERIFICATION (2026-08-27): a parallel session twice replaced the
+    # worktree directory mid-run. Verify from the MAIN repo that the commit we just
+    # made is the tip of OUR branch; if it landed in a foreign repository, say so.
     tip = git("log", "-1", "--format=%h", cwd=WORKTREE).strip()
+    our_tip = git("log", "-1", "--format=%h", BRANCH).strip()
+    if tip != our_tip:
+        sys.exit(f"mirror: committed {tip} but {BRANCH} is at {our_tip} - the commit "
+                 f"landed in a foreign repository (parallel session in the worktree "
+                 f"path). The observation must be recovered by hand.")
     diffstat = git("diff", "--stat", "HEAD~1", "HEAD", cwd=WORKTREE).strip().splitlines()
     last = diffstat[-1] if diffstat else "(binary or rename-only changes)"
     print(f"mirror: committed {tip} ({when}); {last}")

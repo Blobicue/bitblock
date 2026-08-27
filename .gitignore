@@ -1,2 +1,6 @@
 /target/
-
+proof/.lake/
+__pycache__/
+mirror-worktree/
+mirror-wt/
+mirror-wt-gm/
