@@ -3322,10 +3322,15 @@ fn simulate_interaction_tape(
         ));
     }
 
+    // `commit_tick` derives this root from an independent coordinate scan. No mutation follows
+    // the fold, so the already-committed root is the canonical final-world identity for both
+    // consumers below. The per-tick world_tag checks remain the divergence guard.
+    let final_world = app.history.current_world();
+
     #[cfg(feature = "protocol-research")]
     let local_replay_endpoint = LocalReplayEndpoint::new(
         app.tick_outcomes.last().map(TickOutcome::tag),
-        world_tag(&app.world),
+        final_world,
         app.history.head(),
         TickCameraState::capture(&app.camera).bits(),
         app.renderer.width(),
@@ -3342,7 +3347,7 @@ fn simulate_interaction_tape(
         tape: tape.content_tag(),
         action_count: tape.total_actions(),
         ticks,
-        final_world: world_tag(&app.world),
+        final_world,
         final_history: app.history.head(),
         final_camera_bits: TickCameraState::capture(&app.camera).bits(),
         on_bits: app.world.len(),
@@ -5311,6 +5316,11 @@ fit
             direct_tags
         );
         assert_eq!(summary.final_world, world_tag(&direct.world));
+        #[cfg(feature = "protocol-research")]
+        assert_eq!(
+            summary.local_replay_endpoint.world(),
+            world_tag(&direct.world)
+        );
         assert_eq!(summary.final_history, direct.history.head());
         assert_eq!(
             summary.final_camera_bits,
@@ -5359,6 +5369,67 @@ fit
         let context_error = verify_local_replay_evidence(&wrong_context).unwrap_err();
         assert_eq!(context_error.kind(), io::ErrorKind::InvalidData);
         assert!(context_error.to_string().contains("context differs"));
+
+        let context = evidence.context();
+        let changed_policy = |policy: ContentTag| {
+            let digest = policy.digest();
+            hash_canonical(
+                TagKind::Policy,
+                b"bitblock/test/local-replay-policy-context-swap/v1",
+                digest.len() as u64,
+                |sink| sink(&digest),
+            )
+            .unwrap()
+        };
+        for (name, changed_context) in [
+            (
+                "genesis",
+                LocalReplayContext::new(
+                    context.build(),
+                    changed_policy(context.genesis_policy()),
+                    context.rules_policy(),
+                    context.admission_policy(),
+                )
+                .unwrap(),
+            ),
+            (
+                "rules",
+                LocalReplayContext::new(
+                    context.build(),
+                    context.genesis_policy(),
+                    changed_policy(context.rules_policy()),
+                    context.admission_policy(),
+                )
+                .unwrap(),
+            ),
+            (
+                "admission",
+                LocalReplayContext::new(
+                    context.build(),
+                    context.genesis_policy(),
+                    context.rules_policy(),
+                    changed_policy(context.admission_policy()),
+                )
+                .unwrap(),
+            ),
+        ] {
+            let structurally_valid = LocalReplayEvidence::new(
+                changed_context,
+                evidence.tape().clone(),
+                evidence.endpoint(),
+            )
+            .unwrap();
+            let decoded =
+                LocalReplayEvidence::decode_canonical(&structurally_valid.encode_canonical())
+                    .unwrap();
+            decoded.verify().unwrap();
+            let error = verify_local_replay_evidence(&decoded).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData, "{name}");
+            assert!(
+                error.to_string().contains("context differs"),
+                "{name}: {error}"
+            );
+        }
     }
 
     #[test]

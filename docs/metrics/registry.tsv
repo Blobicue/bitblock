@@ -441,7 +441,7 @@
 #bb.metric.render.barycentric-tolerance-admission-vector	#bb.metric-definition.sha256.zdsf3vpupbhulhjbkurctmody43lal34j75ma4bfid6p6k5umi3q	view	Barycentric tolerance admission vector
 #bb.metric.render.framebuffer-colorimetry-contract	#bb.metric-definition.sha256.g4kculqyvzayibahehz7hbjklzxarrg2ydhudndpv4rji2z4nliq	view	Framebuffer colorimetry contract
 #bb.metric.render.render-dirty-cause-set	#bb.metric-definition.sha256.w76wzn6zl7levt5fm5rl7rvwardamkkosu7aswt2mhpmvboeyvia	view	Render dirty cause set
-#bb.metric.render.produced-frame-disposition-relation	#bb.metric-definition.sha256.wu26gvn6psqy6kha322wdl7z6md3undvaj5fh5pk25nvixtgrcgq	view	Produced frame disposition relation
+#bb.metric.render.produced-frame-disposition-relation	#bb.metric-definition.sha256.g53izbrgvkouvhi4drdr4q6dxxrv2pmyijxurr3scezbqrc4tcuq	view	Produced frame disposition relation
 #bb.metric.input.mouse-capture-state	#bb.metric-definition.sha256.4orpavsxthp6ipdjg23sj5iu765ibdcmy2a3adhofxnokfttngfq	view	Mouse capture state
 #bb.metric.input.window-focus-state	#bb.metric-definition.sha256.qdjyskyw3ufp23bljlg7pupyazijn2lc7jrsu657aq5zst4t2t2q	view	Window focus state
 #bb.metric.input.cursor-grab-mode	#bb.metric-definition.sha256.mpqq2mgnxhhxkp5zvr7vikormw73yetwpwnl4ho23oja3cvkijoa	view	Cursor grab mode
@@ -725,13 +725,13 @@
 #bb.metric.replay.replay-transition-count	#bb.metric-definition.sha256.kzvnc667e67djssfkqgzgzt6duexg3wofwzai4ajlnh34j4lkuxa	system	Replay transition count
 #bb.metric.replay.replay-final-cardinality	#bb.metric-definition.sha256.qpwolr4gepvtjla34hpzksogudg7puzbwyr5ctldymmwra554qia	system	Replay final cardinality
 #bb.metric.replay.exact-replay-equality	#bb.metric-definition.sha256.z3hdha4mdkv5rpkdxm72dhiw4uqvfdyz2fkntdmp5ysojuoveujq	system	Exact replay equality
-#bb.metric.replay.replay-root-equality	#bb.metric-definition.sha256.vflctnsxypebnatjhlekbskarmyt2ieglsgxgjalm5bigyxjumaq	system	Replay root equality
+#bb.metric.replay.replay-root-equality	#bb.metric-definition.sha256.vxnrh2bjejekva6ityzzcm4hnmn4sf7ptkpyrhqcpiyqhkkbon2q	system	Replay root equality
 #bb.metric.replay.first-divergent-tick	#bb.metric-definition.sha256.34vtpy766gplsviumh2bbiyjec3peilr6tnsskz5rz55tauewiqa	system	First divergent tick
 #bb.metric.replay.first-divergent-edit	#bb.metric-definition.sha256.hdh4wamgn73fw25slkva2p3k7s2eqaigmsbqwnf754aufsj54jga	system	First divergent edit
 #bb.metric.replay.divergent-coordinate-count	#bb.metric-definition.sha256.p45qrgwbcwnn7ne6zrn2xdkyihnzj2664tpqlh7ynjp3ivahoyfq	system	Divergent-coordinate count
 #bb.metric.replay.verified-prefix-length	#bb.metric-definition.sha256.24nepn3qu543c777nhxhksdie2xzftr276hunqisg5uhnpjidiua	system	Verified prefix length
 #bb.metric.replay.append-law-check	#bb.metric-definition.sha256.kl4kmt65umh6evst7yh5cr6gcmprbpinhhcxkcwtncpqp7k5gi4q	system	Append-law check
-#bb.metric.replay.initial-world-identity	#bb.metric-definition.sha256.is5zy55yxq5voq36xlfjzsaywmclaqulnheax2jfxzuiznesw4oq	system	Initial-world identity
+#bb.metric.replay.initial-world-identity	#bb.metric-definition.sha256.ys6ur6xze7gigqe7akmrrf7fhe2vb3uifpk75znayxgv36wmmnwq	system	Initial-world identity
 #bb.metric.replay.state-boundary-retention-frequency	#bb.metric-definition.sha256.qjdudmyzzlbs42jrwj3atxdudkfk6avdhlozyo3fyl4qdf7y3nkq	system	State-boundary retention frequency
 #bb.metric.replay.rollback-reconstruction-work	#bb.metric-definition.sha256.vrbnn2ckrle2uskxk6slvqe2ldcgsm4urxr4ydyhpb2rtqtsdcoq	system	Rollback reconstruction work
 #bb.metric.replay.receipt-tick-gap-evidence-relation	#bb.metric-definition.sha256.jtz6cmdwr742iakptjfeqdmezqzp2hhwyeeaem2254ubnq4twpwa	system	Receipt tick-gap evidence relation
@@ -1100,7 +1100,7 @@
 #bb.metric.health.dependency-policy-violation-vector	#bb.metric-definition.sha256.l7herp5ec3xoixcdgjib7kkhzotbm6yyrunwciibfkbtp5vfhzuq	system	Dependency-policy violation vector
 #bb.metric.health.lock-toolchain-drift-vector	#bb.metric-definition.sha256.xzqgcn67hhksxej3wqa6y6bqfuzlm2gqbu3bsiykdvpnkqpozswa	system	Lock/toolchain drift vector
 #bb.metric.health.reproducible-build-agreement	#bb.metric-definition.sha256.mbgzdegnpdglzlkxkq7xj2d6lu6afta34r6jo53imkz4vpclivva	system	Reproducible-build agreement
-#bb.metric.health.binary-artifact-bytes-digest	#bb.metric-definition.sha256.o2zgmpdtkaqcdcduoos6njrfq2gbpxhdorr5ugmfxb3pim7lnufq	system	Binary artifact bytes/digest
+#bb.metric.health.binary-artifact-bytes-digest	#bb.metric-definition.sha256.x4o7eciktyat77nwgm4e2koqc47phpkwmnmychmbtnhk4i2vjusq	system	Binary artifact bytes/digest
 #bb.metric.health.validation-freshness	#bb.metric-definition.sha256.7c6saoaxvpbmrzflrsulmemtcxohwkh5opbzsnpf4yogc4w5cugq	system	Validation freshness
 #bb.metric.health.diagnostic-coverage-manifest	#bb.metric-definition.sha256.6vv5324l7dxlfbgftesdh3l6soyslfaiyotsdec2m5fpaybxx24a	system	Diagnostic coverage manifest
 #bb.metric.health.aggregate-system-state	#bb.metric-definition.sha256.nclcffzsc4fl6bt2bldraath6riwmdhnq5v635eztkk4fye62nnq	system	Aggregate system state

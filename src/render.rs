@@ -5,7 +5,9 @@
 //! the currently allocated bits directly. A hierarchy for intermediate-scale LOD is
 //! intentionally deferred until a later checkpoint demonstrates the need.
 
-use crate::camera::{Camera, ONE_PIXEL_EPSILON, ProjectedPoint, Ray, Vec3};
+use std::sync::OnceLock;
+
+use crate::camera::{Camera, CameraProjection, ONE_PIXEL_EPSILON, ProjectedPoint, Ray, Vec3};
 use crate::frame::OverlayInput;
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::{BEDROCK_COORD, Bounds, Coord, World};
@@ -31,57 +33,64 @@ const ORDINARY_FRONT: u32 = 0x00989898;
 const RENDERER_PROFILE_SCHEMA: &[u8] = b"bitblock/renderer-profile/host-f64/v1";
 const CROSSHAIR_POLICY_SCHEMA: &[u8] = b"bitblock/overlay-policy/crosshair/v1";
 
+static RENDERER_PROFILE_TAG: OnceLock<ContentTag> = OnceLock::new();
+static CROSSHAIR_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
+
 /// Declared semantic profile of the current renderer constants and ordering rules.
 ///
 /// This tag identifies the declared profile; it is not a hash of the executable and therefore
 /// does not prove that an implementation followed the declaration.
 pub fn renderer_profile_tag() -> ContentTag {
-    hash_canonical(TagKind::Policy, RENDERER_PROFILE_SCHEMA, 106, |sink| {
-        for revision in [1_u16, 1, 1, 1] {
-            sink(&revision.to_be_bytes());
-        }
-        sink(&[0]); // current host Rust f64 arithmetic
-        sink(&[0]); // total_cmp depth; equal depth chooses lower RGB
-        for value in [
-            NEAR_PLANE,
-            BARYCENTRIC_EPSILON,
-            ONE_PIXEL_EPSILON,
-            SMALL_BIT_EXTENT,
-            PIXEL_CENTER_OFFSET,
-            f64::EPSILON,
-        ] {
-            sink(&value.to_bits().to_be_bytes());
-        }
-        for color in [
-            RGB_MASK,
-            BACKGROUND,
-            AGGREGATE_BIT,
-            BEDROCK_PIXEL,
-            BEDROCK_TOP,
-            BEDROCK_SIDE,
-            BEDROCK_FRONT,
-            BEDROCK_BACK,
-            ORDINARY_TOP,
-            ORDINARY_SIDE,
-            ORDINARY_BACK,
-            ORDINARY_FRONT,
-        ] {
-            sink(&color.to_be_bytes());
-        }
+    *RENDERER_PROFILE_TAG.get_or_init(|| {
+        hash_canonical(TagKind::Policy, RENDERER_PROFILE_SCHEMA, 106, |sink| {
+            for revision in [1_u16, 1, 1, 1] {
+                sink(&revision.to_be_bytes());
+            }
+            sink(&[0]); // current host Rust f64 arithmetic
+            sink(&[0]); // total_cmp depth; equal depth chooses lower RGB
+            for value in [
+                NEAR_PLANE,
+                BARYCENTRIC_EPSILON,
+                ONE_PIXEL_EPSILON,
+                SMALL_BIT_EXTENT,
+                PIXEL_CENTER_OFFSET,
+                f64::EPSILON,
+            ] {
+                sink(&value.to_bits().to_be_bytes());
+            }
+            for color in [
+                RGB_MASK,
+                BACKGROUND,
+                AGGREGATE_BIT,
+                BEDROCK_PIXEL,
+                BEDROCK_TOP,
+                BEDROCK_SIDE,
+                BEDROCK_FRONT,
+                BEDROCK_BACK,
+                ORDINARY_TOP,
+                ORDINARY_SIDE,
+                ORDINARY_BACK,
+                ORDINARY_FRONT,
+            ] {
+                sink(&color.to_be_bytes());
+            }
+        })
+        .expect("renderer profile encoding has a fixed length")
     })
-    .expect("renderer profile encoding has a fixed length")
 }
 
 pub fn crosshair_policy_tag() -> ContentTag {
-    hash_canonical(TagKind::Policy, CROSSHAIR_POLICY_SCHEMA, 16, |sink| {
-        sink(&1_u16.to_be_bytes());
-        sink(&[0]); // integer-divided physical-pixel center
-        sink(&(CROSSHAIR_GAP_RADIUS as u32).to_be_bytes());
-        sink(&(CROSSHAIR_ARM_LENGTH as u32).to_be_bytes());
-        sink(&RGB_MASK.to_be_bytes());
-        sink(&[0]); // overlay never writes depth
+    *CROSSHAIR_POLICY_TAG.get_or_init(|| {
+        hash_canonical(TagKind::Policy, CROSSHAIR_POLICY_SCHEMA, 16, |sink| {
+            sink(&1_u16.to_be_bytes());
+            sink(&[0]); // integer-divided physical-pixel center
+            sink(&(CROSSHAIR_GAP_RADIUS as u32).to_be_bytes());
+            sink(&(CROSSHAIR_ARM_LENGTH as u32).to_be_bytes());
+            sink(&RGB_MASK.to_be_bytes());
+            sink(&[0]); // overlay never writes depth
+        })
+        .expect("crosshair policy encoding has a fixed length")
     })
-    .expect("crosshair policy encoding has a fixed length")
 }
 
 /// Exact policy-plus-payload object for the current static crosshair.
@@ -175,12 +184,14 @@ impl Renderer {
             return;
         }
 
+        let projection = camera
+            .projection_for_viewport(self.width, self.height)
+            .expect("nonzero renderer viewport must produce a projection context");
+
         if let Some(bounds) = world.bounds() {
             let (min, max) = bounds_aabb(bounds);
-            if camera.bounds_fit_one_pixel(min, max, self.width, self.height) {
-                if let Some(projected) =
-                    camera.project(min + (max - min) * 0.5, self.width, self.height)
-                {
+            if projection.bounds_fit_one_pixel(min, max) {
+                if let Some(projected) = projection.project(min + (max - min) * 0.5) {
                     self.plot(
                         projected.x.floor() as i64,
                         projected.y.floor() as i64,
@@ -193,7 +204,7 @@ impl Renderer {
         }
 
         for coord in world.iter_on() {
-            self.draw_bit(camera, coord);
+            self.draw_bit(projection, coord);
         }
     }
 
@@ -230,10 +241,10 @@ impl Renderer {
         self.pixels[index] ^= RGB_MASK;
     }
 
-    fn draw_bit(&mut self, camera: &Camera, coord: Coord) {
+    fn draw_bit(&mut self, projection: CameraProjection, coord: Coord) {
         let center = coord_center(coord);
         let vertices = cube_vertices(center);
-        let projected = vertices.map(|vertex| camera.project(vertex, self.width, self.height));
+        let projected = vertices.map(|vertex| projection.project(vertex));
 
         let mut visible = false;
         let mut min_x = f64::INFINITY;
@@ -252,7 +263,7 @@ impl Renderer {
         }
 
         if max_x - min_x <= SMALL_BIT_EXTENT && max_y - min_y <= SMALL_BIT_EXTENT {
-            if let Some(point) = camera.project(center, self.width, self.height) {
+            if let Some(point) = projection.project(center) {
                 let nearest_depth = projected
                     .iter()
                     .flatten()
@@ -269,7 +280,7 @@ impl Renderer {
         }
 
         for face in FACES {
-            if face.normal.dot(camera.position() - center) <= 0.0 {
+            if face.normal.dot(projection.position() - center) <= 0.0 {
                 continue;
             }
             let Some(a) = projected[face.corners[0]] else {
@@ -1198,7 +1209,13 @@ mod tests {
         let camera = Camera::for_observer_spawn();
         let mut renderer = Renderer::new(801, 801);
 
+        crate::camera::reset_projection_context_build_count();
         renderer.render(&world, &camera);
+        assert_eq!(
+            crate::camera::projection_context_build_count(),
+            1,
+            "a direct render must build one shared projection context"
+        );
 
         let center = (renderer.height() as usize / 2) * renderer.width() as usize
             + renderer.width() as usize / 2;
@@ -1216,14 +1233,15 @@ mod tests {
             crate::camera::DEFAULT_VERTICAL_FOV_RADIANS,
         );
         let ordinary = Coord::new(1, 0, 0);
+        let projection = camera.projection_for_viewport(801, 801).unwrap();
 
         let mut bedrock_first = Renderer::new(801, 801);
-        bedrock_first.draw_bit(&camera, BEDROCK_COORD);
-        bedrock_first.draw_bit(&camera, ordinary);
+        bedrock_first.draw_bit(projection, BEDROCK_COORD);
+        bedrock_first.draw_bit(projection, ordinary);
 
         let mut ordinary_first = Renderer::new(801, 801);
-        ordinary_first.draw_bit(&camera, ordinary);
-        ordinary_first.draw_bit(&camera, BEDROCK_COORD);
+        ordinary_first.draw_bit(projection, ordinary);
+        ordinary_first.draw_bit(projection, BEDROCK_COORD);
 
         assert_eq!(bedrock_first.pixels, ordinary_first.pixels);
         assert_eq!(bedrock_first.depth, ordinary_first.depth);

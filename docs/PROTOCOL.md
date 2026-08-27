@@ -2427,9 +2427,9 @@ controls rather than the complete ordered non-edit action stream.
 
 `src/replay_evidence.rs` adds an opt-in research carrier under the new readable
 `replay-evidence` tag kind. `cargo run --release --features "headless-console
-protocol-research" -- --simulate-actions <tape>` captures the current executable
-before the fold, executes the same bounded headless simulation, structurally verifies
-the carrier, and prints its full tag plus component tags. The carrier remains in memory;
+protocol-research" -- --simulate-actions <tape>` samples bytes from the current executable
+path before the fold, executes the same bounded headless simulation, structurally verifies
+the carrier, and prints its outer tag plus selected component tags. The carrier remains in memory;
 the line declares `carrier=in-memory-only` rather than pretending the tag itself is a
 durable object.
 
@@ -2444,9 +2444,10 @@ optional endpoint fields absent; nonempty tapes require all three present. The d
 rejects caps, every proper prefix, a suffix, noncanonical option padding, invalid Boolean
 values, bad dimensions, and invalid embedded tape bytes before admitting a carrier.
 
-The executable tag names only the length and bytes read through the local process's current
-executable path. It is not a source, compiler, operating-system, reproducible-build, or
-custody identity. The three policy tags bind declarations used by the local verifier; they
+The executable tag names only the length and bytes read through the local process's pre-fold
+executable path. The check rejects a type or length change across the sample, but does not rule
+out a same-length concurrent replacement. It is not a source, compiler, operating-system,
+reproducible-build, custody, or executing-image identity. The three policy tags bind declarations used by the local verifier; they
 do not turn their host-local resource limits into protocol authority. The CLI constructs and
 structurally verifies only its fresh in-memory carrier; it has no supplied-carrier replay CLI or
 persistence format yet. A test-only local verifier first checks a carrier, recomputes its current
@@ -2454,17 +2455,27 @@ local build/policies, then reruns the embedded tape and requires complete endpoi
 Powered controls reject a changed build digest before replay and a structurally valid carrier whose
 endpoint belongs to another tape.
 
-An independent Python encoder/strict-decoder has the fixed 506-byte vector:
+An independent Python fixed-vector encoder/decoder has the fixed 506-byte vector:
 
 ```text
 #bb.replay-evidence.sha256.r7ukwnl52rten5bwquqztobeuhfn362ywca7wrcudy5mvpache4q
 ```
 
 The Rust codec round-trips the same carrier and checks that every decodable single-byte mutation
-changes its outer tag. This establishes one bounded local simulation/replay relation, not
-independent authority. Persistence, cross-host float agreement, signature, ownership, consensus,
+changes its outer tag. The test-only semantic re-run shares the Rust simulation implementation
+with carrier construction, so it establishes local self-consistency rather than an independent
+replay implementation or authority. Persistence, cross-host float agreement, signature, ownership, consensus,
 Proof-of-History, Proof-of-Stake, Layer 1, elapsed time, window submission, display, scanout, and
 physical light all remain outside the carrier.
+
+The local replay-evidence checkpoint passed `cargo fmt --all -- --check`, 326 default
+all-target tests (284 library, 41 application, one integration), 355 all-feature
+all-target tests (304 library, 50 application, one integration), and strict default/all-feature
+Clippy. All 17 independent Python vector programs passed; the exact 1,112-definition metric
+registry audit passed; and `lake build` completed six proof jobs. The release headless
+place/delete tape replay ended with `on_bits=1` and `coordinate_receipts=2`; with the research
+feature it additionally constructed one 519-byte in-memory local carrier. These are local test
+and execution observations, not persistence, custody, or cross-host evidence.
 
 No backend call, OS raster observation, compositor attribution, scanout witness,
 or physical-light measurement occurs. CPU framebuffer tags name produced

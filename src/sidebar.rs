@@ -7,6 +7,8 @@
 //! snapshot, the exact game frame, and the named layout policy without making a receipt depend on
 //! itself.
 
+use std::sync::OnceLock;
+
 use crate::camera::Vec3;
 use crate::frame::{FrameProtocolError, OverlayInput};
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
@@ -20,6 +22,9 @@ const SNAPSHOT_PAYLOAD_LEN: u64 = 368;
 const SIDEBAR_POLICY_SCHEMA: &[u8] = b"bitblock/sidebar/raster-policy/v1";
 const COMPOSITE_POLICY_SCHEMA: &[u8] = b"bitblock/sidebar/composite-policy/v1";
 const COMPOSITE_INPUT_SCHEMA: &[u8] = b"bitblock/sidebar/composite-frame-input/v1";
+
+static SIDEBAR_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
+static COMPOSITE_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
 
 const PANEL_BACKGROUND: u32 = 0x0010_1318;
 const PANEL_RULE: u32 = 0x0038_424d;
@@ -433,39 +438,43 @@ pub fn composite_overlay_input(snapshot: ContentTag) -> Result<OverlayInput, Fra
 }
 
 pub fn sidebar_policy_tag() -> ContentTag {
-    let mut payload = Vec::with_capacity(8_000);
-    payload.extend_from_slice(&SIDEBAR_WIDTH.to_be_bytes());
-    for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
-        payload.extend_from_slice(&color.to_be_bytes());
-    }
-    payload.extend_from_slice(
-        b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1",
-    );
-    for binding in DISPLAYED_METRICS {
-        let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
-        let definition_len =
-            u16::try_from(binding.definition.len()).expect("definition tag exceeds u16");
-        payload.extend_from_slice(&alias_len.to_be_bytes());
-        payload.extend_from_slice(binding.alias.as_bytes());
-        payload.extend_from_slice(&definition_len.to_be_bytes());
-        payload.extend_from_slice(binding.definition.as_bytes());
-    }
-    hash_canonical(
-        TagKind::Policy,
-        SIDEBAR_POLICY_SCHEMA,
-        payload.len() as u64,
-        |sink| sink(&payload),
-    )
-    .expect("sidebar policy byte length is measured from its exact encoding")
+    *SIDEBAR_POLICY_TAG.get_or_init(|| {
+        let mut payload = Vec::with_capacity(8_000);
+        payload.extend_from_slice(&SIDEBAR_WIDTH.to_be_bytes());
+        for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
+            payload.extend_from_slice(&color.to_be_bytes());
+        }
+        payload.extend_from_slice(
+            b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1",
+        );
+        for binding in DISPLAYED_METRICS {
+            let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
+            let definition_len =
+                u16::try_from(binding.definition.len()).expect("definition tag exceeds u16");
+            payload.extend_from_slice(&alias_len.to_be_bytes());
+            payload.extend_from_slice(binding.alias.as_bytes());
+            payload.extend_from_slice(&definition_len.to_be_bytes());
+            payload.extend_from_slice(binding.definition.as_bytes());
+        }
+        hash_canonical(
+            TagKind::Policy,
+            SIDEBAR_POLICY_SCHEMA,
+            payload.len() as u64,
+            |sink| sink(&payload),
+        )
+        .expect("sidebar policy byte length is measured from its exact encoding")
+    })
 }
 
 pub fn composite_policy_tag() -> ContentTag {
-    hash_canonical(TagKind::Policy, COMPOSITE_POLICY_SCHEMA, 96, |sink| {
-        sink(&renderer_profile_tag().digest());
-        sink(&crosshair_policy_tag().digest());
-        sink(&sidebar_policy_tag().digest());
+    *COMPOSITE_POLICY_TAG.get_or_init(|| {
+        hash_canonical(TagKind::Policy, COMPOSITE_POLICY_SCHEMA, 96, |sink| {
+            sink(&renderer_profile_tag().digest());
+            sink(&crosshair_policy_tag().digest());
+            sink(&sidebar_policy_tag().digest());
+        })
+        .expect("composite policy encoding has a fixed length")
     })
-    .expect("composite policy encoding has a fixed length")
 }
 
 pub struct FrameCompositor {
