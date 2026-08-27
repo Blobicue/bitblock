@@ -1273,6 +1273,46 @@ For each candidate change:
 One scalar may rank equivalent candidates after validity. It cannot make a
 smaller or faster invalid renderer acceptable.
 
+### Rejected: short-circuiting the barycentric test
+
+The rasteriser's inner loop computes three barycentric weights, then tests all
+three. Each weight costs one `edge` evaluation and one f64 division, and the
+depth interpolation costs three more divisions, so a pixel is six divisions at
+roughly thirteen cycles each — measured at about 8ns per rasterised pixel, and
+90% of a frame's cost.
+
+Testing each weight as it is computed is exactly equivalent: surviving pixels
+evaluate the same expressions in the same order and write the same values, only
+unused work disappears, and `NaN < eps` is false either way. A triangle covers
+about half its bounding box, so roughly half of these pixels should have exited
+after one division instead of six.
+
+It is **15 to 17% slower**, consistently, at every world size:
+
+| bits | current | short-circuited | change |
+|---:|---:|---:|---:|
+| 1 | 0.80ms | 0.94ms | +17.5% |
+| 99 | 3.06ms | 3.58ms | +17.0% |
+| 2,649 | 5.12ms | 5.89ms | +15.0% |
+| 12,699 | 7.76ms | 9.01ms | +16.1% |
+
+Raster time only, median of five interleaved A/B rounds, so drift cannot
+account for it. All 397 tests passed under the change, so this is a performance
+result and not a correctness one.
+
+The three divisions are independent, and the divider overlaps them. Putting an
+unpredictable branch between each one serialises what the hardware was already
+pipelining, and adds two mispredicting branches per pixel. Doing less work is
+not the same as taking less time.
+
+Both remaining ideas for this loop are ruled out by exactness rather than by
+measurement: `w / area` is not `w * (1.0 / area)` in IEEE 754, and neither is
+`w / depth` and its reciprocal, so hoisting either changes the frame. What is
+still available is not touching the inner loop at all — a bit that is provably
+occluded need not be rasterised, and skipping it writes nothing different. That
+needs a coarse depth structure, and traversal reordering is already permitted
+above.
+
 The first receipt-gated release optimization changed the crosshair policy
 assertion to debug-only. It removed two redundant SHA-256 policy computations
 from every release crosshair draw and reduced the Windows release executable

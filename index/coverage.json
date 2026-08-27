@@ -1,6 +1,6 @@
 {
- "docs": 216,
- "examples": 12,
+ "docs": 217,
+ "examples": 13,
  "gates": {
   "metric_accounting": true,
   "module_accounting": true,
