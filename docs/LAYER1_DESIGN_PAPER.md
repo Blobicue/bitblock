@@ -1,11 +1,17 @@
 # Bitblock: From Binary Occupancy to a Verifiable Layer 1
 
 The checkpoint-0.3 audit remains pinned to paper commit `034b7b2b5f129625f9c6dcec3e14038b7c4aee5f`.
-Two post-checkpoint corrections—conditional bedrock economics and scheduling-authority
+The first post-checkpoint corrections—conditional bedrock economics and scheduling-authority
 cross-links—were made after frozen planning input
 `162406819133c1fd57d0fd26cbe5fa0b495766b8` and are scoped in
 [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). They are not a silent claim that the whole paper was
 re-audited.
+
+The later pre-ID byte pipeline, profile-derived root composition, gate-applicability, and Verkle
+feasibility clarifications are a successor planning correction scoped by
+[`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md) and recorded in
+[`TRANSCRIPT_AUDIT.md`](TRANSCRIPT_AUDIT.md). They preserve the original pinned audit result and do
+not claim that checkpoint 0.3 received another complete paper audit.
 
 **Design paper — checkpoint 0.3 — 2026-08-26**
 
@@ -174,28 +180,148 @@ protocols. Resize, sidebar-toggle, and clear-motion actions also mutate local st
 accepted by the application, before `fixed_tick`; that local orchestration is not consensus
 execution.
 
-Protocol genesis MUST make every initial execution component and authority root explicit.
-To avoid a self-referential identifier:
+Protocol bootstrap uses distinct canonical producers. `TRANSITION-SPEC-D1` first freezes only the
+base operation, result, and system-transition meanings plus the extension interface that scope
+production is allowed to consume. `PROFILE-SCOPE-D0` then selects already designed schemas,
+suites, roles, root domains, and optional features; `GENESIS-D1` supplies the concrete initial
+logical state and the measured limits that passed for that scope; and `PROFILE-D1` emits the
+candidate profile bytes. Only after that candidate has an identifier does `TRANSITION-SPEC-1`
+resolve every active extension slot into the exact versioned `TRANSITION-SPEC-1@profile` artifact
+and powered corpus consumed by `EXECUTOR-1@profile`. These are proposed future byte contracts and
+producer phases, not implemented codecs.
+
+To avoid self-reference, the exact pre-ID pipeline is:
 
 ```text
-genesis_payload = Canonical(
-    chain_id, world_id, identity_namespace, B_0, M_0, E_0, X_0,
-    A_0, N_0, P_0, G_0, Q_0,
-    cryptographic_suites, bootstrap_and_availability_policy
+RequiredDomainV1 = Canonical(
+    domain_tag,
+    composition_layer,
+    root_type,
+    tree_domain,
+    root_schema_id,
+    commitment_profile_id
 )
-genesis_id      = H(genesis_domain || genesis_payload)
-genesis_package = (genesis_payload, genesis_id)
+
+DomainRegistryEntryV1 =
+    ActiveDomainV1(RequiredDomainV1)
+  | InactiveDomainV1(domain_tag, composition_layer, inactive_sentinel_schema_id)
+
+DomainRegistryV1 = CanonicalSortedUniqueByDomainTag([
+    DomainRegistryEntryV1...
+])
+
+domain_registry_digest = ProfileIdHashV1(
+    Domain("bitblock/domain-registry/v1")
+ || LengthFrame(Canonical(DomainRegistryV1))
+)
+
+ProfileScopeV1 = Canonical(
+    profile_scope_schema_version,
+    base_transition_spec_id,
+    activated_operation_and_system_transition_schema_ids,
+    activated_state_schema_ids,
+    DomainRegistryV1,
+    identity_and_authorization_schema_ids,
+    cryptographic_suite_ids,
+    consensus_governance_and_network_role_policy_ids,
+    optional_feature_ids,
+    proposed_limit_vector
+)
+
+profile_scope_digest = H(profile_scope_domain || ProfileScopeV1)
+
+GenesisPayloadV1 = Canonical(
+    genesis_schema_version,
+    profile_scope_digest,
+    domain_registry_digest,
+    chain_id,
+    world_id,
+    identity_namespace,
+    B_0, M_0, E_0, X_0,
+    A_0, N_0, P_0, G_0, Q_0,
+    validated_limit_vector,
+    bootstrap_and_availability_policy
+)
+
+genesis_id      = H(genesis_domain || GenesisPayloadV1)
+genesis_package = (GenesisPayloadV1, genesis_id)
+
+CandidateProfileV1 = Canonical(
+    candidate_profile_schema_version,
+    profile_scope_digest,
+    domain_registry_digest,
+    genesis_id,
+    protocol_version,
+    canonical_scope_and_genesis_projection,
+    declared_capability_closure,
+    canonical_stage_gate_matrix,
+    required_artifact_and_loss_condition_slots,
+    candidate_release_configuration
+)
+
+profile_id = H(candidate_profile_domain || CandidateProfileV1)
 ```
 
-`genesis_payload` excludes `genesis_id`. For the first proposed network profile, one chain
-contains exactly one `world_id`; a future multi-world version would replace the single world
-with a committed `worlds_root`. Initially `support(B_0) = {o}`, `M_0` and `E_0` are empty, and every
-allocation, authority, parameter, validator, and governance record is explicit. The package MUST be
-immutable and reproducible. For this paper's provisional non-economic first-profile sketch, origin
-bedrock is an application invariant rather than an occupancy-episode token, observer property, or
-validator trust anchor. That is not a final asset ruling: `ASSET-D1` may instead define a separate
-permanently locked genesis allocation outside mutable occupancy episodes, and the selected genesis
-profile must make the choice explicit.
+`ProfileScopeV1` owns feature, schema, suite, role, and active-or-inactive domain choices. The
+domain registry is pre-ID: neither entry variant contains `profile_id`. Its independent
+`domain_registry_digest` is projected into both later objects and MUST reproduce from the exact
+registry inside the resolved scope. `GenesisPayloadV1` owns concrete initial state and validated
+limits and references the scope by its digest. A proposed limit is not silently changed during
+validation: `validated_limit_vector` MUST byte-equal the corresponding scope projection, or the
+scope is regenerated and receives a new digest before genesis is derived. `CandidateProfileV1`
+owns admission metadata and references both earlier objects. Repeating a semantic value is normally
+forbidden; when a projection is deliberately repeated for independent inspection, it MUST be the
+specified canonical projection and byte-equal its owner. Missing, additional, or unequal projected
+values reject the candidate.
+
+`GenesisPayloadV1` excludes `genesis_id`, and `CandidateProfileV1` excludes `profile_id`. The
+resulting `profile_id` identifies exact candidate bytes but cannot authorize a network merely by
+existing. `PROFILE-1` admission must separately bind that identifier to the complete passing
+capability/evidence closure. `RELEASE-R1` may separately bind a reproducible candidate build to the
+same identifier; `RELEASE-1` can bind that candidate artifact to the admitted profile only after
+admission. Candidate builds and admitted releases therefore remain different states even when they
+use the same candidate `profile_id`.
+
+After `profile_id` is derived, the profile-specific transition producer emits:
+
+```text
+TransitionSpecAtProfileV1 = Canonical(
+    transition_spec_schema_version,
+    profile_id,
+    base_transition_spec_id,
+    canonical_resolved_active_extension_spec_refs,
+    canonical_validated_bound_projection,
+    complete_operation_result_and_system_transition_table,
+    powered_transition_corpus_digest
+)
+
+transition_spec_at_profile_id =
+    H(transition_spec_at_profile_domain || TransitionSpecAtProfileV1)
+```
+
+That artifact is an admission prerequisite, not an input to `CandidateProfileV1`; putting its
+digest back into the candidate preimage would create a candidate/specification identifier cycle.
+Every bound or active-schema value it repeats MUST be the canonical byte-equal projection of its
+scope/genesis/candidate owner. `PROFILE-1` verifies that the produced specification is the
+deterministic resolution of the candidate's declared scope and closure.
+
+Genesis has two separate completion gates. **Logical-byte completion** under `GENESIS-D1` means
+independent encoders reconstruct the same scope-bound concrete initial state and validated limits.
+It does not require or certify an implementation root. **Genesis-root parity** is later work under
+`COMMIT-1`, `GENESIS-ROOT-PARITY-1`, and `EXECUTION-ROOT-1`: independent implementations rebuild
+every profile-required initial domain from those logical bytes and agree with the published initial
+root tuple. A root mismatch does not rewrite genesis bytes or select whichever implementation
+looked canonical; it keeps the profile locked.
+
+For the first proposed network profile, one chain contains exactly one `world_id`; a future
+multi-world version would replace the single world with a committed `worlds_root`. Initially
+`support(B_0) = {o}`, `M_0` and `E_0` are empty, and every allocation, authority, parameter,
+validator, and governance record is explicit. The package MUST be immutable and reproducible. For
+this paper's provisional non-economic first-profile sketch, origin bedrock is an application
+invariant rather than an occupancy-episode token, observer property, or validator trust anchor.
+That is not a final asset ruling: `ASSET-D1` may instead define a separate permanently locked
+genesis allocation outside mutable occupancy episodes, and the selected genesis profile must make
+the choice explicit.
 
 The authoritative execution transition is a pure function:
 
@@ -378,6 +504,7 @@ TransactionSignDoc =
     protocol_version
  || chain_id
  || genesis_id
+ || profile_id
  || world_id
  || actor_id
  || authorizing_key_id
@@ -404,8 +531,11 @@ tx_id = H(transaction_id_domain || SignedTransaction)
 ```
 
 The signature algorithm, key encoding, and hash suite are **Open** decisions. They MUST be
-versioned and pinned before a network protocol is declared stable. The signed domain MUST
-include the chain and genesis identifiers so an action cannot be replayed on another world.
+versioned and pinned before a network protocol is declared stable. The signed domain MUST include
+the chain, genesis, and admitted profile identifiers so an action cannot be replayed under another
+world or candidate configuration. `profile_id` is added only after candidate derivation and
+admission; it is context for signatures, headers, and releases, not a field inside the initial
+application- or execution-root preimages.
 The transaction identifier hashes the exact canonical signed envelope. The chosen signature
 scheme MUST either be non-malleable or define one canonical signature encoding. No alternate
 text spelling, omitted signature, or decoded-and-reencoded variant may create another
@@ -442,7 +572,7 @@ The cryptographic operations boundary MUST additionally specify:
   side-channel attacks explicitly excluded from the claim.
 
 Client presentation is not proof of signing intent. A wallet SHOULD render the exact decoded
-semantic operations, chain/genesis/world, fee cap, validity window, and authorization being
+semantic operations, chain/genesis/profile/world, fee cap, validity window, and authorization being
 signed; the signer still authorizes only the canonical bytes above.
 
 Actor/observer keys and validator keys are separate authority namespaces. An observer
@@ -469,7 +599,7 @@ Before an action can affect state, a validator MUST check at least:
 
 1. canonical decoding and protocol version;
 2. signature and identity binding;
-3. chain, genesis, world, and any selected anchor/state precondition;
+3. chain, genesis, admitted profile, world, and any selected anchor/state precondition;
 4. nonce freshness and replay protection;
 5. coordinate range and operation limits;
 6. bedrock protection;
@@ -595,6 +725,7 @@ BlockContext = Canonical(
     protocol_version,
     chain_id,
     genesis_id,
+    profile_id,
     world_id,
     height,
     parent_block_id,
@@ -612,6 +743,7 @@ candidate_execution_context_id = H(Canonical(
     protocol_version,
     chain_id,
     genesis_id,
+    profile_id,
     world_id,
     height,
     parent_block_id,
@@ -653,6 +785,7 @@ ProposalHeader = Canonical(
     protocol_version,
     chain_id,
     genesis_id,
+    profile_id,
     world_id,
     height,
     epoch,
@@ -699,6 +832,13 @@ AcceptedBlockRecord = Canonical(Proposal, ConsensusEvidence)
 context, or a trusted sequencer signature according to the selected consensus profile. It is never inside the
 `block_id` it authenticates. Consensus-specific header fields must replace, not informally
 reinterpret, generic fields such as `round_or_view`.
+
+The header's `profile_id` MUST resolve to one admitted `PROFILE-1` record whose candidate bytes,
+scope/genesis projections, and capability closure all verify. A reproducible `RELEASE-R1` candidate
+build does not satisfy that lookup, while artifact deployment separately requires a matching
+`RELEASE-1` record. Because `profile_id` is outside the execution-root preimage but inside
+`block_id` and proposal signatures, it contextualizes the root without making the candidate
+identifier depend on a root that already contains itself.
 
 `execution_parameter_root`, `governance_authority_root`, and `active_validator_root` are the
 parent-authorized values governing this proposal. `optional_next_validator_root` and the
@@ -809,19 +949,30 @@ tagged effects instead.
 
 ### 4.5 Genesis, versioning, and upgrades
 
-The `genesis_payload` MUST contain, at minimum:
+`ProfileScopeV1` MUST contain the selected transition/schema versions, the canonical pre-ID domain
+registry, cryptographic suites, consensus/governance/role choices, optional feature set, and
+proposed limit vector. `GenesisPayloadV1` MUST reference that scope and domain-registry digest and
+contain, at minimum:
 
 - `chain_id` and the first profile's single `world_id`;
-- protocol and state-machine versions;
-- the origin coordinate and initial mutable world;
-- initial authority/validator configuration;
-- resource, fee, and size limits;
-- cryptographic suite identifiers;
-- upgrade and emergency-policy roots.
+- the origin coordinate and complete initial mutable world/episode state;
+- initial authorization, parameter, governance, and validator-schedule state;
+- the validated resource, fee-if-activated, and size limits; and
+- bootstrap and availability policy.
 
-`genesis_id` is then derived from that payload as defined in §2. Every block and proof MUST
-identify the version that interpreted it. Unknown versions, missing genesis data, and
-incompatible parameter roots MUST fail closed.
+The candidate profile then references `profile_scope_digest`, `domain_registry_digest`, and
+`genesis_id` and adds only the admission metadata defined in §2. Any denormalized suite, role,
+feature, limit, state-domain, or root-schema value must be the exact canonical projection of its
+owner. `genesis_id` and then `profile_id` are derived in that order. `TRANSITION-SPEC-1@profile` is then produced separately by
+resolving the candidate's active extension slots against the base contract and validated bounds;
+the candidate does not pre-commit a self-dependent resolved-specification digest. Every block,
+proof, and signed action MUST identify the version and admitted `profile_id` context that
+interpreted it. Unknown versions, unadmitted profiles, missing genesis data, unequal projections,
+and incompatible parameter roots MUST fail closed.
+
+Completing these logical bytes is not genesis-root evidence. `GENESIS-ROOT-PARITY-1` later rebuilds
+the profile-required initial root tuple independently from `GenesisPayloadV1`; only after that gate
+may the candidate publish the roots used by block-zero/header verification.
 
 An upgrade is a deterministic, consensus-accepted state transition, not a changed constant in one
 binary. Its record MUST bind the old and new protocol versions, activation height, migration
@@ -853,20 +1004,40 @@ protocol source; wall-clock timing or a renderer seed is not consensus randomnes
 The current world tag is a canonical content identity. A Layer 1 needs a commitment that
 also supports independently verifiable membership and non-membership claims.
 
-A proposed first-profile root hierarchy commits every deterministic execution domain:
+A proposed root hierarchy is derived from the pre-ID registry rather than from a hard-coded list of
+optional roots. `CommitmentSetV1` holds roots only for active `RequiredDomainV1` values; composition
+walks every registry slot and supplies a typed sentinel for each inactive one:
 
 ```text
+required_domain_set = CanonicalSorted([
+    entry.RequiredDomainV1
+    for each ActiveDomainV1 entry in DomainRegistryV1
+])
+
+application_domain_entries = ComposeRegistrySlots([
+    RootEntryV1(RequiredDomainV1, root_bytes)
+  | InactiveDomainSentinelV1(domain_tag, composition_layer,
+                             inactive_sentinel_schema_id)
+    for each application-layer entry in DomainRegistryV1
+], CommitmentSetV1.root_entries)
+
 application_root = H(Canonical(
     application_state_domain,
     protocol_version,
     chain_id,
     genesis_id,
     world_id,
-    world_root,
-    active_token_root,
-    episode_root,
-    asset_state_root
+    profile_scope_digest,
+    domain_registry_digest,
+    application_domain_entries
 ))
+
+protocol_domain_entries = ComposeRegistrySlots([
+    RootEntryV1(RequiredDomainV1, root_bytes)
+  | InactiveDomainSentinelV1(domain_tag, composition_layer,
+                             inactive_sentinel_schema_id)
+    for each protocol-layer entry in DomainRegistryV1
+], CommitmentSetV1.root_entries)
 
 execution_state_root = H(Canonical(
     execution_state_domain,
@@ -874,32 +1045,87 @@ execution_state_root = H(Canonical(
     chain_id,
     genesis_id,
     world_id,
+    profile_scope_digest,
+    domain_registry_digest,
     application_root,
-    authorization_root,
-    nonce_root,
-    parameter_root,
-    governance_root,
-    validator_schedule_root
+    protocol_domain_entries
 ))
 ```
 
-`active_token_root` commits `M_h`; `episode_root` commits `E_h` under the selected history
-and pruning policy. `asset_state_root` covers all selected ownership, transfer, balance, fee,
-reward, and stake state, not only an ownership projection. `authorization_root` covers current key descriptors,
-delegations, rotation, revocation, and recovery state. `validator_schedule_root` covers
-active and delayed-next schedules but not current-round votes. The `ProposalHeader` in §4.4
-then binds the execution root to its parent, transaction/receipt/history commitments,
-consensus policy, active validator set, governance/parameter roots, and data-availability
-commitment. `block_id` is the header identifier; `ConsensusEvidence` is detached.
+The base occupancy profile requires world, active-token, episode, authorization, nonce, parameter,
+governance, and `VALIDATOR-SCHEDULE-1` domains. `active_token_root` commits `M_h`;
+`episode_root` commits `E_h` under the selected history and pruning policy; authorization commits
+current descriptors, delegations, rotation, revocation, and recovery; the validator-schedule domain
+commits active and delayed-next schedules but not current-round votes. If a profile activates
+program state, `PROGRAM-STATE-1` owns its typed domain and root. If it activates an asset or wider
+economic state, the selected asset decision plus `ECONOMIC-STATE-1` own those typed domains;
+validator incentive semantics are first specified separately by `VALIDATOR-ECON-D1`.
+
+An inactive asset, program, fee, reward, stake, or other optional domain occupies its registry slot
+with `InactiveDomainSentinelV1`; it has no `RequiredDomainV1`, root bytes, or valid proof. A domain
+may instead be active with an empty root only if its owning decision defines one typed empty state
+and canonical empty value. The composer never hashes an undefined placeholder. Entry tags are
+unique and registry ordered. A missing required tag, duplicate tag, unknown tag, wrong layer/type/
+tree-domain/root-schema/commitment-profile, active/inactive flip, root supplied for an inactive slot,
+sentinel supplied for an active slot, or different ordering rejects. The required set, registry
+digest, and every repeated scope/genesis/profile projection must match exactly.
+
+The `commitment_profile_id` inside each `RequiredDomainV1` is the self-excluding identifier for that
+domain's selected authenticated-map construction and proof policy under `COMMIT-1`; it is not the
+candidate network `profile_id`. A network `CommitmentSubjectV1` binds the later `profile_id`,
+`profile_scope_digest`, and `domain_registry_digest` externally to the exact active root set.
+
+`profile_id` is deliberately not in `application_root`, `execution_state_root`, or any initial map
+root preimage. Including it there would make root derivation depend on the candidate identifier
+while the candidate's own projections describe the root domains and schemas. Scope/genesis
+identifiers, protocol version, the authenticated parameter roots, and the typed domain entries
+carry execution semantics. Once the candidate is admitted, the
+`ProposalHeader`, transaction signing document, release metadata, and `AuthenticatedRootRefV1`
+carry `profile_id` as external context and MUST project the same scope/genesis/version/root choices.
+This avoids a profile/root identifier cycle without allowing two profiles to reinterpret one root.
+
+The `ProposalHeader` in §4.4 then binds the execution root to its admitted profile, parent,
+transaction/receipt/history commitments, consensus policy, active validator set,
+governance/parameter roots, and data-availability commitment. `block_id` is the header identifier;
+`ConsensusEvidence` is detached.
 
 Application roots, execution-state roots, block identifiers, and consensus evidence must not
 be interchangeable. A valid world root is not a valid finality certificate, and a valid vote
 certificate is not a proof that a coordinate is occupied.
 
-The `world_root` could be an authenticated sparse map, sparse Merkle tree, Verkle-style
-map, or another structure that handles mostly-absent coordinates efficiently. The choice
-is **Open**. It must define canonical child ordering, empty-subtree values, coordinate
-encoding, and proofs for both “occupied” and “absent”.
+The current `COMMIT-R1` comparison keeps one controlled choice: a constrained fixed-key binary
+Patricia trie versus a 192-level sparse Merkle tree. Either must define canonical child ordering,
+empty-subtree values, coordinate encoding, and both occupied and absent proofs. No structure is
+selected yet.
+
+### 5.1 Separate Verkle feasibility lane
+
+The user's Verkle question opens `VERKLE-R1`, a separate feasibility lane rather than a third arm
+silently added to the controlled `COMMIT-R1` assay. The original
+[John Kuszmaul, “Verkle Trees” paper](https://math.mit.edu/research/highschool/primes/materials/2018/Kuszmaul.pdf)
+develops the use of vector commitments in a high-branching authenticated tree to reduce proof
+bandwidth. The
+[Ethereum Foundation's concrete structure overview](https://blog.ethereum.org/2021/12/02/verkle-tree-structure)
+illustrates a 256-way design using vector commitments and a stem/suffix layout. Those sources
+motivate a hypothesis for Bitblock—smaller aggregated witnesses for many coordinate or state
+queries—not a selected construction or inherited security result.
+
+`VERKLE-R1` must first pin the vector-commitment scheme, curve/field and transcript rules, opening
+and batch-verification equations, key/value layout, absence and deletion semantics, canonical
+encoding, and numeric limits. It must measure witness bytes and verification work against the same
+logical maps and workloads as the binary candidates. The cost side must separately report update
+and witness-generation work, group/field operations, storage churn, cache behavior, and worst-case
+accepted inputs; a small witness does not imply cheap mutation or verification.
+
+The lane must also account for the larger cryptographic and trusted-computing surface: generator
+derivation or scheme-specific setup/custody assumptions, implementation and side-channel risk,
+independent-library diversity, external review, historical-proof retention, and migration from any
+already admitted root. A Verkle prototype cannot reuse Ethereum's key layout, curve choices,
+security analysis, or deployment experience as Bitblock evidence by citation. It remains
+research-only until its own canonical vectors, powered malformed-opening controls, independent
+implementation, refinement story, cost measurements, and reversal/migration plan pass. Failure to
+beat the selected simpler baseline by a predeclared material threshold closes the lane without
+changing live authority.
 
 This is also where the practical-infinity idea meets cryptography. Lazy chunks are good
 storage engineering, but a commitment cannot leave “unloaded” ambiguous. Every coordinate
@@ -937,7 +1163,7 @@ Every proof object SHOULD state its type and scope:
   the stated guarantee.
 
 The verifier MUST reject a proof presented under the wrong root kind, schema, chain, genesis,
-world, height, or protocol version. A compact digest without the corresponding witness is
+admitted profile, world, height, or protocol version. A compact digest without the corresponding witness is
 only an identity, not a membership or availability proof.
 
 ## 6. Replication, consensus, and finality
@@ -1101,7 +1327,7 @@ The initial threat inventory is:
 | --- | --- |
 | Forged action | Signature verification and canonical signed bytes |
 | Ambiguous or malleable encoding | Typed length framing, strict decoding, canonical signatures, and negative vectors |
-| Replay | Per-identity nonces, chain/genesis/world binding, selected anchor rules, and bounded retention |
+| Replay | Per-identity nonces, chain/genesis/profile/world binding, selected anchor rules, and bounded retention |
 | Double spend / duplicate occupancy | Single canonical state transition and live-token checks |
 | Same-coordinate race | Consensus-defined ordering and deterministic conflict results |
 | Validator equivocation | Signed votes, conflicting-certificate detection, and penalty/expulsion policy if applicable |
@@ -1289,6 +1515,14 @@ binary digests, signed release metadata, an independent build, and a procedure f
 a compromised dependency or compiler. A consensus proof over one local binary does not
 cover a substituted binary.
 
+Release production also has two phases. `RELEASE-R1` may exercise the reusable build/reproduction
+framework and emit a clearly labeled candidate artifact bound to `CandidateProfileV1` and its
+`profile_id`. That artifact is not an admitted network release. Only after `PROFILE-1` binds the
+same `profile_id` to a complete passing evidence closure may `RELEASE-1` publish profile-authority
+metadata that also binds the admitted-manifest digest, exact source, features, genesis, binary, and
+configuration. A candidate build must never inherit “admitted” from reproducibility alone, and an
+admitted record must reject any semantic projection or binary that differs from its candidate.
+
 The current Lean capsules prove only their declared abstract finite-support models: bedrock
 and edit/replay properties plus per-edit supply increments, decrements, and no-op
 preservation. They do not prove token identifiers, consuming-burn provenance, a global
@@ -1417,8 +1651,8 @@ describes the current evidence class; this documentation pass did not rerun it.
 | G1 | Feature-gated coordinate-episode correspondence | Map-domain/injectivity, mint/burn, re-mint, and origin vectors | **Partial bounded/local; OPEN**—the independent vector does not replay history, and no durable asset claim exists |
 | G2 | Complete action/result accounting | Reconcile live submission, tape, tick outcome, edit history, rejection, and idle/control lanes | **Open**; any silently lost included action stops admission |
 | G3 | Canonical codec, genesis, and domain separation | Cross-implementation corpus, prefix/suffix/duplicate/unknown-field negatives, collision controls | **Open**; any alternate accepted bytes or ID collision stops the version |
-| G4 | Actor authentication and replay safety | Signature, key-validation, nonce, chain/genesis/world, anchor, rotation/recovery, and mutation controls | **Open**; any unauthorized or cross-domain replay stops admission |
-| G5 | Transaction/interleaving semantics and conservation | Multi-actor schedules; failure/no-op/fee/nonce atomicity; asset/supply conservation | **Open**; any executor-dependent disposition or partial write stops the candidate |
+| G4 | Actor authentication and replay safety | Signature, key-validation, nonce, chain/genesis/profile/world, anchor, rotation/recovery, and mutation controls | **Open**; any unauthorized or cross-domain replay stops admission |
+| G5 | Transaction/interleaving semantics and conservation | **G5.core:** multi-actor schedules; failure/no-op/nonce atomicity; occupancy/episode conservation. **G5.asset:** transfer, fee, and wider asset/supply conservation only when activated | **Open; G5.core is mandatory**—any executor-dependent disposition or partial write stops every candidate. G5.asset is conditional, not a reason to exclude the core |
 | G6 | Authenticated state and receipt proofs | Scheme-specific membership/non-membership plus receipt path through an authenticated header accepted at the selected consensus status | **Open**; a bare digest or unbound witness does not pass |
 | G7 | Prefix safety and finality/confirmation | Formal argument plus partition/equivocation/fork adversarial harness under the named fault model | **Open**; evidence violating the selected profile's safety rule triggers safe halt, while ordinary probabilistic forks use fork choice |
 | G8 | Chain liveness and eligible inclusion | Protocol/model argument for the scoped eventual claim plus bounded fault-injection measurements with synchrony, capacity, fee, and dissemination preconditions | **Open/bounded when run**; samples alone never prove an unstated universal |
@@ -1428,7 +1662,7 @@ describes the current evidence class; this documentation pass did not rerun it.
 | G12 | Validator-set transitions and partitions | Parent-authorized active/next roots, certificate vectors, handoff/quorum proof, long-range recovery | **Open**; candidate-selected authority never passes |
 | G13 | Peer sync and bootstrap | Multi-peer body/witness retrieval, parser/backpressure controls, checkpoint/genesis trust tests, eclipse tests | **Open**; one unproved peer response is not authority |
 | G14 | Provisional versus accepted client state | Reorg, receipt-inclusion, nonce/replacement, wallet proof, and finality/confirmation-status tests | **Open**; a candidate receipt cannot be presented beyond its verified status |
-| G15 | Resource and economic bounds | Worst-case codec/signature/proof/execution/storage/history/witness/recovery measurements and fee/rent invariants | **Open**; an over-bound remote input rejects/disconnects. Safe halt is reserved for a consensus-accepted artifact or local invariant that cannot be processed within the already committed bound; limits are never silently raised |
+| G15 | Resource and economic bounds | **G15.resource:** worst-case codec/signature/proof/execution/storage/history/witness/recovery measurements. **G15.economic:** fee/rent/denomination invariants only when activated | **Open; G15.resource is mandatory**—an over-bound remote input rejects/disconnects. Safe halt is reserved for a consensus-accepted artifact or local invariant that cannot be processed within the already committed bound; limits are never silently raised |
 | G16 | Reviewed source versus shipped binary | Pinned toolchain/dependencies, reproducible independent builds, signed release metadata | **Open**; unmatched binary has no inherited proof claim |
 | G17 | Upgrade/governance migration | Old/new root vectors, bounded migration replay, authorization/timelock, downgrade and historical-verification tests | **Open**; divergent migration roots stop activation |
 | G18 | Production operations and incident response | Privilege/RPC tests, monitoring controls, backup/failover drill, safe-halt and key-compromise exercise | **Open**; recovery cannot resume through an unresolved authority/root fault |
@@ -1438,6 +1672,12 @@ A production coverage matrix must map each public property and threat row to the
 protocol version, adversary assumption, gate, artifact, result, and failure condition. A
 green G0 or G1 does not imply G7. A matching hash does not imply liveness or availability.
 A passing network harness does not prove physical display output or economic value.
+
+For every base occupancy profile, `G5.core` and `G15.resource` are required. Only the asset/economic
+subparts of G5/G15 and the program/randomness features in G19 are conditional on activation; their
+absence cannot be used to exclude core transition or resource evidence. Stage ownership still
+matters—G18 is production work rather than a pre-testnet pass—but a later stage cannot silently
+remove a base gate that its profile already requires.
 
 ## 13. Open decisions
 
@@ -1476,18 +1716,22 @@ These are deliberately not silently decided by this paper:
 27. Which external bridges or oracles, if any, are allowed to make claims outside the coordinate world?
 28. Which actions are actor-authorized, validator-authorized, governance-authorized, or emergency-authorized,
     and how are those namespaces enforced?
+29. Does `VERKLE-R1` beat the selected simpler hash-tree baseline by a predeclared end-to-end
+    witness, update, verification, dependency/TCB, setup-generator, availability, and migration
+    threshold strongly enough to justify a later profile candidate, or should the lane close?
 
 Each decision should be recorded with its assumptions, rejected alternatives, falsifier, and
 the smallest test that could disprove the chosen design. Until then, the current system
 should retain its narrower and truthful description.
 
-## 14. Audit result: obligations still open in the repository
+## 14. Pinned checkpoint-0.3 audit result: obligations still open in the repository
 
-This revision was checked against source/proof snapshot
-`6545d8e7d60e75607445fda564bbf11610a62658`, the Lean/LadderLang capsules,
+The checkpoint-0.3 paper at commit `034b7b2b5f129625f9c6dcec3e14038b7c4aee5f` was checked
+against source/proof snapshot `6545d8e7d60e75607445fda564bbf11610a62658`, the Lean/LadderLang capsules,
 `docs/SEMANTICS.md`, `docs/HANDOFF.md`, and the open-obligation and hash-suite sections of
-`docs/PROTOCOL.md`. The following gaps remain intentionally open. They are not covered by
-the existence of this paper:
+`docs/PROTOCOL.md`. The successor corrections named at the top of this paper were scoped planning
+consistency sweeps, not another complete paper audit. The following gaps remain intentionally
+open. They are not covered by the existence of this paper:
 
 | Repository boundary | What is still missing before a Layer 1 claim |
 | --- | --- |

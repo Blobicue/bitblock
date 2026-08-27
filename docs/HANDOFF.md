@@ -9,9 +9,13 @@ semantic history.
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
+- `2a9e667` is the exact clean input to the second audit/fix loop. Its result is the first
+  descendant commit that adds `docs/FUTURE_PLAN_AUDIT_LOOP2.md`; that audit also records why Verkle
+  is a separate feasibility lane rather than a silently selected third trie.
 - `1624068` is the exact clean input to the one-sweep future-plan audit. The result is the first
   descendant commit that adds `docs/FUTURE_PLAN_AUDIT.md`; the audit file intentionally avoids an
-  impossible self-embedded commit hash.
+  impossible self-embedded commit hash. Its first-addition Git blob
+  `8a02f4b7b00b440e14a35a098b87a7493fd887b4` is frozen by the retained checker.
 - `7075c54` is the motive/capability-tree documentation checkpoint: it adds the project-intent
   owner, the dependency DAG, the MPT/SMT research plan, and transcript checkpoints 16–23.
 - `88fcf55` is that checkpoint's clean input tip and preserves the concurrent-paper provenance
@@ -38,14 +42,15 @@ Read in this order:
 1. `docs/HANDOFF.md` (this file)
 2. `docs/PROJECT_INTENT.md` (why Bitblock exists and what must remain separate)
 3. `docs/CAPABILITY_TREE.md` (dependency DAG, statuses, artifacts, gates, and non-claims)
-4. `docs/FUTURE_PLAN_AUDIT.md` (frozen audit input, findings, patches, and residual boundary)
-5. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-6. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-7. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT comparison checkpoint)
-8. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
-9. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
-10. `README.md` (controls, commands, and feature boundaries)
-11. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+4. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (latest frozen audit/fix map and Verkle disposition)
+5. `docs/FUTURE_PLAN_AUDIT.md` (immutable first-loop audit)
+6. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+7. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+8. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
+9. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
+10. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
+11. `README.md` (controls, commands, and feature boundaries)
+12. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
 
 ## What is implemented
 
@@ -100,8 +105,11 @@ self-verified. Neither path produces physical display evidence.
 - `docs/AUTHENTICATED_STATE_PLAN.md`: unimplemented authenticated-map comparison and integration
   constraints.
 - `docs/FUTURE_PLAN_AUDIT.md`: the finite audit/fix map for planning input `1624068`.
+- `docs/FUTURE_PLAN_AUDIT_LOOP2.md`: the second finite audit/fix map for input `2a9e667`, including
+  the authenticated-state, activation-graph, checker, provenance, and Verkle corrections.
 - `tools/check_planning_docs.py`: retained dependency/Markdown checker with powered negative
-  controls; it does not validate runtime semantics.
+  controls and a frozen-first-audit guard; it does not validate edge completeness, prose meaning,
+  runtime semantics, or cryptographic security.
 
 ## Claims that are safe to make
 
@@ -149,16 +157,20 @@ node gates in `docs/CAPABILITY_TREE.md`, make one semantic change at a time, and
    profiles and compare fixed-key binary Patricia with a 192-level sparse Merkle tree. Do not hook
    either into `World`, history publication, receipts, rendering, or collision until the shared
    assay passes and `LEDGER-1` exists.
-4. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
+4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
+   field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
+   end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
+   Proof-size intuition alone cannot select it or delay `COMMIT-R1`.
+5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-5. Run `SCALE-1`/`COST-1` measurements before designing a hierarchical chunk/LOD path.
+6. Run `SCALE-1`/`COST-1` measurements before designing a hierarchical chunk/LOD path.
    The present below-saturation renderer traverses on bits; no “near-infinite performance” claim
    is licensed yet.
-6. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
+7. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
    then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
    recorded disqualification of the examined
    Aethor TSH/PDH constructions and IterHash; do not conflate them with a different missing design.
-7. Only after `ACCOUNT-1`, consider `RULE-1`: one finite opt-in local transformation rule with a
+8. Only after `ACCOUNT-1`, consider `RULE-1`: one finite opt-in local transformation rule with a
    named neighborhood, ordering, resource bound, and deterministic
    `(initial state, accepted tape, rule version)` replay. Do not combine it with asset or network
    authority.
@@ -178,15 +190,19 @@ cd proof/ladderlang-transition-v1
 ```
 
 The earlier `7075c54` check list is an unretained historical report; do not inherit it as a fresh
-pass. For the one-sweep result whose input is `1624068`, the retained audit artifact is
-`docs/FUTURE_PLAN_AUDIT.md`. Before its commit, these exact checks exited zero:
+pass. The immutable first-loop artifact is `docs/FUTURE_PLAN_AUDIT.md`; the latest successor is
+`docs/FUTURE_PLAN_AUDIT_LOOP2.md`. The current documentation patch is admitted only after:
 
 ```powershell
 python -B tools/check_planning_docs.py --self-test
-git diff --check
+git diff --cached --check
 ```
 
-The first command validates the 62-node conservative DAG, fields, references, planning links,
-fences, tables, and in-memory negative controls. The second checks the complete patch for whitespace
-errors. Rust and Lean suites were not rerun because this sweep changes documentation and a
-read-only planning checker only; it provides no runtime/proof validation.
+The first command validates the pinned node inventory and primary status classes, required detailed
+  fields, declared dependency references and role-expanded union DAG, the structured conditional-edge
+manifest, relative planning links, backtick fences, exact duplicate headings, contiguous table pipe
+shape, and the frozen first-audit blob. Its powered controls exercise those failure paths. It does
+not prove that prose captured every dependency, that a future profile instance is satisfiable, or
+that runtime/cryptographic claims are true. The second command checks the complete staged patch for
+whitespace errors. Stable post-commit checks and the exact no-Rust/no-Lean boundary are retained in
+the second-loop audit.

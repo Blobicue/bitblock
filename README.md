@@ -20,11 +20,13 @@ The proposed authenticated-state checkpoint—including a candidate 192-bit cano
 encoding and the still-open comparison between a constrained binary Merkle Patricia trie and a
 192-level sparse Merkle tree—is isolated in
 [`docs/AUTHENTICATED_STATE_PLAN.md`](docs/AUTHENTICATED_STATE_PLAN.md). No authenticated trie or
-proof codec is implemented in the current runtime.
+proof codec is implemented in the current runtime. Verkle is recorded there as a separate,
+cryptography-gated feasibility lane; it is not selected and does not share the two hash candidates'
+`NodeHash` assay.
 
-The latest finite audit of that future plan, its frozen input, the gaps found, and the one-sweep
-documentation corrections are recorded in
-[`docs/FUTURE_PLAN_AUDIT.md`](docs/FUTURE_PLAN_AUDIT.md). It is an audit of specifications and
+The immutable first finite audit is [`docs/FUTURE_PLAN_AUDIT.md`](docs/FUTURE_PLAN_AUDIT.md). The
+latest second-loop audit, including the Verkle disposition and its own frozen input, is
+[`docs/FUTURE_PLAN_AUDIT_LOOP2.md`](docs/FUTURE_PLAN_AUDIT_LOOP2.md). They audit specifications and
 dependencies, not implementation or security evidence.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.

@@ -8,8 +8,11 @@ while writing this file.
 Implemented/source claims were reconciled to source/proof snapshot
 `6545d8e7d60e75607445fda564bbf11610a62658`; source/proof/tool files remained unchanged through
 planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronology is checked through
-that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). Changes to
-named source/proof files or this chronology stale the corresponding statements.
+that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md) and the
+second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md). Those
+successor audits cover planning corrections only; neither silently extends or reruns the pinned
+checkpoint-0.3 paper audit. Changes to named source/proof files or this chronology stale the
+corresponding statements.
 
 The words below have deliberately narrow meanings:
 
@@ -327,16 +330,39 @@ gate, and non-claim; `AUTHENTICATED_STATE_PLAN.md` owns the MPT/SMT research che
 **documentation checkpoint**. It changes no Rust simulation, storage, proof, networking, identity,
 asset, or consensus behavior.
 
-### 24. “Find more gaps once, then fix them once”
+### 24. Agent-derived one-sweep planning workflow (paraphrase, not a user quotation)
 
-User intent: make one complete read-only pass over the newly recorded future plan, freeze its
-findings, and apply one coordinated correction instead of alternating between audit and edits.
+Underlying user intent: preserve Bitblock's motives and future plan before more feature work and
+keep looking for gaps in what had been recorded. The exact one-read-only-pass/one-coordinated-fix
+shape was the agent's workflow summary, not a verbatim user instruction.
 
 Current truth: [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md) pins input `1624068`, records the
 three independent audit lenses plus the local cross-document pass, freezes 18 material findings,
 and maps every finding to this single documentation/tooling sweep. The corrections add no runtime
 trie, ledger, network, identity, asset, VM, consensus, or Layer 1 implementation. This remains a
 **finite planning audit**, not proof that no further gap exists.
+
+### 25. “One more bounded audit/fix loop; Verkle Trees?” (paraphrased)
+
+User addition: run one more bounded gap-finding loop over the recorded plan and consider whether
+Verkle trees could be useful. The freeze-first, single-correction-sweep procedure was again an
+agent workflow chosen to make that request reproducible; it is not presented as a verbatim user
+quotation.
+
+Current truth: [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md) pins exact input
+`2a9e66731e3ca9e0e433b49f185d2a1cb7096a02`, preserves the first audit as an immutable historical
+artifact, and freezes 16 second-loop findings before one coordinated documentation/checker
+correction. The correction makes the paper own the exact scope-to-genesis-to-candidate byte
+pipeline, separates logical genesis-byte completion from later genesis-root parity, derives the
+required root-domain set from the profile, and separates candidate-build evidence from an admitted
+release. It does not rerun or extend the pinned checkpoint-0.3 paper audit.
+
+Verkle is recorded only as the separate research lane `VERKLE-R1`: a possible compact-witness
+benefit must be tested against exact vector-commitment assumptions, update and verification work,
+setup/generator provenance, dependency and trusted-computing-base cost, availability, and migration
+risk. It is not a third arm in the current MPT/SMT assay, is not selected, and is not implemented.
+No trie, vector commitment, network authority, asset, consensus, cryptocurrency, or Layer 1
+security property is added by this planning correction.
 
 ## Semantic lessons that should survive future checkpoints
 
@@ -371,6 +397,9 @@ trie, ledger, network, identity, asset, VM, consensus, or Layer 1 implementation
   the default with one-pixel fit as an explicit action?
 - After the common authenticated-state assay, does fixed-key binary Patricia materially outperform
   the simpler 192-level sparse Merkle baseline enough to justify its normalization surface?
+- Does separately gated `VERKLE-R1` clear a predeclared end-to-end witness, cost, trusted-computing-
+  base, setup/generator, availability, and migration threshold strongly enough to justify a future
+  comparison, or should it close without delaying the first authenticated root?
 - Is a mutable occupancy episode a collectible, a coordinate edit right, a fungible unit, a
   separate asset-domain record, or non-monetary provenance—and is origin non-economic or a distinct
   locked genesis allocation?

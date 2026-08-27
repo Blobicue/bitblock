@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,12 +13,15 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 CAPABILITY = ROOT / "docs" / "CAPABILITY_TREE.md"
+FIRST_AUDIT = ROOT / "docs" / "FUTURE_PLAN_AUDIT.md"
+FIRST_AUDIT_GIT_BLOB = "8a02f4b7b00b440e14a35a098b87a7493fd887b4"
 PLANNING_FILES = (
     ROOT / "README.md",
     ROOT / "docs" / "PROJECT_INTENT.md",
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
+    ROOT / "docs" / "FUTURE_PLAN_AUDIT_LOOP2.md",
     ROOT / "docs" / "TRANSCRIPT_AUDIT.md",
     ROOT / "docs" / "HANDOFF.md",
     ROOT / "docs" / "LAYER1_DESIGN_PAPER.md",
@@ -25,10 +29,35 @@ PLANNING_FILES = (
 )
 NODE_ID = r"[A-Z][A-Z0-9-]*"
 DETAIL_HEADING = re.compile(rf"^### `({NODE_ID})`(?:\s|$)")
+FIELD_BOUNDARY = re.compile(r"^#{1,3}\s")
 FIELD = re.compile(r"^- \*\*(Status|Depends on|Motive|Artifact|Gate|Non-claim):\*\*\s*(.*)$")
 DEPENDENCY = re.compile(rf"`({NODE_ID})`")
 FOUNDATION_ROW = re.compile(rf"^\| `({NODE_ID})` \| \*\*([^|]+)\*\* \| ([^|]+) \|")
+CONDITIONAL_ROW = re.compile(
+    rf"^\| (CE-[0-9]{{2}}) \| ({NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
+    rf"([a-z0-9]+(?:-[a-z0-9]+)*) \| ({NODE_ID}) \| "
+    rf"([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
+)
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+
+EXPECTED_NODE_IDS = frozenset(
+    """
+    ACCOUNT-1 ASSET-1 ASSET-D1 AUTH-COMMIT-1 BOUNDS-1 CLIENT-1 CODEC-1 COMMIT-1
+    COMMIT-R1 CONSENSUS-1 CONSENSUS-D1 COST-1 CRYPTO-1 CRYPTO-D1 DOC-0
+    ECONOMIC-STATE-1 EMERGENCE-R1 EXECUTION-ROOT-1 EXECUTOR-1 GENESIS-D1
+    GENESIS-ROOT-PARITY-1 GOVERNANCE-1 GOVERNANCE-D1 HASH-R1 HASH-SOURCE-R1 IDENTITY-1
+    IDENTITY-D1 L1-CANDIDATE L1-PRODUCTION LANGUAGE-R1 LEDGER-1 LOCAL-BOUNDS-1 MULTI-1
+    OBSERVE-0 PROD-OPS-1 PROFILE-1 PROFILE-D1 PROFILE-SCOPE-D0 PROGRAM-CONSENSUS
+    PROGRAM-STATE-1 PROOF-0 PROTOCOL-ID-1 REFINE-1 RELEASE-1 RELEASE-R1 REPLAY-0
+    RESOURCE-1 RULE-1 SCALE-1 SCALE-2 SEQUENCER-1 SIGNER-OPS-1 STORAGE-1 SYNC-1
+    TESTNET-1 THREAT-1 THREAT-D0 TICK-0 TRANSITION-SPEC-1 TRANSITION-SPEC-D1
+    UPGRADE-1 UPGRADE-FRAMEWORK-1 VALIDATOR-ECON-1 VALIDATOR-ECON-D1
+    VALIDATOR-SCHEDULE-1 VALUE-1 VERKLE-R1 VM-1 VM-D1 WORLD-0
+    """.split()
+)
+EXPECTED_STATUS_DIGEST = "61f447102b3c6134d74338b05c6a6e1648d48cd2f9254d1e6a822349bab45dc3"
+EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 41))
+EXPECTED_CONDITIONAL_DIGEST = "8356435311c8c1b9207b39892c56126e25b48b21f58b750d4e25b2b3a00d2d1b"
 
 
 class PlanningError(ValueError):
@@ -39,7 +68,60 @@ class PlanningError(ValueError):
 class Node:
     node_id: str
     dependencies: tuple[str, ...]
+    status_class: str
     source: str
+
+
+@dataclass(frozen=True)
+class ConditionalEdge:
+    edge_id: str
+    owner_base: str
+    owner_role: str
+    predicate: str
+    dependency_base: str
+    dependency_role: str
+
+
+STATUS_CLASSES = (
+    "IMPLEMENTED",
+    "BOUNDED",
+    "READY",
+    "LOCKED",
+    "OPEN DECISION",
+    "NOT STARTED",
+)
+
+
+def _status_class(text: str, node_id: str) -> str:
+    plain = re.sub(r"[*`]", "", text).strip().upper()
+    for status in STATUS_CLASSES:
+        if plain.startswith(status):
+            return status
+    raise PlanningError(f"{node_id}: invalid primary status vocabulary: {text}")
+
+
+def _assert_acyclic(adjacency: dict[str, tuple[str, ...]], label: str) -> None:
+    state: dict[str, int] = {}
+    stack: list[str] = []
+
+    def visit(node_id: str) -> None:
+        state[node_id] = 1
+        stack.append(node_id)
+        for dependency in adjacency.get(node_id, ()):
+            if dependency not in adjacency:
+                raise PlanningError(f"{label}: missing graph node {dependency}")
+            if state.get(dependency) == 1:
+                begin = stack.index(dependency)
+                cycle = stack[begin:] + [dependency]
+                raise PlanningError(f"{label} cycle: " + " -> ".join(cycle))
+            if state.get(dependency, 0) == 0:
+                visit(dependency)
+        stack.pop()
+        state[node_id] = 2
+
+    for node_id in adjacency:
+        if state.get(node_id, 0) == 0:
+            visit(node_id)
 
 
 def _field_blocks(lines: list[str], start: int, end: int, node_id: str) -> dict[str, str]:
@@ -58,7 +140,11 @@ def _field_blocks(lines: list[str], start: int, end: int, node_id: str) -> dict[
     missing = sorted(required - fields.keys())
     if missing:
         raise PlanningError(f"{node_id}: missing fields: {', '.join(missing)}")
-    return {name: " ".join(parts).strip() for name, parts in fields.items()}
+    joined = {name: " ".join(parts).strip() for name, parts in fields.items()}
+    empty = sorted(name for name, value in joined.items() if not value)
+    if empty:
+        raise PlanningError(f"{node_id}: empty fields: {', '.join(empty)}")
+    return joined
 
 
 def parse_capability(text: str) -> dict[str, Node]:
@@ -72,7 +158,12 @@ def parse_capability(text: str) -> dict[str, Node]:
         node_id, _status, prerequisites = match.groups()
         if node_id in nodes:
             raise PlanningError(f"duplicate node {node_id} at line {number}")
-        nodes[node_id] = Node(node_id, tuple(DEPENDENCY.findall(prerequisites)), f"line {number}")
+        nodes[node_id] = Node(
+            node_id,
+            tuple(DEPENDENCY.findall(prerequisites)),
+            _status_class(_status, node_id),
+            f"line {number}",
+        )
 
     headings: list[tuple[int, str]] = []
     for index, line in enumerate(lines):
@@ -83,42 +174,136 @@ def parse_capability(text: str) -> dict[str, Node]:
     for position, (start, node_id) in enumerate(headings):
         if node_id in nodes:
             raise PlanningError(f"duplicate node {node_id} at line {start + 1}")
-        end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
+        end = next(
+            (index for index in range(start + 1, len(lines)) if FIELD_BOUNDARY.match(lines[index])),
+            len(lines),
+        )
         fields = _field_blocks(lines, start + 1, end, node_id)
         dependency_text = fields["Depends on"]
         dependencies = tuple(DEPENDENCY.findall(dependency_text))
         if not dependencies and "none" not in dependency_text.lower():
             raise PlanningError(f"{node_id}: dependency field names no node and does not say None")
-        nodes[node_id] = Node(node_id, dependencies, f"line {start + 1}")
+        nodes[node_id] = Node(
+            node_id,
+            dependencies,
+            _status_class(fields["Status"], node_id),
+            f"line {start + 1}",
+        )
 
     if not nodes:
         raise PlanningError("no capability nodes parsed")
+
+    actual_ids = frozenset(nodes)
+    if actual_ids != EXPECTED_NODE_IDS:
+        missing = sorted(EXPECTED_NODE_IDS - actual_ids)
+        extra = sorted(actual_ids - EXPECTED_NODE_IDS)
+        raise PlanningError(
+            "capability inventory changed without updating its intentional inventory guard: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    status_manifest = "\n".join(
+        f"{node_id}={nodes[node_id].status_class}" for node_id in sorted(nodes)
+    )
+    status_digest = hashlib.sha256(status_manifest.encode("utf-8")).hexdigest()
+    if status_digest != EXPECTED_STATUS_DIGEST:
+        raise PlanningError(
+            "primary status classes changed without updating the intentional status guard: "
+            f"expected {EXPECTED_STATUS_DIGEST}, got {status_digest}"
+        )
 
     for node in nodes.values():
         unknown = sorted(set(node.dependencies) - nodes.keys())
         if unknown:
             raise PlanningError(f"{node.node_id}: undefined dependencies: {', '.join(unknown)}")
 
-    state: dict[str, int] = {}
-    stack: list[str] = []
-
-    def visit(node_id: str) -> None:
-        state[node_id] = 1
-        stack.append(node_id)
-        for dependency in nodes[node_id].dependencies:
-            if state.get(dependency) == 1:
-                begin = stack.index(dependency)
-                cycle = stack[begin:] + [dependency]
-                raise PlanningError("dependency cycle: " + " -> ".join(cycle))
-            if state.get(dependency, 0) == 0:
-                visit(dependency)
-        stack.pop()
-        state[node_id] = 2
-
-    for node_id in nodes:
-        if state.get(node_id, 0) == 0:
-            visit(node_id)
+    _assert_acyclic(
+        {node_id: node.dependencies for node_id, node in nodes.items()},
+        "base dependency",
+    )
     return nodes
+
+
+def parse_conditional_edges(
+    text: str,
+    nodes: dict[str, Node],
+    *,
+    enforce_manifest: bool = True,
+) -> tuple[ConditionalEdge, ...]:
+    edges: list[ConditionalEdge] = []
+    seen: set[str] = set()
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.startswith("| CE-"):
+            continue
+        match = CONDITIONAL_ROW.match(line)
+        if not match:
+            raise PlanningError(f"conditional edge row {number} is not canonical: {line}")
+        edge = ConditionalEdge(*match.groups())
+        if edge.edge_id in seen:
+            raise PlanningError(f"duplicate conditional edge {edge.edge_id} at line {number}")
+        seen.add(edge.edge_id)
+        unknown = sorted(
+            {edge.owner_base, edge.dependency_base} - nodes.keys()
+        )
+        if unknown:
+            raise PlanningError(
+                f"{edge.edge_id}: undefined conditional bases: {', '.join(unknown)}"
+            )
+        edges.append(edge)
+
+    if not edges:
+        raise PlanningError("no structured conditional-instance edges parsed")
+
+    canonical = "\n".join(
+        "|".join(
+            (
+                edge.edge_id,
+                edge.owner_base,
+                edge.owner_role,
+                edge.predicate,
+                edge.dependency_base,
+                edge.dependency_role,
+            )
+        )
+        for edge in edges
+    )
+    if enforce_manifest:
+        actual_ids = frozenset(seen)
+        if actual_ids != EXPECTED_CONDITIONAL_IDS:
+            missing = sorted(EXPECTED_CONDITIONAL_IDS - actual_ids)
+            extra = sorted(actual_ids - EXPECTED_CONDITIONAL_IDS)
+            raise PlanningError(
+                "conditional edge inventory changed without updating its intentional guard: "
+                f"missing={missing}, extra={extra}"
+            )
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if digest != EXPECTED_CONDITIONAL_DIGEST:
+            raise PlanningError(
+                "conditional roles, predicates, or polarity changed without updating their guard: "
+                f"expected {EXPECTED_CONDITIONAL_DIGEST}, got {digest}"
+            )
+
+    roles: dict[str, set[str]] = {node_id: {"base"} for node_id in nodes}
+    for edge in edges:
+        roles[edge.owner_base].add(edge.owner_role)
+        roles[edge.dependency_base].add(edge.dependency_role)
+
+    adjacency: dict[str, list[str]] = {}
+    for node_id, node_roles in roles.items():
+        for role in node_roles:
+            adjacency[f"{node_id}@{role}"] = [
+                f"{dependency}@base" for dependency in nodes[node_id].dependencies
+            ]
+    for edge in edges:
+        adjacency[f"{edge.owner_base}@{edge.owner_role}"].append(
+            f"{edge.dependency_base}@{edge.dependency_role}"
+        )
+
+    _assert_acyclic(
+        {node_id: tuple(dependencies) for node_id, dependencies in adjacency.items()},
+        "role-aware conditional dependency",
+    )
+    return tuple(edges)
 
 
 def check_markdown(path: Path, text: str) -> None:
@@ -167,6 +352,16 @@ def check_markdown(path: Path, text: str) -> None:
             raise PlanningError(f"{path.relative_to(ROOT)}: missing relative link target {target}")
 
 
+def check_frozen_first_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != FIRST_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/FUTURE_PLAN_AUDIT.md changed after its frozen first addition: "
+            f"expected Git blob {FIRST_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
 def expect_failure(label: str, text: str) -> None:
     try:
         parse_capability(text)
@@ -175,7 +370,37 @@ def expect_failure(label: str, text: str) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
-def run_self_tests(text: str) -> None:
+def expect_markdown_failure(label: str, path: Path, text: str) -> None:
+    try:
+        check_markdown(path, text)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_first_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_conditional_failure(
+    label: str,
+    text: str,
+    nodes: dict[str, Node],
+    *,
+    enforce_manifest: bool = True,
+) -> None:
+    try:
+        parse_conditional_edges(text, nodes, enforce_manifest=enforce_manifest)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def run_self_tests(text: str, first_audit_bytes: bytes) -> None:
     unknown = text.replace(
         "- **Depends on:** `TICK-0`, `REPLAY-0`.",
         "- **Depends on:** `TICK-0`, `REPLAY-0`, `MISSING-9`.",
@@ -200,6 +425,102 @@ def run_self_tests(text: str) -> None:
     duplicate = text + "\n### `ACCOUNT-1` — duplicate negative control\n"
     expect_failure("duplicate node", duplicate)
 
+    bad_status = text.replace(
+        "- **Status:** **READY; preferred next semantic implementation checkpoint**.",
+        "- **Status:** **MAGICALLY SECURE**.",
+        1,
+    )
+    if bad_status == text:
+        raise PlanningError("self-test fixture drift: ACCOUNT-1 status")
+    expect_failure("invalid status vocabulary", bad_status)
+
+    false_promotion = text.replace(
+        "- **Status:** **READY; preferred next semantic implementation checkpoint**.",
+        "- **Status:** **IMPLEMENTED**.",
+        1,
+    )
+    if false_promotion == text:
+        raise PlanningError("self-test fixture drift: ACCOUNT-1 false promotion")
+    expect_failure("guarded status promotion", false_promotion)
+
+    missing_inventory = re.sub(
+        r"^### `HASH-R1`.*?(?=^### |^## )",
+        "",
+        text,
+        count=1,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if missing_inventory == text:
+        raise PlanningError("self-test fixture drift: HASH-R1 inventory")
+    expect_failure("missing capability inventory", missing_inventory)
+
+    boundary_probe = text.replace(
+        "## Current unlock frontier",
+        "## Current unlock frontier\n\n- **Gate:** outside-node boundary probe",
+        1,
+    )
+    if boundary_probe == text:
+        raise PlanningError("self-test fixture drift: post-node section boundary")
+    parse_capability(boundary_probe)
+
+    nodes = parse_capability(text)
+    missing_conditional = text.replace(
+        "| CE-01 | PROFILE-SCOPE-D0 | candidate-scope | asset-active | ASSET-D1 | design |\n",
+        "",
+        1,
+    )
+    if missing_conditional == text:
+        raise PlanningError("self-test fixture drift: CE-01")
+    expect_conditional_failure("missing conditional edge", missing_conditional, nodes)
+
+    wrong_polarity = text.replace(
+        "| CE-30 | UPGRADE-1 | migration | migration-profile | PROFILE-1 | old-admitted-profile |",
+        "| CE-30 | UPGRADE-1 | migration | migration-profile | PROFILE-1 | new-candidate-profile |",
+        1,
+    )
+    if wrong_polarity == text:
+        raise PlanningError("self-test fixture drift: upgrade polarity")
+    expect_conditional_failure("changed old/new profile polarity", wrong_polarity, nodes)
+
+    conditional_cycle = text.replace(
+        "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |",
+        "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |\n"
+        "| CE-41 | PROFILE-D1 | new-candidate-profile | cycle-test | UPGRADE-1 | migration |",
+        1,
+    )
+    if conditional_cycle == text:
+        raise PlanningError("self-test fixture drift: conditional cycle")
+    expect_conditional_failure(
+        "role-aware conditional cycle",
+        conditional_cycle,
+        nodes,
+        enforce_manifest=False,
+    )
+
+    expect_markdown_failure(
+        "unbalanced Markdown fence",
+        CAPABILITY,
+        text + "\n```\n",
+    )
+    expect_markdown_failure(
+        "duplicate Markdown heading",
+        CAPABILITY,
+        text + "\n# Bitblock capability tree\n",
+    )
+    malformed_table = text.replace("| Status | Meaning |", "| Status Meaning |", 1)
+    if malformed_table == text:
+        raise PlanningError("self-test fixture drift: status table")
+    expect_markdown_failure("malformed Markdown table", CAPABILITY, malformed_table)
+    expect_markdown_failure(
+        "missing relative Markdown link",
+        CAPABILITY,
+        text + "\n[missing](missing-planning-doc-negative-control.md)\n",
+    )
+    expect_frozen_audit_failure(
+        "frozen first audit mutation",
+        first_audit_bytes + b"\nnegative-control",
+    )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -208,16 +529,21 @@ def main() -> int:
 
     capability_text = CAPABILITY.read_text(encoding="utf-8")
     nodes = parse_capability(capability_text)
+    conditional_edges = parse_conditional_edges(capability_text, nodes)
+    first_audit_bytes = FIRST_AUDIT.read_bytes()
+    check_frozen_first_audit(first_audit_bytes)
     for path in PLANNING_FILES:
         check_markdown(path, path.read_text(encoding="utf-8"))
     if args.self_test:
-        run_self_tests(capability_text)
+        run_self_tests(capability_text, first_audit_bytes)
 
-    edge_count = sum(len(node.dependencies) for node in nodes.values())
+    base_edge_count = sum(len(node.dependencies) for node in nodes.values())
+    edge_count = base_edge_count + len(conditional_edges)
     suffix = " with negative controls" if args.self_test else ""
     print(
         f"planning-doc check PASS: {len(nodes)} capability nodes, "
-        f"{edge_count} conservative edges, {len(PLANNING_FILES)} files{suffix}"
+        f"{edge_count} declared base-plus-conditional edges, "
+        f"{len(PLANNING_FILES)} files{suffix}"
     )
     return 0
 

@@ -31,8 +31,23 @@ their parser, VM, resource, refinement, upgrade, and security nodes. A node with
 must report each phase separately; an early research artifact cannot lend **IMPLEMENTED** status to
 its later authority or operations phase.
 
+Activation also fixes domain presence. Every candidate profile binds one pre-ID
+`DomainRegistryV1`, a canonically ordered list with unique `domain_tag` values.
+`RequiredDomainV1(domain_tag, composition_layer, root_type, tree_domain, root_schema_id,
+commitment_profile_id)` is the complete six-field active-domain identity; each registry entry is
+exactly `ActiveDomainV1(required_domain)` or `InactiveDomainV1(domain_tag, composition_layer,
+inactive_sentinel_schema_id)`. Neither variant contains the later network `profile_id`, and
+`required_domain_set` is exactly the canonically sorted set of those projections. A composer
+includes an active root or the typed inactive sentinel in every registry-fixed slot; an empty root,
+zero bytes, a stale prior-profile root, omission, or an unknown domain is not an inactive encoding.
+Proofs for inactive domains reject. `ProfileScopeV1` contains the registry before any derived ID;
+genesis and candidate bytes project its protocol-hash `domain_registry_digest`, and the later
+network `CommitmentSubjectV1` binds `profile_id`, `profile_scope_digest`, and that same registry
+digest. `CommitmentSetV1`, the execution-root preimage, release metadata, and admission evidence
+must resolve and reproduce those same bytes and identities.
+
 Once a schema/profile instance has an artifact, expanding nodes—especially `COST-1`, `CODEC-1`,
-`EXECUTOR-1`, `THREAT-1`, `BOUNDS-1`, `RELEASE-1`, and the crypto/operations nodes—record it as
+`EXECUTOR-1`, `THREAT-1`, `BOUNDS-1`, `RELEASE-R1`, `RELEASE-1`, and the crypto/operations nodes—record it as
 `node@profile-or-schema`, with exact artifact and commit identities. Before an instance exists, the
 node must say which framework/design phase is READY and which authority instance remains LOCKED;
 it must not invent a profile label merely to satisfy this convention. Passing a local-v1 corpus
@@ -41,8 +56,9 @@ does not give a later network, program, asset, or migration profile the same sta
 ## The tree at a glance
 
 This compact view is a selected scheduling projection, not an exhaustive edge manifest. The
-`Depends on` fields below are authoritative. `A + B -> C` means the shown inputs are required, but
-other direct or profile-conditional prerequisites may be omitted here for readability.
+unconditional `Depends on` fields and the structured conditional-instance edge manifest below are
+jointly authoritative. `A + B -> C` means the shown inputs are required, but other direct or
+profile-conditional prerequisites may be omitted here for readability.
 
 ```text
 FOUNDATION (current)
@@ -57,44 +73,52 @@ LOCAL AUTHORITY TRUNK
   ACCOUNT-1 + COST-1 -> LOCAL-BOUNDS-1 -> STORAGE-1 -> LEDGER-1
   LEDGER-1 + ACCOUNT-1 -> TRANSITION-SPEC-D1
   WORLD-0 + PROOF-0 -> COMMIT-R1
-  LEDGER-1 + COMMIT-R1 + CODEC-1 -> COMMIT-1
+  WORLD-0 + PROOF-0 -> VERKLE-R1 feasibility (separate research)
+  LEDGER-1 + TRANSITION-SPEC-D1 + COMMIT-R1 + CODEC-1 -> COMMIT-1
 
 PRE-GENESIS DESIGN AND IDENTITY
   PROOF-0 -> CODEC-1
-  FOUNDATION -> COST-1 -> THREAT-D0
+  FOUNDATION -> THREAT-D0 (COST-1 supplies measurement method, not readiness)
   CODEC-1 + THREAT-D0 -> CRYPTO-D1
   ACCOUNT-1 + CODEC-1 + THREAT-D0 + CRYPTO-D1 -> IDENTITY-D1
-  THREAT-D0 + CRYPTO-D1 -> CONSENSUS-D1 + GOVERNANCE-D1
+  THREAT-D0 + CRYPTO-D1 -> VALIDATOR-ECON-D1 + CONSENSUS-D1 + GOVERNANCE-D1
   TRANSITION-SPEC-D1 + IDENTITY-D1 + CONSENSUS-D1 + GOVERNANCE-D1
       + COMMIT-R1 -> PROFILE-SCOPE-D0
   PROFILE-SCOPE-D0 + measured COST-1 -> THREAT-1 -> BOUNDS-1
   PROFILE-SCOPE-D0 + BOUNDS-1 -> GENESIS-D1 -> PROTOCOL-ID-1 -> PROFILE-D1
+  PROFILE-D1 + BOUNDS-1 + selected design extensions -> TRANSITION-SPEC-1
 
 IDENTITY AND SHARED ORDER
   CRYPTO-D1 + IDENTITY-D1 + PROTOCOL-ID-1 -> CRYPTO-1
   IDENTITY-D1 + PROTOCOL-ID-1 + CRYPTO-1 -> IDENTITY-1
   IDENTITY-1 + COMMIT-1 -> AUTH-COMMIT-1
-  TRANSITION-SPEC-D1 -> EXECUTOR-1
-  AUTH-COMMIT-1 + EXECUTOR-1 + PROFILE-D1 -> EXECUTION-ROOT-1 -> MULTI-1
+  TRANSITION-SPEC-1 + GOVERNANCE-D1 -> GOVERNANCE-1
+  TRANSITION-SPEC-1 + CONSENSUS-D1 + GOVERNANCE-1 -> VALIDATOR-SCHEDULE-1
+  TRANSITION-SPEC-1 + PROFILE-D1 + BOUNDS-1 + activated producers -> EXECUTOR-1
+  AUTH-COMMIT-1 + VALIDATOR-SCHEDULE-1 + EXECUTOR-1 + PROFILE-D1
+      -> EXECUTION-ROOT-1 -> GENESIS-ROOT-PARITY-1 -> MULTI-1
   MULTI-1 + BOUNDS-1 + EXECUTOR-1 + EXECUTION-ROOT-1 -> SEQUENCER-1
   SEQUENCER-1 + STORAGE-1 + BOUNDS-1 -> SYNC-1
-  SYNC-1 + CONSENSUS-D1 + THREAT-1 + CRYPTO-1 + EXECUTION-ROOT-1 -> CONSENSUS-1
+  SYNC-1 + CONSENSUS-D1 + THREAT-1 + CRYPTO-1
+      + VALIDATOR-SCHEDULE-1 + EXECUTION-ROOT-1 -> CONSENSUS-1
   CONSENSUS-1 + EXECUTION-ROOT-1 + PROTOCOL-ID-1 -> CLIENT-1
   CLIENT-1 + PROFILE-1 + cross-cutting release/security nodes -> TESTNET-1
   TESTNET-1 -> L1-CANDIDATE -> L1-PRODUCTION -> optional VALUE-1
 
 ASSET BRANCH
   LEDGER-1 -> ASSET-D1
-  ASSET-D1 + IDENTITY-1 + COMMIT-1 -> ASSET-1
-  ASSET-D1 + BOUNDS-1 + selected network role model -> RESOURCE-1
-  CONSENSUS-1 -> VALIDATOR-ECON-1
+  ASSET-D1 + IDENTITY-1 + COMMIT-1 + TRANSITION-SPEC-1 -> ASSET-1
+  PROFILE-SCOPE-D0 + BOUNDS-1 -> RESOURCE-1 (asset design only for economic charging)
+  VALIDATOR-ECON-D1 + ASSET-1 + RESOURCE-1 + TRANSITION-SPEC-1 -> ECONOMIC-STATE-1
+  CONSENSUS-1 + ECONOMIC-STATE-1 + EXECUTION-ROOT-1 -> VALIDATOR-ECON-1
 
 VISUAL LANGUAGE AND EMERGENCE BRANCH
   WORLD-0 + PROOF-0 -> LANGUAGE-R1 exact static spatial grammar research
   ACCOUNT-1 -> RULE-1 one finite deterministic block rule -> EMERGENCE-R1
   LANGUAGE-R1 + RULE-1 + TRANSITION-SPEC-D1 -> VM-D1
   VM-D1 + BOUNDS-1 -> VM-1
-  VM-1 + REFINE-1 + RESOURCE-1 + EXECUTION-ROOT-1 -> PROGRAM-CONSENSUS
+  VM-1 + TRANSITION-SPEC-1 + COMMIT-1 -> PROGRAM-STATE-1
+  PROGRAM-STATE-1 + REFINE-1 + RESOURCE-1 + EXECUTION-ROOT-1 -> PROGRAM-CONSENSUS
 
 SCALE BRANCH
   WORLD-0 + OBSERVE-0 -> SCALE-1 -> SCALE-2
@@ -115,19 +139,97 @@ CROSS-CUTTING BEFORE A PUBLIC L1 CLAIM
   GOVERNANCE-1 implemented governance transitions and state
   PROFILE-SCOPE-D0 pre-ID feature/operation/configuration scope
   GENESIS-D1 non-self-referential genesis configuration
+  GENESIS-ROOT-PARITY-1 complete typed-root reconstruction of genesis
   PROFILE-D1 frozen candidate activation manifest
+  TRANSITION-SPEC-1 resolved profile transition semantics
   PROFILE-1 admitted activated-feature closure
   UPGRADE-FRAMEWORK-1 version-lifecycle policy and migration verifier
   UPGRADE-1 deterministic version migration and historical verification
   SIGNER-OPS-1 anti-double-sign key custody and restore
-  RELEASE-1 reviewed-source-to-shipped-binary integrity
+  RELEASE-R1 candidate-build reproducibility
+  RELEASE-1 admitted-profile signed release integrity
   PROD-OPS-1 production monitoring, backup, incident, and safe-halt exercises
 ```
 
-The view shows dependency, not elapsed time. `COMMIT-R1`, `REFINE-1`, `LANGUAGE-R1`, `SCALE-1`,
-`COST-1`, and `HASH-SOURCE-R1` are research lanes that can produce
+The view shows dependency, not elapsed time. `COMMIT-R1`, `VERKLE-R1`, `REFINE-1`, `LANGUAGE-R1`,
+`SCALE-1`, `COST-1`, and `HASH-SOURCE-R1` are research lanes that can produce
 evidence without changing live authority. `PROGRAM-CONSENSUS` does not require the asset branch,
 and the asset branch does not require visual programming.
+
+The current inventory is **70 capability nodes**: six foundation rows and 64 detailed nodes. The
+retained base checker derives this count from the document; the conditional rows below are edges,
+not extra capabilities.
+
+## Structured conditional-instance edge manifest
+
+Unconditional base-node prerequisites remain in each node's `Depends on` field. Every conditional
+or cross-instance prerequisite is one row below, with one prerequisite per row. The checker row
+regex is ASCII with exact single spaces and delimiters:
+
+```regex
+^\| (CE-[0-9]{2}) \| ([A-Z0-9]+(?:-[A-Z0-9]+)*) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| ([A-Z0-9]+(?:-[A-Z0-9]+)*) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \|$
+```
+
+`owner-role`, `predicate-token`, and `dependency-role` are lowercase hyphenated tokens. Edge IDs
+are unique. Owner and prerequisite bases must exist. A profile instantiates exactly the rows whose
+predicates are true, resolves each role to one exact artifact/version, and rejects an unresolved
+predicate. The role-aware graph for every realizable profile closure, plus the union of all
+structurally compatible role edges, must be acyclic. Mutually exclusive predicates may not be used
+to excuse a cycle inside any realizable closure.
+
+Predicate entailments are also canonical: `economic-charging` implies `asset-active`;
+`stake-consensus` and `validator-rewards` each imply `validator-economics`, `asset-active`, and
+`economic-charging`; `post-genesis-program` implies `program-active` and `migration-profile`; and
+`in-place-upgrade` implies `migration-profile`.
+
+Roles select artifact instances, not aliases for a base node. In particular, `new-admission` is the
+candidate admission being evaluated, `old-admitted-profile` is a previously admitted immutable
+`PROFILE-1@old-profile-id`, and `new-candidate-profile` is `PROFILE-D1@new-candidate-id`; the latter
+two IDs must differ. Thus CE-29–CE-31 are accepted only when the dependency is already settled in
+the role it names. Collapsing roles to base names would manufacture a cycle and is a checker error.
+
+| Edge | Owner base | Owner role | Predicate | Prerequisite base | Prerequisite role |
+| --- | --- | --- | --- | --- | --- |
+| CE-01 | PROFILE-SCOPE-D0 | candidate-scope | asset-active | ASSET-D1 | design |
+| CE-02 | PROFILE-SCOPE-D0 | candidate-scope | program-active | VM-D1 | design |
+| CE-03 | PROFILE-SCOPE-D0 | candidate-scope | validator-economics | VALIDATOR-ECON-D1 | design |
+| CE-04 | CONSENSUS-D1 | candidate-design | stake-consensus | VALIDATOR-ECON-D1 | design |
+| CE-05 | BOUNDS-1 | candidate-bounds | program-active | VM-D1 | design |
+| CE-06 | GENESIS-D1 | genesis-bytes | asset-active | ASSET-D1 | design |
+| CE-07 | GENESIS-D1 | genesis-bytes | program-active | VM-D1 | design |
+| CE-08 | GENESIS-D1 | genesis-bytes | economic-charging | RESOURCE-1 | policy |
+| CE-09 | GENESIS-D1 | genesis-bytes | validator-economics | VALIDATOR-ECON-D1 | design |
+| CE-10 | TRANSITION-SPEC-1 | resolved-spec | asset-active | ASSET-D1 | design |
+| CE-11 | TRANSITION-SPEC-1 | resolved-spec | program-active | VM-D1 | design |
+| CE-12 | TRANSITION-SPEC-1 | resolved-spec | economic-charging | RESOURCE-1 | policy |
+| CE-13 | TRANSITION-SPEC-1 | resolved-spec | validator-economics | VALIDATOR-ECON-D1 | design |
+| CE-14 | RESOURCE-1 | policy | economic-charging | ASSET-D1 | design |
+| CE-15 | VALIDATOR-SCHEDULE-1 | implementation | stake-consensus | ECONOMIC-STATE-1 | implementation |
+| CE-16 | EXECUTOR-1 | profile-executor | asset-active | ASSET-1 | implementation |
+| CE-17 | EXECUTOR-1 | profile-executor | program-active | PROGRAM-STATE-1 | implementation |
+| CE-18 | EXECUTOR-1 | profile-executor | validator-economics | ECONOMIC-STATE-1 | implementation |
+| CE-19 | EXECUTION-ROOT-1 | root-composer | asset-active | ASSET-1 | implementation |
+| CE-20 | EXECUTION-ROOT-1 | root-composer | program-active | PROGRAM-STATE-1 | implementation |
+| CE-21 | EXECUTION-ROOT-1 | root-composer | validator-economics | ECONOMIC-STATE-1 | implementation |
+| CE-22 | GENESIS-ROOT-PARITY-1 | parity | asset-active | ASSET-1 | implementation |
+| CE-23 | GENESIS-ROOT-PARITY-1 | parity | program-active | PROGRAM-STATE-1 | implementation |
+| CE-24 | GENESIS-ROOT-PARITY-1 | parity | validator-economics | ECONOMIC-STATE-1 | implementation |
+| CE-25 | PROFILE-1 | new-admission | asset-active | ASSET-1 | implementation |
+| CE-26 | PROFILE-1 | new-admission | program-active | PROGRAM-CONSENSUS | authority |
+| CE-27 | PROFILE-1 | new-admission | economic-charging | RESOURCE-1 | policy |
+| CE-28 | PROFILE-1 | new-admission | validator-economics | VALIDATOR-ECON-1 | authority |
+| CE-29 | PROFILE-1 | new-admission | migration-profile | UPGRADE-1 | migration |
+| CE-30 | UPGRADE-1 | migration | migration-profile | PROFILE-1 | old-admitted-profile |
+| CE-31 | UPGRADE-1 | migration | migration-profile | PROFILE-D1 | new-candidate-profile |
+| CE-32 | PROGRAM-CONSENSUS | authority | post-genesis-program | UPGRADE-1 | migration |
+| CE-33 | L1-CANDIDATE | candidate | in-place-upgrade | UPGRADE-1 | rehearsal |
+| CE-34 | VALUE-1 | activation | validator-rewards | VALIDATOR-ECON-1 | authority |
+| CE-35 | VERKLE-R1 | prototype | verkle-prototype | CRYPTO-D1 | selected-suite |
+| CE-36 | VERKLE-R1 | prototype | verkle-prototype | CODEC-1 | prototype-codec |
+| CE-37 | VERKLE-R1 | prototype | verkle-prototype | THREAT-1 | profile-model |
+| CE-38 | VERKLE-R1 | prototype | verkle-prototype | BOUNDS-1 | prototype-bounds |
+| CE-39 | VERKLE-R1 | prototype | verkle-prototype | UPGRADE-FRAMEWORK-1 | migration-framework |
+| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |
 
 ## Foundation nodes
 
@@ -207,20 +309,23 @@ and the asset branch does not require visual programming.
 - **Non-claim:** provenance and conservation do not create a transferable coin, market value,
   multiplayer authority, rollback resistance against an administrator, or consensus.
 
-### `TRANSITION-SPEC-D1` — authoritative base transition specification
+### `TRANSITION-SPEC-D1` — base occupancy/episode transition contract
 
 - **Status:** **LOCKED** on the completed accounting and local-ledger semantics.
 - **Depends on:** `ACCOUNT-1`, `LEDGER-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
-- **Motive:** give independent executors a third reference so mutual agreement cannot settle an
-  underspecified or unintended transition.
-- **Artifact:** versioned specification for genesis initialization, accepted operations, ordering,
-  transaction lifecycle, atomicity, no-op/rejection/admitted-failure, nonce/fee dispositions,
-  system transitions, complete effects/receipts, activated state domains, and root composition.
-- **Gate:** executable/formal vectors give every accepted byte sequence and context one result or
-  one rejection; ambiguity, omitted-lane, partial-write, wrong-version, and powered semantic mutants
-  fail before any executor-to-executor comparison is considered.
-- **Non-claim:** a specification is not an implementation, refinement proof, root publication, or
-  consensus rule.
+- **Motive:** freeze the substrate transition and the interface by which later profile extensions
+  compose, without making base semantics depend on identity, fees, consensus, or optional features.
+- **Artifact:** versioned specification for occupancy/episode genesis, local accepted operations,
+  ordering, atomicity, no-op/rejection/admitted-failure, complete base effects/receipts, and one typed
+  extension interface declaring operation tags, read/write sets, work formula, disposition slots,
+  state-domain ownership, and composition conflicts. It does not fill nonce, fee, governance,
+  validator, asset, or program policy slots.
+- **Gate:** executable/formal base vectors give every base byte sequence and context one result or
+  one rejection; extension-slot collision, undeclared state access, ambiguity, omitted-lane,
+  partial-write, wrong-version, and powered semantic mutants fail. Profile-specific semantics remain
+  locked until `TRANSITION-SPEC-1` resolves every active slot.
+- **Non-claim:** a base contract is not a profile transition specification, implementation,
+  refinement proof, root publication, or consensus rule.
 
 ### `COMMIT-R1` — authenticated-map research
 
@@ -232,15 +337,40 @@ and the asset branch does not require visual programming.
   [`AUTHENTICATED_STATE_PLAN.md`](AUTHENTICATED_STATE_PLAN.md).
 - **Gate:** both candidates pass the same logical-map/root/proof/deletion/fork vectors and report
   bounded update, witness, multiproof, storage, and rebuild costs. A winner is selected only by a
-  recorded decision with rejected alternatives and migration consequences.
+  recorded decision with rejected alternatives and migration consequences. “Winner” means only the
+  selected structure among these two admitted hash-structure candidates under their frozen assay;
+  it neither rejects nor admits `VERKLE-R1` or any future family.
 - **Non-claim:** a prototype root does not replace the current `world_tag`, authenticate a block,
   establish finality, make bytes available, or prove the runtime map is correct.
+
+### `VERKLE-R1` — separate Verkle feasibility and prototype lane
+
+- **Status:** **READY@feasibility** from the implemented foundation; **LOCKED@prototype** until the
+  exact cryptographic, codec, threat, bound, candidate-profile, and migration prerequisites in
+  CE-35–CE-40 exist.
+- **Depends on:** `WORLD-0`, `PROOF-0`; feasibility uses the `COST-1` measurement method but does not
+  inherit or compete in `COMMIT-R1`.
+- **Motive:** evaluate whether a vector-commitment map could materially improve witnesses or updates
+  without silently importing trusted setup, field/curve, codec, cryptographic, or migration risk.
+- **Artifact:** feasibility report fixing the candidate vector-commitment primitive, setup/custody
+  model, field/curve and subgroup rules, coordinate-to-field mapping, commitment/opening codecs,
+  update and multiproof model, verifier work, storage/availability obligations, implementation and
+  audit maturity, pinned cost workloads, and migration/historical-verification design. The later
+  prototype is a separately identified artifact under `verkle-prototype`.
+- **Gate:** feasibility reports exact security assumptions and measured cost thresholds with rejected
+  alternatives. Prototype admission additionally requires the selected crypto suite, independent
+  canonical codecs and implementation, subgroup/noncanonical/malformed-proof controls, worst-case
+  update/opening/batch/storage bounds, powered controls, and a deterministic old/new-root migration
+  plus historical verifier under the exact candidate profile. Failure keeps the prototype locked
+  and cannot reopen the two-candidate `COMMIT-R1` decision by rhetoric.
+- **Non-claim:** feasibility, shorter-looking witnesses, or a matching prototype does not establish
+  cryptographic security, production readiness, selection, or authority.
 
 ### `COMMIT-1` — authenticated local state
 
 - **Status:** **LOCKED**.
-- **Depends on:** `LEDGER-1`, `COMMIT-R1`, `STORAGE-1`, `CODEC-1` at every activated commitment
-  schema; each domain also requires a frozen numeric commitment-limit profile.
+- **Depends on:** `LEDGER-1`, `TRANSITION-SPEC-D1`, `COMMIT-R1`, `STORAGE-1`, `CODEC-1` at every
+  activated commitment schema; each domain also requires a frozen numeric commitment-limit profile.
 - **Motive:** support independently verifiable occupancy, absence, active-episode, and provenance
   queries without replaying or hashing the complete live set for every query.
 - **Artifact:** context-free separately typed world, active-token, and episode roots; canonical
@@ -338,25 +468,47 @@ and the asset branch does not require visual programming.
 ### `EXECUTION-ROOT-1` — complete execution-state commitment
 
 - **Status:** **LOCKED** for every authority profile.
-- **Depends on:** `TRANSITION-SPEC-D1`, `COMMIT-1`, `AUTH-COMMIT-1`, `EXECUTOR-1`, `PROTOCOL-ID-1`,
-  `PROFILE-D1`, `CODEC-1`, `GOVERNANCE-1`, and `CONSENSUS-D1`; activated asset/program domains add
-  their exact implementation nodes.
+- **Depends on:** `TRANSITION-SPEC-1`, `COMMIT-1`, `AUTH-COMMIT-1`, `EXECUTOR-1`, `PROTOCOL-ID-1`,
+  `PROFILE-D1`, `CODEC-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated domain producers are
+  the conditional prerequisites in CE-19–CE-21.
 - **Motive:** ensure no parameter, governance, validator-schedule, authorization, asset, or
   application state can affect execution while remaining outside the accepted root.
-- **Artifact:** per-domain commitment instances plus a typed application/execution-root composer for
-  every activated world, episode, asset, authorization, nonce, parameter, governance, and validator
-  schedule domain; `AuthenticatedRootRefV1`; `CommitmentSetV1`; header/root correspondence.
+- **Artifact:** a typed application/execution-root composer over the exact profile domain registry:
+  base world, episode, authorization, nonce, parameter/governance, and validator-schedule roots plus
+  every activated optional asset, program, or economic root. It binds `required_domain_set`, the
+  canonical inactive-domain sentinels, `AuthenticatedRootRefV1`, `CommitmentSetV1`, and header/root
+  correspondence without reimplementing any domain producer.
 - **Gate:** every domain passes independent codec, rebuild/update/proof/malformed/persistence parity;
   typed roots are non-interchangeable; full-state recomposition matches the executor after every
-  transition/recovery; chain/genesis/world/version/header mutations and mixed-manifest publication
-  reject.
+  transition/recovery; omission, an empty/zero/stale substitute for an inactive sentinel, an active
+  root in an inactive slot, an unknown domain, chain/genesis/world/version/header mutation, and
+  mixed-manifest publication reject.
 - **Non-claim:** a complete execution root does not prove valid ordering, consensus status, data
   availability, or correct rendering.
+
+### `GENESIS-ROOT-PARITY-1` — logical-genesis to typed-root parity
+
+- **Status:** **LOCKED** until every root implementation required by the candidate profile exists.
+- **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`, `COMMIT-1`, `AUTH-COMMIT-1`,
+  `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `CODEC-1`; activated
+  domain implementations are the conditional prerequisites in CE-22–CE-24.
+- **Motive:** keep pre-ID genesis-byte reproducibility separate from the later claim that every
+  implemented typed root reconstructs exactly those logical bytes.
+- **Artifact:** independently decoded logical genesis state, per-domain full rebuilds, the composed
+  execution root, and a parity receipt binding genesis, profile, domain-registry, root-schema, and
+  implementation identifiers.
+- **Gate:** independent decoders reconstruct one logical state; every active typed domain rebuilds
+  exactly its declared genesis state and every inactive domain contributes its canonical sentinel;
+  full rebuild, initialized incremental state, executor output, and composed root agree. Omitted,
+  duplicated, cross-domain, stale-profile, synthetic-zero, and self-derived-ID mutations reject.
+- **Non-claim:** genesis/root parity does not admit the profile, authenticate distribution, establish
+  data availability, or prove consensus safety.
 
 ### `MULTI-1` — deterministic multi-actor harness
 
 - **Status:** **LOCKED**.
-- **Depends on:** `AUTH-COMMIT-1`, `TRANSITION-SPEC-D1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`.
+- **Depends on:** `AUTH-COMMIT-1`, `TRANSITION-SPEC-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
+  `GENESIS-ROOT-PARITY-1`.
 - **Motive:** expose ordering, authorization, and same-coordinate conflicts at the cheapest scale.
 - **Artifact:** two or more signed action streams folded by one in-process deterministic executor.
 - **Gate:** permutations of races, stale anchors, duplicate nonces, delegated rights, no-ops,
@@ -407,10 +559,29 @@ and the asset branch does not require visual programming.
 - **Non-claim:** choosing semantics does not establish demand, price, legal status, fair
   distribution, decentralization, or security.
 
+### `VALIDATOR-ECON-D1` — pre-genesis stake and incentive schema
+
+- **Status:** **LOCKED** on its design prerequisites and required only for profiles whose predicates
+  activate stake-weighted consensus or validator economics.
+- **Depends on:** `ASSET-D1`, `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`.
+- **Motive:** define stake, weight, issuance, rewards, penalties, and exits before a consensus
+  candidate or genesis payload can treat economic state as authority.
+- **Artifact:** pre-genesis-encodable stake/weight source, bonding and unbonding, reward/issuance,
+  slashable evidence and penalty, withdrawal/recovery, validator-entry/exit, concentration, and
+  long-range assumptions; it declares the state and transition slots later implemented by
+  `ECONOMIC-STATE-1` without choosing the consensus mechanism for non-stake profiles.
+- **Gate:** supply and weight equations close over genesis, join, exit, reward, slash, inactivity,
+  key change, fork, and recovery vectors; evidence lifetime, unbonding horizon, bootstrap trust, and
+  stake-origin assumptions are explicit; a validator cannot select or fabricate its own initial
+  weight.
+- **Non-claim:** an incentive schema is not implemented economic state, adequate incentives,
+  consensus safety, fair distribution, Sybil resistance, or proof that the asset has value.
+
 ### `ASSET-1` — ownership and transfer
 
 - **Status:** **LOCKED**.
-- **Depends on:** `ASSET-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `COMMIT-1`.
+- **Depends on:** `ASSET-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `COMMIT-1`,
+  `TRANSITION-SPEC-1`, `PROFILE-D1`.
 - **Motive:** distinguish occupancy, episode identity, and authority to transfer or edit.
 - **Artifact:** chosen account/UTXO/object model; ownership/balance/permission roots; atomic
   transfer, mint, burn, recovery, and conflict rules; proof-carrying client receipts.
@@ -422,8 +593,8 @@ and the asset branch does not require visual programming.
 ### `RESOURCE-1` — fees, rent, and economic resource policy
 
 - **Status:** **LOCKED**.
-- **Depends on:** `BOUNDS-1`, `PROFILE-SCOPE-D0`; an economic charging profile additionally depends
-  on `ASSET-D1`, while a non-economic profile may choose deterministic quotas.
+- **Depends on:** `BOUNDS-1`, `PROFILE-SCOPE-D0`; economic charging adds the conditional design edge
+  CE-14, while a non-economic profile may choose deterministic quotas.
 - **Motive:** prevent the huge coordinate space and proof/history creation from becoming an
   unpaid obligation or denial-of-service surface.
 - **Artifact:** deterministic pricing or quota policy for signatures, codecs, execution, proof
@@ -435,16 +606,35 @@ and the asset branch does not require visual programming.
 - **Non-claim:** fees do not guarantee liveness, fair inclusion, price stability, or sustainable
   validator incentives.
 
+### `ECONOMIC-STATE-1` — deterministic stake, reward, and slash state
+
+- **Status:** **LOCKED**; required only when validator economics is active.
+- **Depends on:** `VALIDATOR-ECON-D1`, `ASSET-1`, `RESOURCE-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`,
+  `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
+- **Motive:** produce every economic state transition and commitment before execution-root or
+  consensus consumers rely on stake, rewards, or slashing.
+- **Artifact:** independently specified and implemented stake, reward/accrual, issuance, slash,
+  unbonding, withdrawal, and validator-economic state; canonical codecs and separately typed roots;
+  deterministic transition/receipt adapters for the resolved profile.
+- **Gate:** full-rebuild/incremental/root-proof parity and independent execution agree across genesis,
+  join/exit, reward, slash, inactivity, fork, restart, recovery, and supply/weight conservation
+  vectors; malformed evidence, cross-domain roots, hidden issuance, and partial economic writes
+  reject before publication.
+- **Non-claim:** committed economic state does not show that incentives are sufficient, participants
+  are independent, the asset has value, or consensus is safe or live.
+
 ### `VALIDATOR-ECON-1` — consensus incentives
 
 - **Status:** **LOCKED**.
-- **Depends on:** `CONSENSUS-1`, `ASSET-D1`, `ASSET-1`, `RESOURCE-1`, `EXECUTION-ROOT-1`; only
-  activated profiles that use economic validator incentives require this node.
+- **Depends on:** `CONSENSUS-1`, `VALIDATOR-ECON-D1`, `ECONOMIC-STATE-1`, `EXECUTION-ROOT-1`,
+  `THREAT-1`; only activated profiles that use economic validator incentives require this node.
 - **Motive:** align validator behavior only after “validator” has an exact protocol meaning.
-- **Artifact:** separate stake/reward/slashing domains, issuance schedule, unbonding, evidence,
-  and economic attack analysis.
+- **Artifact:** profile-bound incentive analysis and consensus adapter consuming the already committed
+  economic roots and receipts; issuance/unbonding/slashing correspondence; attack assumptions and
+  monitored loss conditions. It does not produce an execution-root domain.
 - **Gate:** safety/liveness arguments and adversarial simulations include bribery, censorship,
-  equivocation, griefing, concentration, long-range, and recovery assumptions.
+  equivocation, griefing, concentration, long-range, and recovery assumptions; every modeled weight,
+  reward, and penalty matches an `ECONOMIC-STATE-1` receipt under the accepted execution root.
 - **Non-claim:** occupancy scarcity does not automatically secure consensus, and a block token
   must not silently become validator stake.
 
@@ -501,6 +691,21 @@ and the asset branch does not require visual programming.
 - **Non-claim:** determinism alone does not make a language safe, useful, decentralized, or
   consensus-authoritative.
 
+### `PROGRAM-STATE-1` — deterministic code and program-state commitments
+
+- **Status:** **LOCKED**; required only when programmability is active.
+- **Depends on:** `VM-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
+- **Motive:** produce canonical code/program state and roots before the execution-root composer or
+  shared-authority layer consumes them.
+- **Artifact:** canonical code identity and byte-availability references, program instances and
+  storage, separately typed code/program roots, deterministic activation/execution/trap receipts,
+  and the resolved transition adapter for the exact language profile.
+- **Gate:** independent codecs, parser/interpreter, full-rebuild/incremental roots, proofs, receipts,
+  restart, and recovery agree; malformed/unavailable code, stale versions, hidden state, uncharged
+  work, cross-domain roots, and partial program writes reject before root publication.
+- **Non-claim:** committed program state does not grant shared authority, prove useful behavior,
+  establish code availability, or make activation governance or consensus-safe.
+
 ### `EMERGENCE-R1` — bounded emergence assays
 
 - **Status:** **LOCKED**.
@@ -519,17 +724,18 @@ and the asset branch does not require visual programming.
 ### `PROGRAM-CONSENSUS` — programs as shared authority
 
 - **Status:** **LOCKED**.
-- **Depends on:** `VM-1`, `REFINE-1`, `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `EXECUTION-ROOT-1`,
+- **Depends on:** `PROGRAM-STATE-1`, `REFINE-1`, `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `EXECUTION-ROOT-1`,
   `BOUNDS-1`, `RESOURCE-1`, `EXECUTOR-1`, `SEQUENCER-1`, `SYNC-1`, `CONSENSUS-1`,
   `UPGRADE-FRAMEWORK-1`, and a `PROFILE-D1` draft that proposes programmability.
 - **Motive:** allow spatial programs to affect shared state only when every verifier can reproduce
   and price them.
-- **Artifact:** program/code roots, activation/version rules, transaction context, receipts,
-  migration policy, deterministic randomness source if any, and refinement evidence.
+- **Artifact:** shared-authority activation/version rules, transaction context and root/receipt
+  correspondence, migration policy, deterministic randomness source if any, availability contract,
+  and refinement evidence consuming the `PROGRAM-STATE-1` roots.
 - **Gate:** independent nodes reproduce program effects and resource charges; malformed code,
   nondeterminism, stale versions, and unavailable program bytes fail closed. Genesis activation
-  binds the framework policy; post-genesis activation additionally requires a concrete
-  `UPGRADE-1@old-profile->new-profile` result in the profile admission matrix.
+  binds the framework policy; post-genesis activation additionally realizes CE-32 and requires a
+  concrete old-admitted to new-candidate `UPGRADE-1` result in the profile admission matrix.
 - **Non-claim:** visual programmability is not required for the base occupancy ledger or an L1.
 
 ## Scale branch
@@ -563,7 +769,8 @@ and the asset branch does not require visual programming.
 
 - **Status:** **LOCKED**; mechanism, fault threshold, synchrony, finality type, and node roles remain
   **OPEN DECISIONS**.
-- **Depends on:** `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`, `COST-1` design inputs.
+- **Depends on:** `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`, `COST-1` design inputs; a stake-weighted
+  candidate realizes CE-04 before it can be selected.
 - **Motive:** freeze the validator/sequencer role schema and initial authority bytes before genesis
   identifies them, without pretending the protocol is implemented or tested.
 - **Artifact:** selected candidate mechanism, quantitative design envelope, proposal/vote/certificate
@@ -575,16 +782,34 @@ and the asset branch does not require visual programming.
 - **Non-claim:** a frozen consensus design is not a safety proof, running network, finality evidence,
   or adequate incentive model.
 
+### `VALIDATOR-SCHEDULE-1` — deterministic validator schedule state and root
+
+- **Status:** **LOCKED** on the selected consensus/governance profile; required before execution-root
+  or consensus implementation.
+- **Depends on:** `CONSENSUS-D1`, `GOVERNANCE-1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
+  `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`; stake-weighted consensus adds
+  the conditional producer edge CE-15.
+- **Motive:** make validator membership, weight, epoch, and activation changes ordinary deterministic
+  committed state instead of a hidden output of the consensus implementation that later consumes it.
+- **Artifact:** canonical validator descriptors and epochs, join/exit/key-change/weight/activation
+  transitions, separately typed schedule root and receipts, historical lookup, governance adapter,
+  and economic-root input mapping where stake weighting is active.
+- **Gate:** independent codec/executor and full-rebuild/incremental/proof parity agree across genesis,
+  epoch boundaries, simultaneous changes, stale/conflicting governance actions, restart, recovery,
+  and stake-root changes; a proposal/vote cannot fabricate or retroactively select its own schedule.
+- **Non-claim:** a committed validator schedule does not prove quorum honesty, decentralization,
+  consensus safety/liveness, economic adequacy, signer custody, or data availability.
+
 ### `CONSENSUS-1` — select and specify one consensus profile
 
 - **Status:** **LOCKED** on the selected `CONSENSUS-D1` design and implementation prerequisites.
 - **Depends on:** `CONSENSUS-D1`, `SYNC-1`, `PROTOCOL-ID-1`, `THREAT-1`, `CRYPTO-1`, `BOUNDS-1`,
-  `EXECUTION-ROOT-1`.
+  `VALIDATOR-SCHEDULE-1`, `EXECUTION-ROOT-1`.
 - **Motive:** replace sequencer trust with an explicit replicated ordering and state-root rule.
 - **Artifact:** implementation and evidence for the selected quantitative adversary/network model;
-  proposal/vote/certificate domains;
-  fork-choice or deterministic-finality rule; validator-set transition; data-before-vote;
-  confirmation/finality status; safe-halt and recovery rules.
+  proposal/vote/certificate domains; fork-choice or deterministic-finality rule; exact consumption of
+  committed validator-schedule transitions; data-before-vote; confirmation/finality status;
+  safe-halt and recovery rules.
 - **Gate:** formal/model safety argument appropriate to the profile plus a deterministic reference
   harness over adversarial proposal, vote, partition, missing-data, set-change, and long-range
   traces. Independent multi-process, restart, and operational fault evidence belongs to
@@ -613,23 +838,26 @@ and the asset branch does not require visual programming.
 
 - **Status:** **LOCKED**.
 - **Depends on:** `CLIENT-1`, `PROFILE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
+  `GENESIS-ROOT-PARITY-1`,
   `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `GOVERNANCE-1`, `CRYPTO-1`, `THREAT-1`, and
   the activated `BOUNDS-1` profile.
 - **Motive:** expose implementation and operating failures across independent Rust processes.
 - **Artifact:** version-pinned genesis, validators, full verifiers, archive/recovery nodes, fault
   injector, retained bodies/witnesses/evidence, and public coverage results.
-- **Gate:** the admitted stage-by-gate matrix marks every G0–G19 row as required, conditional, or
-  excluded-with-reason and names its owner/artifact/stop condition. Every testnet-required row must
-  pass; production-only G18 remains owned by `PROD-OPS-1`; optional G5/G19 rows cannot be excluded if
-  their feature is active. Unresolved authority/root/availability faults halt the candidate.
+- **Gate:** the admitted stage×gate-subclaim matrix names every owner/artifact/stop condition and has
+  no unresolved conditional: `G5.core` and `G15.resource` pass for every profile, each economic
+  subclaim passes when its predicate is true, and each active `G19.<feature>` passes while inactive
+  feature subclaims carry an explicit exclusion. Production-only G18 remains owned by `PROD-OPS-1`.
+  Genesis-root parity and every testnet-required row pass; unresolved authority, root, availability,
+  predicate, or release-binding faults halt the candidate.
 - **Non-claim:** a testnet, hash agreement, or long fault-free run is not production security.
 
 ### `L1-CANDIDATE` — independently reviewable base state machine
 
 - **Status:** **LOCKED**.
 - **Depends on:** `TESTNET-1`, `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `RELEASE-1`, `PROD-OPS-1`, and the
-  complete activated-profile coverage matrix. A profile permitting in-place migration also needs a
-  successful `UPGRADE-1` rehearsal.
+  complete activated-profile coverage matrix; in-place upgrade rehearsal is the conditional edge
+  CE-33.
 - **Motive:** make the strongest possible claim reviewable before real value depends on it.
 - **Artifact:** frozen schemas, reproducible builds, independent executor, genesis package,
   threat model, consensus proof/evidence, DA and recovery contracts, upgrade rules, operations
@@ -656,8 +884,8 @@ and the asset branch does not require visual programming.
 ### `VALUE-1` — optional production-value activation
 
 - **Status:** **LOCKED** and optional; Bitblock can remain a research/game network indefinitely.
-- **Depends on:** `L1-PRODUCTION`, `ASSET-1`, `RESOURCE-1`, `VALIDATOR-ECON-1` if validators receive
-  economic rewards, independent economic/security/legal review, and an explicit human decision.
+- **Depends on:** `L1-PRODUCTION`, `ASSET-1`, `RESOURCE-1`, independent economic/security/legal
+  review, and an explicit human decision; validator rewards realize CE-34.
 - **Motive:** keep launching secure replication separate from asking people to assign or risk real
   value.
 - **Artifact:** finalized issuance/distribution and custody policy, user risk disclosures,
@@ -700,25 +928,31 @@ and the asset branch does not require visual programming.
 ### `EXECUTOR-1` — independent transition executor
 
 - **Status:** **LOCKED** for the first authority profile.
-- **Depends on:** `TRANSITION-SPEC-D1`, `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`, `PROTOCOL-ID-1`.
+- **Depends on:** `TRANSITION-SPEC-1`, `PROFILE-D1`, `BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`,
+  `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated state producers
+  are the conditional prerequisites in CE-16–CE-18.
 - **Motive:** detect a shared implementation bug that same-code replay would reproduce perfectly.
-- **Artifact:** independently implemented base state-transition executor with no shared
-  authority-path code, producing ordered effects, receipts, and roots. Each later upgrade must add
-  its own independently implemented migration extension under `UPGRADE-1`.
+- **Artifact:** independently implemented executor for the exact resolved profile transition spec,
+  with no shared authority-path code, producing ordered effects, receipts, per-domain updates, and
+  the domain-registry inputs consumed by the root composer. Each later upgrade adds its own
+  independently implemented migration extension under `UPGRADE-1`.
 - **Gate:** each executor first passes the frozen specification vectors and powered semantic mutants;
   then differential corpora, generated sequences, failure/no-op paths, and fork contexts agree or
-  fail at a named boundary per step for the pinned profile.
+  fail at a named boundary per step for the pinned profile. Every activated extension is present,
+  every inactive extension is rejected, and unresolved predicates cannot enter the executable.
 - **Non-claim:** two wrappers, binaries, or processes around the same reducer are not independent.
 
 ### `THREAT-D0` — pre-profile adversary and claim envelope
 
 - **Status:** **READY as non-authoritative design work**.
-- **Depends on:** `COST-1` measurement framework and the current foundation.
+- **Depends on:** implemented `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, plus bounded `PROOF-0`
+  claim discipline.
 - **Motive:** enumerate attacker powers, public properties, parameter slots, and loss conditions
   before crypto, consensus, or genesis choices narrow the candidate.
 - **Artifact:** versioned threat taxonomy and candidate quantitative ranges for corruption, network,
   eclipse, key compromise, denial of service, censorship, supply-chain, bridge/oracle, bootstrap,
-  and operational powers, including the measurements still required.
+  and operational powers, including the measurements still required. `COST-1` supplies a measurement
+  methodology and later facts; it is not a falsely completed prerequisite for drafting the envelope.
 - **Gate:** every proposed property has an attacker action, assumption slot, loss condition, and
   candidate mitigation; unquantified entries remain visibly open and cannot support profile status.
 - **Non-claim:** an envelope is not the profile's measured adversary model or a security proof.
@@ -795,8 +1029,8 @@ and the asset branch does not require visual programming.
 
 - **Status:** **LOCKED** for the first authority profile; it expands for later profiles.
 - **Depends on:** `PROFILE-SCOPE-D0`, `THREAT-1`, `LOCAL-BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, and the
-  common proof shapes frozen by `COMMIT-R1`; a program profile additionally depends on `VM-D1`, not
-  the later interpreter implementation.
+  common proof shapes frozen by `COMMIT-R1`; program scope realizes the design edge CE-05, not a
+  dependency on the later interpreter implementation.
 - **Motive:** make every accepted remote input and retained obligation processable under a committed
   deterministic limit before fees or consensus rely on it.
 - **Artifact:** checked maxima and pre-mutation charging for payloads, batches, signatures, keys,
@@ -829,32 +1063,36 @@ and the asset branch does not require visual programming.
 
 - **Status:** **LOCKED**.
 - **Depends on:** `TRANSITION-SPEC-D1`, `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`,
-  `COMMIT-R1`, `CODEC-1`, `COST-1`; activated asset or program scope additionally depends on
-  `ASSET-D1` or `VM-D1` respectively.
+  `COMMIT-R1`, `CODEC-1`, `COST-1`; conditional design prerequisites are CE-01–CE-03.
 - **Motive:** give bounds and genesis an exact, non-self-referential target before any derived chain,
   genesis, or profile identifier exists.
-- **Artifact:** canonical pre-ID scope containing activated operations/schemas/root domains, roles,
-  suite and consensus/governance choices, initial logical state descriptors, proposed numeric
-  limits, optional features, and stage-gate applicability—explicitly excluding all derived IDs.
+- **Artifact:** canonical pre-ID scope containing activated operations/schemas, the ordered active-or-
+  inactive domain registry and `required_domain_set`, roles, suite and consensus/governance choices,
+  initial logical state descriptors, proposed numeric limits, optional features, and stage×gate-
+  subclaim applicability with named predicate tokens—explicitly excluding all derived IDs.
 - **Gate:** independent encoding and closure expansion produce one scope digest; every field owner is
-  named; no `genesis_id`, `profile_id`, candidate-selected authority, missing operation, or unknown
-  optional feature can enter the preimage.
+  named; every inactive domain uses its canonical sentinel; no `genesis_id`, `profile_id`, candidate-
+  selected authority, missing operation, unknown feature, omitted domain, or unregistered predicate
+  token can enter the preimage.
 - **Non-claim:** a scope digest does not validate its proposed limits, derive genesis, implement its
   features, or admit a network profile.
 
 ### `GENESIS-D1` — reproducible non-self-referential genesis configuration
 
 - **Status:** **LOCKED**.
-- **Depends on:** `PROFILE-SCOPE-D0`, `BOUNDS-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
+- **Depends on:** `PROFILE-SCOPE-D0`, `BOUNDS-1`, `CODEC-1`, `COMMIT-R1` profile definitions;
+  activated logical domains add CE-06–CE-09.
 - **Motive:** freeze every initial logical state and authority byte before deriving the identifier
   that later signatures, roots, and profiles bind.
-- **Artifact:** canonical genesis payload containing the scope digest, validated limits, chain/world
-  namespace, initial world/episode/asset descriptors, authorization descriptors, parameter and
-  governance state, validator configuration, suites, and bootstrap/availability policy; it excludes
-  its derived `genesis_id` and any self-derived profile identifier.
-- **Gate:** independent reconstruction produces one payload; every initial execution component is
-  explicit; mutation/omission/duplicate/self-reference tests reject; root implementations later
-  rebuild the same logical genesis state.
+- **Artifact:** canonical logical genesis payload containing the scope and domain-registry digests,
+  chain/world namespace, initial base state and every active optional-domain descriptor, canonical
+  inactive-domain entries, authorization descriptors, parameter/governance state, validator
+  configuration, suites, and bootstrap/availability policy; it excludes its derived `genesis_id`,
+  profile identifier, and all roots derived from those bytes.
+- **Gate:** independent codecs reconstruct exactly one logical payload before any ID or root exists;
+  every initial logical component and active/inactive domain entry is explicit, and mutation,
+  omission, duplicate, alternate-order, unknown-domain, and self-reference tests reject. Root parity
+  is deliberately deferred to `GENESIS-ROOT-PARITY-1` and is not evidence for this pre-ID gate.
 - **Non-claim:** reproducible bytes do not prove trusted distribution, fair allocation, usable keys,
   available archives, or consensus safety.
 
@@ -865,22 +1103,46 @@ and the asset branch does not require visual programming.
   implements optional features.
 - **Motive:** give programs, migrations, economics, and other optional features one immutable target
   without pretending their implementation has already passed.
-- **Artifact:** versioned canonical candidate manifest binding the pre-ID scope digest, derived
-  `genesis_id`, activated schemas/roles/capability nodes, validated parameters/roots/limits/suites,
-  transitive prerequisites, and a stage-by-gate matrix. Candidate bytes exclude their own
-  `profile_id`; that identifier is derived afterward from a domain-separated digest.
+- **Artifact:** versioned canonical candidate manifest binding the pre-ID scope and domain-registry
+  digests, derived `genesis_id`, activated schemas/roles/capability nodes, validated parameters/limits/suites and
+  root/domain schema plus commitment-profile identifiers,
+  the ordered active-or-inactive domain registry and `required_domain_set`, transitive prerequisites,
+  and a stage×gate-subclaim matrix. Candidate bytes exclude their own `profile_id`; that identifier
+  is derived afterward from a domain-separated digest.
 - **Gate:** independent codec/parser parity, non-circular identifier graph, no unknown/duplicate
-  activation, canonical ordering, deterministic closure expansion, and exactly one
-  required/conditional/excluded-with-reason entry for each G0–G19 stage. Missing implementation
-  evidence is reported but does not make drafting circular.
+  activation, canonical ordering, and deterministic closure expansion. Every stage/gate subclaim has
+  exactly one required, conditional-with-predicate, or excluded-with-reason entry: `G5.core` and
+  `G15.resource` are always required; economic subclaims are conditional on their named economic
+  predicate; each `G19.<feature>` is required exactly when that feature is active and otherwise is
+  excluded with reason. Missing implementation evidence is reported but does not make drafting
+  circular; unresolved conditionals can exist only in a candidate and cannot pass `PROFILE-1`.
 - **Non-claim:** a frozen candidate manifest is not an admitted profile and does not implement or
   approve any feature it names.
+
+### `TRANSITION-SPEC-1` — exact candidate-profile transition specification
+
+- **Status:** **LOCKED** until the candidate profile, bounds, and every activated design extension
+  are frozen.
+- **Depends on:** `TRANSITION-SPEC-D1`, `PROFILE-D1`, `BOUNDS-1`, `IDENTITY-D1`, `CONSENSUS-D1`,
+  `GOVERNANCE-D1`, `CODEC-1`; conditional design/policy inputs are CE-10–CE-13.
+- **Motive:** resolve the base extension interface into one exact operation/state/work contract before
+  either authoritative or independent execution is implemented.
+- **Artifact:** profile-ID-bound total transition specification covering operation tags, preconditions,
+  authorization/nonces, ordering/conflicts, read/write domains, work/charging, dispositions, atomic
+  effects/receipts, governance and validator-schedule slots, active optional extensions, and explicit
+  rejection of inactive or unknown extensions.
+- **Gate:** independent executable/formal vectors give every bounded byte sequence and context one
+  result or one rejection; the resolved operation/domain/predicate closure equals `PROFILE-D1`, every
+  active slot has one owner, no inactive slot is reachable, and collision, omitted-effect, partial-
+  write, wrong-version, uncharged-work, ambiguity, and powered semantic mutants fail.
+- **Non-claim:** an exact transition specification is not either executor, a commitment/root,
+  profile admission, networking, consensus, or proof of implementation correctness.
 
 ### `GOVERNANCE-1` — implemented governance and emergency transitions
 
 - **Status:** **LOCKED**.
 - **Depends on:** `GOVERNANCE-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
-  `TRANSITION-SPEC-D1`, `CODEC-1`, `BOUNDS-1`.
+  `TRANSITION-SPEC-1`, `CODEC-1`, `BOUNDS-1`.
 - **Motive:** turn pre-genesis authority bytes into deterministic, authenticated state transitions
   instead of operator convention.
 - **Artifact:** governance and emergency transactions/system transitions, canonical receipts,
@@ -909,8 +1171,9 @@ and the asset branch does not require visual programming.
 ### `UPGRADE-1` — deterministic version migration
 
 - **Status:** **LOCKED**.
-- **Depends on:** `UPGRADE-FRAMEWORK-1`, `PROFILE-1` admission procedure and an already admitted old
-  profile instance, the new `PROFILE-D1` candidate, `EXECUTOR-1`, `GOVERNANCE-1`.
+- **Depends on:** `UPGRADE-FRAMEWORK-1`, `EXECUTOR-1`, `GOVERNANCE-1`; CE-30 and CE-31 bind the
+  already admitted old-profile instance and distinct new candidate-profile instance without
+  reversing their polarity.
 - **Motive:** prevent a codec, hash, VM, or state-layout upgrade from silently rewriting authority,
   supply, bedrock, ownership, or historical verification.
 - **Artifact:** `UPGRADE-1@old-profile-id->new-candidate-id`, a frozen migration specification,
@@ -926,17 +1189,21 @@ and the asset branch does not require visual programming.
 ### `PROFILE-1` — admitted activated-feature closure
 
 - **Status:** **LOCKED** for the first testnet profile.
-- **Depends on:** `PROFILE-D1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`, and every exact-version capability
-  node named by its expanded prerequisite set, including `PROGRAM-CONSENSUS`, `ASSET-1`,
-  `RESOURCE-1`, `VALIDATOR-ECON-1`, `GOVERNANCE-1`, or `EXECUTION-ROOT-1` when activated.
+- **Depends on:** `PROFILE-D1`, `TRANSITION-SPEC-1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`,
+  `GENESIS-ROOT-PARITY-1`, `GOVERNANCE-1`, `EXECUTION-ROOT-1`; optional exact-version authority and
+  implementation prerequisites are CE-25–CE-29.
 - **Motive:** prevent a testnet or release from inheriting gates for the base profile while quietly
   activating an optional surface whose evidence is missing.
 - **Artifact:** immutable admitted-manifest digest plus a machine-readable mapping from every
-  activated node/version to its artifact, commit, result, assumptions, and loss condition.
+  activated node/version and domain-registry entry to its artifact, commit, result, assumptions,
+  loss condition, stage×gate-subclaim disposition, and resolved conditional-edge instance.
 - **Gate:** the closure walker rejects every missing, unknown, wrong-version, non-passing, stale, or
-  mutually incompatible prerequisite and every unjustified gate exclusion. A migration admission
-  additionally consumes the concrete `UPGRADE-1@old->new` evidence after verifying its old-profile
-  polarity; `TESTNET-1`, releases, and coverage matrices bind the exact admitted digest.
+  mutually incompatible prerequisite, inactive-domain encoding, and unjustified gate exclusion.
+  Every conditional predicate is resolved, its realizable role-aware closure and compatible union are
+  acyclic, `G5.core` and `G15.resource` are required, economic subclaims follow their predicates, and
+  every `G19.<feature>` matches activation. A migration admission consumes the concrete old-admitted
+  to new-candidate `UPGRADE-1` evidence after verifying polarity; `TESTNET-1`, releases, and coverage
+  matrices bind the exact admitted digest.
 - **Non-claim:** profile admission does not prove properties outside the activated closure or make
   its assumptions universally true.
 
@@ -953,22 +1220,39 @@ and the asset branch does not require visual programming.
 - **Non-claim:** secure signer operation does not establish validator honesty, quorum safety, or
   network availability.
 
-### `RELEASE-1` — reviewed source to shipped binary
+### `RELEASE-R1` — candidate-build reproducibility
 
-- **Status:** **READY@framework** for current builds; **LOCKED@profile** until its exact
-  `PROFILE-D1` candidate exists.
-- **Depends on:** `PROFILE-D1` for a profile-bound release; the reusable framework has only external
-  pinned Rust/tool/proof dependency inputs.
+- **Status:** **READY@framework** for non-authoritative current builds; **LOCKED@candidate** until the
+  exact `PROFILE-D1` candidate exists.
+- **Depends on:** `PROFILE-D1` for a candidate instance; reusable mechanics use only pinned external
+  Rust/tool/proof dependency inputs.
 - **Motive:** stop an unreviewed compiler, dependency, feature set, binary, or genesis configuration
-  from inheriting source-level evidence.
+  from inheriting candidate source-level evidence.
 - **Artifact:** dependency lock/policy, pinned toolchain, reproducible independent builds, SBOM or
-  equivalent manifest, signed release metadata, feature/config/genesis/profile binding, and
-  vulnerability response.
+  equivalent manifest, feature/config/genesis/candidate-profile binding, candidate artifact digest,
+  and vulnerability response. Candidate attestations are labeled candidate, not admitted-release
+  authority.
 - **Gate:** independent builders reproduce the declared artifact or an explicitly explained
   platform-scoped equivalent; mismatched source, dependency, feature, config, or binary rejects the
-  release identity.
-- **Non-claim:** reproducibility proves artifact correspondence, not absence of source or toolchain
-  vulnerabilities.
+  candidate artifact identity.
+- **Non-claim:** reproducibility proves candidate artifact correspondence, not admission, release
+  authorization, signature custody, or absence of source/toolchain vulnerabilities.
+
+### `RELEASE-1` — admitted-profile signed release
+
+- **Status:** **LOCKED@admitted** until both the candidate artifact and admitted profile exist.
+- **Depends on:** `RELEASE-R1`, `PROFILE-1`, `CRYPTO-1`.
+- **Motive:** ensure the binary distributed to testnet or production is the reproducible candidate
+  whose exact profile closure was admitted, not merely a similarly configured build.
+- **Artifact:** signed release metadata binding source, toolchain/dependency manifest, candidate
+  artifact digest, admitted profile digest, genesis, features/config, platform artifacts, signer
+  role/suite, and vulnerability/withdrawal status.
+- **Gate:** independent builders reproduce the candidate artifact; the admitted profile closure and
+  genesis/root-parity receipt match byte-for-byte; wrong candidate/profile/genesis/platform/suite,
+  stale admission, unsigned metadata, unauthorized signer, and signature mutation reject the release
+  identity before testnet deployment.
+- **Non-claim:** a reproducible signed admitted release does not prove source correctness, toolchain
+  integrity, operator honesty, availability, or consensus safety.
 
 ### `PROD-OPS-1` — production operations and incident safety
 
@@ -992,9 +1276,10 @@ single checkpoint:
 
 1. **Semantic trunk:** `ACCOUNT-1` is the first implementation prerequisite shared by the ledger,
    multiplayer, and programming branches.
-2. **Research without authority:** `COMMIT-R1`, `REFINE-1`, `LANGUAGE-R1`, `SCALE-1`, `COST-1`,
-   `CODEC-1`, `THREAT-D0`, and `HASH-SOURCE-R1` can produce comparisons and vectors without
-   changing the live state representation.
+2. **Research without authority:** `COMMIT-R1`, `VERKLE-R1@feasibility`, `REFINE-1`, `LANGUAGE-R1`,
+   `SCALE-1`, `COST-1`, `CODEC-1`, `THREAT-D0`, `HASH-SOURCE-R1`, and the reusable mechanics of
+   `RELEASE-R1@framework` can produce comparisons, vectors, or build evidence without changing live
+   state or profile authority.
 3. **Visual decision:** the exact one-pixel-startup choice remains independent and can be handled as
    a small observer checkpoint, provided its source, vectors, and docs change together.
 
@@ -1015,17 +1300,22 @@ ACCOUNT-1
   -> GENESIS-D1
   -> PROTOCOL-ID-1
   -> PROFILE-D1
+  -> TRANSITION-SPEC-1
   -> IDENTITY-1
   -> AUTH-COMMIT-1
-  -> EXECUTOR-1 + EXECUTION-ROOT-1
+  -> GOVERNANCE-1
+  -> activated state producers + VALIDATOR-SCHEDULE-1
+  -> EXECUTOR-1
+  -> EXECUTION-ROOT-1
+  -> GENESIS-ROOT-PARITY-1
   -> MULTI-1
   -> SEQUENCER-1
 ```
 
 This sequence is deliberately non-normative shorthand. `IDENTITY-D1`, `CONSENSUS-D1`,
 `GOVERNANCE-D1`, `THREAT-D0`, `CODEC-1`, `CRYPTO-D1`, `CRYPTO-1`, `COST-1`, `BOUNDS-1`,
-`EXECUTOR-1`, and conditional branches join only at their exact `Depends on` fields. Run the
-retained checker rather than inferring an omitted edge from this display.
+`EXECUTOR-1`, and conditional branches join only at their exact `Depends on` fields and manifest
+rows. Run the retained checker rather than inferring an omitted edge from this display.
 
 At that point Bitblock could be truthfully described as an authenticated, accountable multiplayer
 ledger under a centralized ordering boundary. Consensus, currency, and Layer 1 would still remain
@@ -1045,9 +1335,14 @@ When a checkpoint changes a node:
    [`SEMANTICS.md`](SEMANTICS.md).
 
 Run `python -B tools/check_planning_docs.py --self-test` after every tree edit. It checks all
-foundation and detailed nodes, required fields, undefined dependencies, the full conservative DAG,
-links/fences/tables in the planning set, and powered in-memory mutations for missing fields,
-undefined nodes, duplicate nodes, and cycles. The compact diagram remains explanatory only.
+foundation and detailed nodes, required fields, undefined dependencies, the unconditional
+conservative DAG, links/fences/tables in the planning set, and powered in-memory mutations for
+missing fields, undefined nodes, duplicate nodes, and unconditional cycles. It does **not yet parse**
+the conditional-instance table. Before `PROFILE-1` can admit anything, the admission checker must
+parse the exact row regex above, validate IDs/bases/tokens/roles and predicate entailments, expand
+each realizable profile closure, and reject a cycle in either that closure or the compatible role-
+edge union. Until that powered checker exists, conditional closure admission remains **LOCKED**. The
+compact diagram remains explanatory only.
 
 A branch can unlock knowledge without unlocking authority. That distinction is the central rule of
 this tree.

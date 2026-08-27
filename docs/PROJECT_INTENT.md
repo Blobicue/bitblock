@@ -69,6 +69,12 @@ game systems all serve the same motive: spend resources on occupied state and ex
 Optimization must preserve semantic parity and be measured; “sparse” and “near-infinite” are not
 synonyms.
 
+The user's Verkle-tree question belongs to this cheapness motive and the proof motive below. A
+high-branching vector-commitment tree may reduce some witness sizes, but Bitblock must measure that
+hypothesis against cryptographic verification, update generation, storage, setup-or-generator,
+trusted-code, and migration costs. The paper's separate `VERKLE-R1` feasibility lane preserves the
+question without adding it to the current Patricia-versus-sparse-Merkle assay or selecting it.
+
 ### 5. Let patterns become language only through an explicit rule
 
 A spatial arrangement can already be interpreted by a person as a symbol or diagram. A future
@@ -134,6 +140,9 @@ Bitblock's proof motive is not “hash everything and call it proven.” The pro
 No item inherits the guarantees of the next. The Lean and LadderLang capsules remain bounded to
 their declared models. The user's intended balanced-trit hashing algorithm remains unidentified in
 this repository; the current SHA-256 content tags remain the implemented byte-identity mechanism.
+Likewise, a Verkle root or compact vector-commitment witness would prove only its exact typed claim
+under a pinned construction and caller-selected root. It would not establish execution validity,
+consensus, data availability, cheap updates, or cryptographic suitability merely by being smaller.
 
 ### 9. Treat Layer 1 as a final scoped claim, not a starting label
 
