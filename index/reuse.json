@@ -1,0 +1,774 @@
+{
+ "dead": {
+  "module_private_candidates": [
+   {
+    "item": "BRIDGE_POLICY_SCHEMA",
+    "modules": [
+     "ladder_bridge"
+    ]
+   },
+   {
+    "item": "COMPOSITION_TIMING_ENVELOPE_SCHEMA",
+    "modules": [
+     "presentation"
+    ]
+   },
+   {
+    "item": "COORDINATE_EPISODE_DERIVATION_POLICY_SCHEMA",
+    "modules": [
+     "coordinate_episode"
+    ]
+   },
+   {
+    "item": "COORDINATE_EPISODE_EVIDENCE_SCHEMA",
+    "modules": [
+     "coordinate_episode"
+    ]
+   },
+   {
+    "item": "COORDINATE_EVIDENCE_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "CameraBasis",
+    "modules": [
+     "camera"
+    ]
+   },
+   {
+    "item": "CoordinateEpisode",
+    "modules": [
+     "coordinate_episode"
+    ]
+   },
+   {
+    "item": "DECLARED_SENSOR_PROFILE_SCHEMA",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "DisplayArtifactInventoryEntry",
+    "modules": [
+     "display_store"
+    ]
+   },
+   {
+    "item": "DisplayArtifactRecoveryJournal",
+    "modules": [
+     "display_store"
+    ]
+   },
+   {
+    "item": "FALLBACK_QUERY_FLAGS",
+    "modules": [
+     "windows_topology"
+    ]
+   },
+   {
+    "item": "FRAME_INPUT_SCHEMA",
+    "modules": [
+     "frame"
+    ]
+   },
+   {
+    "item": "FRAME_RECEIPT_SCHEMA",
+    "modules": [
+     "frame"
+    ]
+   },
+   {
+    "item": "FRAME_RECEIPT_V2_SCHEMA",
+    "modules": [
+     "frame_v2"
+    ]
+   },
+   {
+    "item": "FinalGamePaletteAudit",
+    "modules": [
+     "render"
+    ]
+   },
+   {
+    "item": "FrameAdmissionV2",
+    "modules": [
+     "frame_v2"
+    ]
+   },
+   {
+    "item": "HistoryAppendReceipt",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "HistoryCreateReceipt",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "HistoryRecoveryJournal",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "INTERACTION_TAPE_SCHEMA",
+    "modules": [
+     "interaction"
+    ]
+   },
+   {
+    "item": "IllegalFinalGameColor",
+    "modules": [
+     "render"
+    ]
+   },
+   {
+    "item": "InteractionTapeParseError",
+    "modules": [
+     "interaction"
+    ]
+   },
+   {
+    "item": "JOURNAL_REJECTED_TAIL_SCHEMA",
+    "modules": [
+     "journal"
+    ]
+   },
+   {
+    "item": "LADDER_QUOTE_RECEIPT_SCHEMA",
+    "modules": [
+     "ladder_bridge"
+    ]
+   },
+   {
+    "item": "LOCAL_REPLAY_BUILD_SCHEMA",
+    "modules": [
+     "replay_evidence"
+    ]
+   },
+   {
+    "item": "LOCAL_REPLAY_EVIDENCE_SCHEMA",
+    "modules": [
+     "replay_evidence"
+    ]
+   },
+   {
+    "item": "MAX_COORDINATE_EPISODES",
+    "modules": [
+     "coordinate_episode"
+    ]
+   },
+   {
+    "item": "MAX_OUTPUT_TOPOLOGY_UTF16_UNITS",
+    "modules": [
+     "output_topology"
+    ]
+   },
+   {
+    "item": "MAX_PHYSICAL_SENSOR_OBSERVATION_BYTES",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "MAX_PRESENTATION_OUTPUT_ARTIFACT_V2_BYTES",
+    "modules": [
+     "presentation_output_v2"
+    ]
+   },
+   {
+    "item": "MAX_QUERY_MODES",
+    "modules": [
+     "windows_topology"
+    ]
+   },
+   {
+    "item": "MAX_QUERY_PATHS",
+    "modules": [
+     "windows_topology"
+    ]
+   },
+   {
+    "item": "MAX_SENSOR_CHALLENGE_POINTS",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "MAX_SENSOR_RAW_BYTES",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "MAX_SIZE_QUERY_CYCLES",
+    "modules": [
+     "windows_topology"
+    ]
+   },
+   {
+    "item": "MetricBinding",
+    "modules": [
+     "sidebar"
+    ]
+   },
+   {
+    "item": "OPEN_LOCAL_EVIDENCE_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "OPEN_LOCAL_MODE_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "OUTPUT_COLOR_OBSERVATION_SCHEMA",
+    "modules": [
+     "output_color"
+    ]
+   },
+   {
+    "item": "OUTPUT_TOPOLOGY_OBSERVATION_SCHEMA",
+    "modules": [
+     "output_topology"
+    ]
+   },
+   {
+    "item": "OVERLAY_INPUT_SCHEMA",
+    "modules": [
+     "frame"
+    ]
+   },
+   {
+    "item": "OptimizationEquivalenceReceipt",
+    "modules": [
+     "optimization"
+    ]
+   },
+   {
+    "item": "PHYSICAL_SENSOR_OBSERVATION_SCHEMA",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "PHYSICAL_SENSOR_POLICY_SCHEMA",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "ParseError",
+    "modules": [
+     "program"
+    ]
+   },
+   {
+    "item": "RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "ReplayedHistory",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "SENSOR_CHALLENGE_SCHEMA",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "SEQUENTIAL_FUNCTION_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "SEQUENTIAL_INPUT_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "SEQUENTIAL_MODE_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "SEQUENTIAL_SEGMENT_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "SEQUENTIAL_STEP_SCHEMA",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "STORAGE_RECORD_SCHEMA",
+    "modules": [
+     "storage"
+    ]
+   },
+   {
+    "item": "SensorCodeSpace",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "SequentialVerification",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "SweepHit",
+    "modules": [
+     "render"
+    ]
+   },
+   {
+    "item": "TickRecord",
+    "modules": [
+     "interaction"
+    ]
+   },
+   {
+    "item": "TickTransaction",
+    "modules": [
+     "history"
+    ]
+   },
+   {
+    "item": "UnavailableTopologyFacts",
+    "modules": [
+     "output_topology"
+    ]
+   },
+   {
+    "item": "VerifiedInMemoryHistory",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "WindowsCompositionTimingObservation",
+    "modules": [
+     "windows_timing"
+    ]
+   },
+   {
+    "item": "bridge_policy_tag",
+    "modules": [
+     "ladder_bridge"
+    ]
+   },
+   {
+    "item": "canonical_segment_payload_len",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "challenge_tag",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "dolly",
+    "modules": [
+     "camera"
+    ]
+   },
+   {
+    "item": "end_iteration",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "open_existing_with_replay_limits",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "open_local_mode_tag",
+    "modules": [
+     "sequential"
+    ]
+   },
+   {
+    "item": "profile_tag",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "raw_measurement",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "rgb_gradient_challenge_policy_tag",
+    "modules": [
+     "physical_sensor"
+    ]
+   }
+  ],
+  "pub_items": 561,
+  "unreferenced": [
+   {
+    "item": "into_challenge",
+    "modules": [
+     "physical_sensor"
+    ]
+   },
+   {
+    "item": "into_parts",
+    "modules": [
+     "history_store"
+    ]
+   },
+   {
+    "item": "into_units",
+    "modules": [
+     "output_topology"
+    ]
+   },
+   {
+    "item": "set_observation_anchor",
+    "modules": [
+     "camera"
+    ]
+   }
+  ]
+ },
+ "duplication": {
+  "production": {
+   "code_lines": 29213,
+   "duplicated_lines": 416,
+   "regions": [
+    {
+     "left": "presentation_output:376",
+     "lines": 27,
+     "right": "presentation_output_v2:332"
+    },
+    {
+     "left": "output_color:438",
+     "lines": 22,
+     "right": "output_topology:1211"
+    },
+    {
+     "left": "presentation_output:241",
+     "lines": 21,
+     "right": "presentation_output_v2:211"
+    },
+    {
+     "left": "output_color:388",
+     "lines": 19,
+     "right": "output_topology:1143"
+    },
+    {
+     "left": "presentation_output:449",
+     "lines": 17,
+     "right": "presentation_output_v2:384"
+    },
+    {
+     "left": "display:1101",
+     "lines": 16,
+     "right": "frame:574"
+    },
+    {
+     "left": "frame:241",
+     "lines": 15,
+     "right": "tick:276"
+    },
+    {
+     "left": "physical_sensor:1562",
+     "lines": 14,
+     "right": "presentation_output:452"
+    },
+    {
+     "left": "display:852",
+     "lines": 13,
+     "right": "tick:939"
+    },
+    {
+     "left": "display_artifact:415",
+     "lines": 13,
+     "right": "presentation_output:245"
+    },
+    {
+     "left": "interaction:1313",
+     "lines": 13,
+     "right": "physical_sensor:1566"
+    },
+    {
+     "left": "history_store:517",
+     "lines": 12,
+     "right": "sequential:1345"
+    },
+    {
+     "left": "interaction:1208",
+     "lines": 12,
+     "right": "replay_evidence:864"
+    },
+    {
+     "left": "frame:476",
+     "lines": 11,
+     "right": "frame_v2:260"
+    },
+    {
+     "left": "presentation_output:491",
+     "lines": 11,
+     "right": "presentation_output_v2:425"
+    },
+    {
+     "left": "frame:436",
+     "lines": 10,
+     "right": "frame_v2:76"
+    },
+    {
+     "left": "history:344",
+     "lines": 10,
+     "right": "interaction:1319"
+    },
+    {
+     "left": "coordinate_episode:504",
+     "lines": 9,
+     "right": "physical_sensor:1343"
+    },
+    {
+     "left": "coordinate_episode:700",
+     "lines": 9,
+     "right": "display:1104"
+    },
+    {
+     "left": "display:1060",
+     "lines": 9,
+     "right": "frame:555"
+    },
+    {
+     "left": "display_store:578",
+     "lines": 9,
+     "right": "history_store:1157"
+    },
+    {
+     "left": "history_store:426",
+     "lines": 9,
+     "right": "sequential:1269"
+    },
+    {
+     "left": "interaction:838",
+     "lines": 9,
+     "right": "replay_evidence:650"
+    },
+    {
+     "left": "presentation_output:61",
+     "lines": 9,
+     "right": "presentation_output_v2:57"
+    },
+    {
+     "left": "sequential:1158",
+     "lines": 9,
+     "right": "storage:751"
+    },
+    {
+     "left": "display:1147",
+     "lines": 8,
+     "right": "display_artifact:763"
+    },
+    {
+     "left": "display:1156",
+     "lines": 8,
+     "right": "frame:598"
+    },
+    {
+     "left": "display_store:286",
+     "lines": 8,
+     "right": "history_store:323"
+    },
+    {
+     "left": "interaction:1122",
+     "lines": 8,
+     "right": "replay_evidence:799"
+    },
+    {
+     "left": "ladder_bridge:20",
+     "lines": 8,
+     "right": "ladder_bridge:21"
+    },
+    {
+     "left": "output_color:229",
+     "lines": 8,
+     "right": "output_topology:933"
+    },
+    {
+     "left": "output_color:409",
+     "lines": 8,
+     "right": "output_topology:1195"
+    },
+    {
+     "left": "output_color:492",
+     "lines": 8,
+     "right": "presentation_output:434"
+    },
+    {
+     "left": "physical_sensor:1391",
+     "lines": 8,
+     "right": "presentation_output:334"
+    },
+    {
+     "left": "physical_sensor:1475",
+     "lines": 8,
+     "right": "presentation_output:388"
+    },
+    {
+     "left": "program:90",
+     "lines": 8,
+     "right": "windows_present:122"
+    }
+   ]
+  },
+  "test": {
+   "code_lines": 17821,
+   "duplicated_lines": 341,
+   "regions": [
+    {
+     "left": "presentation_output:600",
+     "lines": 56,
+     "right": "presentation_output_v2:498"
+    },
+    {
+     "left": "display_artifact:831",
+     "lines": 32,
+     "right": "display_store:1526"
+    },
+    {
+     "left": "output_color:627",
+     "lines": 27,
+     "right": "presentation_output_v2:596"
+    },
+    {
+     "left": "physical_sensor:1660",
+     "lines": 20,
+     "right": "presentation_output:627"
+    },
+    {
+     "left": "display_store:1685",
+     "lines": 19,
+     "right": "main:4010"
+    },
+    {
+     "left": "output_topology:1469",
+     "lines": 18,
+     "right": "presentation_output:663"
+    },
+    {
+     "left": "main:4052",
+     "lines": 17,
+     "right": "main:5115"
+    },
+    {
+     "left": "presentation_output:693",
+     "lines": 13,
+     "right": "presentation_output_v2:587"
+    },
+    {
+     "left": "display_store:1649",
+     "lines": 12,
+     "right": "main:3969"
+    },
+    {
+     "left": "history:931",
+     "lines": 12,
+     "right": "history_store:1499"
+    },
+    {
+     "left": "physical_sensor:1613",
+     "lines": 12,
+     "right": "presentation_output_v2:464"
+    },
+    {
+     "left": "frame_v2:979",
+     "lines": 10,
+     "right": "optimization:1503"
+    },
+    {
+     "left": "journal:1238",
+     "lines": 10,
+     "right": "storage:960"
+    },
+    {
+     "left": "presentation:1090",
+     "lines": 10,
+     "right": "presentation:1147"
+    },
+    {
+     "left": "display:1542",
+     "lines": 9,
+     "right": "display_artifact:790"
+    },
+    {
+     "left": "display_store:1489",
+     "lines": 8,
+     "right": "journal:1778"
+    },
+    {
+     "left": "display_store:1627",
+     "lines": 8,
+     "right": "physical_sensor:1625"
+    },
+    {
+     "left": "frame_v2:967",
+     "lines": 8,
+     "right": "main:4537"
+    },
+    {
+     "left": "history_store:1595",
+     "lines": 8,
+     "right": "history_store:1674"
+    },
+    {
+     "left": "history_store:2060",
+     "lines": 8,
+     "right": "journal:1776"
+    },
+    {
+     "left": "physical_sensor:1652",
+     "lines": 8,
+     "right": "presentation:1209"
+    },
+    {
+     "left": "physical_sensor:1683",
+     "lines": 8,
+     "right": "presentation_output:649"
+    },
+    {
+     "left": "presentation_output:744",
+     "lines": 8,
+     "right": "presentation_output_v2:665"
+    }
+   ]
+  }
+ }
+}

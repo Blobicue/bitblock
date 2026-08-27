@@ -1,6 +1,5 @@
 {
     "$comment": "What 'the index works' means, in a file rather than in someone's memory. `bbgraph.py selftest` runs it and exits non-zero on any mismatch. Expectations are about the leading MODULE for code questions, because that is the file an agent opens. When a source change legitimately moves an answer, update the expectation in the same commit and say why -- an unexplained edit here is how a ranking bug gets ratified.",
-
     "queries": [
         {
             "q": "canonical framebuffer bytes",
@@ -55,7 +54,6 @@
             "note": "Not history_store: the store is the persistence layer, the history is the object."
         }
     ],
-
     "no_match": [
         {
             "q": "quantum flux capacitor",
@@ -67,7 +65,6 @@
             "max_score": 0.5
         }
     ],
-
     "confidence": [
         {
             "q": "tick outcome",
@@ -97,7 +94,6 @@
             "expect": "LOW"
         }
     ],
-
     "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem.",
     "counts": {
         "modules": 33,
@@ -107,7 +103,6 @@
         "metrics": 1112,
         "metrics_claimed_by_doc": 1112
     },
-
     "structure": [
         {
             "module": "protocol",
@@ -125,7 +120,6 @@
             "note": "A leaf: research-only, nothing depends on it. Safe to change in isolation."
         }
     ],
-
     "schemas": [
         {
             "schema": "bitblock/frame/xrgb8888-row-major/v1",
@@ -141,5 +135,11 @@
             "vectored": false,
             "note": "Recorded as uncovered on purpose. 16 of 58 protocol objects have no independent vectors, and pretending otherwise would make the coverage number meaningless. If someone writes vectors for this, flip it here in the same commit."
         }
-    ]
+    ],
+    "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested.",
+    "reuse": {
+        "production_duplicated_lines": 416,
+        "test_duplicated_lines": 341,
+        "unreferenced_pub_items": 4
+    }
 }

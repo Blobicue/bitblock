@@ -18,7 +18,8 @@ covers only the index — how to query the tree, and what the index will not tel
 python tools/bbgraph.py ask "canonical framebuffer bytes"
 ```
 
-Also: `node <name>` (everything known about one module, tool, proof or doc),
+Also: `dup` and `dead` (see **How compressible is this tree** below),
+`node <name>` (everything known about one module, tool, proof or doc),
 `schema [name]` (the protocol surface, and what independently checks each
 object), `metric <words>` (registry families), `dag` (dependency strata and
 which modules are load-bearing), `sub [name]` (modules that move together),
@@ -79,6 +80,7 @@ Stdlib only, no network, no build. Three stages, each printing its own numbers:
 |---|---|---|
 | `extract` | `src/*.rs`, `tools/*.py`, `docs/**`, `proof/**`, `examples/*` | `index/nodes.jsonl` |
 | `link` | the extracted nodes | `index/edges.jsonl`, `index/dag.json`, `index/subsystems.json` |
+| `reuse` | the module sources again | `index/reuse.json` |
 | `audit` | the whole index | `index/coverage.json`, and the three gates |
 
 Run one stage alone with `python tools/bbindex.py extract|link|audit`.
@@ -163,6 +165,47 @@ objects and 50 covered, overstating both the surface and the gap —
 `bitblock/test-object/v1` is a throwaway name that `frame.rs` and `storage.rs`
 each coined in their own tests, and it was fusing them into a shared subsystem.
 
+## How compressible is this tree
+
+Measured, because "make it smaller" deserves a number rather than an intuition.
+
+```bash
+python tools/bbgraph.py dup
+python tools/bbgraph.py dead
+```
+
+| Avenue | Recoverable | What it costs |
+|---|---:|---|
+| Repeated production regions | 416 lines (1.4%) | extraction overhead eats much of it |
+| Repeated test-scope regions | 341 lines (1.9%) | fixtures are also the refactor's gate |
+| Public items nothing names | 4 items | nothing, but ~20 lines |
+| Error enum + `Display` behind a macro | ~2,100 lines (4%) | **removes ~800 lines from `cargo fmt --check`** |
+| Deleting superseded v1 codecs | ~1,800 lines | orphans recorded receipt history |
+
+**The tree is already tight.** 37% of `src/` is tests, and the rest does not
+repeat itself much. There is no large byte-preserving compression available
+here, and the two large-looking levers both pay for their lines with something
+this repository values more.
+
+The first scan said otherwise, and was wrong for an instructive reason. It
+reported `presentation_output` <-> `_v2` as an 87-block target, the biggest in
+the crate. Most of that overlap is test fixtures: `fn qpc`, `fn bracket`,
+`fn timing`. Production overlap between those two files is a third the size.
+`dup` therefore counts the two scopes apart and refuses to add them.
+
+`dup` also answers the routing half. A shared helper has to live somewhere both
+sides already reach, or extracting it adds dependency edges and can cycle, and
+under a cfg gate at least as permissive as the more permissive user, or a
+default build ends up depending on research-gated code. That is what the DAG is
+for, and it is why the `output_color` <-> `output_topology` pair routes to
+`protocol` while the `presentation_output` pair routes to `display_artifact`.
+
+`dead` reports what `clippy -D warnings` structurally cannot: a `pub` item in a
+library is reachable by definition, so an unused one raises nothing. 4 items are
+named nowhere in the tree and 72 are named only inside their own module. Confirm
+by deleting and compiling before acting on either list -- a name can also be
+reached through a trait impl or a macro, which the scan does not model.
+
 ## Tried and corrected
 
 Recorded because each looked obviously right until it was measured.
@@ -189,6 +232,21 @@ attribute. `#[cfg(test)]` also guards test-only imports, and `history.rs` has
 two of them above its schema constants — so the first-attribute rule demoted
 `GENESIS_SCHEMA` and `RECEIPT_SCHEMA`, both `pub`, on line 18 of a 1,424-line
 file.
+
+**Putting the error boilerplate behind a macro.** 45 hand-written `Error` enums
+and 53 `Display` impls are 3,766 lines, 7.3% of `src/`, and 38 of the impls are
+exactly one `write!` per arm. A `macro_rules!` declaring the message beside the
+variant would remove roughly 2,100 of those lines and colocate two things that
+currently sit far apart in the same file.
+
+It was not done, for a measured reason: **rustfmt does not format inside a macro
+invocation.** A probe crate with deliberately mis-indented code inside and
+outside a macro body confirmed it -- `cargo fmt` fixed the enum and left the
+macro body untouched. CI enforces `cargo fmt --check`, so the conversion would
+buy a 4% line reduction by moving ~800 lines outside a gate. In a repository
+whose claims rest on its gates, that is the wrong direction. (The same probe
+established that clippy does *not* object to `write!` with a placeholder-free
+literal, so the 110 `write_str` arms are convention rather than enforcement.)
 
 The generalisation: reach for the derived signal over the authored one, and
 measure the diagnosis before acting on it. Three of the four above were correct

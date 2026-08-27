@@ -10,6 +10,9 @@ against the tree that produced it.
     schema <name>       One protocol object: who declares it, who checks it.
     metric <query...>   Metric families by name, with owner and definition tag.
     dag [--full]        Module strata and which modules are load-bearing.
+    dup [test]          Where the tree repeats itself, and where a shared
+                        helper could legally live. Production scope by default.
+    dead                Public items nothing else in the tree names.
     sub [name]          A subsystem and its members.
     gates               Re-run the accounting gates and the staleness check.
     stats               Index shape.
@@ -57,6 +60,7 @@ EDGES = INDEX / "edges.jsonl"
 DAG = INDEX / "dag.json"
 SUBSYSTEMS = INDEX / "subsystems.json"
 COVERAGE = INDEX / "coverage.json"
+REUSE = INDEX / "reuse.json"
 SELFTEST = ROOT / "tools" / "bbselftest.json"
 
 STOP = {
@@ -596,6 +600,96 @@ def cmd_gates() -> int:
     return 0 if accounting and fresh else 1
 
 
+def reachable(dag: dict, module: str) -> set:
+    seen: set = set()
+    stack = list(dag["adjacency"].get(module, ()))
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        stack.extend(dag["adjacency"].get(node, ()))
+    return seen
+
+
+GATE_RANK = {"default": 0, "binary": 0, "windows": 1}
+
+
+def gate_rank(gate: str) -> int:
+    if gate in GATE_RANK:
+        return GATE_RANK[gate]
+    return 2 if "protocol-research" in gate else 1
+
+
+def cmd_dup(scope: str) -> int:
+    """Repeated regions, with the home a shared helper could legally take.
+
+    The home has to be a module BOTH sides already reach, or extracting adds
+    dependency edges and can cycle; and it has to sit under a cfg gate at least
+    as permissive as the more permissive user, or a default build would end up
+    depending on research-gated code. That is the routing question, and the DAG
+    is what answers it.
+    """
+    scope = (scope or "production").strip().lower()
+    if scope not in ("production", "test"):
+        scope = "test" if scope.startswith("t") else "production"
+    reuse = json.loads(REUSE.read_text(encoding="utf-8"))
+    nodes, _subs, dag = load()
+    mods = {n["name"]: n for n in nodes if n["kind"] == "module"}
+    data = reuse["duplication"][scope]
+
+    print("REPEATED REGIONS -- %s scope" % scope)
+    print("  %d of %d code lines sit in a repeated region (%.1f%%)"
+          % (data["duplicated_lines"], data["code_lines"],
+             100.0 * data["duplicated_lines"] / max(data["code_lines"], 1)))
+    if scope == "production":
+        other = reuse["duplication"]["test"]
+        print("  test scope, counted separately: %d of %d (%.1f%%)"
+              % (other["duplicated_lines"], other["code_lines"],
+                 100.0 * other["duplicated_lines"] / max(other["code_lines"], 1)))
+    print()
+    for region in data["regions"][:12]:
+        left = region["left"].split(":")[0]
+        right = region["right"].split(":")[0]
+        print("  %3d lines  %-28s <-> %s" % (region["lines"], region["left"], region["right"]))
+        a, b = mods.get(left), mods.get(right)
+        if not (a and b):
+            continue
+        common = reachable(dag, left) & reachable(dag, right)
+        weakest = min(gate_rank(a["gate"]), gate_rank(b["gate"]))
+        homes = [c for c in common if gate_rank(mods[c]["gate"]) <= weakest]
+        homes.sort(key=lambda m: (-dag["stratum"].get(m, 0), m))
+        print("             home: %s" % (", ".join(homes[:2]) if homes
+                                         else "none shared -- a new module would be needed"))
+    print()
+    print("A home must be a module both sides already reach, under a gate at")
+    print("least as permissive as the more permissive user.")
+    return 0
+
+
+def cmd_dead() -> int:
+    reuse = json.loads(REUSE.read_text(encoding="utf-8"))
+    dead = reuse["dead"]
+    print("PUBLIC SURFACE  %d items" % dead["pub_items"])
+    print()
+    print("NOTHING IN THE TREE NAMES THESE  (%d)" % len(dead["unreferenced"]))
+    for row in dead["unreferenced"]:
+        print("  %-38s %s" % (row["item"], ", ".join(row["modules"])))
+    print()
+    print("USED ONLY INSIDE THEIR OWN MODULE  (%d)  -- could drop `pub`"
+          % len(dead["module_private_candidates"]))
+    for row in dead["module_private_candidates"][:20]:
+        print("  %-38s %s" % (row["item"], ", ".join(row["modules"])))
+    rest = len(dead["module_private_candidates"]) - 20
+    if rest > 0:
+        print("  ... and %d more" % rest)
+    print()
+    print("clippy cannot report either list: a `pub` item in a library is")
+    print("reachable by definition. Confirm by deleting and compiling -- a name")
+    print("can also be reached through a trait impl or a macro.")
+    return 0
+
+
 def cmd_stats() -> int:
     nodes, subs, dag = load()
     coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
@@ -659,6 +753,23 @@ def cmd_selftest() -> int:
                 "confidence %r -> %s, expected %s" % (case["q"], level, case["expect"])
             )
 
+    reuse_spec = spec.get("reuse")
+    if reuse_spec:
+        reuse = json.loads(REUSE.read_text(encoding="utf-8"))
+        actual = {
+            "production_duplicated_lines":
+                reuse["duplication"]["production"]["duplicated_lines"],
+            "test_duplicated_lines":
+                reuse["duplication"]["test"]["duplicated_lines"],
+            "unreferenced_pub_items": len(reuse["dead"]["unreferenced"]),
+        }
+        for key, expected in reuse_spec.items():
+            checks += 1
+            if actual[key] != expected:
+                failures.append(
+                    "reuse %s -> %r, expected %r" % (key, actual[key], expected)
+                )
+
     coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
     for key, expected in spec.get("counts", {}).items():
         checks += 1
@@ -718,6 +829,10 @@ def main(argv: list[str]) -> int:
         return cmd_metric(joined)
     if cmd == "dag":
         return cmd_dag("--full" in rest)
+    if cmd == "dup":
+        return cmd_dup(joined)
+    if cmd == "dead":
+        return cmd_dead()
     if cmd == "sub":
         return cmd_sub(" ".join(r for r in rest if not r.startswith("--")))
     if cmd == "gates":

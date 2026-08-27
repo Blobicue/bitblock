@@ -10,6 +10,8 @@ Stdlib only, no network, no build. Three stages, each printing its own numbers:
               -> index/nodes.jsonl
     link      the extracted nodes
               -> index/edges.jsonl, index/dag.json, index/subsystems.json
+    reuse     the module sources again, for repetition and dead surface
+              -> index/reuse.json
     audit     the whole index
               -> index/coverage.json  (and the three gates)
 
@@ -635,6 +637,162 @@ def stage_link(nodes: list[dict]) -> list[dict]:
 
 
 # --------------------------------------------------------------------------
+# reuse -- where the tree repeats itself, and what nothing names
+# --------------------------------------------------------------------------
+
+
+def normalise(line: str) -> str | None:
+    """A line reduced to its shape: string literals and numbers collapsed.
+
+    Two arms differing only in a tag index or a byte count are the same shape,
+    and shape is what can be extracted. Comments and blanks are not code and
+    would otherwise inflate every measurement below.
+    """
+    text = line.strip()
+    if not text or text.startswith("//"):
+        return None
+    text = re.sub(r'"[^"]*"', '"S"', text)
+    text = re.sub(r"\b\d+\b", "N", text)
+    return re.sub(r"\s+", " ", text)
+
+
+def duplication(modules: list[dict], window: int = 8) -> dict:
+    """Contiguous repeated regions, production and test scope counted apart.
+
+    They are different findings and must never be added together. A repeated
+    test fixture costs a little duplication, but the tests are also what proves
+    a refactor preserved canonical bytes, so they are not simply waste.
+    Measuring both at once is what made the first pass name
+    presentation_output <-> _v2 the largest target in the crate, when most of
+    that pair's overlap is fixtures and its production overlap is a third the
+    size.
+    """
+    scopes: dict[str, dict] = {"production": {}, "test": {}}
+    for mod in modules:
+        text = read(ROOT / mod["path"])
+        lines = text.splitlines()
+        edge = min(test_scope_line(text), len(lines))
+        for scope, block, offset in (
+            ("production", lines[:edge], 0),
+            ("test", lines[edge:], edge),
+        ):
+            scopes[scope][mod["name"]] = [
+                (i + 1 + offset, normalise(l))
+                for i, l in enumerate(block)
+                if normalise(l)
+            ]
+
+    out: dict[str, dict] = {}
+    for scope, corpus in scopes.items():
+        seeds: dict[str, list] = {}
+        for name, kept in corpus.items():
+            for i in range(len(kept) - window + 1):
+                key = "\n".join(x for _, x in kept[i:i + window])
+                seeds.setdefault(key, []).append((name, i))
+        claimed: set = set()
+        regions = []
+        for occurrences in seeds.values():
+            if len({n for n, _ in occurrences}) < 2:
+                continue
+            (left, li), (right, ri) = occurrences[0], occurrences[1]
+            if (left, li) in claimed or (right, ri) in claimed:
+                continue
+            a, b = corpus[left], corpus[right]
+            span = 0
+            while (
+                li + span < len(a)
+                and ri + span < len(b)
+                and a[li + span][1] == b[ri + span][1]
+            ):
+                span += 1
+            for k in range(span):
+                claimed.add((left, li + k))
+                claimed.add((right, ri + k))
+            regions.append(
+                {
+                    "lines": span,
+                    "left": "%s:%d" % (left, a[li][0]),
+                    "right": "%s:%d" % (right, b[ri][0]),
+                }
+            )
+        regions.sort(key=lambda r: (-r["lines"], r["left"]))
+        out[scope] = {
+            "code_lines": sum(len(v) for v in corpus.values()),
+            "duplicated_lines": sum(r["lines"] for r in regions),
+            "regions": regions[:40],
+        }
+    return out
+
+
+def dead_surface(modules: list[dict]) -> dict:
+    """Public items nothing else in the tree names.
+
+    `clippy -D warnings` cannot report this: a `pub` item in a library is
+    reachable by definition, so an unused one raises nothing at all. This crate
+    is its own only consumer, so "named nowhere else" is a checkable emptiness
+    claim rather than a guess -- but confirm by deleting and compiling before
+    acting on it, because a name can also be reached through a trait impl or a
+    macro, which this scan does not model.
+    """
+    corpus = {}
+    for path in (
+        sorted(SRC.glob("*.rs"))
+        + sorted(EXAMPLES.glob("*.rs"))
+        + sorted(TESTS.glob("*.rs"))
+    ):
+        text = read(path)
+        lines = text.splitlines()
+        edge = min(test_scope_line(text), len(lines))
+        corpus[path.stem] = ("\n".join(lines[:edge]), "\n".join(lines[edge:]))
+
+    owners: dict[str, set] = {}
+    for mod in modules:
+        for item in mod["pub_items"]:
+            owners.setdefault(item, set()).add(mod["name"])
+
+    unreferenced, module_only = [], []
+    for item in sorted(owners):
+        word = re.compile(r"\b%s\b" % re.escape(item))
+        own = other = tests = 0
+        for name, (prod, test) in corpus.items():
+            here = len(word.findall(prod))
+            if name in owners[item]:
+                own += max(here - 1, 0)  # discount the declaration itself
+            else:
+                other += here
+            tests += len(word.findall(test))
+        if other or tests:
+            continue
+        row = {"item": item, "modules": sorted(owners[item])}
+        (unreferenced if own == 0 else module_only).append(row)
+    return {
+        "pub_items": len(owners),
+        "unreferenced": unreferenced,
+        "module_private_candidates": module_only,
+    }
+
+
+def stage_reuse(nodes: list[dict]) -> None:
+    modules = [n for n in nodes if n["kind"] == "module"]
+    reuse = {"duplication": duplication(modules), "dead": dead_surface(modules)}
+    write_json(INDEX / "reuse.json", reuse)
+    print("reuse")
+    for scope in ("production", "test"):
+        s = reuse["duplication"][scope]
+        print(
+            "    %-11s %6d code lines, %4d in repeated regions across %d"
+            % (scope, s["code_lines"], s["duplicated_lines"], len(s["regions"]))
+        )
+    print(
+        "    dead        %d public items unreferenced, %d used only in their own module"
+        % (
+            len(reuse["dead"]["unreferenced"]),
+            len(reuse["dead"]["module_private_candidates"]),
+        )
+    )
+
+
+# --------------------------------------------------------------------------
 # audit -- the three gates
 # --------------------------------------------------------------------------
 
@@ -831,8 +989,8 @@ def load_nodes() -> list[dict]:
 
 
 def main(argv: list[str]) -> int:
-    stages = argv[1:] or ["extract", "link", "audit"]
-    unknown = [s for s in stages if s not in ("extract", "link", "audit")]
+    stages = argv[1:] or ["extract", "link", "reuse", "audit"]
+    unknown = [s for s in stages if s not in ("extract", "link", "reuse", "audit")]
     if unknown:
         print(__doc__)
         return 1
@@ -843,6 +1001,8 @@ def main(argv: list[str]) -> int:
             nodes = stage_extract()
         elif stage == "link":
             stage_link(nodes if nodes is not None else load_nodes())
+        elif stage == "reuse":
+            stage_reuse(nodes if nodes is not None else load_nodes())
         elif stage == "audit":
             status = stage_audit(nodes if nodes is not None else load_nodes())
     return status
