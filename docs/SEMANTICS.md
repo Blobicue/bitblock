@@ -109,6 +109,15 @@ bits, and any derived frame commitments, followed by final world/history/camera 
 headless path intentionally refuses to publish ordinary frame receipts; an optional
 `protocol-research` build can add an in-memory local replay-evidence carrier.
 
+The carrier's executable fingerprint is computed **once per process**, not once per
+verification. The fingerprint names the bytes of the executable that emitted the carrier, and
+within a single process that is a constant: re-reading and re-hashing the file for each
+verification cannot make the evidence more accurate, and would only let one run's evidence
+disagree with itself if the file were replaced mid-run. The mid-read integrity check is
+unchanged and still runs -- the length is compared before and after hashing, so a file replaced
+*during* a read is still refused. What is no longer detected is a replacement occurring between
+two separate verifications inside one process, which the evidence never claimed to cover.
+
 This protocol begins after platform input acceptance. It does not prove focus, capture, repeat
 filtering, OS timestamps, pixel-wheel conversion, redraw scheduling, F4/F5 capture behavior, or
 what a physical display showed. A deterministic action tape proves the reducer and replay

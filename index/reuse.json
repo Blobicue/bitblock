@@ -464,7 +464,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29213,
+   "code_lines": 29226,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -676,7 +676,7 @@
     {
      "left": "display_store:1685",
      "lines": 19,
-     "right": "main:4038"
+     "right": "main:4070"
     },
     {
      "left": "output_topology:1469",
@@ -684,9 +684,9 @@
      "right": "presentation_output:663"
     },
     {
-     "left": "main:4080",
+     "left": "main:4112",
      "lines": 17,
-     "right": "main:5143"
+     "right": "main:5175"
     },
     {
      "left": "presentation_output:693",
@@ -696,7 +696,7 @@
     {
      "left": "display_store:1649",
      "lines": 12,
-     "right": "main:3997"
+     "right": "main:4029"
     },
     {
      "left": "history:931",
@@ -741,7 +741,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4565"
+     "right": "main:4597"
     },
     {
      "left": "history_store:1595",

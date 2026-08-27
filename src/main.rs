@@ -9,6 +9,8 @@ use std::io::{self, Read};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(feature = "protocol-research")]
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use bitblock::camera::{Camera, DEFAULT_DOLLY_LOG_STEP, DEFAULT_MOUSE_SENSITIVITY, Vec3};
@@ -3269,8 +3271,38 @@ fn headless_local_replay_admission_policy_tag() -> ContentTag {
     local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_ADMISSION_SCHEMA, &payload)
 }
 
+/// The fingerprint of the running executable, computed once for this process.
+///
+/// The fingerprint names the bytes of the executable that emitted a carrier. Within one
+/// process that is a constant, so re-reading and re-hashing the file per call cannot make
+/// the evidence more accurate. It can only make one run's evidence inconsistent with itself
+/// if the file is replaced mid-run, so computing it once is the stronger reading of what the
+/// fingerprint claims rather than a weaker one.
+///
+/// The mid-read integrity check in [`fingerprint_running_executable`] is unchanged and still
+/// runs: the length is compared before and after hashing, so a file replaced *during* the
+/// read is still refused. What is no longer detected is a replacement between two separate
+/// verifications inside one process, which the evidence never claimed to cover.
+///
+/// The cost this removes: `verify_local_replay_evidence` streams the whole executable, and a
+/// test calling it six times hashed 27MB six times -- 6.45s of an 8s verification run.
 #[cfg(feature = "protocol-research")]
 fn headless_local_replay_build() -> Result<LocalReplayBuild, io::Error> {
+    // io::Error is not Clone, so the kind and message are stored and rebuilt. A failure is
+    // remembered like a success: an executable this process cannot fingerprint now is one it
+    // cannot fingerprint later either, and retrying would re-read 27MB only to fail again.
+    static FINGERPRINT: OnceLock<Result<LocalReplayBuild, (io::ErrorKind, String)>> =
+        OnceLock::new();
+    match FINGERPRINT.get_or_init(|| {
+        fingerprint_running_executable().map_err(|error| (error.kind(), error.to_string()))
+    }) {
+        Ok(build) => Ok(*build),
+        Err((kind, message)) => Err(io::Error::new(*kind, message.clone())),
+    }
+}
+
+#[cfg(feature = "protocol-research")]
+fn fingerprint_running_executable() -> Result<LocalReplayBuild, io::Error> {
     let executable = std::env::current_exe()?;
     let mut file = std::fs::File::open(&executable)?;
     let before = file.metadata()?;
