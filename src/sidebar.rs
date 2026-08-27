@@ -22,6 +22,10 @@ const SNAPSHOT_PAYLOAD_LEN: u64 = 368;
 const SIDEBAR_POLICY_SCHEMA: &[u8] = b"bitblock/sidebar/raster-policy/v1";
 const COMPOSITE_POLICY_SCHEMA: &[u8] = b"bitblock/sidebar/composite-policy/v1";
 const COMPOSITE_INPUT_SCHEMA: &[u8] = b"bitblock/sidebar/composite-frame-input/v1";
+const SIDEBAR_POLICY_TEXT: &[u8] =
+    b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1";
+const SIDEBAR_POLICY_FIXED_BYTES: u64 =
+    size_of::<u32>() as u64 + 5 * size_of::<u32>() as u64 + SIDEBAR_POLICY_TEXT.len() as u64;
 
 static SIDEBAR_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
 static COMPOSITE_POLICY_TAG: OnceLock<ContentTag> = OnceLock::new();
@@ -439,31 +443,68 @@ pub fn composite_overlay_input(snapshot: ContentTag) -> Result<OverlayInput, Fra
 
 pub fn sidebar_policy_tag() -> ContentTag {
     *SIDEBAR_POLICY_TAG.get_or_init(|| {
-        let mut payload = Vec::with_capacity(8_000);
-        payload.extend_from_slice(&SIDEBAR_WIDTH.to_be_bytes());
-        for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
-            payload.extend_from_slice(&color.to_be_bytes());
-        }
-        payload.extend_from_slice(
-            b"font=bitblock-3x5-ascii/v1;glyph-scale=1;row-gap=2;predecessor-only=v1",
-        );
-        for binding in DISPLAYED_METRICS {
-            let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
-            let definition_len =
-                u16::try_from(binding.definition.len()).expect("definition tag exceeds u16");
-            payload.extend_from_slice(&alias_len.to_be_bytes());
-            payload.extend_from_slice(binding.alias.as_bytes());
-            payload.extend_from_slice(&definition_len.to_be_bytes());
-            payload.extend_from_slice(binding.definition.as_bytes());
-        }
         hash_canonical(
             TagKind::Policy,
             SIDEBAR_POLICY_SCHEMA,
-            payload.len() as u64,
-            |sink| sink(&payload),
+            sidebar_policy_payload_len(),
+            feed_sidebar_policy,
         )
-        .expect("sidebar policy byte length is measured from its exact encoding")
+        .expect("sidebar policy byte length and exact encoding are fixed")
     })
+}
+
+fn sidebar_policy_payload_len() -> u64 {
+    DISPLAYED_METRICS
+        .iter()
+        .fold(SIDEBAR_POLICY_FIXED_BYTES, |total, binding| {
+            let alias_len =
+                u64::try_from(binding.alias.len()).expect("metric alias length fits u64");
+            let definition_len =
+                u64::try_from(binding.definition.len()).expect("definition tag length fits u64");
+            total
+                .checked_add(size_of::<u16>() as u64 + alias_len)
+                .and_then(|value| value.checked_add(size_of::<u16>() as u64 + definition_len))
+                .expect("static sidebar policy length does not overflow")
+        })
+}
+
+fn feed_sidebar_policy(sink: &mut dyn FnMut(&[u8])) {
+    sink(&SIDEBAR_WIDTH.to_be_bytes());
+    for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
+        sink(&color.to_be_bytes());
+    }
+    sink(SIDEBAR_POLICY_TEXT);
+    for binding in DISPLAYED_METRICS {
+        let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
+        let definition_len =
+            u16::try_from(binding.definition.len()).expect("definition tag exceeds u16");
+        sink(&alias_len.to_be_bytes());
+        sink(binding.alias.as_bytes());
+        sink(&definition_len.to_be_bytes());
+        sink(binding.definition.as_bytes());
+    }
+}
+
+#[cfg(test)]
+fn sidebar_policy_payload_reference() -> Vec<u8> {
+    let mut payload = Vec::with_capacity(
+        usize::try_from(sidebar_policy_payload_len()).expect("static sidebar policy fits usize"),
+    );
+    payload.extend_from_slice(&SIDEBAR_WIDTH.to_be_bytes());
+    for color in [PANEL_BACKGROUND, PANEL_RULE, HEADING, LABEL, VALUE] {
+        payload.extend_from_slice(&color.to_be_bytes());
+    }
+    payload.extend_from_slice(SIDEBAR_POLICY_TEXT);
+    for binding in DISPLAYED_METRICS {
+        let alias_len = u16::try_from(binding.alias.len()).expect("metric alias exceeds u16");
+        let definition_len =
+            u16::try_from(binding.definition.len()).expect("definition tag exceeds u16");
+        payload.extend_from_slice(&alias_len.to_be_bytes());
+        payload.extend_from_slice(binding.alias.as_bytes());
+        payload.extend_from_slice(&definition_len.to_be_bytes());
+        payload.extend_from_slice(binding.definition.as_bytes());
+    }
+    payload
 }
 
 pub fn composite_policy_tag() -> ContentTag {
@@ -1683,6 +1724,20 @@ mod tests {
             composite_policy_tag().to_string(),
             "#bb.policy.sha256.kyd57oandtrj4iuis54zozpv6pwgmcoy4hmsvlkp2fqvhy6noe5q"
         );
+    }
+
+    #[test]
+    fn streamed_sidebar_policy_matches_the_collected_reference_bytes() {
+        let reference = sidebar_policy_payload_reference();
+        assert_eq!(reference.len() as u64, sidebar_policy_payload_len());
+        let reference_tag = hash_canonical(
+            TagKind::Policy,
+            SIDEBAR_POLICY_SCHEMA,
+            reference.len() as u64,
+            |sink| sink(&reference),
+        )
+        .unwrap();
+        assert_eq!(sidebar_policy_tag(), reference_tag);
     }
 
     #[test]

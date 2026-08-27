@@ -19,6 +19,8 @@ pub mod optimization;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod output_topology;
 #[cfg(any(test, feature = "protocol-research"))]
+pub mod physical_sensor;
+#[cfg(any(test, feature = "protocol-research"))]
 pub mod presentation;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod presentation_output;

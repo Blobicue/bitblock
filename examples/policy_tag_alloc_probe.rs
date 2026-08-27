@@ -4,8 +4,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bitblock::sidebar::composite_policy_tag;
 
-const SIDEBAR_POLICY_TEMPORARY_BYTES: usize = 8_000;
-
 struct CountingAllocator;
 
 static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
@@ -57,7 +55,7 @@ fn main() {
         black_box(composite_policy_tag());
     });
 
-    assert_eq!(cold, (1, SIDEBAR_POLICY_TEMPORARY_BYTES));
+    assert_eq!(cold, (0, 0));
     assert_eq!(warm, (0, 0));
     println!(
         "cold_allocations={}\tcold_allocated_bytes={}\twarm_allocations={}\twarm_allocated_bytes={}\tcomposite_policy={tag}",

@@ -34,6 +34,12 @@ Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 and verifies that an open term is refused. This is a dependency/parity assay,
 not a claim that the two repositories share a verified compiler.
 
+`ladderlang-transition-v1/` is a separate, self-contained copy of the exact
+two-source transitive closure needed to run a finite one-bit transition truth
+table under LadderLang's actual bounded reducer. Its verifier checks copied
+source SHA-256 values before building. It retains `HOLD`, `RAN`, and `GREW`
+outcomes, and is not a Rust refinement or general semantic bridge.
+
 These are abstract mathematical models. They do not prove that the Rust world,
 renderer, hash/receipt encoding, network, or consensus implementation refines
 either model.

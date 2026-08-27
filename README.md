@@ -18,6 +18,10 @@ Bitblock is a binary coordinate space observed through a free camera.
 - A one-shot research bundle can additionally retain bounded active-output topology before and
   after one OS screen-raster capture. Stable routes and matching pixels still do not prove
   per-frame DWM attribution, scanout, or physical light.
+- A feature-gated physical-sensor carrier can retain a full presentation tag, declared integer
+  RGB tolerance profile, ordered XRGB challenge positions, and reported RGB16 samples. It has no
+  device collector or physical observation yet: `N/A`, unavailable, and unbound states remain
+  first-class, and a synthetic codec test is not a monitor-light result.
 - One fixed 60 Hz tick consumes input, changes observer/world state, and produces changed frames;
   the window layer only presents pixels produced by that tick.
 - Scroll moves logarithmically between the one-pixel view and a block-filling view.
@@ -296,13 +300,22 @@ association and bit-order mutants. `proof/LadderLangQuotedByteParity.lean`
 additionally runs against the pinned LadderLang checkout's own
 `Lam.costChecked`.
 
+`proof/ladderlang-transition-v1/` is a separate frozen two-source executable
+capsule. It copies and SHA-256 verifies only the pinned `Ladderlang.Core` and
+`Ladderlang.Entries` sources, then uses their real bounded reducer to check the
+finite mutable `on/off/toggle × on/off` truth table, valid immutable-origin
+rows, and explicit `RAN`/`GREW` resource controls. Run `verify.ps1` inside that
+directory. It establishes only that finite target under its declared reducer
+and Lean dependencies; it does not yet prove that Rust executes a translated
+program or establish iota execution cost.
+
 ```powershell
 cd proof
 lake build
 ```
 
-The capsule does not prove that the chunked Rust implementation refines the
-world model or that quoted bytes execute Edit semantics. It makes no claim
+The capsules do not prove that the chunked Rust implementation refines the
+world model or that quoted bytes execute Edit semantics. They make no claim
 about camera floats, rendering, hashing, wall-clock scheduling, currency, or
 consensus.
 
@@ -406,3 +419,31 @@ join identifiers. Query failure is explicit. The derived route result is
 `Stable`, `Changed`, or `Unavailable`; it is not encoded and does not by itself
 establish collection time or displayed-frame fate. ICC/HDR state, output bit
 depth, applied transform order, scanout, and panel light remain unobserved.
+
+## External-sensor boundary
+
+`physical_sensor` is an opt-in research protocol module, not a hardware driver. Its canonical
+`PhysicalSensorObservation` has only three serialized states: `NotApplicable`, `Unavailable`,
+and `ReportedSamples`. The record names a full `PresentationOutputArtifact` tag, a fixed policy
+tag, a declared (not independently certified) sensor profile, ordered framebuffer coordinates
+with expected XRGB words, bounded raw source bytes, and one RGB16 triplet per challenge point.
+It does not contain a self-declared “pass.”
+
+A separate `verify_against(parent)` call can return `BoundSampleMatch` only when the caller
+supplies the exact named presentation artifact, that artifact structurally verifies and records
+an exact complete OS desktop-raster match, every challenge XRGB word equals the artifact's
+expected framebuffer word, and every reported RGB16 channel is within its declared integer
+tolerance of `channel8 * 257`. Missing/wrong parents, unavailable GDI captures, bad challenges,
+and residuals outside the bound stay `Unbound`, `ChallengeMismatch`, or `SampleMismatch`.
+
+That narrow result still proves neither that an external device produced the numbers nor that
+they came from the panel. Device identity, calibration custody, camera-to-panel geometry,
+temporal synchronization, ICC/HDR transforms, scanout, and emitted light remain outside the
+current evidence. The physical-display-sensor metric therefore remains `N/A` until an actual
+external instrument is bound under a future protocol.
+
+The codec's independent, stdlib-only tag vectors can be checked with:
+
+```powershell
+python -B tools/physical_sensor_vectors.py
+```

@@ -36,6 +36,8 @@ pub enum TagKind {
     MetricSnapshot,
     #[cfg(any(test, feature = "protocol-research"))]
     OutputTopology,
+    #[cfg(any(test, feature = "protocol-research"))]
+    PhysicalSensorObservation,
     Policy,
     #[cfg(any(test, feature = "protocol-research"))]
     PresentationArtifact,
@@ -77,6 +79,8 @@ impl TagKind {
             Self::MetricSnapshot => "metric-snapshot",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::OutputTopology => "output-topology",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::PhysicalSensorObservation => "physical-sensor-observation",
             Self::Policy => "policy",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::PresentationArtifact => "presentation-artifact",
@@ -119,6 +123,8 @@ impl TagKind {
             b"metric-snapshot" => Self::MetricSnapshot,
             #[cfg(any(test, feature = "protocol-research"))]
             b"output-topology" => Self::OutputTopology,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"physical-sensor-observation" => Self::PhysicalSensorObservation,
             b"policy" => Self::Policy,
             #[cfg(any(test, feature = "protocol-research"))]
             b"presentation-artifact" => Self::PresentationArtifact,
@@ -560,6 +566,7 @@ mod tests {
             TagKind::MetricDefinition,
             TagKind::MetricSnapshot,
             TagKind::OutputTopology,
+            TagKind::PhysicalSensorObservation,
             TagKind::Policy,
             TagKind::PresentationArtifact,
             TagKind::PresentationOutputArtifact,

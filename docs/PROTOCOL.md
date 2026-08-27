@@ -127,6 +127,30 @@ The process cannot prove photons on the monitor from its own framebuffer. OS
 composition, scaling, color management, occlusion, cable, and panel behavior
 sit outside that trust boundary.
 
+### External-sensor observation carrier
+
+The feature-gated `PhysicalSensorObservation v1` carrier is a bounded bridge for a future
+external instrument, not a physical-display certificate. It serializes only `NotApplicable`,
+`Unavailable`, or `ReportedSamples`; no canonical payload can declare that it passed. A
+reported-sample object contains a full typed `PresentationOutputArtifact` tag, the fixed
+sensor-comparison policy tag, a declared profile tag and RGB16 tolerances, an ordered list of
+`(x, y, expected_XRGB)` challenge points, one RGB16 sample per point, and at most 64 KiB of raw
+attachment bytes. The attachment is hash-bound but is not parsed as a success witness.
+
+`verify_against(parent)` first re-verifies the carrier, then requires the caller-supplied parent
+to have the named full tag and pass its own display/timing/topology checks. It requires the
+nested display receipt to be `Match` at `Complete` capture stage, checks every challenge position
+against the parent's authoritative expected XRGB slice, and compares channels only in the integer
+relation `abs(sample_u16 - expected_u8 * 257) <= declared_tolerance_u16`. Any missing/wrong
+parent, nonexact desktop capture, challenge drift, out-of-bounds coordinate, count mismatch, or
+residual breach yields a named refusal. Only then may it return `BoundSampleMatch`.
+
+`BoundSampleMatch` means that supplied numbers satisfy the declared bounded comparison against
+named pixels of one already-matching OS-raster artifact. It does not establish the provenance of
+the numbers, an independently held/calibrated instrument, physical camera/panel mapping, timing,
+scanout, or photons. No external sensor record has been admitted, so the physical-display metric
+is still `N/A`.
+
 The implemented frame chain separates input, output, and occurrence:
 
 ```text
