@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """bbtime.py -- measure where verification time actually goes, per test and per module.
 
-    python tools/bbtime.py              # profile everything, write target/bbtiming.json
-    python tools/bbtime.py --serial     # slower, but no contention in the numbers
+    python tools/bbtime.py              # serial and accurate; writes target/bbtiming.json
+    python tools/bbtime.py --best-of-3  # three samples per test, keep the fastest
+    python tools/bbtime.py --parallel   # rough sweep only; see the warning below
     python tools/bbtime.py --top 30     # show more rows
 
 The point is that bottlenecks should surface themselves rather than be guessed
@@ -20,12 +21,30 @@ The output is written to target/ rather than index/, deliberately. It is a
 measurement of this machine on this day -- it would differ on every host, and
 index/ has to regenerate byte-identically from the tree.
 
-**On the numbers.** Each test is run in its own process, so process start is
-measured once and subtracted. Under `--parallel` (the default) tests contend for
-cores, which inflates absolute times but leaves the ranking stable; `--serial`
-gives true single-test cost at several times the wall clock. Neither is a
-benchmark: they are wall-clock samples taken once, and a difference under about
-20% between two rows is not a real difference.
+**On the numbers.** Each test runs in its own process with `--test-threads 1`,
+and process start is measured and subtracted.
+
+`--parallel` is a rough sweep and its **ranking is not trustworthy**. Eight
+concurrent children, each opening a full libtest thread pool, oversubscribe the
+machine badly enough to reorder the results: against best-of-three isolated
+runs, a 0.04s test was reported at 3.88s and ranked slowest of all, while a
+genuinely 1.93s test came fourth. That was measured, not feared, and it is why
+serial is the default.
+
+Serial numbers are still wall-clock samples rather than a benchmark. Take a
+difference under about 20% between two rows as noise, and use `--best-of-3` when
+a specific pair matters.
+
+**Per-test isolation double-counts anything a process pays once.** The
+executable fingerprint is memoised per process, so in a real run the 27MB hash
+happens once for all 53 bin tests; here every test that touches it pays again.
+Isolated cost answers "what does this test cost alone", not "what would deleting
+it save".
+
+**The sum is not the wall clock.** ~30s of measured test cost becomes ~3.5s of
+tier, because the binaries run concurrently and libtest parallelises within
+each. What sets the floor is the slowest single binary, and inside that, its
+slowest test. Optimise the longest pole, never the largest sum.
 """
 
 from __future__ import annotations
@@ -95,14 +114,24 @@ def owning_module(binary: str, test: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    serial = "--serial" in argv
+    # Serial by default, because the parallel mode does not merely inflate the
+    # numbers -- it reorders them. Measured against best-of-three isolated runs,
+    # eight concurrent children each spawning a full libtest thread pool
+    # oversubscribed sixteen cores so badly that a 0.04s test was reported at
+    # 3.88s and ranked slowest of all, while a genuinely 1.93s test came fourth.
+    # A profiler that mis-ranks is worse than no profiler, so --parallel is now
+    # opt-in and only fit for a rough sweep.
+    parallel = "--parallel" in argv
+    repeats = 3 if "--best-of-3" in argv else 1
     top = 20
     if "--top" in argv:
         top = int(argv[argv.index("--top") + 1])
 
     binaries = build(["--features", "protocol-research"])
-    print("bbtime  %d test binaries, %s"
-          % (len(binaries), "serial" if serial else "8 concurrent workers"))
+    print("bbtime  %d test binaries, %s%s"
+          % (len(binaries),
+             "8 concurrent workers (RANKING UNRELIABLE)" if parallel else "serial",
+             ", best of %d" % repeats if repeats > 1 else ""))
 
     rows = []
     started = time.time()
@@ -112,16 +141,23 @@ def main(argv: list[str]) -> int:
         print("  %-22s %3d tests, process start %.3fs" % (label, len(names), overhead))
 
         def timed(name: str):
-            mark = time.time()
-            subprocess.run([exe, "--quiet", "--exact", name], cwd=ROOT,
-                           capture_output=True)
-            return name, max(time.time() - mark - overhead, 0.0)
+            best = None
+            for _ in range(repeats):
+                mark = time.time()
+                # One test does not need a thread pool, and letting each child
+                # open one is what wrecked the parallel mode.
+                subprocess.run([exe, "--quiet", "--exact", name,
+                                "--test-threads", "1"],
+                               cwd=ROOT, capture_output=True)
+                sample = time.time() - mark - overhead
+                best = sample if best is None else min(best, sample)
+            return name, max(best or 0.0, 0.0)
 
-        if serial:
-            measured = [timed(n) for n in names]
-        else:
+        if parallel:
             with ThreadPoolExecutor(max_workers=8) as pool:
                 measured = list(pool.map(timed, names))
+        else:
+            measured = [timed(n) for n in names]
         for name, cost in measured:
             rows.append({"binary": label, "test": name, "seconds": round(cost, 4),
                          "module": owning_module(label, name)})
@@ -137,7 +173,8 @@ def main(argv: list[str]) -> int:
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({
-        "mode": "serial" if serial else "parallel",
+        "mode": "parallel" if parallel else "serial",
+        "repeats": repeats,
         "profiled_in_seconds": round(elapsed, 1),
         "by_module": dict(sorted(by_module.items(),
                                  key=lambda kv: -kv[1]["seconds"])),

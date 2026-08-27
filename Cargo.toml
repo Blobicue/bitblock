@@ -27,6 +27,25 @@ windows-sys = { version = "=0.61.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+# Tests are the inner loop, and at opt-level 0 they were the whole cost of
+# verification: one headless replay of a five-record tape took 1.56s unoptimised
+# and 0.06s optimised, a 26x difference that put every slow test in the profile
+# there for the same reason.
+#
+# Optimising also makes the incremental rebuild *faster*, which is not obvious:
+# an unoptimised build produces 27MB binaries and the edit-to-answer path is
+# link-bound, so opt-level 3 rebuilds in 4.8s where opt-level 0 took 7.9s.
+# Measured edit-to-answer: 11.1s at opt 0, 6.3s at 1, 5.7s at 2, 5.3s at 3.
+# Only the cold build pays, at 39.6s against 31.0s.
+#
+# debug-assertions and overflow-checks stay on: they are correctness checks, not
+# speed knobs, and this crate relies on both. Rust does not enable fast-math at
+# any opt-level, so f64 camera geometry is bit-identical across all of them.
+[profile.dev]
+opt-level = 3
+debug-assertions = true
+overflow-checks = true
+
 [profile.release]
 lto = "thin"
 strip = true

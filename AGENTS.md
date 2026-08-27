@@ -183,8 +183,20 @@ byte fails both from opposite directions.
 |---|---:|---:|
 | nothing | 0.1s | 0.0s |
 | a document | 1.0s | 0.0s |
-| a source file | ~5.5s | ~3.5s |
-| everything (`--force`) | 5.5s | ~3.5s |
+| a source file | ~14s | ~9.6s |
+| nothing, but `--force` | 1.8s | 0.9s |
+
+After a source edit the cost is the Rust toolchain, not the checks: a rebuild is
+5.2s and clippy another 3.2s, against 0.5s to run all 397 tests.
+
+`[profile.dev] opt-level = 3` is why the test half is small. At opt-level 0 one
+headless replay of a five-record tape took 1.56s; optimised it takes 0.06s, and
+every slow test in the profile was slow for that one reason. Optimising also
+makes the *rebuild* faster, which is not obvious -- unoptimised builds produce
+27MB binaries and the edit path is link-bound. Measured edit-to-answer: 11.1s at
+opt 0, 6.3s at 1, 5.7s at 2, 5.3s at 3; only the cold build pays, 39.6s against
+31.0s. `debug-assertions` and `overflow-checks` stay on, and Rust does not
+enable fast-math at any level, so the f64 camera geometry is bit-identical.
 
 Those are steady-state figures. Alternating the tiers costs roughly two extra
 seconds on the first run after the switch, because they use different feature
