@@ -183,8 +183,11 @@ byte fails both from opposite directions.
 |---|---:|---:|
 | nothing | 0.1s | 0.0s |
 | a document | 1.0s | 0.0s |
-| a source file | ~8s | ~4s |
-| everything (`--force`) | 8.0s | 3.9s |
+| a source file | ~6.5s | ~4.4s |
+| everything (`--force`) | 6.5s | 5.2s |
+
+Alternating the tiers costs about a second: they use different feature sets, so
+each invalidates the other's build profile. Repeating one tier is the fast path.
 
 Three things get it there.
 
