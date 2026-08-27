@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
@@ -16,24 +17,34 @@ ROOT = Path(__file__).resolve().parents[1]
 CAPABILITY = ROOT / "docs" / "CAPABILITY_TREE.md"
 FIRST_AUDIT = ROOT / "docs" / "FUTURE_PLAN_AUDIT.md"
 FIRST_AUDIT_GIT_BLOB = "8a02f4b7b00b440e14a35a098b87a7493fd887b4"
+SECOND_AUDIT = ROOT / "docs" / "FUTURE_PLAN_AUDIT_LOOP2.md"
+SECOND_AUDIT_GIT_BLOB = "c4be9e0dc7041bfe79b3e8561308b6c2c4767ce6"
 DESIGN_DISTILLATION = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION.md"
 DESIGN_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT.md"
 DESIGN_AUDIT_GIT_BLOB = "73d53bc6f3ca007b5faca8c499660b207ff048e2"
+SUCCESSOR_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md"
+SUCCESSOR_AUDIT_GIT_BLOB = "e8bd912f171d64c345b6fa71413bd9503e12f5f3"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
+DESIGN_RECEIPT_GIT_BLOB = "c3005e7fc98971a7747ab125f1624d08aff31199"
 DESIGN_RECEIPT_CANONICAL_SHA256 = "38731565d149bedfc9a9e7570db0ca0a1478e4e7aa3cdeef0aa1a4e5a5888acb"
+DESIGN_RECEIPT_AUDITED_COMMIT = "694650f4028f5c1fb715384597326e0b0e31f0e1"
 PLANNING_FILES = (
     ROOT / "README.md",
     ROOT / "docs" / "PROJECT_INTENT.md",
     DESIGN_DISTILLATION,
     DESIGN_AUDIT,
+    SUCCESSOR_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
-    ROOT / "docs" / "FUTURE_PLAN_AUDIT_LOOP2.md",
+    SECOND_AUDIT,
+    ROOT / "docs" / "SEMANTICS.md",
     ROOT / "docs" / "TRANSCRIPT_AUDIT.md",
     ROOT / "docs" / "HANDOFF.md",
     ROOT / "docs" / "LAYER1_DESIGN_PAPER.md",
     ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md",
+    ROOT / "docs" / "PROTOCOL.md",
+    ROOT / "docs" / "TIMELINES.md",
 )
 NODE_ID = r"[A-Z][A-Z0-9-]*"
 DETAIL_HEADING = re.compile(rf"^### `({NODE_ID})`(?:\s|$)")
@@ -45,6 +56,10 @@ CONDITIONAL_ROW = re.compile(
     rf"^\| (CE-[0-9]{{2}}) \| ({NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
     rf"([a-z0-9]+(?:-[a-z0-9]+)*) \| ({NODE_ID}) \| "
     rf"([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
+)
+PREDICATE_ENTAILMENT_ROW = re.compile(
+    r"^\| (PE-[0-9]{2}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
+    r"([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
 )
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
@@ -65,8 +80,10 @@ EXPECTED_NODE_IDS = frozenset(
     """.split()
 )
 EXPECTED_STATUS_DIGEST = "61f447102b3c6134d74338b05c6a6e1648d48cd2f9254d1e6a822349bab45dc3"
-EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 41))
-EXPECTED_CONDITIONAL_DIGEST = "8356435311c8c1b9207b39892c56126e25b48b21f58b750d4e25b2b3a00d2d1b"
+EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 42))
+EXPECTED_CONDITIONAL_DIGEST = "3468248e99fcb12af5ed644dfbdc18d7c5ca0d40a40fb18b4ac499c33fe88df7"
+EXPECTED_PREDICATE_ENTAILMENT_IDS = frozenset(f"PE-{number:02d}" for number in range(1, 12))
+EXPECTED_PREDICATE_ENTAILMENT_DIGEST = "68d76604c6370932c8dcaab229ed1ed495922d0eac3e7ef741abe80b17534e85"
 
 
 class PlanningError(ValueError):
@@ -89,6 +106,13 @@ class ConditionalEdge:
     predicate: str
     dependency_base: str
     dependency_role: str
+
+
+@dataclass(frozen=True)
+class PredicateEntailment:
+    entailment_id: str
+    antecedent: str
+    consequent: str
 
 
 STATUS_CLASSES = (
@@ -315,6 +339,101 @@ def parse_conditional_edges(
     return tuple(edges)
 
 
+def parse_predicate_entailments(
+    text: str,
+    conditional_edges: tuple[ConditionalEdge, ...],
+    *,
+    enforce_manifest: bool = True,
+) -> tuple[PredicateEntailment, ...]:
+    entailments: list[PredicateEntailment] = []
+    seen_ids: set[str] = set()
+    seen_pairs: set[tuple[str, str]] = set()
+    known_predicates = {edge.predicate for edge in conditional_edges}
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.startswith("| PE-"):
+            continue
+        match = PREDICATE_ENTAILMENT_ROW.match(line)
+        if not match:
+            raise PlanningError(f"predicate entailment row {number} is not canonical: {line}")
+        entailment = PredicateEntailment(*match.groups())
+        if entailment.entailment_id in seen_ids:
+            raise PlanningError(
+                f"duplicate predicate entailment {entailment.entailment_id} at line {number}"
+            )
+        pair = (entailment.antecedent, entailment.consequent)
+        if pair in seen_pairs:
+            raise PlanningError(
+                f"duplicate predicate entailment pair {pair[0]} -> {pair[1]} at line {number}"
+            )
+        if entailment.antecedent == entailment.consequent:
+            raise PlanningError(
+                f"{entailment.entailment_id}: predicate cannot entail itself"
+            )
+        unknown = sorted(set(pair) - known_predicates)
+        if unknown:
+            raise PlanningError(
+                f"{entailment.entailment_id}: undefined predicates: {', '.join(unknown)}"
+            )
+        seen_ids.add(entailment.entailment_id)
+        seen_pairs.add(pair)
+        entailments.append(entailment)
+
+    if not entailments:
+        raise PlanningError("no structured predicate entailments parsed")
+
+    canonical = "\n".join(
+        "|".join(
+            (
+                entailment.entailment_id,
+                entailment.antecedent,
+                entailment.consequent,
+            )
+        )
+        for entailment in entailments
+    )
+    if enforce_manifest:
+        actual_ids = frozenset(seen_ids)
+        if actual_ids != EXPECTED_PREDICATE_ENTAILMENT_IDS:
+            missing = sorted(EXPECTED_PREDICATE_ENTAILMENT_IDS - actual_ids)
+            extra = sorted(actual_ids - EXPECTED_PREDICATE_ENTAILMENT_IDS)
+            raise PlanningError(
+                "predicate entailment inventory changed without updating its intentional guard: "
+                f"missing={missing}, extra={extra}"
+            )
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if digest != EXPECTED_PREDICATE_ENTAILMENT_DIGEST:
+            raise PlanningError(
+                "predicate entailments changed without updating their guard: "
+                f"expected {EXPECTED_PREDICATE_ENTAILMENT_DIGEST}, got {digest}"
+            )
+
+    adjacency: dict[str, list[str]] = {
+        predicate: [] for predicate in known_predicates
+    }
+    for entailment in entailments:
+        adjacency[entailment.antecedent].append(entailment.consequent)
+    _assert_acyclic(
+        {predicate: tuple(consequents) for predicate, consequents in adjacency.items()},
+        "predicate entailment",
+    )
+    return tuple(entailments)
+
+
+def expand_predicates(
+    seeds: set[str],
+    entailments: tuple[PredicateEntailment, ...],
+) -> frozenset[str]:
+    expanded = set(seeds)
+    changed = True
+    while changed:
+        changed = False
+        for entailment in entailments:
+            if entailment.antecedent in expanded and entailment.consequent not in expanded:
+                expanded.add(entailment.consequent)
+                changed = True
+    return frozenset(expanded)
+
+
 def heading_slug(text: str) -> str:
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"<[^>]*>", "", text)
@@ -346,7 +465,47 @@ def heading_anchors(text: str) -> set[str]:
     return anchors
 
 
-def check_markdown(path: Path, text: str) -> None:
+def git_tracked_or_staged_paths() -> frozenset[Path]:
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "-z"],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", b"").decode("utf-8", errors="replace").strip()
+        raise PlanningError(f"cannot enumerate Git tracked/staged paths: {detail or error}") from error
+    return frozenset(
+        (ROOT / entry.decode("utf-8")).resolve()
+        for entry in result.stdout.split(b"\0")
+        if entry
+    )
+
+
+def is_git_tracked_or_staged_target(
+    resolved: Path,
+    tracked_paths: frozenset[Path],
+) -> bool:
+    if resolved in tracked_paths:
+        return True
+    if not resolved.is_dir():
+        return False
+    return any(
+        candidate != resolved and resolved in candidate.parents
+        for candidate in tracked_paths
+    )
+
+
+def check_markdown(
+    path: Path,
+    text: str,
+    *,
+    tracked_paths: frozenset[Path] | None = None,
+) -> None:
+    if tracked_paths is None:
+        tracked_paths = git_tracked_or_staged_paths()
     lines = text.splitlines()
     fence_count = sum(1 for line in lines if line.startswith("```"))
     if fence_count % 2:
@@ -389,8 +548,18 @@ def check_markdown(path: Path, text: str) -> None:
             continue
         target, separator, fragment = raw_target.partition("#")
         resolved = path.resolve() if not target else (path.parent / target).resolve()
+        try:
+            resolved.relative_to(ROOT)
+        except ValueError as error:
+            raise PlanningError(
+                f"{path.relative_to(ROOT)}: relative link escapes repository: {target}"
+            ) from error
         if not resolved.exists():
             raise PlanningError(f"{path.relative_to(ROOT)}: missing relative link target {target}")
+        if not is_git_tracked_or_staged_target(resolved, tracked_paths):
+            raise PlanningError(
+                f"{path.relative_to(ROOT)}: relative link target is not Git tracked/staged: {target}"
+            )
         if separator and fragment:
             target_text = text if resolved == path.resolve() else resolved.read_text(encoding="utf-8")
             if fragment not in heading_anchors(target_text):
@@ -410,6 +579,16 @@ def check_frozen_first_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_second_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != SECOND_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/FUTURE_PLAN_AUDIT_LOOP2.md changed after its frozen first addition: "
+            f"expected Git blob {SECOND_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
 def check_frozen_design_audit(data: bytes) -> None:
     header = f"blob {len(data)}\0".encode("ascii")
     actual = hashlib.sha1(header + data).hexdigest()
@@ -417,6 +596,26 @@ def check_frozen_design_audit(data: bytes) -> None:
         raise PlanningError(
             "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md changed after its frozen first addition: "
             f"expected Git blob {DESIGN_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def check_frozen_successor_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != SUCCESSOR_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md changed after its frozen first "
+            f"addition: expected Git blob {SUCCESSOR_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def check_frozen_design_receipt_bytes(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != DESIGN_RECEIPT_GIT_BLOB:
+        raise PlanningError(
+            "docs/design-source-receipt-v1.json changed after first admission: "
+            f"expected Git blob {DESIGN_RECEIPT_GIT_BLOB}, got {actual}"
         )
 
 
@@ -440,6 +639,62 @@ def parse_frozen_design_receipt(data: bytes) -> dict[str, object]:
             f"expected canonical SHA-256 {DESIGN_RECEIPT_CANONICAL_SHA256}, got {actual}"
         )
     return receipt
+
+
+def read_historical_git_blob(commit: str, path: Path) -> bytes:
+    try:
+        relative = path.resolve().relative_to(ROOT).as_posix()
+    except ValueError as error:
+        raise PlanningError(f"historical receipt path escapes repository: {path}") from error
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise PlanningError(f"historical receipt commit is not a full lowercase Git ID: {commit}")
+    object_name = f"{commit}:{relative}"
+    try:
+        result = subprocess.run(
+            ["git", "cat-file", "blob", object_name],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", b"").decode("utf-8", errors="replace").strip()
+        raise PlanningError(
+            f"cannot resolve historical receipt object {object_name}: {detail or error}"
+        ) from error
+    return result.stdout
+
+
+def check_audited_distillation_receipt(receipt: dict[str, object]) -> None:
+    audited = receipt.get("audited_distillation_input")
+    if not isinstance(audited, dict):
+        raise PlanningError("design source receipt missing audited_distillation_input object")
+    commit = audited.get("commit")
+    if commit != DESIGN_RECEIPT_AUDITED_COMMIT:
+        raise PlanningError(
+            "design source receipt audited commit changed: "
+            f"expected {DESIGN_RECEIPT_AUDITED_COMMIT}, got {commit}"
+        )
+    data = read_historical_git_blob(commit, DESIGN_DISTILLATION)
+    try:
+        decoded = data.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise PlanningError(f"audited distillation is not UTF-8/BOM text: {error}") from error
+    actual = {
+        "git_blob_sha1": hashlib.sha1(f"blob {len(data)}\0".encode("ascii") + data).hexdigest(),
+        "hash_algorithm": "SHA-256",
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "raw_bytes": len(data),
+        "decoded_utf16_code_units": len(decoded.encode("utf-16-le")) // 2,
+        "whitespace_word_count": len(re.findall(r"\S+", decoded)),
+        "line_count": decoded.count("\n") + 1,
+    }
+    for field, actual_value in actual.items():
+        if audited.get(field) != actual_value:
+            raise PlanningError(
+                f"design source receipt audited {field} disagrees with Git object: "
+                f"expected {actual_value}, got {audited.get(field)}"
+            )
 
 
 def check_design_source_receipt(text: str, receipt: dict[str, object]) -> None:
@@ -477,9 +732,15 @@ def expect_failure(label: str, text: str) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
-def expect_markdown_failure(label: str, path: Path, text: str) -> None:
+def expect_markdown_failure(
+    label: str,
+    path: Path,
+    text: str,
+    *,
+    tracked_paths: frozenset[Path] | None = None,
+) -> None:
     try:
-        check_markdown(path, text)
+        check_markdown(path, text, tracked_paths=tracked_paths)
     except PlanningError:
         return
     raise PlanningError(f"negative control did not fail: {label}")
@@ -493,6 +754,14 @@ def expect_frozen_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_second_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_second_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_frozen_design_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_design_audit(data)
@@ -501,9 +770,36 @@ def expect_frozen_design_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_successor_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_successor_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_frozen_design_receipt_failure(label: str, data: bytes) -> None:
     try:
         parse_frozen_design_receipt(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_design_receipt_bytes_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_design_receipt_bytes(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_audited_distillation_receipt_failure(
+    label: str,
+    receipt: dict[str, object],
+) -> None:
+    try:
+        check_audited_distillation_receipt(receipt)
     except PlanningError:
         return
     raise PlanningError(f"negative control did not fail: {label}")
@@ -527,10 +823,39 @@ def expect_conditional_failure(
     nodes: dict[str, Node],
     *,
     enforce_manifest: bool = True,
+    expected_message: str | None = None,
 ) -> None:
     try:
         parse_conditional_edges(text, nodes, enforce_manifest=enforce_manifest)
-    except PlanningError:
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_predicate_entailment_failure(
+    label: str,
+    text: str,
+    nodes: dict[str, Node],
+    *,
+    enforce_manifest: bool = True,
+    expected_message: str | None = None,
+) -> None:
+    conditional_edges = parse_conditional_edges(text, nodes)
+    try:
+        parse_predicate_entailments(
+            text,
+            conditional_edges,
+            enforce_manifest=enforce_manifest,
+        )
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
         return
     raise PlanningError(f"negative control did not fail: {label}")
 
@@ -538,10 +863,13 @@ def expect_conditional_failure(
 def run_self_tests(
     text: str,
     first_audit_bytes: bytes,
+    second_audit_bytes: bytes,
     design_audit_bytes: bytes,
+    successor_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
     design_receipt: dict[str, object],
+    tracked_paths: frozenset[Path],
 ) -> None:
     unknown = text.replace(
         "- **Depends on:** `TICK-0`, `REPLAY-0`.",
@@ -606,6 +934,13 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     nodes = parse_capability(text)
+    conditional_edges = parse_conditional_edges(text, nodes)
+    predicate_entailments = parse_predicate_entailments(text, conditional_edges)
+    verkle_closure = expand_predicates({"verkle-prototype"}, predicate_entailments)
+    if "verkle-selected" not in verkle_closure:
+        raise PlanningError(
+            "predicate closure did not carry verkle-prototype to verkle-selected"
+        )
     missing_conditional = text.replace(
         "| CE-01 | PROFILE-SCOPE-D0 | candidate-scope | asset-active | ASSET-D1 | design |\n",
         "",
@@ -627,7 +962,7 @@ def run_self_tests(
     conditional_cycle = text.replace(
         "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |",
         "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |\n"
-        "| CE-41 | PROFILE-D1 | new-candidate-profile | cycle-test | UPGRADE-1 | migration |",
+        "| CE-42 | PROFILE-D1 | new-candidate-profile | migration-profile | UPGRADE-1 | migration |",
         1,
     )
     if conditional_cycle == text:
@@ -637,26 +972,89 @@ def run_self_tests(
         conditional_cycle,
         nodes,
         enforce_manifest=False,
+        expected_message="role-aware conditional dependency cycle:",
+    )
+
+    missing_entailment = text.replace(
+        "| PE-11 | verkle-prototype | verkle-selected |\n",
+        "",
+        1,
+    )
+    if missing_entailment == text:
+        raise PlanningError("self-test fixture drift: PE-11")
+    expect_predicate_entailment_failure(
+        "missing predicate entailment",
+        missing_entailment,
+        nodes,
+    )
+
+    reversed_entailment = text.replace(
+        "| PE-11 | verkle-prototype | verkle-selected |",
+        "| PE-11 | verkle-selected | verkle-prototype |",
+        1,
+    )
+    if reversed_entailment == text:
+        raise PlanningError("self-test fixture drift: predicate entailment polarity")
+    expect_predicate_entailment_failure(
+        "reversed predicate entailment",
+        reversed_entailment,
+        nodes,
+    )
+
+    entailment_cycle = text.replace(
+        "| PE-11 | verkle-prototype | verkle-selected |",
+        "| PE-11 | verkle-prototype | verkle-selected |\n"
+        "| PE-12 | verkle-selected | verkle-prototype |",
+        1,
+    )
+    if entailment_cycle == text:
+        raise PlanningError("self-test fixture drift: predicate entailment cycle")
+    expect_predicate_entailment_failure(
+        "predicate entailment cycle",
+        entailment_cycle,
+        nodes,
+        enforce_manifest=False,
+        expected_message="predicate entailment cycle:",
     )
 
     expect_markdown_failure(
         "unbalanced Markdown fence",
         CAPABILITY,
         text + "\n```\n",
+        tracked_paths=tracked_paths,
     )
     expect_markdown_failure(
         "duplicate Markdown heading",
         CAPABILITY,
         text + "\n# Bitblock capability tree\n",
+        tracked_paths=tracked_paths,
     )
     malformed_table = text.replace("| Status | Meaning |", "| Status Meaning |", 1)
     if malformed_table == text:
         raise PlanningError("self-test fixture drift: status table")
-    expect_markdown_failure("malformed Markdown table", CAPABILITY, malformed_table)
+    expect_markdown_failure(
+        "malformed Markdown table",
+        CAPABILITY,
+        malformed_table,
+        tracked_paths=tracked_paths,
+    )
     expect_markdown_failure(
         "missing relative Markdown link",
         CAPABILITY,
         text + "\n[missing](missing-planning-doc-negative-control.md)\n",
+        tracked_paths=tracked_paths,
+    )
+    expect_markdown_failure(
+        "relative Markdown link escaping repository",
+        DESIGN_DISTILLATION,
+        "[escape](../../outside-repository-negative-control.md)\n",
+        tracked_paths=tracked_paths,
+    )
+    expect_markdown_failure(
+        "relative Markdown link to untracked content",
+        DESIGN_DISTILLATION,
+        "[untracked](design-source-receipt-v1.json)\n",
+        tracked_paths=tracked_paths - {DESIGN_RECEIPT.resolve()},
     )
     bad_fragment = design_text.replace(
         "AUTHENTICATED_STATE_PLAN.md#world-roots-are-not-history-roots",
@@ -669,14 +1067,27 @@ def run_self_tests(
         "missing relative Markdown fragment",
         DESIGN_DISTILLATION,
         bad_fragment,
+        tracked_paths=tracked_paths,
     )
     expect_frozen_audit_failure(
         "frozen first audit mutation",
         first_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_second_audit_failure(
+        "frozen second audit mutation",
+        second_audit_bytes + b"\nnegative-control",
+    )
     expect_frozen_design_audit_failure(
         "frozen design audit mutation",
         design_audit_bytes + b"\nnegative-control",
+    )
+    expect_frozen_successor_audit_failure(
+        "frozen successor audit mutation",
+        successor_audit_bytes + b"\nnegative-control",
+    )
+    expect_frozen_design_receipt_bytes_failure(
+        "byte-frozen design receipt mutation",
+        design_receipt_bytes + b"\n",
     )
     external = design_receipt["external_source"]
     external_sha = external.get("sha256") if isinstance(external, dict) else None
@@ -699,6 +1110,26 @@ def run_self_tests(
         design_receipt,
     )
 
+    wrong_commit = json.loads(json.dumps(design_receipt))
+    wrong_commit["audited_distillation_input"]["commit"] = "0" * 40
+    expect_audited_distillation_receipt_failure(
+        "audited distillation wrong commit",
+        wrong_commit,
+    )
+    wrong_hash = json.loads(json.dumps(design_receipt))
+    wrong_hash["audited_distillation_input"]["sha256"] = "0" * 64
+    expect_audited_distillation_receipt_failure(
+        "audited distillation wrong SHA-256",
+        wrong_hash,
+    )
+    wrong_count = json.loads(json.dumps(design_receipt))
+    audited_input = wrong_count["audited_distillation_input"]
+    audited_input["decoded_utf16_code_units"] += 1
+    expect_audited_distillation_receipt_failure(
+        "audited distillation wrong UTF-16 count",
+        wrong_count,
+    )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -708,24 +1139,39 @@ def main() -> int:
     capability_text = CAPABILITY.read_text(encoding="utf-8")
     nodes = parse_capability(capability_text)
     conditional_edges = parse_conditional_edges(capability_text, nodes)
+    predicate_entailments = parse_predicate_entailments(capability_text, conditional_edges)
+    tracked_paths = git_tracked_or_staged_paths()
     first_audit_bytes = FIRST_AUDIT.read_bytes()
     check_frozen_first_audit(first_audit_bytes)
+    second_audit_bytes = SECOND_AUDIT.read_bytes()
+    check_frozen_second_audit(second_audit_bytes)
     design_audit_bytes = DESIGN_AUDIT.read_bytes()
     check_frozen_design_audit(design_audit_bytes)
+    successor_audit_bytes = SUCCESSOR_AUDIT.read_bytes()
+    check_frozen_successor_audit(successor_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
+    check_frozen_design_receipt_bytes(design_receipt_bytes)
     design_receipt = parse_frozen_design_receipt(design_receipt_bytes)
+    check_audited_distillation_receipt(design_receipt)
     design_text = DESIGN_DISTILLATION.read_text(encoding="utf-8")
     check_design_source_receipt(design_text, design_receipt)
     for path in PLANNING_FILES:
-        check_markdown(path, path.read_text(encoding="utf-8"))
+        check_markdown(
+            path,
+            path.read_text(encoding="utf-8"),
+            tracked_paths=tracked_paths,
+        )
     if args.self_test:
         run_self_tests(
             capability_text,
             first_audit_bytes,
+            second_audit_bytes,
             design_audit_bytes,
+            successor_audit_bytes,
             design_receipt_bytes,
             design_text,
             design_receipt,
+            tracked_paths,
         )
 
     base_edge_count = sum(len(node.dependencies) for node in nodes.values())
@@ -734,6 +1180,7 @@ def main() -> int:
     print(
         f"planning-doc check PASS: {len(nodes)} capability nodes, "
         f"{edge_count} declared base-plus-conditional edges, "
+        f"{len(predicate_entailments)} predicate entailments, "
         f"{len(PLANNING_FILES)} Markdown files and 1 frozen source receipt{suffix}"
     )
     return 0

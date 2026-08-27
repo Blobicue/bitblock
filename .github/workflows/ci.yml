@@ -2,7 +2,6 @@ name: ci
 
 on:
   push:
-    branches: [main, timeline-2]
   pull_request:
 
 jobs:
@@ -27,16 +26,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: powered planning-document checks
+        run: python3 tools/check_planning_docs.py --self-test
       - name: standalone vector tools
         run: |
           set -e
           for t in tools/*.py; do
-            # metric_registry wants a subcommand; mirror_timeline1 needs the local
-            # timeline-1 source directory - neither is a bare validator.
-            case "$t" in tools/metric_registry.py|tools/mirror_timeline1.py) continue ;; esac
+            # These tools need explicit arguments, history/context, or their own
+            # powered invocation below; none is a bare vector validator.
+            case "$t" in
+              tools/check_planning_docs.py|tools/metric_registry.py|tools/mirror_timeline1.py|tools/simulate_sequence.py)
+                continue
+                ;;
+            esac
             echo "== $t"
             python3 "$t" > /dev/null
           done
+      - name: expectation-checked interaction scenario
+        run: python3 tools/simulate_sequence.py examples/observer_walk_sequence.json --expect > /dev/null
       - name: metric registry audit
         run: python3 tools/metric_registry.py audit
 

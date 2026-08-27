@@ -177,7 +177,11 @@ reject the vector rather than silently describe a second tree.
 The two hash-tree candidates need one non-self-referential way to name every byte and limit that
 affects their roots or accepted proofs. R0 freezes a protocol-level `ProfileIdHashV1` before any
 candidate descriptor is admitted. A candidate cannot choose the hash function used to identify its
-own descriptor.
+own descriptor. The same pre-frozen function is the sole identity-hash owner for the Layer 1
+pre-admission chain—domain registry, profile scope, chain genesis, candidate profile, actor identity,
+and profile-bound transition specification. Every invocation is domain separated and length frames
+its canonical payload. Candidate-selected cryptographic-suite fields govern only later
+profile-resolved operations and cannot alter `ProfileIdHashV1`.
 
 ```text
 ProofPolicyDescriptorV1 {
@@ -672,8 +676,15 @@ CommitmentSubjectV1 =
     LocalTransitionV1(local_storage_profile_id, scope_digest,
                       domain_registry_digest, ledger_sequence_u64)
   | NetworkHeightV1(chain_id, genesis_id, world_id,
-                    protocol_version, profile_id, profile_scope_digest,
-                    domain_registry_digest, height_u64)
+                    ProfileContextV1, height_u64)
+
+CommitmentSetPredecessorV1 =
+    GenesisCommitmentSetV1
+  | OrdinaryCommitmentSuccessorV1(prior_commitment_set_id)
+  | MigrationCommitmentSuccessorV1(
+        prior_commitment_set_id,
+        InPlaceMigrationTransitionV1
+    )
 
 CommitmentSetV1 {
     schema_version,
@@ -681,7 +692,7 @@ CommitmentSetV1 {
     ledger_head_id,
     required_domain_set,
     root_entries,
-    prior_commitment_set_id_or_none
+    predecessor
 }
 
 CommitmentSetIdV1 = CommitmentSetIdHashV1(
@@ -691,11 +702,14 @@ CommitmentSetIdV1 = CommitmentSetIdHashV1(
 ```
 
 `CommitmentSetV1` never contains its own identifier. `CommitmentSubjectV1` is a tagged union; the
-same integer cannot be interpreted once as a local transition and once as a network height. A
-network subject binds the candidate network `profile_id` as external context alongside the
-pre-ID scope and domain-registry digests; this does not put `profile_id` inside a logical root or
-inside the candidate bytes that derive it. A local storage profile resolves its own scope and
-registry under the explicit digest fields rather than inheriting network semantics implicitly.
+same integer cannot be interpreted once as a local transition and once as a network height. The
+network variant uses the sole `ProfileContextV1` defined by the Layer 1 byte-contract owner; it
+binds protocol version, `profile_id`, scope digest, and domain-registry digest as external context
+alongside immutable chain/genesis/world identity. This does not put `profile_id` inside a logical
+root or inside the candidate bytes that derive it. The outer chain/genesis/world fields MUST
+byte-equal their projection inside `ProfileContextV1`; disagreement rejects rather than selecting
+one owner. A local storage profile resolves its own scope and registry under the explicit digest
+fields rather than inheriting network semantics implicitly.
 
 `RequiredDomainV1` is byte-for-byte the active-entry projection from the subject's canonical
 `DomainRegistryV1`. `required_domain_set` is the canonically sorted set of unique
@@ -717,17 +731,33 @@ execution roots are retained as entries, they are recomputed from exactly the re
 active roots, typed inactive sentinels, and subject context. They never hash `CommitmentSetIdV1`;
 the set identifier is derived only after every logical and composed root exists.
 
-`prior_commitment_set_id_or_none` is `None` only for the declared local genesis transition or
-network genesis height; R0 freezes the exact genesis counter for each kind. Every successor names
-an existing complete parent set whose subject has the same tag and the same non-counter context,
-and increments the local sequence or network height by exactly one; overflow rejects. Forks may
-produce several children of one parent, but no child may name itself, a descendant, a missing set,
-or a set from another context. The ledger record/head for the transition is derived without the
-current `CommitmentSetIdV1`; it may commit already-derived logical roots but cannot point back to
-the set that contains it. The acyclic construction and publication direction is therefore:
+`GenesisCommitmentSetV1` is legal only for the declared local genesis transition or network genesis
+height; R0 freezes the exact genesis counter for each kind. `OrdinaryCommitmentSuccessorV1` names an
+existing complete parent set whose subject has the same tag and exactly the same non-counter
+context—including network `ProfileContextV1`—and increments the local sequence or network height by
+exactly one. It cannot cross a protocol, profile, scope, or registry boundary.
+
+`MigrationCommitmentSuccessorV1` is network-only. Its prior set MUST have the same chain, immutable
+`genesis_id`, world, and immediately preceding height as the candidate set. The prior subject's
+profile context MUST byte-equal `old_active_profile_context`; the candidate subject's context MUST
+byte-equal the distinct `new_admitted_profile_context`; that admitted profile's candidate lineage
+MUST name the old admitted profile, and its `PROFILE-1` evidence MUST already have consumed the
+matching concrete `UPGRADE-1` old-to-candidate migration evidence. The migration transition's
+specification, activation authorization, and activation height MUST match the proposal/header and
+parent-authorized governance state. Its typed old execution-root reference MUST recompute from the
+prior set, and its typed new execution-root reference MUST recompute from the candidate set after
+deterministic migration. Consensus acceptance activates the previously admitted successor;
+admission, migration evidence, and the predecessor tag grant no activation authority by themselves.
+
+Overflow rejects. Forks may produce several ordinary or migration children of one parent, but no
+child may name itself, a descendant, a missing set, or a set from another chain/genesis/world
+context. The ledger record/head and migration record are derived without the current
+`CommitmentSetIdV1`; they may commit already-derived logical roots but cannot point back to the set
+that contains them. The acyclic construction and publication direction is therefore:
 
 ```text
-prior set + transition input
+prior set + ordinary transition input
+  or prior set + authorized migration input
     -> canonical post-transition ledger state
     -> logical map roots
     -> ledger record/head (which may embed those roots, never the current set ID)

@@ -177,10 +177,22 @@ predicate. The role-aware graph for every realizable profile closure, plus the u
 structurally compatible role edges, must be acyclic. Mutually exclusive predicates may not be used
 to excuse a cycle inside any realizable closure.
 
-Predicate entailments are also canonical: `economic-charging` implies `asset-active`;
-`stake-consensus` and `validator-rewards` each imply `validator-economics`, `asset-active`, and
-`economic-charging`; `post-genesis-program` implies `program-active` and `migration-profile`; and
-`in-place-upgrade` implies `migration-profile`.
+Predicate entailments are canonical direct edges too. Transitive closure is derived from this
+manifest; prose cannot add, reverse, or remove an entailment:
+
+| Entailment | Antecedent predicate | Entailed predicate |
+| --- | --- | --- |
+| PE-01 | economic-charging | asset-active |
+| PE-02 | stake-consensus | validator-economics |
+| PE-03 | stake-consensus | asset-active |
+| PE-04 | stake-consensus | economic-charging |
+| PE-05 | validator-rewards | validator-economics |
+| PE-06 | validator-rewards | asset-active |
+| PE-07 | validator-rewards | economic-charging |
+| PE-08 | post-genesis-program | program-active |
+| PE-09 | post-genesis-program | migration-profile |
+| PE-10 | in-place-upgrade | migration-profile |
+| PE-11 | verkle-prototype | verkle-selected |
 
 Roles select artifact instances, not aliases for a base node. In particular, `new-admission` is the
 candidate admission being evaluated, `old-admitted-profile` is a previously admitted immutable
@@ -230,6 +242,7 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 | CE-38 | VERKLE-R1 | prototype | verkle-prototype | BOUNDS-1 | prototype-bounds |
 | CE-39 | VERKLE-R1 | prototype | verkle-prototype | UPGRADE-FRAMEWORK-1 | migration-framework |
 | CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |
+| CE-41 | PROFILE-SCOPE-D0 | candidate-scope | verkle-selected | VERKLE-R1 | feasibility |
 
 ## Foundation nodes
 
@@ -345,9 +358,10 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 
 ### `VERKLE-R1` — separate Verkle feasibility and prototype lane
 
-- **Status:** **READY@feasibility** from the implemented foundation; **LOCKED@prototype** until the
-  exact cryptographic, codec, threat, bound, candidate-profile, and migration prerequisites in
-  CE-35–CE-40 exist.
+- **Status:** **READY@feasibility** from the implemented foundation; a `verkle-selected` candidate
+  scope remains **LOCKED** until CE-41 consumes the completed feasibility artifact;
+  **LOCKED@prototype** remains until the exact cryptographic, codec, threat, bound,
+  candidate-profile, and migration prerequisites in CE-35–CE-40 exist.
 - **Depends on:** `WORLD-0`, `PROOF-0`; feasibility uses the `COST-1` measurement method but does not
   inherit or compete in `COMMIT-R1`.
 - **Motive:** evaluate whether a vector-commitment map could materially improve witnesses or updates
@@ -355,8 +369,11 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 - **Artifact:** feasibility report fixing the candidate vector-commitment primitive, setup/custody
   model, field/curve and subgroup rules, coordinate-to-field mapping, commitment/opening codecs,
   update and multiproof model, verifier work, storage/availability obligations, implementation and
-  audit maturity, pinned cost workloads, and migration/historical-verification design. The later
-  prototype is a separately identified artifact under `verkle-prototype`.
+  audit maturity, pinned cost workloads, and migration/historical-verification design, plus the
+  exact canonical self-excluding vector-commitment profile descriptor bytes and domain-separated
+  identifier consumed by a later `DomainRegistryV1`. Neither descriptor nor identifier depends on
+  candidate/genesis/profile identifiers or a produced root. The later prototype is a separately
+  identified artifact under `verkle-prototype`, after the candidate-profile dependency in CE-40.
 - **Gate:** feasibility reports exact security assumptions and measured cost thresholds with rejected
   alternatives. Prototype admission additionally requires the selected crypto suite, independent
   canonical codecs and implementation, subgroup/noncanonical/malformed-proof controls, worst-case
@@ -1063,7 +1080,7 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 
 - **Status:** **LOCKED**.
 - **Depends on:** `TRANSITION-SPEC-D1`, `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`,
-  `COMMIT-R1`, `CODEC-1`, `COST-1`; conditional design prerequisites are CE-01–CE-03.
+  `COMMIT-R1`, `CODEC-1`, `COST-1`; conditional design prerequisites are CE-01–CE-03 and CE-41.
 - **Motive:** give bounds and genesis an exact, non-self-referential target before any derived chain,
   genesis, or profile identifier exists.
 - **Artifact:** canonical pre-ID scope containing activated operations/schemas, the ordered active-or-
@@ -1336,13 +1353,15 @@ When a checkpoint changes a node:
 
 Run `python -B tools/check_planning_docs.py --self-test` after every tree edit. It checks all
 foundation and detailed nodes, required fields, undefined dependencies, the unconditional
-conservative DAG, links/fences/tables in the planning set, and powered in-memory mutations for
-missing fields, undefined nodes, duplicate nodes, and unconditional cycles. It does **not yet parse**
-the conditional-instance table. Before `PROFILE-1` can admit anything, the admission checker must
-parse the exact row regex above, validate IDs/bases/tokens/roles and predicate entailments, expand
-each realizable profile closure, and reject a cycle in either that closure or the compatible role-
-edge union. Until that powered checker exists, conditional closure admission remains **LOCKED**. The
-compact diagram remains explanatory only.
+conservative DAG, exact conditional-instance rows, the direct predicate-entailment manifest and its
+acyclic closure, the compatible role-edge union, links/fences/tables in the planning set, and powered
+in-memory mutations for those surfaces. It still does **not** decide which predicates are true,
+prove that the manifest is semantically complete, or expand and validate each realizable
+profile-specific artifact closure. Before `PROFILE-1` can admit anything, that admission checker
+must resolve the candidate's predicates and roles against exact artifacts, reject incompatible
+combinations, and apply these already checked edges and entailments. Until that powered admission
+checker exists, conditional closure admission remains **LOCKED**. The compact diagram remains
+explanatory only.
 
 A branch can unlock knowledge without unlocking authority. That distinction is the central rule of
 this tree.

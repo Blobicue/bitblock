@@ -5,6 +5,10 @@
 claim, cryptographic result, or Layer 1 admission artifact
 **Audit:** [`DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT.md), frozen
 against input commit `694650f4028f5c1fb715384597326e0b0e31f0e1`
+**First correction:** `ea9294ba08b5e4bd339f82894ecb761461f5af13`
+**Successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md), frozen
+against that first correction
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
 in `C:\Users\Owen\Downloads\design.txt`. The downloaded source remains untouched. It is a mixed
@@ -120,6 +124,11 @@ C_n        = CommitTypedDomains(G_(p_n), {P_(p_n,d)}, S_n)
 X_n        = ComposeExecutionRoot(G_(p_n), C_n)
 ```
 
+Every scope, genesis, candidate-profile, and other pre-admission identifier is derived with the
+single protocol-frozen `ProfileIdHashV1`; a candidate's selected cryptographic suites cannot choose
+or reinterpret the function that identifies the candidate. Profile-selected hashes apply only
+where the already identified and admitted profile assigns them.
+
 Binding `D_n` makes replay inputs explicit; it does not prove an oracle value true, randomness
 unbiased, or acquisition honest.
 
@@ -150,10 +159,11 @@ commitment-profile change is a different transition class:
 ```text
 MigrationTransition(
     old_profile_id,
-    new_candidate_profile_id,
+    new_admitted_profile_id,
     migration_spec_id,
-    old_execution_root,
-    new_execution_root,
+    typed_old_execution_root_ref,
+    typed_new_execution_root_ref,
+    activation_authorization_ref,
     complete_bounded_correspondence_evidence
 )
 ```
@@ -162,7 +172,10 @@ Touched-state openings cannot establish equality of untouched state across unrel
 admitted migration would additionally need parent-authorized activation, deterministic complete
 old/new correspondence, failure and restart semantics, retained old-profile verification context,
 and available migration material. Root correspondence alone would not authorize the upgrade or
-select its fork.
+select its fork. Ordinary units carry one unchanged profile context; a migration unit carries the
+explicit old/new context, contains no ambiguously interpreted ordinary action, and uses the
+migration-specific commitment-set transition owned by the Layer 1 paper and authenticated-state
+plan.
 
 ## Witnessed transition, stated precisely
 
@@ -201,6 +214,11 @@ A stateless transition verifier would:
 9. only after execution validity is established, independently verify the candidate's typed
    consensus-status evidence and availability predicate under their declared policies and threat
    model.
+
+The concrete owner represents availability as detached assessment/evidence bound to the block,
+policy, authority/epoch context, and exact predicate. A profile may prove that its already-bound
+consensus evidence entails that assessment, or may require separate evidence; a node-local
+retrieval observation is not silently promoted into the accepted record.
 
 A profile may choose explicitly chained per-action roots instead of one batch pre-root plus overlay,
 but then it must bind and verify every intermediate root. The two update models cannot be mixed
@@ -529,6 +547,7 @@ This note preserves the raw source fingerprint, question spine, useful architect
 candidate lanes, and source queue. It intentionally does not preserve every phrase or false claim;
 Git history will retain later revisions of this note, while the original downloaded source remains
 an external byte-level provenance artifact on this machine. The checker validates this file's
-Markdown structure, relative planning files/fragments, frozen receipt identity, and receipt-field
-agreement. It does not validate external URLs or the completeness or truth of the technical
-contents.
+Markdown structure, repository-contained tracked relative planning files/fragments, frozen audit
+and receipt identity, receipt-field agreement, and the receipt's historical distillation
+object/count claims against Git. It does not validate external URLs, recover the external raw
+source, or establish the completeness or truth of the technical contents.

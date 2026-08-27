@@ -402,6 +402,25 @@ audit chronology. This is still a **documentation and checker checkpoint**: it i
 vector commitment, recursive proof, network, asset, consensus, cryptocurrency, or Layer 1 property,
 and it does not rerun Rust or Lean validation.
 
+### 28. “Keep running this loop until diminishing returns, then test” (paraphrased)
+
+User intent: repeat the same audit-before-edit discipline rather than treating the first correction
+as convergence, stop only after a complete successor sweep finds no new material gap, and then run
+the real repository test surfaces.
+
+Current truth: [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md)
+freezes clean input `ea9294ba08b5e4bd339f82894ecb761461f5af13` and 11 new findings before
+the audited files change. The P0 findings are an undefined/self-selectable pre-ID hash and an
+in-place profile migration that the existing genesis, commitment-set, and single-profile header
+types cannot represent. The sweep also found a missing availability-evidence carrier, a missing
+Verkle feasibility dependency, three provenance/freeze failures, repository-escaping link checks,
+and CI paths that neither run the powered planning controls nor invoke the scenario runner legally.
+
+The coordinated descendant correction is still documentation, checker, and CI-definition work. It
+does not activate any capability. Broad Rust, Lean, vector, headless, network, performance, and
+display testing begins only after the next complete read-only sweep either finds another material
+gap or records zero-new-gap convergence.
+
 ## Semantic lessons that should survive future checkpoints
 
 1. **Coordinate memory is the primitive.** An on bit is a fact about one address; absence means

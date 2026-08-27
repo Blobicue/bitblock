@@ -40,6 +40,13 @@ external input identity/count method is pinned by
 [`docs/design-source-receipt-v1.json`](docs/design-source-receipt-v1.json). The audit corrects notes
 and checker coverage only; it is not cryptographic or implementation validation.
 
+The first correction is pinned at `ea9294ba08b5e4bd339f82894ecb761461f5af13`. A second complete
+read-only sweep of that corrected state is frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md).
+It records 11 successor type, dependency, provenance, checker, and CI gaps before their one
+coordinated documentation/tooling correction. Neither audit activates a runtime capability or
+constitutes Rust, Lean, cryptographic, consensus, or Layer 1 evidence.
+
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
 - Every other unspecified coordinate is off.

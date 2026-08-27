@@ -15,9 +15,14 @@ Three CI jobs gate every push and pull request:
   -D warnings`, `cargo test`. The pinned `1.96.0` toolchain comes from
   `rust-toolchain.toml`.
 - **python vector tools (ubuntu-latest)** — every standalone `tools/*.py`
-  vector tool must exit zero, and `tools/metric_registry.py audit` must report
-  an exact manifest with zero unresolved references. The audit has been
-  watched failing on a deliberately corrupted registry before being enforced.
+  vector tool must exit zero; `tools/check_planning_docs.py --self-test` runs
+  the powered planning/audit/receipt/link controls from a full-history checkout;
+  `tools/simulate_sequence.py examples/observer_walk_sequence.json --expect`
+  checks one explicit scenario; and `tools/metric_registry.py audit` must report
+  an exact manifest with zero unresolved references. Argument-taking tools are
+  excluded from the bare-tool loop and invoked explicitly. The registry audit
+  has been watched failing on a deliberately corrupted registry before being
+  enforced.
 - **lean proof capsule (ubuntu-latest)** — `lake build` in `proof/` must
   succeed. `LadderLangQuotedByteParity.lean` is deliberately outside this
   target (it requires the separately pinned LadderLang checkout) and is not
@@ -29,8 +34,8 @@ protection is a paid feature for private repositories** on the free tier
 (HTTP 403, "Upgrade to GitHub Pro or make this repository public"). The
 repository stays private by the same deliberate policy as its sibling
 project, so hard protection is **not currently active** — what enforces
-today is that CI runs on every push to `main` and `timeline-2` and a red
-run is loud and visible. Enabling hard protection is a one-command change
+today is that CI runs on every branch push and pull request and a red run is
+loud and visible. Enabling hard protection is a one-command change
 if the repository is later made public or the plan upgraded; that choice
 belongs to the owner, not the timeline.
 
