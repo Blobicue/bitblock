@@ -20,9 +20,13 @@ When memories disagree, use this order:
 
 1. The current Rust implementation and its explicit tests/vectors.
 2. The Lean/LadderLang capsules and their declared scope.
-3. The README, protocol, metrics, semantic, and display documents.
-4. This transcript audit for intent, rejected interpretations, and unresolved questions.
-5. A visual or verbal recollection that has no artifact is an observation to investigate, not a
+3. `SEMANTICS.md`, `PROTOCOL.md`, the README, metrics, and display documents for current contracts.
+4. `PROJECT_INTENT.md` for the motive chain and `CAPABILITY_TREE.md` for future dependency/status
+   planning; neither overrides current behavior.
+5. The Layer 1 paper for proposed protocol design and its pinned audit for the finite review result.
+6. This transcript audit for chronology, original intent, rejected interpretations, and unresolved
+   questions.
+7. A visual or verbal recollection that has no artifact is an observation to investigate, not a
    world-state fact.
 
 ## Conversation checkpoints reconciled with the repository
@@ -203,6 +207,118 @@ was not a Git checkout and was left untouched. Generated `target`, Lean `.lake`,
 files were excluded. This is **historical repository state**; future commits should update this
 handoff when semantics change.
 
+### 16. “Arrangements of bits could be a visual programming language”
+
+User intent: let exact spatial arrangements become symbols, logic, and programs that a person and
+an agent can inspect and manipulate directly.
+
+Current truth: coordinates can be edited through canonical text/tape actions, but no arrangement
+has a protocol-level symbol meaning and no block transforms another block. The renderer recognizes
+geometry only to project it; visual appearance is not a parser. This remains **open**.
+
+The future branch is now explicit in `PROJECT_INTENT.md` and `CAPABILITY_TREE.md`: static spatial
+grammar research and one finite deterministic world rule are independent early experiments; they
+converge only before a bounded executable interpreter with independent replay. Visual programming
+does not require currency or consensus unless a later network profile makes program execution
+authoritative.
+
+### 17. “Placing a block mints a coin; deleting it is a sink”
+
+User intent: bind issuance and destruction directly to visible world transitions so everything
+built in the space can carry exact accounting and provenance from the start.
+
+Current truth: local coordinate history already names mutable `off -> on` effects `Mint` and
+`on -> off` effects `Burn`, and the feature-gated `CoordinateEpisodeEvidence` prototype tracks
+bounded live episodes and consuming burns. Re-placement creates a fresh occurrence. These names
+describe local transition provenance; they do not create a cryptocurrency. This is **implemented
+only as bounded/local accounting vocabulary and evidence**.
+
+The first proposed asset profile excludes bedrock from post-genesis occupancy episodes because it
+is genesis world structure rather than a mutable placement episode and cannot be burned. The final
+economic treatment of origin—non-economic world structure versus a distinct permanently locked
+genesis allocation—remains an explicit `ASSET-D1` decision.
+
+### 18. “What does the cryptocurrency interpretation still miss?”
+
+The conversation separated a locally conserved occupancy-episode ledger from a currency. The
+missing surfaces include actor identity, authorization, ownership or balances, transfers, replay
+protection, one shared order, authenticated state proofs, receipt inclusion, data availability,
+durability, finality or confirmation, supply and fee policy, state-growth controls, key custody,
+upgrades, adversarial operation, and a precise public claim.
+
+This correction is **recorded design**, not an implementation result. A Merkle root would cover
+only one part of it, and economic value would remain outside what the protocol can manufacture by
+definition.
+
+### 19. “Multiplayer observers create ownership and unique identity”
+
+User intent: let more than one participant join so actions can have distinct authors and blocks can
+be associated with someone.
+
+Current truth: no network, account, actor key, signature, owner, balance, or transfer exists.
+Multiple input streams are useful because they expose conflicts and ordering, but a connection or
+camera does not produce unique identity. Cryptographic identity proves control of a credential, not
+one unique human. This is **open**.
+
+The capability tree therefore orders canonical genesis/identifier domains, actor authorization,
+authenticated nonce state, and a deterministic multi-actor harness before accountable centralized
+multiplayer. Observers remain local camera state rather than consensus entities.
+
+### 20. “Write a paper toward full Layer 1 security coverage”
+
+User intent: make every missing assumption and security layer explicit enough that the design could
+eventually support a scoped Layer 1 claim.
+
+Current truth: `LAYER1_DESIGN_PAPER.md` checkpoint 0.3 defines a proposed state machine, identity,
+transaction, root, consensus, availability, economic, upgrade, operational, and verification-gate
+inventory. It deliberately distinguishes implemented, bounded, proposed, open, and not-claimed
+surfaces. This is **documentation**, not Layer 1 implementation or security coverage.
+
+Layer 1 is one future branch of Bitblock rather than the definition of the project. The original
+binary-world, observation, scale, emergence, and visual-language motives remain independently
+visible in `PROJECT_INTENT.md`.
+
+### 21. “Audit the paper, patch it, then do a second loop”
+
+User intent: attack the paper repeatedly instead of accepting a persuasive first draft.
+
+Current truth: `LAYER1_DESIGN_AUDIT.md` records two finite audit loops, findings F-01 through F-52,
+their prose patches, exact source/paper pins, checks run, and repository obligations left open.
+Those loops corrected circular identifiers, incomplete roots and receipts, execution/consensus/DA
+conflation, action-lane overclaims, supply correspondence, finality profiles, threat assumptions,
+upgrades, operations, and other design gaps. This is a **pinned documentation audit**.
+
+The audit does not prove its inventory complete, rerun Rust/Lean/network/crypto suites, or close any
+implementation obligation. Later docs link to it without silently changing its historical result.
+
+### 22. “Could a Merkle Patricia Trie work here?”
+
+User intent: use an authenticated sparse structure to make coordinate state and later ledger maps
+independently provable.
+
+Current truth: no authenticated trie or proof codec exists. `world_tag` scans and sorts the complete
+occupied set, so it provides deterministic byte identity but no point membership/non-membership
+witness. This is **open research**.
+
+`AUTHENTICATED_STATE_PLAN.md` now records an apples-to-apples comparison plan for a constrained
+fixed-192-bit binary Patricia trie and a 192-level sparse Merkle tree. Both use a proposed
+sign-biased canonical coordinate key, separately typed roots, exact absence semantics, rebuild and
+deletion-restoration gates, malformed-proof rejection, persistent-fork/GC assays, independent
+vectors, and resource measurements. The chunked `World` remains the renderer/collision hot path;
+the new root must not reinterpret legacy `world_tag`.
+
+### 23. “Record the motives and future plans; build the skill tree first”
+
+User intent: stop before another feature and preserve why Bitblock exists, what it might become,
+and which capabilities actually depend on which others so successor agents can continue without
+turning proposals into premises.
+
+Current truth: `PROJECT_INTENT.md` now owns the motive chain;
+`CAPABILITY_TREE.md` is a dependency DAG whose nodes carry status, prerequisites, motive, artifact,
+gate, and non-claim; `AUTHENTICATED_STATE_PLAN.md` owns the MPT/SMT research checkpoint. This is a
+**documentation checkpoint**. It changes no Rust simulation, storage, proof, networking, identity,
+asset, or consensus behavior.
+
 ## Semantic lessons that should survive future checkpoints
 
 1. **Coordinate memory is the primitive.** An on bit is a fact about one address; absence means
@@ -230,8 +346,15 @@ handoff when semantics change.
 
 ## Open questions for the next checkpoint
 
+- Does the next code checkpoint take the shared trunk through `ACCOUNT-1`, or does the user first
+  want one more isolated observer/visual checkpoint?
 - Should live startup be changed to the exact one-pixel camera, or should adjacent spawn remain
   the default with one-pixel fit as an explicit action?
+- After the common authenticated-state assay, does fixed-key binary Patricia materially outperform
+  the simpler 192-level sparse Merkle baseline enough to justify its normalization surface?
+- Is a mutable occupancy episode a collectible, a coordinate edit right, a fungible unit, a
+  separate asset-domain record, or non-monetary provenance—and is origin non-economic or a distinct
+  locked genesis allocation?
 - Where is the user's ternary hashing implementation, and what exact input/output contract would
   let it be compared with the existing SHA-256 content-tag protocol without replacing it by
   assumption?

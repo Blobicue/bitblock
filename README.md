@@ -2,9 +2,10 @@
 
 Bitblock is a binary coordinate space observed through a free camera.
 
-For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md), then read
-[`docs/SEMANTICS.md`](docs/SEMANTICS.md) and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md)
-before changing the simulation boundary.
+For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md). The broader motive chain is in
+[`docs/PROJECT_INTENT.md`](docs/PROJECT_INTENT.md), and the dependency-gated future plan is in
+[`docs/CAPABILITY_TREE.md`](docs/CAPABILITY_TREE.md). Read [`docs/SEMANTICS.md`](docs/SEMANTICS.md)
+and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md) before changing the simulation boundary.
 
 The forward-looking security architecture is documented in
 [`docs/LAYER1_DESIGN_PAPER.md`](docs/LAYER1_DESIGN_PAPER.md). It separates the implemented
@@ -14,6 +15,12 @@ availability, and Layer 1 requirements.
 The paper's latest gap review is recorded in
 [`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md); it distinguishes prose fixes
 from repository obligations that remain unimplemented.
+
+The proposed authenticated-state checkpoint—including the canonical 192-bit coordinate-key
+profile and the still-open comparison between a constrained binary Merkle Patricia trie and a
+192-level sparse Merkle tree—is isolated in
+[`docs/AUTHENTICATED_STATE_PLAN.md`](docs/AUTHENTICATED_STATE_PLAN.md). No authenticated trie or
+proof codec is implemented in the current runtime.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
