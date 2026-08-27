@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -92,6 +93,11 @@ INDEX_INPUTS = ("src/**/*.rs", "tools/*.py", "tools/*.json", "docs/**/*.md",
                 "README.md", "METRICS.md", "proof/**/*.lean", "proof/README.md")
 
 CLIPPY = ["cargo", "clippy", "--all-targets", "-q", "--", "-D", "warnings"]
+# Clippy gets its own target directory so it does not queue behind the test
+# build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s
+# after an edit against 4.7s when they genuinely overlap. It costs ~158MB inside
+# target/, which is already ignored and far larger.
+CLIPPY_ENV = {"CARGO_TARGET_DIR": str(ROOT / "target" / "clippy")}
 
 
 def digest(patterns) -> str:
@@ -133,10 +139,14 @@ def save_cache(cache: dict) -> None:
         pass  # a cache that cannot be written is a slow run, not a wrong one
 
 
-def run(command: list[str]) -> tuple[bool, str]:
+def run(command: list[str], env: dict | None = None) -> tuple[bool, str]:
+    environment = None
+    if env:
+        environment = dict(os.environ)
+        environment.update(env)
     result = subprocess.run(
         command, cwd=ROOT, capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
+        encoding="utf-8", errors="replace", env=environment,
     )
     if result.returncode == 0:
         return True, ""
@@ -224,18 +234,27 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
     # including whether the build is needed at all.
     rust_fresh = bool(rust_key) and cache.get("rust::" + name) == rust_key
     binaries = []
+    clippy_pool = clippy_future = None
     if rust_fresh:
         rows.append(("rust tests + clippy", "skip", None,
                      "unchanged since the last pass"))
     else:
+        # Clippy starts here rather than joining the group below, because after a
+        # source edit it is the second-largest cost (3.2s against the build's
+        # 5.2s) and nothing it needs comes from the build. On its own target dir
+        # the two overlap instead of queueing on cargo's lock: 7.1s to 4.7s.
+        clippy_pool = ThreadPoolExecutor(max_workers=1)
+        clippy_started = time.time()
+        clippy_future = clippy_pool.submit(lambda: run(CLIPPY, CLIPPY_ENV))
+
         mark = time.time()
         ok, binaries, detail = build_tests(features)
         rows.append(("build test binaries", "ok" if ok else "FAIL",
                      time.time() - mark, "0.4s warm; lets the rest overlap"))
         if not ok:
+            clippy_future.result()
+            clippy_pool.shutdown()
             return report(rows, [("build test binaries", detail)], started)
-        jobs.append(("clippy", CLIPPY and (lambda: run(CLIPPY)),
-                     "lint clean is a CI gate"))
         for label, path in binaries:
             jobs.append(("test %s" % label,
                          (lambda p: (lambda: run([p, "--quiet"])))(path),
@@ -274,6 +293,15 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
                 if not ok:
                     failures.append((label, detail))
         parallel = time.time() - mark
+
+    if clippy_future is not None:
+        ok, detail = clippy_future.result()
+        clippy_pool.shutdown()
+        rows.append(("clippy", "ok" if ok else "FAIL",
+                     time.time() - clippy_started,
+                     "own target dir, started alongside the build"))
+        if not ok:
+            failures.append(("clippy", detail))
 
     if not failures:
         if not rust_fresh and rust_key:

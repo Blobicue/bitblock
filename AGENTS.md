@@ -183,11 +183,15 @@ byte fails both from opposite directions.
 |---|---:|---:|
 | nothing | 0.1s | 0.0s |
 | a document | 1.0s | 0.0s |
-| a source file | ~14s | ~9.6s |
-| nothing, but `--force` | 1.8s | 0.9s |
+| a source file | 6.2s | 5.1s |
+| nothing, but `--force` | 1.7s | 0.7s |
 
 After a source edit the cost is the Rust toolchain, not the checks: a rebuild is
-5.2s and clippy another 3.2s, against 0.5s to run all 397 tests.
+5.2s and clippy another 3.2s, against 0.5s to run all 397 tests. Clippy is given
+its own `CARGO_TARGET_DIR` and started alongside the build rather than after it,
+because sharing one directory makes the two cargo invocations queue on the same
+lock -- 7.1s against 4.7s when they genuinely overlap, for ~158MB inside an
+already-ignored `target/`.
 
 `[profile.dev] opt-level = 3` is why the test half is small. At opt-level 0 one
 headless replay of a five-record tape took 1.56s; optimised it takes 0.06s, and
