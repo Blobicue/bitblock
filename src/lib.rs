@@ -26,6 +26,8 @@ pub mod program;
 pub mod protocol;
 pub mod render;
 #[cfg(any(test, feature = "protocol-research"))]
+pub mod replay_evidence;
+#[cfg(any(test, feature = "protocol-research"))]
 pub mod sequential;
 pub mod sidebar;
 #[cfg(any(test, feature = "protocol-research"))]

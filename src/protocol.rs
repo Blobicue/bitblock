@@ -15,6 +15,8 @@ const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagKind {
     #[cfg(any(test, feature = "protocol-research"))]
+    Build,
+    #[cfg(any(test, feature = "protocol-research"))]
     DisplayArtifact,
     DisplayReceipt,
     Edit,
@@ -39,6 +41,8 @@ pub enum TagKind {
     PresentationArtifact,
     #[cfg(any(test, feature = "protocol-research"))]
     PresentationOutputArtifact,
+    #[cfg(any(test, feature = "protocol-research"))]
+    ReplayEvidence,
     Receipt,
     Registry,
     SequentialHistory,
@@ -51,6 +55,8 @@ pub enum TagKind {
 impl TagKind {
     pub const fn name(self) -> &'static str {
         match self {
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::Build => "build",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::DisplayArtifact => "display-artifact",
             Self::DisplayReceipt => "display-receipt",
@@ -76,6 +82,8 @@ impl TagKind {
             Self::PresentationArtifact => "presentation-artifact",
             #[cfg(any(test, feature = "protocol-research"))]
             Self::PresentationOutputArtifact => "presentation-output-artifact",
+            #[cfg(any(test, feature = "protocol-research"))]
+            Self::ReplayEvidence => "replay-evidence",
             Self::Receipt => "receipt",
             Self::Registry => "registry",
             Self::SequentialHistory => "sequential-history",
@@ -89,6 +97,8 @@ impl TagKind {
     #[cfg(any(test, feature = "protocol-research"))]
     pub(crate) fn from_name(name: &[u8]) -> Option<Self> {
         Some(match name {
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"build" => Self::Build,
             #[cfg(any(test, feature = "protocol-research"))]
             b"display-artifact" => Self::DisplayArtifact,
             b"display-receipt" => Self::DisplayReceipt,
@@ -114,6 +124,8 @@ impl TagKind {
             b"presentation-artifact" => Self::PresentationArtifact,
             #[cfg(any(test, feature = "protocol-research"))]
             b"presentation-output-artifact" => Self::PresentationOutputArtifact,
+            #[cfg(any(test, feature = "protocol-research"))]
+            b"replay-evidence" => Self::ReplayEvidence,
             b"receipt" => Self::Receipt,
             b"registry" => Self::Registry,
             b"sequential-history" => Self::SequentialHistory,
@@ -532,6 +544,7 @@ mod tests {
     #[test]
     fn every_kind_name_has_one_canonical_inverse() {
         let kinds = [
+            TagKind::Build,
             TagKind::DisplayArtifact,
             TagKind::DisplayReceipt,
             TagKind::Edit,
@@ -550,6 +563,7 @@ mod tests {
             TagKind::Policy,
             TagKind::PresentationArtifact,
             TagKind::PresentationOutputArtifact,
+            TagKind::ReplayEvidence,
             TagKind::Receipt,
             TagKind::Registry,
             TagKind::SequentialHistory,

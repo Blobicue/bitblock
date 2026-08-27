@@ -2414,15 +2414,57 @@ are accumulated. Both preflight and the shared reducer now use the same checked
 finite accumulator; a same-record pair of maximum finite deltas is refused with
 its tick/action address before `fixed_tick` can panic.
 
-The report exposes the tape tag, each tick's outcome/world/history/camera and
-optional game/composite CPU-frame commitments, then final world/history/camera
+The ordinary report exposes the tape tag, each tick's outcome/world/history/camera
+and optional game/composite CPU-frame commitments, then final world/history/camera
 state. It explicitly reports zero game/composite admissions, empty frame-receipt
-heads, and unavailable display evidence. The first line labels these values as
-`scope=fixed-tick-projection` and `run_receipt=unavailable`: stdout juxtaposition
-is not a canonical carrier binding tape, genesis, rules/build/policy, and result
-chain. TickOutcome also retains accumulated non-edit controls rather than the
-complete ordered non-edit action stream. An authoritative replay result remains
-open.
+heads, and unavailable display evidence. In the ordinary build, the first line
+labels these values as `scope=fixed-tick-projection` and `run_receipt=unavailable`:
+stdout juxtaposition alone is not a canonical carrier binding tape, genesis,
+rules/build/policy, and result chain. TickOutcome also retains accumulated non-edit
+controls rather than the complete ordered non-edit action stream.
+
+### Local replay evidence v1
+
+`src/replay_evidence.rs` adds an opt-in research carrier under the new readable
+`replay-evidence` tag kind. `cargo run --release --features "headless-console
+protocol-research" -- --simulate-actions <tape>` captures the current executable
+before the fold, executes the same bounded headless simulation, structurally verifies
+the carrier, and prints its full tag plus component tags. The carrier remains in memory;
+the line declares `carrier=in-memory-only` rather than pretending the tag itself is a
+durable object.
+
+The schema is `bitblock/local-replay-evidence/v1`. Its exact byte length is
+`468 + N`, where `N` is the embedded canonical InteractionTape payload length. In order
+it contains an eight-byte executable length plus SHA-256 digest; three policy digests
+for fixed headless genesis, rules, and admission; an eight-byte tape length and all `N`
+tape bytes; an optional final TickOutcome tag; final World and coordinate-history Receipt tags;
+ten exact camera `u64` lanes; simulation/output dimensions; sidebar Boolean; and optional
+latest-produced game/composite `(FrameInput tag, Frame tag)` pairs. Empty tapes require all three
+optional endpoint fields absent; nonempty tapes require all three present. The decoder
+rejects caps, every proper prefix, a suffix, noncanonical option padding, invalid Boolean
+values, bad dimensions, and invalid embedded tape bytes before admitting a carrier.
+
+The executable tag names only the length and bytes read through the local process's current
+executable path. It is not a source, compiler, operating-system, reproducible-build, or
+custody identity. The three policy tags bind declarations used by the local verifier; they
+do not turn their host-local resource limits into protocol authority. The CLI constructs and
+structurally verifies only its fresh in-memory carrier; it has no supplied-carrier replay CLI or
+persistence format yet. A test-only local verifier first checks a carrier, recomputes its current
+local build/policies, then reruns the embedded tape and requires complete endpoint/carrier equality.
+Powered controls reject a changed build digest before replay and a structurally valid carrier whose
+endpoint belongs to another tape.
+
+An independent Python encoder/strict-decoder has the fixed 506-byte vector:
+
+```text
+#bb.replay-evidence.sha256.r7ukwnl52rten5bwquqztobeuhfn362ywca7wrcudy5mvpache4q
+```
+
+The Rust codec round-trips the same carrier and checks that every decodable single-byte mutation
+changes its outer tag. This establishes one bounded local simulation/replay relation, not
+independent authority. Persistence, cross-host float agreement, signature, ownership, consensus,
+Proof-of-History, Proof-of-Stake, Layer 1, elapsed time, window submission, display, scanout, and
+physical light all remain outside the carrier.
 
 No backend call, OS raster observation, compositor attribution, scanout witness,
 or physical-light measurement occurs. CPU framebuffer tags name produced
@@ -2508,6 +2550,20 @@ cross-implementation digest parity       #bb.metric-definition.sha256.e3twhjvyxi
 deterministic resource admission         #bb.metric-definition.sha256.tolccwjudoe3vtikeycfrvgqzi4vrpe3x6iaj3civwj3qk7xlejq
 produced-frame disposition               #bb.metric-definition.sha256.wu26gvn6psqy6kha322wdl7z6md3undvaj5fh5pk25nvixtgrcgq
 interaction-to-display causal path       #bb.metric-definition.sha256.iz2hk6s5zejuemox72rs4l4dp4gup5az53e4i2le232qpm2un6nq
+```
+
+The subsequent local replay-evidence v1 checkpoint advances eight existing
+definitions and adds no metric family:
+
+```text
+canonical replay bytes                   #bb.metric-definition.sha256.lqtx75tyv3ro3ifmcb5furmfelm7t53admqbvqrnjort2sfs66hq
+domain-separation identity               #bb.metric-definition.sha256.4lv3fi6naepsomnyezxqqeoeormhdce6chc7eb4u5tarteldmz2q
+hash input bytes                         #bb.metric-definition.sha256.ktd33zqvdnbj2rd43bxmvvjw6bygul52dlp43up47kt327jxd7uq
+encoding round-trip check                #bb.metric-definition.sha256.gduldun3htcmfiy2ymxah2uqi5ph2gbcvlmrzmvo6uozans4disa
+known-answer vector verdict              #bb.metric-definition.sha256.im56mg23da4rwnd2j5fmhukvppvdofh7yq4vaicrvubhb2ekcv6a
+cross-implementation digest parity       #bb.metric-definition.sha256.vpfuuupwg73zrzzup2zvqhjf652k2l5imxoy5j2cm2ntczse4oza
+deterministic resource admission         #bb.metric-definition.sha256.rrfid54dw5qpb5pe7fliu5wp6yzmn2podbjzdopbd4kzgyvf6lfa
+interaction-to-display causal path       #bb.metric-definition.sha256.m4h4uqbedh3w76nxvyccjrras5pxgarftfvfhkjvv57dmhww3una
 ```
 
 ### Tag-bound sidebar-only compositor reuse
@@ -2613,8 +2669,8 @@ with `BITBLOCK_DISPLAY_AUDIT` absent and then set to `1` produces byte-identical
 captured text: 8 lines and 4,557 UTF-8 bytes under the PowerShell comparison,
 with SHA-256
 `84276214A256D808D046C8EB8D31D72288533266B87BBC6F34C1C32964AEB9EB`.
-That digest is a test-observation of captured report text, not the missing
-canonical run receipt.
+That digest is a test-observation of captured report text, not the canonical
+local replay-evidence carrier or a durable/authoritative run receipt.
 
 The retained same-source Windows release artifacts are:
 

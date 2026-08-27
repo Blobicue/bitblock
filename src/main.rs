@@ -32,16 +32,29 @@ use bitblock::history::{History, world_tag};
 use bitblock::interaction::{
     AcceptedAction, InteractionTape, MAX_INTERACTION_TAPE_PAYLOAD_BYTES, MoveControl,
 };
+#[cfg(feature = "protocol-research")]
+use bitblock::interaction::{
+    MAX_INTERACTION_ACTIONS_PER_RECORD, MAX_INTERACTION_TAPE_RECORDS, MAX_INTERACTION_TOTAL_ACTIONS,
+};
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::journal::AnchorPolicy;
 use bitblock::program::{Edit as WorldEdit, Operation, Program, TickBatch};
 use bitblock::protocol::ContentTag;
-#[cfg(all(windows, feature = "protocol-research"))]
-use bitblock::protocol::TagKind;
+#[cfg(feature = "protocol-research")]
+use bitblock::protocol::{TagKind, hash_canonical};
+#[cfg(feature = "protocol-research")]
+use bitblock::render::crosshair_policy_tag;
 use bitblock::render::{
     Renderer, bounds_aabb, coord_containing, crosshair_overlay_input, raycast,
     renderer_profile_tag, sweep_point,
 };
+#[cfg(feature = "protocol-research")]
+use bitblock::replay_evidence::{
+    LocalReplayBuild, LocalReplayContext, LocalReplayEndpoint, LocalReplayEvidence,
+    ReplayFrameCommitment,
+};
+#[cfg(feature = "protocol-research")]
+use bitblock::sidebar::composite_policy_tag;
 use bitblock::sidebar::{
     CompositeFrameInput, DisplayStatus, FrameCompositor, SIDEBAR_WIDTH, SidebarRasterFacts,
     SidebarSnapshot, composite_overlay_input,
@@ -103,6 +116,15 @@ const HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS: u128 = 1_073_741_824;
 const HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS: u128 = 65_536;
 const HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND: u128 = 12;
 const HEADLESS_SIMULATION_MAX_SOURCE_BYTES: usize = MAX_INTERACTION_TAPE_PAYLOAD_BYTES;
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_MAX_EXECUTABLE_BYTES: u64 = 64 * 1024 * 1024;
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_GENESIS_SCHEMA: &[u8] = b"bitblock/local-replay-genesis/headless-v1";
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_RULES_SCHEMA: &[u8] = b"bitblock/local-replay-rules/headless-v1";
+#[cfg(feature = "protocol-research")]
+const HEADLESS_LOCAL_REPLAY_ADMISSION_SCHEMA: &[u8] =
+    b"bitblock/local-replay-admission-policy/headless-v1";
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
 #[cfg(all(windows, feature = "protocol-research"))]
 const PRESENTATION_AUDIT_ENV: &str = "BITBLOCK_PRESENTATION_AUDIT";
@@ -122,8 +144,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             event_loop.run_app(&mut app)?;
         }
         StartupMode::Simulate(tape) => {
-            let summary = simulate_interaction_tape(&tape)?;
-            print_headless_summary(&summary);
+            #[cfg(feature = "protocol-research")]
+            {
+                let (summary, evidence) =
+                    simulate_interaction_tape_with_local_replay_evidence(&tape)?;
+                print_headless_summary(&summary);
+                print_local_replay_evidence(&evidence);
+            }
+            #[cfg(not(feature = "protocol-research"))]
+            {
+                let summary = simulate_interaction_tape(&tape)?;
+                print_headless_summary(&summary);
+            }
         }
         #[cfg(all(windows, feature = "protocol-research"))]
         StartupMode::VerifyDisplayJournal {
@@ -1451,6 +1483,8 @@ struct HeadlessSimulationSummary {
     composite_admissions: usize,
     game_receipt_head: Option<ContentTag>,
     composite_receipt_head: Option<ContentTag>,
+    #[cfg(feature = "protocol-research")]
+    local_replay_endpoint: LocalReplayEndpoint,
 }
 
 impl App {
@@ -2991,6 +3025,212 @@ fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
     Ok(())
 }
 
+#[cfg(feature = "protocol-research")]
+fn local_replay_policy_tag(schema: &[u8], payload: &[u8]) -> ContentTag {
+    hash_canonical(TagKind::Policy, schema, payload.len() as u64, |sink| {
+        sink(payload)
+    })
+    .expect("local replay policy payload length is measured from its exact encoding")
+}
+
+/// Declares the deterministic initial state of the fixed headless fold.
+///
+/// The executable fingerprint in the surrounding context is still required: this policy tag is
+/// a transparent state declaration, not a hash of the implementation that obeyed it.
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_genesis_policy_tag() -> ContentTag {
+    let app = App::for_headless_simulation();
+    let mut payload = Vec::with_capacity(192);
+    payload.extend_from_slice(&1_u16.to_be_bytes());
+    payload.extend_from_slice(&world_tag(&app.world).digest());
+    payload.extend_from_slice(&app.history.genesis().digest());
+    for bits in TickCameraState::capture(&app.camera).bits() {
+        payload.extend_from_slice(&bits.to_be_bytes());
+    }
+    payload.extend_from_slice(&app.renderer.width().to_be_bytes());
+    payload.extend_from_slice(&app.renderer.height().to_be_bytes());
+    payload.extend_from_slice(&app.compositor.width().to_be_bytes());
+    payload.extend_from_slice(&app.compositor.height().to_be_bytes());
+    payload.extend_from_slice(&app.compositor.simulation_width().to_be_bytes());
+    payload.extend_from_slice(&app.tick.to_be_bytes());
+    payload.push(u8::from(app.sidebar_visible));
+    payload.push(u8::from(app.needs_render));
+    payload.push(u8::from(app.needs_sidebar_render));
+    payload.push(u8::from(app.needs_present));
+    payload.push(u8::from(app.inputs.edits.is_empty()));
+    payload.push(
+        app.display_predecessor_override
+            .expect("headless simulation has an explicit display-audit-disabled predecessor")
+            as u8,
+    );
+    local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_GENESIS_SCHEMA, &payload)
+}
+
+/// Declares the fixed-tick and renderer/compositor policies used by one headless replay.
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_rules_policy_tag() -> ContentTag {
+    let mut payload = Vec::with_capacity(192);
+    payload.extend_from_slice(&1_u16.to_be_bytes());
+    payload.extend_from_slice(&TICK_RATE.to_bits().to_be_bytes());
+    payload.extend_from_slice(&(TICK_DURATION.as_nanos()).to_be_bytes());
+    payload.extend_from_slice(&DEFAULT_DOLLY_LOG_STEP.to_bits().to_be_bytes());
+    payload.extend_from_slice(&DEFAULT_MOUSE_SENSITIVITY.to_bits().to_be_bytes());
+    payload.extend_from_slice(&BLOCK_FILL_DISTANCE.to_bits().to_be_bytes());
+    payload.extend_from_slice(&OBSERVER_COLLISION_CLEARANCE.to_bits().to_be_bytes());
+    payload.extend_from_slice(&renderer_profile_tag().digest());
+    payload.extend_from_slice(&crosshair_policy_tag().digest());
+    payload.extend_from_slice(&composite_policy_tag().digest());
+    local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_RULES_SCHEMA, &payload)
+}
+
+/// Declares the bounded input and work-admission policy before a tape is replayed.
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_admission_policy_tag() -> ContentTag {
+    let mut payload = Vec::with_capacity(256);
+    payload.extend_from_slice(&1_u16.to_be_bytes());
+    for value in [
+        MAX_INTERACTION_TAPE_PAYLOAD_BYTES as u64,
+        MAX_INTERACTION_TAPE_RECORDS as u64,
+        MAX_INTERACTION_ACTIONS_PER_RECORD as u64,
+        MAX_INTERACTION_TOTAL_ACTIONS as u64,
+        HEADLESS_SIMULATION_MAX_SOURCE_BYTES as u64,
+        HEADLESS_LOCAL_REPLAY_MAX_EXECUTABLE_BYTES,
+        HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS,
+        HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND as u64,
+    ] {
+        payload.extend_from_slice(&value.to_be_bytes());
+    }
+    for value in [
+        HEADLESS_SIMULATION_MAX_RESIZE_PIXEL_WRITES,
+        HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS,
+        HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS,
+        HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
+        HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS,
+        HEADLESS_SIMULATION_MAX_CHUNK_WORD_TESTS,
+        HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS,
+        HEADLESS_SIMULATION_MAX_POSSIBLE_CHUNKS,
+    ] {
+        payload.extend_from_slice(&value.to_be_bytes());
+    }
+    local_replay_policy_tag(HEADLESS_LOCAL_REPLAY_ADMISSION_SCHEMA, &payload)
+}
+
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_build() -> Result<LocalReplayBuild, io::Error> {
+    let executable = std::env::current_exe()?;
+    let mut file = std::fs::File::open(&executable)?;
+    let before = file.metadata()?;
+    if !before.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "current local replay executable is not a regular file: {}",
+                executable.display()
+            ),
+        ));
+    }
+    let build = LocalReplayBuild::fingerprint_reader(
+        &mut file,
+        before.len(),
+        HEADLESS_LOCAL_REPLAY_MAX_EXECUTABLE_BYTES,
+    )
+    .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not fingerprint local replay executable: {error}"),
+        )
+    })?;
+    let after = file.metadata()?;
+    if !after.is_file() || after.len() != before.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "local replay executable changed while fingerprinting: {}",
+                executable.display()
+            ),
+        ));
+    }
+    Ok(build)
+}
+
+#[cfg(feature = "protocol-research")]
+fn headless_local_replay_context() -> Result<LocalReplayContext, io::Error> {
+    LocalReplayContext::new(
+        headless_local_replay_build()?,
+        headless_local_replay_genesis_policy_tag(),
+        headless_local_replay_rules_policy_tag(),
+        headless_local_replay_admission_policy_tag(),
+    )
+    .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not construct local replay context: {error}"),
+        )
+    })
+}
+
+#[cfg(feature = "protocol-research")]
+fn simulate_interaction_tape_with_local_replay_evidence(
+    tape: &InteractionTape,
+) -> Result<(HeadlessSimulationSummary, LocalReplayEvidence), io::Error> {
+    // Capture the build and declared policies before the fold. This is a local binding, not
+    // source/build provenance or a claim that the executable cannot change concurrently.
+    let context = headless_local_replay_context()?;
+    let summary = simulate_interaction_tape(tape)?;
+    let evidence = LocalReplayEvidence::new(context, tape.clone(), summary.local_replay_endpoint)
+        .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not construct local replay evidence: {error}"),
+        )
+    })?;
+    evidence.verify().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("constructed local replay evidence did not verify: {error}"),
+        )
+    })?;
+    Ok((summary, evidence))
+}
+
+#[cfg(all(test, feature = "protocol-research"))]
+fn verify_local_replay_evidence(
+    evidence: &LocalReplayEvidence,
+) -> Result<HeadlessSimulationSummary, io::Error> {
+    evidence.verify().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("local replay evidence structural verification failed: {error}"),
+        )
+    })?;
+    let current_context = headless_local_replay_context()?;
+    if evidence.context() != current_context {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "local replay evidence context differs from this executable or its declared headless policies",
+        ));
+    }
+    let summary = simulate_interaction_tape(evidence.tape())?;
+    let expected = LocalReplayEvidence::new(
+        current_context,
+        evidence.tape().clone(),
+        summary.local_replay_endpoint,
+    )
+    .map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not reconstruct local replay evidence: {error}"),
+        )
+    })?;
+    if expected != *evidence {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "local replay evidence endpoint differs from replay of its embedded action tape",
+        ));
+    }
+    Ok(summary)
+}
+
 fn simulate_interaction_tape(
     tape: &InteractionTape,
 ) -> Result<HeadlessSimulationSummary, io::Error> {
@@ -3003,6 +3243,10 @@ fn simulate_interaction_tape(
             "could not reserve headless tick summaries",
         )
     })?;
+    #[cfg(feature = "protocol-research")]
+    let mut latest_game = None;
+    #[cfg(feature = "protocol-research")]
+    let mut latest_composite = None;
 
     for record in tape.records() {
         for (action_index, &action) in record.actions().iter().enumerate() {
@@ -3028,6 +3272,20 @@ fn simulate_interaction_tape(
         );
         let game = outcome.game();
         let composite = outcome.composite();
+        #[cfg(feature = "protocol-research")]
+        if let Some(game) = game {
+            latest_game = Some(
+                ReplayFrameCommitment::new(game.input(), game.frame())
+                    .expect("fixed tick game commitment has canonical nested kinds"),
+            );
+        }
+        #[cfg(feature = "protocol-research")]
+        if let Some(composite) = composite {
+            latest_composite = Some(
+                ReplayFrameCommitment::new(composite.input(), composite.frame())
+                    .expect("fixed tick composite commitment has canonical nested kinds"),
+            );
+        }
         ticks.push(HeadlessTickSummary {
             ordinal: outcome.tick(),
             outcome: outcome.tag(),
@@ -3064,6 +3322,22 @@ fn simulate_interaction_tape(
         ));
     }
 
+    #[cfg(feature = "protocol-research")]
+    let local_replay_endpoint = LocalReplayEndpoint::new(
+        app.tick_outcomes.last().map(TickOutcome::tag),
+        world_tag(&app.world),
+        app.history.head(),
+        TickCameraState::capture(&app.camera).bits(),
+        app.renderer.width(),
+        app.renderer.height(),
+        app.compositor.width(),
+        app.compositor.height(),
+        app.sidebar_visible,
+        latest_game,
+        latest_composite,
+    )
+    .expect("headless fixed fold produces a structurally valid replay endpoint");
+
     Ok(HeadlessSimulationSummary {
         tape: tape.content_tag(),
         action_count: tape.total_actions(),
@@ -3077,6 +3351,8 @@ fn simulate_interaction_tape(
         composite_admissions,
         game_receipt_head,
         composite_receipt_head,
+        #[cfg(feature = "protocol-research")]
+        local_replay_endpoint,
     })
 }
 
@@ -3092,6 +3368,14 @@ fn camera_bits_text(bits: [u64; 10]) -> String {
 }
 
 fn print_headless_summary(summary: &HeadlessSimulationSummary) {
+    #[cfg(feature = "protocol-research")]
+    println!(
+        "interaction-simulation\ttape={}\tticks={}\tactions={}\tscope=fixed-tick-projection\trun_receipt=separate-local-replay-evidence-line",
+        summary.tape,
+        summary.ticks.len(),
+        summary.action_count,
+    );
+    #[cfg(not(feature = "protocol-research"))]
     println!(
         "interaction-simulation\ttape={}\tticks={}\tactions={}\tscope=fixed-tick-projection\trun_receipt=unavailable",
         summary.tape,
@@ -3126,6 +3410,31 @@ fn print_headless_summary(summary: &HeadlessSimulationSummary) {
         summary.composite_admissions,
         optional_tag(summary.game_receipt_head),
         optional_tag(summary.composite_receipt_head),
+    );
+}
+
+/// Reports the in-memory carrier emitted for a research-enabled action simulation.
+///
+/// The line intentionally names only local replay bindings. It does not turn the carrier into
+/// durable storage or attribute it to a display, clock, remote peer, owner, or consensus rule.
+#[cfg(feature = "protocol-research")]
+fn print_local_replay_evidence(evidence: &LocalReplayEvidence) {
+    let context = evidence.context();
+    let endpoint = evidence.endpoint();
+    println!(
+        "interaction-local-replay-evidence\ttag={}\tcarrier_bytes={}\tcarrier=in-memory-only\tscope=canonical-local-replay\tbuild={}\tgenesis_policy={}\trules_policy={}\tadmission_policy={}\ttape={}\toutcome={}\tworld={}\thistory={}\tgame_frame={}\tcomposite_frame={}\tnot_claimed=persistence,custody,signature,ownership,consensus,clock,display,scanout,light",
+        evidence.tag(),
+        evidence.encoded_len(),
+        context.build().tag(),
+        context.genesis_policy(),
+        context.rules_policy(),
+        context.admission_policy(),
+        evidence.tape().content_tag(),
+        optional_tag(endpoint.outcome()),
+        endpoint.world(),
+        endpoint.history(),
+        optional_tag(endpoint.game().map(ReplayFrameCommitment::frame)),
+        optional_tag(endpoint.composite().map(ReplayFrameCommitment::frame)),
     );
 }
 
@@ -5025,6 +5334,31 @@ fit
         assert_eq!(summary.on_bits, 1);
         assert_eq!(summary.coordinate_receipts, 2);
         assert_eq!(summary.final_world, world_tag(&origin_only.world));
+    }
+
+    #[cfg(feature = "protocol-research")]
+    #[test]
+    fn local_replay_evidence_replays_the_embedded_tape_and_refuses_context_or_endpoint_swaps() {
+        let tape =
+            InteractionTape::parse(include_str!("../examples/observer_place_delete.tape")).unwrap();
+        let (summary, evidence) =
+            simulate_interaction_tape_with_local_replay_evidence(&tape).unwrap();
+        assert_eq!(verify_local_replay_evidence(&evidence).unwrap(), summary);
+
+        let different_tape = InteractionTape::parse("tick\nwheel 1\n").unwrap();
+        let wrong_endpoint =
+            LocalReplayEvidence::new(evidence.context(), different_tape, evidence.endpoint())
+                .unwrap();
+        let endpoint_error = verify_local_replay_evidence(&wrong_endpoint).unwrap_err();
+        assert_eq!(endpoint_error.kind(), io::ErrorKind::InvalidData);
+        assert!(endpoint_error.to_string().contains("endpoint differs"));
+
+        let mut changed_build = evidence.encode_canonical();
+        changed_build[size_of::<u64>()] ^= 1;
+        let wrong_context = LocalReplayEvidence::decode_canonical(&changed_build).unwrap();
+        let context_error = verify_local_replay_evidence(&wrong_context).unwrap_err();
+        assert_eq!(context_error.kind(), io::ErrorKind::InvalidData);
+        assert!(context_error.to_string().contains("context differs"));
     }
 
     #[test]

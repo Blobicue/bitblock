@@ -105,11 +105,23 @@ checks the complete tape against payload/action limits and cumulative resize, co
 world-coordinate, sparse-chunk-word, edit, and canonical-ordering work budgets. Invalid finite
 accumulation and over-budget work fail closed.
 
-The report contains the tape tag, per-tick outcome/world/history/camera and CPU-frame commitments,
-and the final state. Those lines are reproducible projections, not yet one canonical run receipt
-binding the tape, build/rules, and result chain. Headless frames are intentionally unsubmitted:
-frame admissions and receipt heads remain empty, and no OS raster, scanout, or physical-light
-evidence is produced.
+The ordinary `headless-console` report contains the tape tag, per-tick
+outcome/world/history/camera and CPU-frame commitments, and the final state. Those lines remain
+lightweight reproducible projections. With the opt-in `protocol-research` feature, the same
+command additionally constructs and structurally verifies one in-memory
+`#bb.replay-evidence.sha256...` v1 carrier. It embeds the complete canonical tape, a streamed
+fingerprint of the current local executable, declared headless genesis/rules/admission policy
+tags, and the exact final fixed-tick/world/history/camera/latest-frame endpoint. It is not written
+to a file, signed, or treated as custody, ownership, consensus, time, display, scanout, or
+physical-light evidence. The research command is:
+
+```powershell
+cargo run --release --features "headless-console protocol-research" -- --simulate-actions examples/observer_place_delete.tape
+```
+
+Headless frames are intentionally unsubmitted: frame admissions and receipt heads remain empty,
+and no OS raster, scanout, or physical-light evidence is produced. The default build does not
+include the local-replay carrier code.
 
 The app retains the most recent tick's resolved, ordered integer-coordinate
 batch in memory. That batch can be replayed without the camera or renderer and
