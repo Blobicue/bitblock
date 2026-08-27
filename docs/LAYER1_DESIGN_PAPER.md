@@ -80,7 +80,7 @@ The starting point is intentionally small:
 | World/history identity | Canonical SHA-256 content tags and parent-linked local receipts | Implemented |
 | Interaction replay | Supplied bounded canonical `InteractionTape` values and headless replay reports; no complete live recorder | Implemented, bounded |
 | Mint/burn evidence | `CoordinateEpisodeEvidence` records local issuance episodes and consuming burns | Implemented, feature-gated, bounded/in-memory |
-| Abstract proof | Lean models cover bedrock/edit replay and per-edit finite-trace supply deltas; not token identity or Rust refinement | Bounded |
+| Abstract proof | Lean finite-support models cover bedrock/edit replay and per-edit supply delta/no-op theorems; not token identity or Rust refinement | Bounded |
 | Ownership | No owners, accounts, signatures, or transfer records | Not claimed |
 | Networking | No replicated nodes or wire consensus protocol | Not claimed |
 | Persistence | Research storage exists, but the default live history is not durable custody | Not claimed |
@@ -106,8 +106,8 @@ for the current version, and let `o = (0, 0, 0)` be the immutable origin. A worl
 contains an occupied set:
 
 ```text
-B_t : C -> {0, 1}
-B_t(o) = 1
+B_h : C -> {0, 1}
+B_h(o) = 1
 ```
 
 The absence of a stored bit is semantically `0`, not “unloaded” or “unknown”. Storage is
@@ -116,12 +116,13 @@ an implementation of this function; it is not the definition of the world.
 A future deterministic execution state can be written as:
 
 ```text
-ApplicationState_h = (B_h, M_h, X_h)
+ApplicationState_h = (B_h, M_h, E_h, X_h)
 ProtocolState_h    = (A_h, N_h, P_h, G_h, Q_h)
 ExecutionState_h   = (ApplicationState_h, ProtocolState_h)
 
-FinalizedHead_h = (height, block_id, execution_state_root, history_root,
-                   availability_claim)
+ConsensusHead_(i,h) = (height, block_id, execution_state_root, history_root,
+                       consensus_status, availability_status,
+                       availability_evidence_ref)
 
 NodeLocalView_i = (UI_i, mempool_i, candidate_branches_i, current_votes_i,
                    timeouts_i, peers_i, sync_i, caches_i)
@@ -131,6 +132,8 @@ where:
 
 - `B_h` is the occupied-coordinate function;
 - `M_h` is the active mint map from mutable occupied coordinates to token identifiers;
+- `E_h` is canonical mint/burn episode and event state, including live/consumed status and
+  provenance needed by the chosen pruning policy;
 - `ApplicationState_h` MAY also contain `X_h`, the selected ownership, transfer, balance,
   fee, or stake state. `X_h` is empty until an asset/economic model is chosen, but any later
   asset domain MUST have its own canonical state and root;
@@ -138,31 +141,39 @@ where:
 - `N_h` is committed per-identity replay state such as nonces;
 - `P_h` is committed protocol-version, codec, resource, and economic parameter state;
 - `G_h` is committed governance, upgrade, and emergency-policy state;
-- `Q_h` is the validator/sequencer schedule authorized by the finalized parent, including
+- `Q_h` is the validator/sequencer schedule authorized by the parent accepted under the
+  selected consensus rule, including
   active and delayed-next authority sets where the selected consensus needs them;
-- `FinalizedHead_h` identifies the accepted ledger prefix and its declared availability
-  status; and
+- `ConsensusHead_(i,h)` identifies node `i`'s rule-verified ledger prefix, exact
+  finality/confirmation status, and typed availability status/evidence reference. A bare
+  availability claim cannot populate these fields; the status is `Unverified` until the
+  selected possession, certificate, or sampling rule verifies. A probabilistic tip may be
+  node-relative; a public safety claim covers only the prefix satisfying its declared
+  confirmation/common-prefix rule; and
 - `NodeLocalView_i` contains facts that may legitimately differ between honest nodes and is
   never covered by `execution_state_root`.
 
 Candidate branches, mempool contents, current-round votes, timeouts, peer state, retrieval
 progress, caches, camera state, and rendering state are not deterministic results of user
 transactions. They MUST NOT be placed inside `ExecutionState_h`. Finality evidence is
-detached evidence over a proposed block identifier; actual byte availability is a network
+detached consensus evidence over a proposed block identifier; actual byte availability is a network
 property evaluated under the selected rule, not a Boolean manufactured by `Execute`.
 
 The current executable has `B_h`, local camera/presentation state, ordered edit-attempt
 history, aggregate tick outcomes, and local content tags. Its supplied interaction tapes are
 replay inputs rather than proof that every live input was recorded. It does not implement
 the proposed authorization, nonce, governance, validator, consensus, or availability
-protocols.
+protocols. Resize, sidebar-toggle, and clear-motion actions also mutate local state when
+accepted by the application, before `fixed_tick`; that local orchestration is not consensus
+execution.
 
 Protocol genesis MUST make every initial execution component and authority root explicit.
 To avoid a self-referential identifier:
 
 ```text
 genesis_payload = Canonical(
-    chain_id, world_id, B_0, M_0, X_0, A_0, N_0, P_0, G_0, Q_0,
+    chain_id, world_id, identity_namespace, B_0, M_0, E_0, X_0,
+    A_0, N_0, P_0, G_0, Q_0,
     cryptographic_suites, bootstrap_and_availability_policy
 )
 genesis_id      = H(genesis_domain || genesis_payload)
@@ -171,8 +182,8 @@ genesis_package = (genesis_payload, genesis_id)
 
 `genesis_payload` excludes `genesis_id`. For the first proposed network profile, one chain
 contains exactly one `world_id`; a future multi-world version would replace the single world
-with a committed `worlds_root`. Initially `B_0 = {o}`, `M_0` is empty, and every allocation,
-authority, parameter, validator, and governance record is explicit. The package MUST be
+with a committed `worlds_root`. Initially `support(B_0) = {o}`, `M_0` and `E_0` are empty, and every
+allocation, authority, parameter, validator, and governance record is explicit. The package MUST be
 immutable and reproducible. Origin bedrock is an application invariant, not an initial coin
 allocation, observer property, or validator trust anchor.
 
@@ -181,12 +192,14 @@ The authoritative execution transition is a pure function:
 ```text
 ExecutionState_(h+1) = Execute(
     ExecutionState_h,
-    BlockContext_h,
-    OrderedTransactions_h
+    BlockContext_(h+1),
+    OrderedTransactions_(h+1)
 )
 ```
 
-`BlockContext_h` contains only committed inputs required by the selected version, such as
+`ExecutionState_h` is the post-state of ledger height `h` accepted at the profile's named
+consensus status; the candidate successor has
+height `h+1`. `BlockContext_(h+1)` contains only committed inputs required by the selected version, such as
 height, parent identifier, and any authenticated protocol randomness. Execution MUST depend
 only on canonical parent state, committed context, and ordered transaction bytes. Proposal,
 validation, voting, certification, and publication are separate transitions. Wall-clock
@@ -215,42 +228,70 @@ a new token identifier. The protocol must choose whether identity is transaction
 inclusion-stable across provisional forks. One non-circular inclusion-stable candidate is:
 
 ```text
-event_position = H(Canonical(
-    event_position_domain,
-    chain_id,
-    genesis_id,
-    world_id,
-    parent_block_id,
-    transactions_root,
+UserEventPosition = Canonical(
+    user_event_position_domain,
+    candidate_execution_context_id,
     transaction_index,
-    action_index
-))
+    action_index,
+    effect_index
+)
+
+SystemEventPosition = Canonical(
+    system_event_position_domain,
+    candidate_execution_context_id,
+    system_phase,
+    system_rule_id,
+    system_transition_ordinal,
+    effect_index
+)
+
+event_position = H(Canonical(UserEventPosition | SystemEventPosition))
 
 mint_id = H(
     Canonical(mint_domain, event_position, coordinate)
 )
+
+burn_event_id = H(Canonical(
+    burn_domain,
+    event_position,
+    coordinate,
+    consumed_mint_id
+))
 ```
 
-This candidate is known before post-state and `block_id` computation, so it creates no hash
-cycle. Re-inclusion under another parent creates another event position. A transaction-stable
+`candidate_execution_context_id` is defined in §4.4 from the parent, exact body, committed
+block context, and execution policy before execution begins. Both tagged position variants
+are therefore known before post-state and `block_id` computation and create no hash cycle.
+The system namespace covers rent, reward, migration, or governance
+transitions that are not user transaction actions; its ordinals and phases are deterministic
+protocol rules. Re-inclusion under another parent creates another user event position. A transaction-stable
 alternative would deliberately preserve identity across such re-inclusion and must define
 the collision and duplicate-inclusion rules. The final choice MUST include an unambiguous
 event identity or equivalent canonical nonce; a coordinate alone is never a token ID.
-Finality remains a separate status. The historical mint and its consuming burn remain in
-the finalized log.
+Consensus status remains separate. The historical mint and its consuming burn remain in
+the ledger prefix accepted under the selected rule.
 
 Cardinality alone is too weak: it could pass while tokens are attached to the wrong
-coordinates. Let `Episode[id]` be canonical episode state. The core correspondence is:
+coordinates. Let `E_h[id]` be canonical episode state. The core correspondence is:
 
 ```text
 dom(M_h) = { c in C : c != o and B_h(c) = 1 }
 M_h is injective
 
 for every c in dom(M_h):
-    Episode[M_h(c)].coordinate = c
-    Episode[M_h(c)].status = live
+    E_h[M_h(c)].coordinate = c
+    E_h[M_h(c)].status = live
+
+range(M_h) = {
+    mint_id : E_h[mint_id] is a live MintEpisode
+}
 
 no burned mint_id occurs in range(M_h)
+each MintEpisode has at most one consuming BurnEvent
+each BurnEvent names exactly one existing MintEpisode
+E_h[mint_id].status = consumed iff exactly one BurnEvent has
+    consumed_mint_id = mint_id
+MintEpisode IDs and BurnEvent IDs use distinct typed domains
 ```
 
 Therefore `|M_h| = |{c != o : B_h(c) = 1}|` is a corollary. Each successful burn consumes
@@ -283,8 +324,9 @@ Until that choice is made, “mint” and “burn” should be read as provenanc
 promise of financial value.
 
 Transfers, if added, preserve active supply while changing ownership metadata. They MUST
-not silently rewrite the coordinate episode. A burn is an irreversible state transition in
-the finalized history. Governance MAY authorize a later, explicit compensating mint or
+not silently rewrite the coordinate episode. A burn becomes irreversible only under the
+selected deterministic-finality rule; a probabilistic profile carries its declared residual
+reversal risk. Governance MAY authorize a later, explicit compensating mint or
 recovery transition, but it cannot erase the burn. A governance hard fork creates a newly
 versioned history and must be disclosed as such.
 
@@ -298,15 +340,17 @@ future protocol needs a committed authorization model. A stable-actor candidate 
 actor_id = H(Canonical(
     actor_identity_domain,
     chain_id,
-    genesis_id,
+    identity_namespace,
     initial_authorization_descriptor
 ))
 
 A_h[actor_id] = current versioned authorization descriptor
 ```
 
-The descriptor can name one key, a threshold set, delegated capabilities, and an explicit
-rotation/recovery policy. A finalized authorization transition changes the descriptor while
+`identity_namespace` is selected inside `genesis_payload` before `genesis_id` is derived, so
+genesis authorization records do not create an identifier cycle. Transactions still bind
+`genesis_id`, preventing cross-genesis replay. The descriptor can name one key, a threshold set, delegated capabilities, and an explicit
+rotation/recovery policy. A consensus-accepted authorization transition changes the descriptor while
 preserving `actor_id`. The simpler alternative is a public-key-hash address, in which case
 “rotation” is an authorized ownership transfer to a new address rather than preservation of
 identity. A network version MUST select one model; two valid keys cannot silently alias one
@@ -327,6 +371,8 @@ TransactionSignDoc =
  || world_id
  || actor_id
  || authorizing_key_id
+ || signature_suite_id
+ || signing_hash_suite_id
  || actor_nonce
  || valid_after
  || valid_until
@@ -335,11 +381,12 @@ TransactionSignDoc =
  || fee_and_resource_offer
  || ordered_operations
 
-signing_digest    = H(action_signature_domain || Canonical(TransactionSignDoc))
-signature         = Sign(actor_secret_key, signing_digest)
+signing_digest    = H[signing_hash_suite_id](
+    action_signature_domain || Canonical(TransactionSignDoc)
+)
+signature         = Sign[signature_suite_id](actor_secret_key, signing_digest)
 SignedTransaction = Canonical(
     TransactionSignDoc,
-    signature_suite_id,
     signature
 )
 
@@ -436,17 +483,20 @@ Validity, admission, execution failure, and semantic no-op are different outcome
 | Outcome | Consensus effect |
 | --- | --- |
 | `RejectedBeforeAdmission` | Malformed, bad-signature, wrong-domain, expired, or pre-admission-unaffordable bytes are excluded. They cause no consensus-state mutation; a local rejection response need not be permanently committed. |
+| `DroppedAfterAdmission` | A node-local mempool may evict or expire an admitted but unincluded transaction under declared queue rules. This causes no consensus-state mutation and needs a local disposition, not a canonical receipt. |
 | `BlockInvalid` | A proposed block that includes a transaction forbidden by block validation, has a wrong root, exceeds limits, or cannot execute deterministically is rejected wholesale. No candidate post-root becomes canonical. |
 | `IncludedSuccess` | Ordered operations commit atomically with the declared nonce and fee disposition. |
 | `IncludedNoOp` | An allowed idempotent `on -> on` or `off -> off` records an explicit success-no-op and applies the versioned nonce/fee rule, with no occupancy or token change. |
-| `IncludedFailure` | A transaction admitted under the selected policy can record failure. It performs no partial occupancy, token, or ownership writes; only the explicitly selected nonce/fee effects may commit atomically. |
+| `IncludedFailure` | A transaction admitted under the selected policy can record failure. It performs no partial execution-domain writes; only the explicitly selected nonce/fee effects may commit atomically. |
 
-The proposed initial transaction model is transaction-local atomicity: all ordered
-application operations in one transaction succeed, no-op as specified, or leave the
-application domains unchanged. Blocks execute transactions sequentially, so each receipt's
-actual pre-state is the previous transaction's post-state. Candidate execution and durable
-publication are a separate atomicity boundary: a node publishes either the fully validated
-candidate body and roots or no candidate root, never a partial batch.
+The proposed initial transaction model is transaction-local atomicity. Operations evaluate
+in order against a staged transaction state; allowed no-ops may coexist with successes, but
+any failing operation discards every staged execution-domain write for that transaction
+except the explicitly versioned nonce/fee disposition of `IncludedFailure`. Blocks execute
+transactions sequentially, so each receipt's actual pre-state
+is the previous transaction's post-state. Candidate execution and durable publication are a
+separate atomicity boundary: a node publishes either the fully validated candidate body and
+roots or no candidate root, never a partial batch.
 
 Every included transaction MUST have exactly one canonical receipt. Every submitted item
 MUST receive a local disposition, but the protocol need not make rejected network spam part
@@ -456,7 +506,8 @@ finalization lanes must reconcile without silently losing an included action.
 ### 4.2 Ordering and conflicts
 
 Two observers may target the same coordinate in one logical tick. Arrival order on one
-machine is not a safe distributed rule. A finalized batch MUST carry one canonical order,
+machine is not a safe distributed rule. A batch accepted at the selected consensus status
+MUST carry one canonical order,
 chosen by a sequencer or consensus mechanism. Under that order:
 
 - the first valid `on` may open the coordinate;
@@ -477,9 +528,11 @@ wire format may lower `toggle` into explicit `on` or `off` after canonical order
 The protocol MUST distinguish these states:
 
 ```text
-submitted -> admitted -> executed -> finalized
-                    \-> rejected / expired
-executed  -> orphaned  (only before finality)
+submitted -> rejected-before-admission / locally-expired
+         \-> admitted -> dropped-or-expired-before-inclusion
+                      \-> included-and-executed -> candidate
+                                                 \-> finalized-or-threshold-confirmed
+                                                 \-> orphaned-or-reorged under the selected rule
 ```
 
 Mempool contents are node-local and MUST NOT be spendable or treated as ownership proof. A
@@ -491,15 +544,30 @@ windowed anchor is selected, the admissible ancestor window and expected-state f
 consensus rules.
 
 An unfinalized mint is provisional. Wallets and clients MUST distinguish candidate,
-executed, and finalized receipts. If a pre-finality fork removes a transaction, its mint
-or burn is not part of the canonical supply; re-inclusion requires a new, valid transaction
-under the surviving parent and nonce rules.
+executed, and finalized or threshold-confirmed receipts. If a pre-finality fork removes a transaction, its mint
+or burn is not part of the canonical supply. The same signed transaction MAY be re-included
+if it remains valid under the surviving nonce, anchor, and validity-window rules; otherwise
+the actor must authorize a replacement.
 
-### 4.4 Proposed block, identifier, finality evidence, and receipts
+### 4.4 Proposed block, identifier, consensus evidence, and receipts
 
 The signed object must not contain its own signature or certificate. A consensus-neutral
 envelope separates the ordered body, deterministic execution commitments, proposal
-signature, and detached finality evidence:
+signature, and detached consensus evidence:
+
+`CommitOrdered(domain, items)` below means a domain-separated authenticated sequence
+commitment that binds the sequence type, exact length, every zero-based index, and each
+canonical leaf byte string. Its inclusion proof also binds domain, length, index, and leaf;
+it is not an undifferentiated Merkle root over raw concatenation.
+
+`CommitAvailability(policy_id, payload)` means the selected binding, domain-separated
+commitment to the exact canonical `AvailabilityPayload` bytes. Any erasure-coded shares,
+sampling positions, or recovery proofs are derived from and verify against that same payload
+and policy; a commitment to unrelated bytes cannot satisfy proposal validity.
+
+`system_transition_schedule` contains only pre-execution rule invocations and deterministic
+ordinals. It excludes event IDs, effects, post-state values, and anything derived from
+`candidate_execution_context_id`, preventing a context/identifier cycle.
 
 ```text
 Body = Canonical(
@@ -507,14 +575,66 @@ Body = Canonical(
     deterministic_auxiliary_inputs
 )
 
-transactions_root = CommitOrdered(ordered_signed_transactions)
-receipts_root     = CommitOrdered(receipts_by_transaction_index)
+transactions_root = CommitOrdered(
+    transaction_sequence_domain,
+    ordered_signed_transactions
+)
+body_root         = H(body_domain || Body)
+
+BlockContext = Canonical(
+    protocol_version,
+    chain_id,
+    genesis_id,
+    world_id,
+    height,
+    parent_block_id,
+    epoch,
+    round_or_view,
+    optional_committed_randomness,
+    application_subtick_schedule,
+    system_transition_schedule
+)
+
+block_context_root = H(block_context_domain || BlockContext)
+
+candidate_execution_context_id = H(Canonical(
+    candidate_execution_context_domain,
+    protocol_version,
+    chain_id,
+    genesis_id,
+    world_id,
+    height,
+    parent_block_id,
+    body_root,
+    block_context_root,
+    execution_parameter_root,
+    governance_authority_root,
+    active_validator_root,
+    consensus_policy_id,
+    proposer_identity
+))
+
+receipts_root     = CommitOrdered(
+    execution_receipt_sequence_domain,
+    all_transaction_and_system_receipts_in_execution_order
+)
+
+AvailabilityPayload = Canonical(
+    Body,
+    all_transaction_and_system_receipts_in_execution_order,
+    consensus_required_execution_witnesses
+)
+
+data_availability_commitment = CommitAvailability(
+    data_availability_policy_id,
+    AvailabilityPayload
+)
 
 post_history_root = H(Canonical(
     history_domain,
     parent_history_root,
     height,
-    transactions_root,
+    body_root,
     receipts_root,
     post_execution_state_root
 ))
@@ -530,57 +650,123 @@ ProposalHeader = Canonical(
     parent_block_id,
     parent_history_root,
     pre_execution_state_root,
+    block_context_root,
+    candidate_execution_context_id,
+    body_root,
     transactions_root,
     receipts_root,
     post_execution_state_root,
     post_history_root,
-    parameter_root,
-    governance_root,
+    execution_parameter_root,
+    execution_policy_id,
+    governance_authority_root,
     active_validator_root,
     optional_next_validator_root,
     consensus_policy_id,
+    data_availability_policy_id,
     data_availability_commitment,
-    proposer_identity
+    proposer_identity,
+    proposer_key_id,
+    proposal_signature_suite_id,
+    proposal_signing_hash_suite_id
 )
 
-block_id           = H(block_header_domain || ProposalHeader)
-proposer_signature = Sign(proposer_key, H(proposal_signature_domain || block_id))
-Proposal           = Canonical(ProposalHeader, Body, receipts, proposer_signature)
-FinalityEvidence   = consensus-specific evidence over block_id
-FinalizedBlock     = Canonical(Proposal, FinalityEvidence)
+block_id = H(block_header_domain || ProposalHeader)
+proposer_signature = Sign[proposal_signature_suite_id](
+    proposer_secret_key_for(proposer_key_id),
+    H[proposal_signing_hash_suite_id](proposal_signature_domain || block_id)
+)
+Proposal           = Canonical(ProposalHeader, AvailabilityPayload, proposer_signature)
+ConsensusEvidence =
+    DeterministicFinalityEvidence(block_id, ...)
+  | ProbabilisticConfirmationEvidence(block_id, ...)
+  | CentralAuthorityEvidence(block_id, ...)
+
+AcceptedBlockRecord = Canonical(Proposal, ConsensusEvidence)
 ```
 
-`FinalityEvidence` may be a quorum certificate, a declared work/ancestry proof, or a trusted
-sequencer signature according to the selected consensus profile. It is never inside the
+`ConsensusEvidence` may be a quorum certificate, declared work/ancestry and confirmation
+context, or a trusted sequencer signature according to the selected consensus profile. It is never inside the
 `block_id` it authenticates. Consensus-specific header fields must replace, not informally
 reinterpret, generic fields such as `round_or_view`.
 
-A valid proposal requires all of the following to recompute exactly: parent/height/epoch;
-proposer eligibility and signature; canonical body and transaction root; transaction and
-block resource limits; sequential deterministic execution from the pre-state; ordered
-receipts and receipt root; post-state and history roots; parameter, governance, and active
-validator roots authorized by the finalized parent; and the declared data-availability
-commitment. Finalization additionally requires valid consensus-specific evidence. A mismatch
-in any required field invalidates the proposal rather than producing a partial successor.
+`execution_parameter_root`, `governance_authority_root`, and `active_validator_root` are the
+parent-authorized values governing this proposal. `optional_next_validator_root` and the
+post-execution root commit successor changes. No header label may ambiguously mean both a
+pre-transition authority and a post-transition result. `execution_policy_id` in each receipt
+names the exact versioned execution, no-op, fee, and failure rules selected by
+`execution_parameter_root`. `consensus_policy_id` and `data_availability_policy_id` likewise
+name uniquely versioned policies authorized by the parent parameter/governance state;
+`optional_next_validator_root` MUST equal the delayed-next schedule committed in the
+post-execution `Q` state.
 
-Each included transaction receipt is canonical and position-specific:
+`proposer_identity`, key ID, and signature/hash suite IDs MUST resolve to exactly one active
+proposal credential in the parent-authorized validator record. A proposer cannot select an
+alternate key or downgrade suite merely by changing header fields.
 
 ```text
-Receipt = Canonical(
-    tx_id,
+execution_policy_id = H(Canonical(
+    execution_policy_domain, protocol_version, execution_parameter_root
+))
+consensus_policy_id = H(Canonical(
+    consensus_policy_domain, protocol_version,
+    execution_parameter_root, governance_authority_root
+))
+data_availability_policy_id = H(Canonical(
+    availability_policy_domain, protocol_version, execution_parameter_root
+))
+```
+
+`AcceptedBlockRecord` is a neutral carrier name. A deterministic-finality profile may call
+it finalized only after its finality rule passes. A probabilistic profile must retain its
+confidence/confirmation status and cannot turn work ancestry into absolute finality by using
+this envelope.
+
+A valid proposal requires all of the following to recompute exactly: parent/height/epoch;
+proposer eligibility and signature; canonical block context, candidate execution context,
+availability payload, body, body root, and transaction root;
+transaction and block resource limits; sequential deterministic execution from the
+pre-state; ordered receipts and receipt root; post-state and history roots; execution-
+parameter, governance-authority, and active-validator roots authorized by the parent
+accepted under the selected consensus rule;
+parent; complete receipt/effect/witness bytes; and a data-availability commitment recomputed
+under the declared policy. Acceptance at the claimed consensus status additionally requires
+valid profile-specific evidence—deterministic finality or the declared probabilistic
+confirmation threshold. A mismatch
+in any required field invalidates the proposal rather than producing a partial successor.
+
+Each included transaction and deterministic system transition has a canonical,
+position-specific receipt:
+
+```text
+effects_root_j = CommitOrdered(
+    execution_effect_sequence_domain,
+    effects_in_subject_order_for_receipt_j
+)
+
+ReceiptSubject =
+    UserTransaction(tx_id, transaction_index)
+  | SystemTransition(system_phase, system_rule_id, system_transition_ordinal)
+
+ReceiptCore = Canonical(
+    ReceiptSubject,
     included_height,
-    transaction_index,
     result,
-    pre_transaction_state_root,
-    post_transaction_state_root,
+    pre_subject_state_root,
+    post_subject_state_root,
     nonce_disposition,
     fee_disposition,
-    ordered_effects_root,
+    effects_root_j,
     execution_policy_id
 )
 
-Effect = Canonical(
-    action_index,
+Receipt = Canonical(ReceiptCore, effects_in_subject_order)
+
+OccupancyEffect = Canonical(
+    occupancy_effect_tag,
+    effect_index,
+    optional_source_action_index,
+    event_position,
     status,
     coordinate,
     pre_occupancy,
@@ -589,13 +775,27 @@ Effect = Canonical(
     optional_consumed_mint_id,
     optional_burn_event_id
 )
+
+Effect =
+    OccupancyEffect
+  | OwnershipOrTransferEffect(...)
+  | BalanceFeeRewardOrRentEffect(...)
+  | AuthorizationEffect(...)
+  | GovernanceOrUpgradeEffect(...)
+  | ValidatorScheduleEffect(...)
+  | other versioned tagged execution-domain effect
 ```
 
-`block_id` is deliberately not inside a receipt whose root helps form that identifier. A
-receipt-inclusion proof links the receipt and its transaction index to `receipts_root`; an
-authenticated header links that root to `block_id`; detached finality evidence establishes
+`receipts_root` commits the full ordered receipts, so it transitively binds each effect list
+and its per-receipt `effects_root_j`. `block_id` is deliberately not inside a receipt
+whose root helps form that identifier. A
+receipt-inclusion proof links the receipt and its canonical subject position to `receipts_root`; an
+authenticated header links that root to `block_id`; detached consensus evidence establishes
 its consensus status. Execution, inclusion, finality, and availability remain four separate
 claims. A receipt hash alone proves only the receipt bytes and schema.
+For a `SystemTransition` receipt, `nonce_disposition` and `fee_disposition` are the canonical
+`NotApplicable` variants; rewards, rent, migrations, and other system changes appear as
+tagged effects instead.
 
 ### 4.5 Genesis, versioning, and upgrades
 
@@ -613,14 +813,14 @@ The `genesis_payload` MUST contain, at minimum:
 identify the version that interpreted it. Unknown versions, missing genesis data, and
 incompatible parameter roots MUST fail closed.
 
-An upgrade is a deterministic, finalized state transition, not a changed constant in one
+An upgrade is a deterministic, consensus-accepted state transition, not a changed constant in one
 binary. Its record MUST bind the old and new protocol versions, activation height, migration
 function or code hash, old root, expected new root, parameter deltas, and authorization
 proof. Every validator replays the same bounded migration. Bedrock, supply, ownership, and
 authorization changes must appear as explicit deltas rather than emerge from serialization
 drift. A cryptographic migration must prevent downgrade, define any dual-validation window,
 and preserve verification of historical blocks. Emergency and rollback policy cannot
-silently rewrite finalized history.
+silently rewrite history that the selected rule treats as irreversible.
 
 Cross-world or cross-chain transfers MUST be explicit bridge transactions with their own
 proof and trust boundary; matching coordinate names do not imply shared state.
@@ -654,6 +854,7 @@ application_root = H(Canonical(
     world_id,
     world_root,
     active_token_root,
+    episode_root,
     asset_state_root
 ))
 
@@ -672,15 +873,16 @@ execution_state_root = H(Canonical(
 ))
 ```
 
-`asset_state_root` covers all selected ownership, transfer, balance, fee, reward, and stake
-state, not only an ownership projection. `authorization_root` covers current key descriptors,
+`active_token_root` commits `M_h`; `episode_root` commits `E_h` under the selected history
+and pruning policy. `asset_state_root` covers all selected ownership, transfer, balance, fee,
+reward, and stake state, not only an ownership projection. `authorization_root` covers current key descriptors,
 delegations, rotation, revocation, and recovery state. `validator_schedule_root` covers
 active and delayed-next schedules but not current-round votes. The `ProposalHeader` in §4.4
 then binds the execution root to its parent, transaction/receipt/history commitments,
 consensus policy, active validator set, governance/parameter roots, and data-availability
-commitment. `block_id` is the header identifier; `FinalityEvidence` is detached.
+commitment. `block_id` is the header identifier; `ConsensusEvidence` is detached.
 
-Application roots, execution-state roots, block identifiers, and finality evidence must not
+Application roots, execution-state roots, block identifiers, and consensus evidence must not
 be interchangeable. A valid world root is not a valid finality certificate, and a valid vote
 certificate is not a proof that a coordinate is occupied.
 
@@ -719,14 +921,14 @@ Every proof object SHOULD state its type and scope:
   execution root, deterministically yield the complete receipt and state-root sequence;
 - **receipt inclusion** — a receipt path reaches the header's `receipts_root`, and the
   authenticated header reaches `block_id`;
-- **finality** — consensus-specific evidence covers one `block_id` under the authority set
-  selected by its finalized parent;
-- **availability** — the bytes needed to replay a finalized block can be retrieved under
+- **consensus status** — profile-specific evidence covers one `block_id` under the authority
+  selected by its parent accepted under that consensus rule;
+- **availability** — the bytes needed to replay an accepted block can be retrieved under
   the stated guarantee.
 
 The verifier MUST reject a proof presented under the wrong root kind, schema, chain, genesis,
-height, or protocol version. A compact digest without the corresponding witness is only an
-identity, not a membership or availability proof.
+world, height, or protocol version. A compact digest without the corresponding witness is
+only an identity, not a membership or availability proof.
 
 ## 6. Replication, consensus, and finality
 
@@ -734,22 +936,29 @@ Local parent-linked history explains how one process derived a state. Consensus 
 different question: which history independent processes accept. A versioned claim MUST
 separate at least these properties:
 
+In the remainder of this paper, “finalized” means irreversible under a selected
+deterministic-finality rule. A probabilistic profile must substitute “reached the declared
+confirmation threshold,” carry the residual reversal probability and horizon, and must not
+reuse absolute-finality wording.
+
 - **execution validity** — every accepted successor is the deterministic result of the
   declared parent, context, body, and version;
-- **prefix safety** — any two finalized histories accepted under the claim are
-  prefix-comparable, not merely non-conflicting at one height;
+- **prefix safety** — any two deterministically finalized histories accepted under the claim
+  are prefix-comparable, not merely non-conflicting at one height; a probabilistic profile
+  states the corresponding common-prefix probability and horizon;
 - **finality** — the exact rule after which a block is irreversible under the stated fault
   assumptions, or the confirmation/confidence rule if finality is probabilistic;
 - **availability** — consensus-required bodies and witnesses are retrievable under the
   declared retention, coding, sampling, and network assumptions;
-- **chain liveness** — new valid blocks continue to finalize after the stated synchrony
-  condition while faults remain within the bound;
+- **chain liveness** — new valid blocks continue to finalize or reach the declared
+  confirmation threshold after the stated synchrony condition while faults remain within
+  the bound;
 - **transaction inclusion/fairness** — the narrower conditions, if any, under which an
   eligible transaction is included;
 - **accountability** — conflicting signed evidence can be attributed where the selected
   construction supports it; and
 - **cross-implementation agreement** — conforming executors obtain the same receipts and
-  roots for the same finalized inputs.
+  roots for the same accepted inputs.
 
 An **eligible transaction** is canonical, continuously available to the protocol's required
 honest network fraction, valid or correctly resubmitted against canonical state, within its
@@ -796,12 +1005,17 @@ VoteSignDoc = Canonical(
 ```
 
 Certificate verification MUST reject duplicate signers or duplicated voting weight, derive
-power from the active set authorized by the finalized parent, and use exact checked threshold
+power from the active set authorized by the parent finalized under that certificate profile,
+and use exact checked threshold
 arithmetic. Aggregation must retain signer attribution and apply the selected scheme's
 public-key validation and proof-of-possession defenses. A candidate cannot choose the set
 that certifies itself. A block may commit an `optional_next_validator_root`, but delayed
 activation and a specified cross-epoch handoff authorize it only from a prior finalized
 state.
+
+Each validator vote key and signature/hash suite MUST resolve uniquely from the
+parent-authorized active-validator record and `consensus_policy_id`; a vote message cannot
+select an alternate key or downgrade suite.
 
 These bindings are mandatory for a quorum-certificate design even though the consensus
 choice remains open. A probabilistic work-based design instead needs a precise work/fork and
@@ -809,17 +1023,25 @@ confirmation rule and must not label confidence evidence a certificate. A node M
 treat a state root as final merely because it is newest or locally observed unless that is
 the declared consensus rule.
 
-A validator MUST NOT vote for execution/finality until it has obtained all
-consensus-required block bytes, validated resource limits, and recomputed the transition.
-If the selected protocol substitutes an explicit data-availability certificate or sampling
-construction, it must state the sampling threshold, erasure-code and honest-share assumptions,
-recovery threshold, withholding horizon, and exact weaker guarantee. A public claim must say
-whether its finality entails availability or requires separate evidence.
+A validator MUST NOT vote for execution validity or finality until it has obtained all
+consensus-required execution bytes, validated resource limits, and recomputed the transition,
+unless the selected protocol separately specifies a sound validity-proof system bound to the
+same `block_id`, body, receipts, and post-state root. Data-availability sampling or a DA
+certificate never substitutes for execution validity.
 
-Before finality, a branch can be replaced. The protocol MUST specify orphan handling,
-transaction re-inclusion, nonce behavior, receipt status, and whether provisional mint/burn
-records are visible to clients. After finality, a conflicting root is a safety violation,
-not an ordinary reorganization. Validator-set changes need an activation rule, overlap or
+A separately typed availability attestation may use sampling instead of full possession only
+under a declared construction. It must state the sampling threshold, erasure-code and
+honest-share assumptions, recovery threshold, withholding horizon, commitment-to-payload
+binding, and exact weaker guarantee. A combined validity/finality vote must satisfy both the
+execution rule and the DA rule. A public claim must say whether finality entails availability
+or requires separate evidence.
+
+In a deterministic-finality profile, a branch can be replaced before finality; after
+finality, a conflicting root is a safety violation rather than an ordinary reorganization.
+In a probabilistic profile, reorganization remains possible with the bounded probability and
+tail described by its common-prefix/confirmation claim. Every profile MUST specify orphan
+handling, transaction re-inclusion, nonce behavior, receipt status, and visibility of
+provisional mint/burn records. Validator-set changes need an activation rule, overlap or
 handoff proof, key revocation behavior, and protection against long-range or stale-checkpoint
 attacks.
 
@@ -873,7 +1095,7 @@ The initial threat inventory is:
 | Double spend / duplicate occupancy | Single canonical state transition and live-token checks |
 | Same-coordinate race | Consensus-defined ordering and deterministic conflict results |
 | Validator equivocation | Signed votes, conflicting-certificate detection, and penalty/expulsion policy if applicable |
-| Fork or rollback | Declared finality evidence, checkpoint policy, and recovery rules |
+| Fork or rollback | Declared consensus/finality rule and evidence, checkpoint policy, and recovery rules |
 | Data withholding | Full transaction availability, archival policy, and retrievability proofs or explicit trust boundary |
 | Sybil participation | Admission, stake, proof-of-work, permissioning, or another declared cost |
 | Spam and unbounded coordinates | Fees, quotas, work budgets, chunk limits, and allocation-failure handling |
@@ -932,7 +1154,7 @@ The future network protocol must distinguish at least these roles:
 - **consensus validators/proposers** — perform the selected proposal/vote role and satisfy
   the selected data-possession rule before signing;
 - **archive/recovery nodes** — retain historical blocks, receipts, proofs, and snapshots;
-- **light clients** — verify headers, finality evidence, and state/receipt witnesses without
+- **light clients** — verify headers, consensus evidence/status, and state/receipt witnesses without
   trusting a server's claimed coordinate state; and
 - **optional RPC/indexer nodes** — accelerate queries but remain non-authoritative.
 
@@ -945,12 +1167,12 @@ peer to reduce eclipse risk.
 RPC and indexer responses are query surfaces, not authority surfaces. A client that asks
 whether a coordinate is occupied or who owns a token SHOULD receive the relevant root and
 witness, then verify it locally. Pagination, historical queries, and event indexes need a
-consistency rule so an API cannot mix records from different finalized roots without saying
+consistency rule so an API cannot mix records from different verified consensus-status roots without saying
 so.
 
 Bootstrap MUST name its trust anchor: a pinned genesis package, a verified checkpoint, or a
 declared weak-subjectivity source. A snapshot is admissible only after its state root,
-validator-set root, finality proof, and parameter/version root are checked. A new node must
+validator-set root, consensus evidence/status proof, and parameter/version root are checked. A new node must
 also obtain the bodies or witnesses required by the declared availability rule.
 
 The protocol must choose its recovery guarantee. **Genesis replay** requires durable archival
@@ -966,7 +1188,7 @@ protocol/storage boundary needs an ordering such as:
 
 ```text
 receive -> validate -> durably stage body -> execute -> durably stage roots
-         -> publish candidate -> obtain finality -> publish finalized index
+         -> publish candidate -> verify selected consensus status -> publish accepted index
 ```
 
 The exact order is an **Open** implementation choice, but a crash between any two steps
@@ -975,7 +1197,7 @@ reconstruct. Power-loss, torn-write, corruption, restore, pruning, and recovery 
 required before a custody or durability claim.
 
 Validator recovery has an additional monotonicity requirement: restoring a backup or moving
-to a failover signer MUST NOT regress vote, nonce, slashing-protection, finalized-head, or
+to a failover signer MUST NOT regress vote, nonce, slashing-protection, accepted-head, or
 upgrade state and thereby authorize a double-sign or stale history. Recovery tooling must
 verify exact roots and authority epochs before proposal/vote service resumes.
 
@@ -986,7 +1208,8 @@ execution, networking, RPC/indexing, administration, and signing privileges; aut
 admin/RPC surfaces; pin genesis and configuration; keep secrets out of logs; and verify
 signed, reproducible updates with a downgrade-safe rollback procedure.
 
-Operators must monitor finalized-head continuity, conflicting finality evidence, validator
+Operators must monitor finalized or threshold-confirmed head continuity, conflicting
+deterministic-finality evidence, probabilistic fork-choice anomalies, validator
 participation and double-sign warnings, active/next validator roots, availability retrieval,
 peer diversity/eclipsing, execution-root agreement, storage and recovery health, supply
 correspondence, resource saturation, and pending upgrades. Alerts must carry the exact
@@ -994,9 +1217,11 @@ height, roots, version, and signed evidence needed for independent diagnosis. Me
 diagnostic projections, never consensus authority.
 
 A node MUST enter a declared safe-halt mode—stop proposing, voting, or publishing new
-finalized indexes—when it observes conflicting valid finality evidence, an unknown active
-version, unavailable consensus-required bytes beyond the permitted horizon, an irrecoverable
-state-root mismatch, or regressed anti-double-sign state. Safe halt does not automatically
+accepted indexes—when evidence violates the selected profile's safety rule, it observes an
+unknown active version, consensus-required bytes remain unavailable beyond the permitted
+horizon, a state-root mismatch is irrecoverable, or anti-double-sign state has regressed.
+Ordinary competing branches in a probabilistic protocol go through its fork-choice and
+confirmation rules; their mere existence is not a safe-halt trigger. Safe halt does not automatically
 roll back or rewrite finalized history. The incident procedure must define evidence capture,
 key isolation/revocation, peer quarantine, resynchronization, coordinated upgrade handling,
 restart criteria, and a public post-incident account for any widened trust assumption.
@@ -1004,19 +1229,26 @@ restart criteria, and a public post-incident account for any widened trust assum
 ## 9. Determinism and formal refinement
 
 The single most important inherited property is replayability across every activated
-protocol version. The replay input is the complete genesis package, finalized headers and
-bodies, and an implementation/specification for every version referenced by that history:
+protocol version. Independent chain validation consumes the complete genesis package, each
+canonical `AcceptedBlockRecord`—including availability payload, full receipts/effects,
+proposal signature, and consensus evidence—and an implementation/specification for every
+version referenced by that history:
 
 ```text
-(genesis_payload,
- finalized ProposalHeader + Body sequence,
- implementation/specification for every referenced protocol_version)
-    -> exactly one execution-state-root and receipt-root sequence
+(genesis_package,
+ canonical AcceptedBlockRecord sequence,
+ implementation/specification for every referenced protocol and consensus version)
+    -> exactly one verification disposition,
+       execution-state-root sequence,
+       receipt-root sequence,
+       and finality-or-confirmation status sequence
 ```
 
 Version activation, validator scheduling, committed randomness, rewards, governance, and
-migrations come from finalized header/state context. Ordered user actions alone are not a
-complete replay input once any of those mechanisms exists.
+migrations come from accepted header/state context. Ordered user actions alone are not a
+complete replay input once any of those mechanisms exists. An execution-only replay may
+start from a supplied trusted parent and omit consensus evidence, but its claim MUST then say
+that parent selection and finality verification were out of scope.
 
 To make that a network property rather than a local intention:
 
@@ -1047,8 +1279,8 @@ binary digests, signed release metadata, an independent build, and a procedure f
 a compromised dependency or compiler. A consensus proof over one local binary does not
 cover a substituted binary.
 
-The current Lean capsules prove only their declared abstract or finite models: bedrock and
-edit/replay properties plus per-edit finite-trace supply increments, decrements, and no-op
+The current Lean capsules prove only their declared abstract finite-support models: bedrock
+and edit/replay properties plus per-edit supply increments, decrements, and no-op
 preservation. They do not prove token identifiers, consuming-burn provenance, a global
 episode-ledger theorem, Rust refinement, exact camera floats over the full coordinate domain,
 or any network implementation.
@@ -1159,29 +1391,36 @@ looked convincing”.
 
 ## 12. Verification gates
 
-Each gate answers one question and must not be promoted into a broader claim:
+Each gate answers one question and must not be promoted into a broader claim. “Bounded” below
+describes the current evidence class; this documentation pass did not rerun it.
 
-| Gate | Question | Passing evidence |
-| --- | --- | --- |
-| G0 | Does the local world obey its invariants? | Rust tests plus bounded Lean model |
-| G1 | Does the optional ledger conserve active occupancy? | Independent vectors and mint/burn replay |
-| G2 | Do multiple identities produce one deterministic result? | Two-or-more executor agreement per state root |
-| G3 | Are actions authenticated and non-replayable? | Signature, nonce, parent-root, and mutation controls |
-| G4 | Can an independent node verify membership and non-membership? | Authenticated state proofs and negative tests |
-| G5 | Does the replicated protocol preserve safety? | Partition/equivocation/fork adversarial harness |
-| G6 | Does it make progress under the stated assumptions? | Bounded liveness measurements with fault injection |
-| G7 | Is history and data recoverable? | Fresh-node bootstrap, pruning, crash, and restore tests |
-| G8 | Does the implementation refine the specification? | Independent executor plus formal or differential evidence |
-| G9 | Are the cryptographic and operational assumptions reviewed? | External audit and published threat-model response |
-| G10 | Does finality survive validator changes and partitions? | Certificate/quorum proofs, fork tests, and recovery vectors |
-| G11 | Can a node sync without trusting one peer? | Multi-peer body retrieval, snapshot witnesses, and eclipse controls |
-| G12 | Are provisional and finalized assets separated? | Reorg/receipt/nonce tests and wallet admission rules |
-| G13 | Is execution resource-bounded over time? | State-growth, storage-rent, pruning, and fee-budget measurements |
-| G14 | Does the shipped binary match the reviewed source? | Reproducible independent builds and signed release metadata |
-| G15 | Are future programs/randomness separately secured? | Versioned VM/gas tests and committed-randomness adversarial tests |
+| Gate | Claim boundary | Required passing evidence | Current status / stop condition |
+| --- | --- | --- | --- |
+| G0 | Current local occupancy invariants | Pinned Rust tests and exact abstract Lean theorems | **Bounded**; no Rust-refinement claim |
+| G1 | Feature-gated coordinate-episode correspondence | Map-domain/injectivity, mint/burn, re-mint, and origin vectors | **Partial bounded/local; OPEN**—the independent vector does not replay history, and no durable asset claim exists |
+| G2 | Complete action/result accounting | Reconcile live submission, tape, tick outcome, edit history, rejection, and idle/control lanes | **Open**; any silently lost included action stops admission |
+| G3 | Canonical codec, genesis, and domain separation | Cross-implementation corpus, prefix/suffix/duplicate/unknown-field negatives, collision controls | **Open**; any alternate accepted bytes or ID collision stops the version |
+| G4 | Actor authentication and replay safety | Signature, key-validation, nonce, chain/genesis/world, anchor, rotation/recovery, and mutation controls | **Open**; any unauthorized or cross-domain replay stops admission |
+| G5 | Transaction/interleaving semantics and conservation | Multi-actor schedules; failure/no-op/fee/nonce atomicity; asset/supply conservation | **Open**; any executor-dependent disposition or partial write stops the candidate |
+| G6 | Authenticated state and receipt proofs | Scheme-specific membership/non-membership plus receipt path through an authenticated header accepted at the selected consensus status | **Open**; a bare digest or unbound witness does not pass |
+| G7 | Prefix safety and finality/confirmation | Formal argument plus partition/equivocation/fork adversarial harness under the named fault model | **Open**; evidence violating the selected profile's safety rule triggers safe halt, while ordinary probabilistic forks use fork choice |
+| G8 | Chain liveness and eligible inclusion | Protocol/model argument for the scoped eventual claim plus bounded fault-injection measurements with synchrony, capacity, fee, and dissemination preconditions | **Open/bounded when run**; samples alone never prove an unstated universal |
+| G9 | Availability, durability, and recovery | DA-before-vote controls, fresh-node recovery, pruning/archive, crash, power-loss, and restore tests | **Open**; unavailable required bytes or regressed signer state stops service |
+| G10 | Implementation/specification refinement | Independent executor across every activated version plus formal or differential evidence | **Open**; same-code self-replay is insufficient |
+| G11 | Cryptographic/key-operations boundary | Published TCB and assumptions, ceremonies, compromise drills, independent audit, dispositioned findings | **Open**; merely receiving an audit is not a pass |
+| G12 | Validator-set transitions and partitions | Parent-authorized active/next roots, certificate vectors, handoff/quorum proof, long-range recovery | **Open**; candidate-selected authority never passes |
+| G13 | Peer sync and bootstrap | Multi-peer body/witness retrieval, parser/backpressure controls, checkpoint/genesis trust tests, eclipse tests | **Open**; one unproved peer response is not authority |
+| G14 | Provisional versus accepted client state | Reorg, receipt-inclusion, nonce/replacement, wallet proof, and finality/confirmation-status tests | **Open**; a candidate receipt cannot be presented beyond its verified status |
+| G15 | Resource and economic bounds | Worst-case codec/signature/proof/execution/storage/history/witness/recovery measurements and fee/rent invariants | **Open**; an over-bound remote input rejects/disconnects. Safe halt is reserved for a consensus-accepted artifact or local invariant that cannot be processed within the already committed bound; limits are never silently raised |
+| G16 | Reviewed source versus shipped binary | Pinned toolchain/dependencies, reproducible independent builds, signed release metadata | **Open**; unmatched binary has no inherited proof claim |
+| G17 | Upgrade/governance migration | Old/new root vectors, bounded migration replay, authorization/timelock, downgrade and historical-verification tests | **Open**; divergent migration roots stop activation |
+| G18 | Production operations and incident response | Privilege/RPC tests, monitoring controls, backup/failover drill, safe-halt and key-compromise exercise | **Open**; recovery cannot resume through an unresolved authority/root fault |
+| G19 | Future programs and randomness | Versioned VM/gas/refinement tests and committed-randomness adversarial analysis | **Open** until either feature exists |
 
-A green G0 or G1 does not imply G5. A matching hash does not imply G6 or G7. A passing
-network harness does not prove physical display output or economic value.
+A production coverage matrix must map each public property and threat row to the exact
+protocol version, adversary assumption, gate, artifact, result, and failure condition. A
+green G0 or G1 does not imply G7. A matching hash does not imply liveness or availability.
+A passing network harness does not prove physical display output or economic value.
 
 ## 13. Open decisions
 
@@ -1189,29 +1428,37 @@ These are deliberately not silently decided by this paper:
 
 1. Is a block an occupancy token, an edit right, a fungible resource, or a dual asset?
 2. Does ownership attach to coordinates, token episodes, or permissions?
-3. Which signature and hash suites are accepted for the first network version?
-4. Which authenticated map supports sparse coordinates and non-membership proofs?
-5. Which consensus model matches the desired trust and cost assumptions?
-6. Is the coordinate domain permanently signed-64-bit or versioned for expansion?
-7. Are observer reach/collision rules consensus state or local interaction rules?
-8. What limits or fees prevent place/delete history spam?
-9. What data-availability and archival guarantee is required?
-10. What upgrade, key-recovery, emergency-stop, and governance rules are acceptable?
-11. Is privacy required, and if so, which state is public versus concealed?
-12. What exact claim will “Layer 1 security” be allowed to mean for Bitblock?
-13. Is `parent_state_root` required on every transaction, and how are stale pending actions replaced?
-14. Which transaction lifecycle and reorganization receipts are canonical?
-15. What network synchrony, validator fault threshold, and quorum-intersection assumptions apply?
-16. Which validator-set transition, checkpoint, and long-range-attack rules are required?
-17. Which node types, archival window, snapshot trust anchor, and data-availability guarantee are required?
-18. Which state-commitment structure supplies efficient sparse-coordinate membership and non-membership proofs?
-19. What exact fee, storage-rent, state-growth, and failed-action charging rules prevent denial of service?
-20. Will a future visual program be consensus code, user data, or a separate non-authoritative projection?
-21. What randomness source, if any, is admissible to a deterministic future program?
-22. What reproducible-build, dependency, key-ceremony, audit, and incident-response standard is required?
-23. Which external bridges or oracles, if any, are allowed to make claims outside the coordinate world?
-24. Does the network retain `toggle`, require an expected-state precondition, or lower it to `on`/`off`?
-25. Which actions are actor-authorized, which are validator-authorized, and how are those namespaces enforced?
+3. Does identity use a stable actor descriptor or public-key-hash addresses, and what exact
+   threshold, delegation, rotation, revocation, and recovery rules apply?
+4. Which signature, hash, aggregation, and canonical-key suites are accepted for the first network version?
+5. Which authenticated map supports sparse coordinates and scheme-specific non-membership proofs?
+6. Which consensus/finality model matches the desired trust, availability, and cost assumptions?
+7. What adversary, synchrony, capacity, validator-fault, and quorum-intersection assumptions apply?
+8. Which validator-set activation, checkpoint, handoff, and long-range-attack rules are required?
+9. Is the coordinate domain permanently signed-64-bit, and will a chain always contain one world?
+10. Are observer reach/collision rules consensus state or local interaction rules?
+11. Does the protocol retain deterministic application sub-ticks, and how do they map to block context?
+12. Is one transaction one operation or a bounded vector, and what are its atomicity, no-op,
+    admitted-failure, nonce, and fee dispositions?
+13. Does a transaction require an exact parent, a windowed anchor, an expected-state precondition,
+    or no state anchor, and how are stale transactions replaced?
+14. Does the network retain `toggle`, require an expected-state precondition, or lower it to `on`/`off`?
+15. Is mint identity transaction-stable or inclusion-stable across provisional forks?
+16. Which transaction lifecycle, re-inclusion, and reorganization receipt rules are canonical?
+17. Which live inputs and local rejections must be retained so submitted, admitted, executed,
+    finalized-or-confirmed, rejected, camera-only, and idle lanes reconcile?
+18. What exact fee, storage-rent, state-growth, and failed-action charging rules prevent denial of service?
+19. What data-availability, archival, pruning, genesis-replay, checkpoint, or weak-subjectivity guarantee applies?
+20. Which full-verifier, consensus-validator, archive, light-client, and RPC/indexer roles and retention windows exist?
+21. What upgrade, migration, key-recovery, safe-halt, emergency, and governance rules are acceptable?
+22. Is privacy required, and if so, which state is public versus concealed?
+23. What exact versioned claim will “Layer 1 security” be allowed to mean for Bitblock?
+24. Will a future visual program be consensus code, user data, or a separate non-authoritative projection?
+25. What randomness source, if any, is admissible to a deterministic future program?
+26. What reproducible-build, dependency, key-ceremony, audit, monitoring, backup, and incident-response standard is required?
+27. Which external bridges or oracles, if any, are allowed to make claims outside the coordinate world?
+28. Which actions are actor-authorized, validator-authorized, governance-authorized, or emergency-authorized,
+    and how are those namespaces enforced?
 
 Each decision should be recorded with its assumptions, rejected alternatives, falsifier, and
 the smallest test that could disprove the chosen design. Until then, the current system
@@ -1219,8 +1466,9 @@ should retain its narrower and truthful description.
 
 ## 14. Audit result: obligations still open in the repository
 
-This revision was checked against the current Rust modules, the Lean/LadderLang capsules,
-`docs/SEMANTICS.md`, `docs/HANDOFF.md`, and the open-obligation section of
+This revision was checked against source/proof snapshot
+`6545d8e7d60e75607445fda564bbf11610a62658`, the Lean/LadderLang capsules,
+`docs/SEMANTICS.md`, `docs/HANDOFF.md`, and the open-obligation and hash-suite sections of
 `docs/PROTOCOL.md`. The following gaps remain intentionally open. They are not covered by
 the existence of this paper:
 
@@ -1230,24 +1478,30 @@ the existence of this paper:
 | Canonical byte domains | Independent corpus parity for every authority-relevant schema and key/signature codec |
 | Local journal/storage | Durable journal receipts, process-death/power-loss evidence, external custody, and rollback detection |
 | History branches | Independently retained heads and a canonical fork/latest-history authority |
-| Tick sidecar | Independent replay/refinement and shared durable storage/pruning for finalized outcomes |
-| Coordinate episodes | Durable, independently verifiable asset evidence rather than an in-memory local sidecar |
+| Tick sidecar | Independent replay/refinement and shared durable storage/pruning for consensus-accepted outcomes |
+| Action/result completeness | One canonical reconciliation of live submission, aggregate non-edit controls, ordered edit attempts, misses/rejections, camera-only actions, idle ticks, admission, execution, and finalization |
+| Coordinate episodes | Promotion of the feature-gated, bounded in-memory sidecar into durable, independently verifiable asset evidence |
+| World commitment | An authenticated sparse map, durable decoder, and membership/non-membership witnesses instead of the current full sorted-coordinate tag |
+| Local replay evidence | A durable supplied-carrier verifier and independent executor; ordinary stdout and locally self-verified in-memory evidence are not run receipts |
 | Sequential/elapsed-time evidence | No VDF/sequentiality analysis or external anchor; serial SHA-256 history is not Proof of History |
 | LadderLang bridge | The current bridge is representation-focused and does not prove live edit execution or network authority |
-| Network | Peer protocol, sync, validator messages, finality certificates, and adversarial multi-node evidence |
+| Network | Peer protocol, sync, validator messages, consensus/finality evidence, data-before-vote rule, and adversarial multi-node evidence |
 | Cryptography | Pinned signature/hash suite, key lifecycle, proof witnesses, and migration controls |
 | Economics | A chosen asset/account model, fees/rent, validator incentives, and supply policy |
-| Ternary hashing | The user's implementation, exact contract, independent vectors, and security analysis |
+| Ternary hashing | The intended balanced-trit implementation, exact contract, independent vectors, and analysis; examined Aethor TSH/PDH and IterHash remain non-authoritative |
+| Operations | Privilege separation, monitoring, safe-halt, backup/failover, key compromise, and incident evidence |
+| Upgrades | Deterministic migration format, old/new-root replay, authorization, downgrade, and historical-verification evidence |
 | Programmability | A versioned deterministic VM and refinement/resource proof if blocks become executable |
 | Presentation | Physical display evidence remains outside the Layer 1 state-machine claim |
 
-The current branch therefore has a complete **design coverage map**, not complete security
-coverage. A future implementation checkpoint should remove one row only when its evidence
-is independently reproducible and its assumptions are written into the public claim.
+The current branch therefore has a broad, versioned **design inventory of the presently
+named surfaces**, not a proof of completeness and not security coverage. A future
+implementation checkpoint should remove one row only when its evidence is independently
+reproducible and its assumptions are written into the public claim.
 
 ## Conclusion
 
-Bitblock already has the right seed for a verifiable system: a small state space semantics,
+Bitblock already has the right seed for a verifiable system: a small semantic core,
 an ordered tick boundary, sparse storage, canonical bytes, parent-linked history, and
 bounded proofs. What it lacks is not more visual complexity. It lacks the authority and
 replication layers that let independent participants agree on who did what, in what order,
