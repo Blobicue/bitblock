@@ -17,8 +17,18 @@ fn run_example(audit: Option<&str>) -> Output {
 
 #[test]
 fn headless_cli_output_is_independent_of_live_display_audit_environment() {
-    let audit_off = run_example(None);
+    // The two children are independent by construction -- that independence is the
+    // property under test -- so they are spawned together rather than one after the
+    // other. Each is a full headless replay of the tape, and running them in
+    // sequence made this single test the slowest thing in the whole verification
+    // run at 3.5s, which is also the wall-clock floor of a tier that has nothing
+    // else left to overlap it with. `--simulate-actions` only reads the tape and
+    // writes to stdout, so there is no shared state for them to race over.
+    let audit_off = std::thread::spawn(|| run_example(None));
     let audit_on = run_example(Some("1"));
+    let audit_off = audit_off
+        .join()
+        .expect("audit-off child thread must not panic");
 
     assert!(
         audit_off.status.success(),

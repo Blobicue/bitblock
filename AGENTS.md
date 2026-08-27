@@ -183,8 +183,8 @@ byte fails both from opposite directions.
 |---|---:|---:|
 | nothing | 0.1s | 0.0s |
 | a document | 1.0s | 0.0s |
-| a source file | ~5.5s | ~3.7s |
-| everything (`--force`) | 5.5s | 3.7s |
+| a source file | ~5.5s | ~3.5s |
+| everything (`--force`) | 5.5s | ~3.5s |
 
 Those are steady-state figures. Alternating the tiers costs roughly two extra
 seconds on the first run after the switch, because they use different feature
@@ -223,6 +223,34 @@ they belong to the per-commit tier.
 All 58 protocol objects are guarded. The last two -- `journal/rejected-tail/v1`
 and `storage-record/envelope/v1` -- had neither an independent vector nor a
 literal tag until both were added, with each side asserting the same digest.
+
+### Where the time goes
+
+```bash
+python tools/bbtime.py            # every test, attributed to its module
+```
+
+Bottlenecks should surface themselves rather than be guessed at. Every speedup
+here was found by measuring and every one was somewhere other than where it
+looked: the index's 18s was a per-item regex sweep, not the obvious string
+joining; the full tier's 8s was one test hashing a 27MB executable six times;
+and a 20s regression turned out to be the vector sweep running the profiler
+itself, which is only visible because each job now reports its own seconds.
+
+Cost lands on the same module nodes `bbgraph dag` ranks, so "what does this
+module cost to verify" and "what depends on it" are answerable together. Results
+go to `target/bbtiming.json` -- a measurement of one machine on one day, not a
+property of the tree, so it stays out of `index/`.
+
+Two cautions. Absolute numbers are inflated by contention under the default
+8-way profiling (`--serial` avoids that at several times the wall clock), and
+the ranking is what to trust: a gap under about 20% between two rows is not a
+real difference.
+
+What sets the wall clock is not the total. Summed test cost is ~78s while a tier
+costs about four seconds, because the binaries run concurrently and libtest
+parallelises within each. The floor is the *slowest single binary*, so the thing
+worth optimising is always the longest pole, never the largest sum.
 
 ### How sensitive it actually is
 

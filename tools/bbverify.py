@@ -69,11 +69,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / "target" / ".bbverify-cache.json"
 
-# Not bare validators. bbmutate deliberately rewrites src/ and restores it from
-# git, so it must never run inside a verification sweep -- or in CI.
+# Not bare validators, so the sweep must not run them. bbmutate rewrites src/ and
+# restores it from git; bbtime spends half a minute profiling every test. Both
+# were caught by this file's own per-job timing after being added to tools/ --
+# bbtime turned the vector sweep from 3s into 29s, and until each job reported
+# its own seconds the concurrent group was one opaque number that had simply
+# grown.
 SKIP_BARE = {
     "metric_registry.py", "mirror_timeline1.py", "simulate_sequence.py",
-    "bbindex.py", "bbgraph.py", "bbverify.py", "bbmutate.py",
+    "bbindex.py", "bbgraph.py", "bbverify.py", "bbmutate.py", "bbtime.py",
 }
 
 # What each kind of check reads. A check is skipped only when every path here is
@@ -249,12 +253,24 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
     failures = []
     parallel = 0.0
     if jobs:
+        # Each job times itself. Without this the concurrent group is one opaque
+        # number, and a job that quietly became the bottleneck is invisible --
+        # which is exactly how a 5s tier drifted to 20s without anything saying
+        # which part had changed.
+        def measured(label, fn):
+            def go():
+                mark = time.time()
+                ok, detail = fn()
+                return ok, detail, time.time() - mark
+            return go
+
         mark = time.time()
         with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
-            futures = [(label, why, pool.submit(fn)) for label, fn, why in jobs]
+            futures = [(label, why, pool.submit(measured(label, fn)))
+                       for label, fn, why in jobs]
             for label, why, future in futures:
-                ok, detail = future.result()
-                rows.append((label, "ok" if ok else "FAIL", None, why))
+                ok, detail, elapsed = future.result()
+                rows.append((label, "ok" if ok else "FAIL", elapsed, why))
                 if not ok:
                     failures.append((label, detail))
         parallel = time.time() - mark

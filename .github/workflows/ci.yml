@@ -37,7 +37,8 @@ jobs:
           #   bbindex/bbgraph   write and query index/; the index job gates them
           #   bbverify          is a local sweep of these same checks
           #   bbmutate          rewrites src/ on purpose and must never run here
-          skip="metric_registry mirror_timeline1 simulate_sequence bbindex bbgraph bbverify bbmutate"
+          #   bbtime            spends ~30s profiling every test
+          skip="metric_registry mirror_timeline1 simulate_sequence bbindex bbgraph bbverify bbmutate bbtime"
           for t in tools/*.py; do
             name=$(basename "$t" .py)
             case " $skip " in *" $name "*) continue ;; esac
