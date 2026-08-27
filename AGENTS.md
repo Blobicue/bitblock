@@ -268,6 +268,40 @@ costs about four seconds, because the binaries run concurrently and libtest
 parallelises within each. The floor is the *slowest single binary*, so the thing
 worth optimising is always the longest pole, never the largest sum.
 
+### What it costs to touch a module
+
+```bash
+python tools/bbtime.py --build
+```
+
+Once the tests take half a second, verification *is* the Rust toolchain, and
+this is the part `bbgraph dag` cannot see:
+
+| module | touch cost | dependents |
+|---|---:|---:|
+| world | 8.0s | 22 |
+| **coordinate_episode** | **7.9s** | **0** |
+| protocol | 6.4s | 29 |
+| frame | 5.6s | 14 |
+| main | 4.0s | 0 |
+
+`coordinate_episode` is a leaf that nothing depends on, and it costs more to
+touch than `protocol`, which 29 of 33 modules reach. The compiler charges almost
+the same wherever the edit lands, because the crate is one compilation unit and
+the module DAG is not a build boundary. That gap is the measurement: a module
+far above its dependent count is paying for coupling the source does not have.
+
+Closing it means splitting the crate into a workspace so a leaf edit recompiles
+a leaf. Roughly half the cost is type-checking and half codegen plus linking,
+and both would shrink -- a leaf edit might go from ~6s to ~3s. It is a real but
+moderate win for a large, invasive change to a byte-exact codebase, so it is
+recorded here rather than done.
+
+What is *not* left: incremental is already on (turning it off costs 17-20s),
+codegen-units is already at the dev default of 256 and lowering it is worse, and
+`debug = 0` buys about 10% while removing line numbers from every panic. Those
+were measured, not assumed.
+
 ### How sensitive it actually is
 
 ```bash

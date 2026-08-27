@@ -5,6 +5,7 @@
     python tools/bbtime.py --best-of-3  # three samples per test, keep the fastest
     python tools/bbtime.py --parallel   # rough sweep only; see the warning below
     python tools/bbtime.py --top 30     # show more rows
+    python tools/bbtime.py --build      # what it costs to touch each module
 
 The point is that bottlenecks should surface themselves rather than be guessed
 at. Every previous speedup in this repository came from measuring and finding
@@ -113,7 +114,70 @@ def owning_module(binary: str, test: str) -> str:
     return binary.split(" ")[0]
 
 
+def rebuild_cost(argv: list[str]) -> int:
+    """What it costs to touch each module, which is now the whole edit path.
+
+    Once tests take half a second, verification is entirely the Rust toolchain,
+    and this is the part `bbgraph dag` cannot see. The DAG knows
+    `coordinate_episode` is a leaf nothing depends on; the compiler charges the
+    same for editing it as for editing `frame`, because the crate is one
+    compilation unit and the DAG is not a build boundary.
+
+    That gap is the measurement. A module whose rebuild cost is far above its
+    dependent count is paying for coupling the source does not actually have.
+    """
+    import json as _json
+
+    wanted = [a for a in argv[2:] if not a.startswith("--")]
+    dag_path = ROOT / "index" / "dag.json"
+    dependents = {}
+    if dag_path.exists():
+        dependents = _json.loads(dag_path.read_text(encoding="utf-8"))\
+            .get("transitive_dependents", {})
+
+    modules = sorted(p.stem for p in (ROOT / "src").glob("*.rs")
+                     if not wanted or p.stem in wanted)
+    command = ["cargo", "test", "--no-run", "-q", "--features", "protocol-research"]
+
+    def run() -> float:
+        mark = time.time()
+        subprocess.run(command, cwd=ROOT, capture_output=True)
+        return time.time() - mark
+
+    print("bbtime --build   %d modules, one touch each" % len(modules))
+    print("  a module far above its dependent count is paying for coupling it does not have\n")
+    run()
+    rows = []
+    for name in modules:
+        path = ROOT / "src" / ("%s.rs" % name)
+        original = path.read_text(encoding="utf-8")
+        try:
+            path.write_text(original + "\n// bbtime probe\n", encoding="utf-8",
+                            newline="\n")
+            cost = run()
+        finally:
+            path.write_text(original, encoding="utf-8", newline="\n")
+            run()
+        rows.append((cost, name, dependents.get(name, 0)))
+        print("  %-24s %5.1fs   %2d dependents" % (name, cost, dependents.get(name, 0)))
+
+    rows.sort(reverse=True)
+    out = ROOT / "target" / "bbtiming-build.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_json.dumps(
+        {"modules": [{"module": n, "seconds": round(c, 2), "dependents": d}
+                     for c, n, d in rows]}, indent=1),
+        encoding="utf-8", newline="\n")
+    print("\nslowest to touch:")
+    for cost, name, deps in rows[:8]:
+        print("  %5.1fs  %-24s %2d dependents" % (cost, name, deps))
+    print("\nwritten to %s" % out.relative_to(ROOT).as_posix())
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if "--build" in argv:
+        return rebuild_cost(argv)
     # Serial by default, because the parallel mode does not merely inflate the
     # numbers -- it reorders them. Measured against best-of-three isolated runs,
     # eight concurrent children each spawning a full libtest thread pool
