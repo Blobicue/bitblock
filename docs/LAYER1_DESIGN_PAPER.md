@@ -252,7 +252,7 @@ genesis_id = ProfileIdHashV1(
     Domain("bitblock/chain-genesis/v1")
  || LengthFrame(Canonical(ChainGenesisPayloadV1))
 )
-genesis_package = (ChainGenesisPayloadV1, genesis_id)
+genesis_package = (ChainGenesisPayloadV1, genesis_id)  // pre-ID launch input only
 
 ProfileLineageV1 =
     InitialProfileV1
@@ -328,6 +328,59 @@ transition_spec_at_profile_id =
         Domain("bitblock/transition-spec-at-profile/v1")
      || LengthFrame(Canonical(TransitionSpecAtProfileV1))
     )
+
+GenesisRootParityRecordV1 = Canonical(
+    genesis_root_parity_record_schema_version,
+    genesis_id,
+    initial_profile_id,
+    initial_transition_spec_at_profile_id,
+    required_domain_set_digest,
+    canonical_initial_root_entry_set_digest,
+    initial_application_root,
+    initial_execution_root_ref,
+    genesis_history_root,
+    independent_reconstruction_artifact_digests
+)
+
+genesis_root_parity_record_id = ProfileIdHashV1(
+    Domain("bitblock/genesis-root-parity-record/v1")
+ || LengthFrame(Canonical(GenesisRootParityRecordV1))
+)
+
+ChainLaunchManifestV1 = Canonical(
+    chain_launch_manifest_schema_version,
+    genesis_id,
+    initial_profile_id,
+    initial_transition_spec_at_profile_id,
+    initial_profile_admitted_manifest_digest,
+    genesis_root_parity_record_id,
+    initial_execution_root_ref,
+    initial_release_record_id,
+    launch_authority_policy_id,
+    genesis_parent_block_id,
+    genesis_history_root,
+    first_ledger_height
+)
+
+chain_launch_manifest_id = ProfileIdHashV1(
+    Domain("bitblock/chain-launch-manifest/v1")
+ || LengthFrame(Canonical(ChainLaunchManifestV1))
+)
+
+ChainLaunchAuthorizationV1 = Canonical(
+    chain_launch_manifest_id,
+    launch_authority_policy_id,
+    launch_authorization_scheme_id,
+    canonical_launch_authorization_bytes
+)
+
+chain_launch_package = Canonical(
+    genesis_package,
+    GenesisRootParityRecordV1,
+    ChainLaunchManifestV1,
+    chain_launch_manifest_id,
+    ChainLaunchAuthorizationV1
+)
 ```
 
 That artifact is an admission prerequisite, not an input to `CandidateProfileV1`; putting its
@@ -335,6 +388,40 @@ digest back into the candidate preimage would create a candidate/specification i
 Every bound or active-schema value it repeats MUST be the canonical byte-equal projection of its
 scope/genesis/candidate owner. `PROFILE-1` verifies that the produced specification is the
 deterministic resolution of the candidate's declared scope and closure.
+
+`genesis_package` is deliberately only the immutable pre-ID input. It is not, by itself, a complete
+network launch trust anchor. After the initial candidate ID, transition specification, `PROFILE-1`
+admitted-manifest digest, genesis-root-parity result, and `RELEASE-1` record exist, their exact
+identities are bound by `ChainLaunchManifestV1`. `initial_execution_root_ref` is the typed
+`ExecutionRootRefV1` defined in §4.4 and MUST contain the initial admitted profile context;
+`GenesisRootParityRecordV1` and the manifest MUST carry the same byte-exact reference and history
+root. `initial_release_record_id` identifies the admitted-profile signed release, not a
+`RELEASE-R1` candidate build. That referenced `RELEASE-1` record MUST be derived without
+`chain_launch_manifest_id`; otherwise the release and manifest would form a forbidden identifier
+cycle. `launch_authority_policy_id` MUST be the byte-exact projection of the policy already
+committed in `G_0`, not a policy selected by the candidate or manifest.
+
+The manifest excludes its own identifier and all future block identifiers. Its authorization is a
+detached envelope over the already-derived `chain_launch_manifest_id`, verified under the launch
+authority policy committed in `G_0`; neither the initial candidate nor its selected cryptographic
+suites may choose that authority. The canonical derivation is therefore:
+
+```text
+genesis_package
+  -> initial CandidateProfileV1 / profile_id
+  -> transition_spec_at_profile_id
+  -> PROFILE-1 admission + genesis root parity + RELEASE-1
+  -> ChainLaunchManifestV1 / chain_launch_manifest_id
+  -> ChainLaunchAuthorizationV1
+  -> first AcceptedBlockRecord
+```
+
+The first accepted record MUST name `chain_launch_manifest_id`; use the manifest's initial profile
+as an ordinary profile context; use its exact initial execution-root reference as the pre-state;
+and match its `genesis_parent_block_id`, `genesis_history_root`, and `first_ledger_height`. Every
+later record retains the same launch-manifest identifier. A different initial candidate,
+transition-specification ID, admission digest, parity record, release record, or initial typed root
+is a different launch trust anchor even when `genesis_id` is unchanged.
 
 `ProfileIdHashV1` is a protocol-level identity function frozen before any candidate scope or
 candidate-selected cryptographic suite is interpreted. Every pre-admission identifier above uses
@@ -546,6 +633,7 @@ TransactionSignDoc =
     protocol_version
  || chain_id
  || genesis_id
+ || chain_launch_manifest_id
  || profile_id
  || world_id
  || actor_id
@@ -574,8 +662,8 @@ tx_id = H(transaction_id_domain || SignedTransaction)
 
 The signature algorithm, key encoding, and hash suite are **Open** decisions. They MUST be
 versioned and pinned before a network protocol is declared stable. The signed domain MUST include
-the chain, genesis, and admitted profile identifiers so an action cannot be replayed under another
-world or candidate configuration. `profile_id` is added only after candidate derivation and
+the chain, genesis, launch-manifest, and admitted profile identifiers so an action cannot be replayed under another
+world, launch authority, or candidate configuration. `profile_id` is added only after candidate derivation and
 admission; it is context for signatures, headers, and releases, not a field inside the initial
 application- or execution-root preimages.
 The transaction identifier hashes the exact canonical signed envelope. The chosen signature
@@ -614,7 +702,7 @@ The cryptographic operations boundary MUST additionally specify:
   side-channel attacks explicitly excluded from the claim.
 
 Client presentation is not proof of signing intent. A wallet SHOULD render the exact decoded
-semantic operations, chain/genesis/profile/world, fee cap, validity window, and authorization being
+semantic operations, chain/genesis/launch/profile/world, fee cap, validity window, and authorization being
 signed; the signer still authorizes only the canonical bytes above.
 
 Actor/observer keys and validator keys are separate authority namespaces. An observer
@@ -641,7 +729,7 @@ Before an action can affect state, a validator MUST check at least:
 
 1. canonical decoding and protocol version;
 2. signature and identity binding;
-3. chain, genesis, admitted profile, world, and any selected anchor/state precondition;
+3. chain, genesis, launch manifest, admitted profile, world, and any selected anchor/state precondition;
 4. nonce freshness and replay protection;
 5. coordinate range and operation limits;
 6. bedrock protection;
@@ -740,12 +828,17 @@ signature, detached consensus evidence, and the separately verified availability
 `CommitOrdered(domain, items)` below means a domain-separated authenticated sequence
 commitment that binds the sequence type, exact length, every zero-based index, and each
 canonical leaf byte string. Its inclusion proof also binds domain, length, index, and leaf;
-it is not an undifferentiated Merkle root over raw concatenation.
+it is not an undifferentiated Merkle root over raw concatenation. Within the proposal envelope,
+`EnvelopeCommitOrderedV1` is the only instantiation of that operation: it uses the envelope owner's
+canonical codec and object-hash suite over `CanonicalOrderedSequence(items)` rather than selecting a
+second header-controlled commitment algorithm.
 
-`CommitAvailability(policy_id, payload)` means the selected binding, domain-separated
-commitment to the exact canonical `AvailabilityPayload` bytes. Any erasure-coded shares,
-sampling positions, or recovery proofs are derived from and verify against that same payload
-and policy; a commitment to unrelated bytes cannot satisfy proposal validity.
+`CommitAvailability(envelope_owner, verified_parent_or_launch_policy, payload)` means the uniquely
+resolved binding, domain-separated commitment to the exact canonical `AvailabilityPayload` bytes.
+The resolver takes the envelope owner plus policy bytes already authenticated by the accepted parent
+or initial launch manifest; a raw proposal field is not authority. Any erasure-coded shares, sampling
+positions, or recovery proofs are derived from and verify against that same payload and policy; a
+commitment to unrelated bytes cannot satisfy proposal validity.
 
 `system_transition_schedule` contains only pre-execution rule invocations and deterministic
 ordinals. It excludes event IDs, effects, post-state values, and anything derived from
@@ -777,26 +870,64 @@ ProfileTransitionContextV1 =
         activation_height
     )
 
+EnvelopeOwnerProfileContextV1(profile_transition_context) =
+    match profile_transition_context {
+        OrdinaryProfileTransitionV1(active) => active,
+        InPlaceMigrationTransitionV1(old, new, spec, authorization, height) => old
+    }
+
+EnvelopeResolutionV1(profile_transition_context) =
+    ResolveAdmittedEnvelopeProfile(
+        EnvelopeOwnerProfileContextV1(profile_transition_context)
+    )
+
+EnvelopeHashV1(profile_transition_context, object_domain, payload) =
+    H[EnvelopeResolutionV1(profile_transition_context).object_hash_suite_id](
+        Domain(object_domain)
+     || LengthFrame(Canonical[
+            EnvelopeResolutionV1(profile_transition_context).canonical_codec_id
+        ](
+            EnvelopeOwnerProfileContextV1(profile_transition_context)
+        ))
+     || LengthFrame(Canonical[
+            EnvelopeResolutionV1(profile_transition_context).canonical_codec_id
+        ](payload))
+    )
+
+EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence) =
+    EnvelopeHashV1(
+        profile_transition_context,
+        sequence_domain,
+        CanonicalOrderedSequence(sequence)
+    )
+
 ExecutionRootRefV1 = Canonical(
     profile_context,
     execution_state_root
 )
 
-Body = Canonical(
-    ordered_signed_transactions,
-    deterministic_auxiliary_inputs
-)
+Body =
+    OrdinaryBodyV1(
+        ordered_signed_transactions,
+        deterministic_auxiliary_inputs
+    )
+  | DedicatedMigrationBodyV1(
+        empty_signed_transaction_sequence,
+        deterministic_migration_inputs
+    )
 
-transactions_root = CommitOrdered(
+transactions_root = EnvelopeCommitOrderedV1(
+    profile_transition_context,
     transaction_sequence_domain,
-    ordered_signed_transactions
+    SignedTransactionSequence(Body)
 )
-body_root         = H(body_domain || Body)
+body_root = EnvelopeHashV1(profile_transition_context, body_domain, Body)
 
 BlockContext = Canonical(
     protocol_version,
     chain_id,
     genesis_id,
+    chain_launch_manifest_id,
     profile_transition_context,
     world_id,
     height,
@@ -808,13 +939,20 @@ BlockContext = Canonical(
     system_transition_schedule
 )
 
-block_context_root = H(block_context_domain || BlockContext)
+block_context_root = EnvelopeHashV1(
+    profile_transition_context,
+    block_context_domain,
+    BlockContext
+)
 
-candidate_execution_context_id = H(Canonical(
+candidate_execution_context_id = EnvelopeHashV1(
+    profile_transition_context,
     candidate_execution_context_domain,
+    Canonical(
     protocol_version,
     chain_id,
     genesis_id,
+    chain_launch_manifest_id,
     profile_transition_context,
     world_id,
     height,
@@ -828,7 +966,8 @@ candidate_execution_context_id = H(Canonical(
     proposer_identity
 ))
 
-receipts_root     = CommitOrdered(
+receipts_root = EnvelopeCommitOrderedV1(
+    profile_transition_context,
     execution_receipt_sequence_domain,
     all_transaction_and_system_receipts_in_execution_order
 )
@@ -840,12 +979,15 @@ AvailabilityPayload = Canonical(
 )
 
 data_availability_commitment = CommitAvailability(
-    data_availability_policy_id,
+    EnvelopeOwnerProfileContextV1(profile_transition_context),
+    VerifiedParentOrLaunchAvailabilityPolicy(data_availability_policy_id),
     AvailabilityPayload
 )
 
-post_history_root = H(Canonical(
+post_history_root = EnvelopeHashV1(
+    profile_transition_context,
     history_domain,
+    Canonical(
     parent_history_root,
     height,
     body_root,
@@ -857,6 +999,7 @@ ProposalHeader = Canonical(
     protocol_version,
     chain_id,
     genesis_id,
+    chain_launch_manifest_id,
     profile_transition_context,
     world_id,
     height,
@@ -886,20 +1029,48 @@ ProposalHeader = Canonical(
     proposal_signing_hash_suite_id
 )
 
-block_id = H(block_header_domain || ProposalHeader)
-proposer_signature = Sign[proposal_signature_suite_id](
-    proposer_secret_key_for(proposer_key_id),
-    H[proposal_signing_hash_suite_id](proposal_signature_domain || block_id)
+block_id = EnvelopeHashV1(
+    profile_transition_context,
+    block_header_domain,
+    ProposalHeader
 )
-Proposal           = Canonical(ProposalHeader, AvailabilityPayload, proposer_signature)
+proposal_credential_resolution = ResolveParentAuthorizedProposalCredentialV1(
+    EnvelopeOwnerProfileContextV1(profile_transition_context),
+    VerifiedParentOrLaunchAuthorityContext(parent_block_id),
+    proposer_identity,
+    proposer_key_id
+)
+require proposal_signature_suite_id
+    == proposal_credential_resolution.signature_suite_id
+require proposal_signing_hash_suite_id
+    == proposal_credential_resolution.signing_hash_suite_id
+proposer_signature = Sign[proposal_credential_resolution.signature_suite_id](
+    proposer_secret_key_for(proposer_key_id),
+    H[proposal_credential_resolution.signing_hash_suite_id](
+        proposal_signature_domain || block_id
+    )
+)
+Proposal = Canonical[
+    EnvelopeResolutionV1(profile_transition_context).canonical_codec_id
+](
+    ProposalHeader,
+    AvailabilityPayload,
+    proposer_signature
+)
 ConsensusEvidence =
     DeterministicFinalityEvidence(block_id, ...)
   | ProbabilisticConfirmationEvidence(block_id, ...)
   | CentralAuthorityEvidence(block_id, ...)
 
-consensus_evidence_id = H[ConsensusEvidenceHashSuite(consensus_policy_id)](
+consensus_evidence_resolution = ResolveParentAuthorizedConsensusEvidenceV1(
+    EnvelopeOwnerProfileContextV1(profile_transition_context),
+    VerifiedParentOrLaunchConsensusPolicy(consensus_policy_id)
+)
+consensus_evidence_id = H[consensus_evidence_resolution.hash_suite_id](
     Domain("bitblock/consensus-evidence/v1")
- || LengthFrame(Canonical(ConsensusEvidence))
+ || LengthFrame(Canonical[
+        consensus_evidence_resolution.canonical_codec_id
+    ](ConsensusEvidence))
 )
 
 AvailabilityClaimCoreV1 = Canonical(
@@ -917,9 +1088,18 @@ AvailabilityEvidenceV1 = Canonical(
     canonical_evidence_bytes
 )
 
-availability_evidence_id = H[AvailabilityEvidenceHashSuite(data_availability_policy_id)](
+availability_evidence_resolution = ResolveParentAuthorizedAvailabilityEvidenceV1(
+    EnvelopeOwnerProfileContextV1(profile_transition_context),
+    VerifiedParentOrLaunchAvailabilityPolicy(data_availability_policy_id),
+    evidence_scheme_id
+)
+require evidence_scheme_id
+    == availability_evidence_resolution.evidence_scheme_id
+availability_evidence_id = H[availability_evidence_resolution.hash_suite_id](
     Domain("bitblock/availability-evidence/v1")
- || LengthFrame(Canonical(AvailabilityEvidenceV1))
+ || LengthFrame(Canonical[
+        availability_evidence_resolution.canonical_codec_id
+    ](AvailabilityEvidenceV1))
 )
 
 AvailabilityAssessmentV1 =
@@ -962,13 +1142,46 @@ offline migration evidence, or admission alone cannot self-activate. An ordinary
 cross-profile roots, and a migration block cannot use the
 ordinary same-profile rule to relabel a root.
 
+`EnvelopeOwnerProfileContextV1` is the sole codec and identifier owner for the proposal envelope. It
+is the active profile context for an ordinary block and the old parent-admitted profile context for
+a migration block. The owner resolves the top-level protocol version, canonical header/body/receipt
+codec, envelope object-hash suite, ordered-sequence commitment framing, identifier domains, and the
+allowed proposal credential suites. The new profile may define post-migration execution roots and
+future envelopes, but it cannot encode or hash the block that activates itself. Every `Canonical`,
+`EnvelopeHashV1`, and `EnvelopeCommitOrderedV1` operation in §4.4 uses that resolution unless an
+expression explicitly names a separately parent-authorized policy suite. `CommitAvailability`,
+`ResolveParentAuthorizedConsensusEvidenceV1`, and
+`ResolveParentAuthorizedAvailabilityEvidenceV1` resolve through policy bytes that the same owner and
+accepted parent authorize; a header field cannot select an alternate resolver.
+The explicit proposal-credential and evidence resolvers above take that owner plus an already
+verified parent-or-launch authority object. They MUST NOT consume an unverified header policy ID as
+authority. The selected evidence codec and hash suite, like the proposal signature and signing-hash
+suite, are therefore deterministic projections of the owner and parent authority rather than
+candidate choices. `evidence_scheme_id` is only a bounded lookup key into the already verified
+availability policy: resolution MUST return exactly one authorized scheme with the same identifier,
+and an unknown, duplicate, disabled, or mismatched scheme rejects before evidence verification.
+
+The first supported migration body is deliberately dedicated. For
+`InPlaceMigrationTransitionV1`, `Body` MUST be `DedicatedMigrationBodyV1`,
+`SignedTransactionSequence(Body)` MUST be the canonical empty sequence,
+`application_subtick_schedule` MUST be empty, and `system_transition_schedule` MUST contain exactly
+one `AuthorizedMigrationSystemTransitionV1(migration_spec_id, activation_authorization_id,
+activation_height)`. Its deterministic inputs are exactly those required by the admitted migration
+specification, and execution emits exactly one position-specific migration system receipt and no
+transaction receipt. An ordinary context MUST use `OrdinaryBodyV1`. A future block that mixes user
+transactions with migration would require a separately versioned, profile/phase-tagged body and a
+total ordering rule; this contract grants no such interpretation.
+
 A reproducible `RELEASE-R1` candidate build does not satisfy either admission lookup, while artifact
 deployment separately requires a matching `RELEASE-1` record. Profile IDs remain outside logical
 execution-root preimages but inside the typed root references, `block_id`, and proposal signatures.
 They contextualize roots without making a candidate identifier depend on a root that contains
 itself. The top-level `protocol_version`, chain, genesis, and world fields MUST equal their exact
-projection from `profile_transition_context`; for a migration the parent-selected envelope version
-is distinct from the old/new execution versions carried by those contexts.
+projection from `EnvelopeOwnerProfileContextV1`. For a migration, chain, genesis, and world MUST
+also byte-equal their projections from the distinct new execution context, while the top-level
+protocol version is exactly the old owner's envelope version. `chain_launch_manifest_id` MUST equal
+the verified launch package for the chain and is retained unchanged across ordinary and migration
+blocks.
 
 `execution_parameter_root`, `governance_authority_root`, and `active_validator_root` are the
 parent-authorized values governing this proposal. `optional_next_validator_root` and the
@@ -981,14 +1194,15 @@ name uniquely versioned policies authorized by the parent parameter/governance s
 post-execution `Q` state.
 
 `proposer_identity`, key ID, and signature/hash suite IDs MUST resolve to exactly one active
-proposal credential in the parent-authorized validator record. A proposer cannot select an
-alternate key or downgrade suite merely by changing header fields.
+proposal credential in the envelope owner's parent-authorized validator record. A proposer cannot
+select an alternate key, codec, object hash, or downgrade suite merely by changing header fields.
 
 Every field of `AvailabilityClaimCoreV1` MUST equal the corresponding header and parent-authorized
 policy/authority context. `ConsensusEntailedAvailabilityV1` is valid only when the selected
 consensus policy explicitly makes that exact predicate and status a verified consequence of the
-named `ConsensusEvidence`; otherwise detached evidence is mandatory. Detached evidence is decoded,
-bounded, and verified under the declared availability policy and its own evidence scheme. A payload
+named `ConsensusEvidence`; otherwise detached evidence is mandatory. Detached evidence is
+bounded-decoded and verified under the uniquely resolved parent-authorized availability evidence
+scheme. A payload
 commitment alone, possession by one verifier, or a node-local retrieval observation cannot populate
 either canonical variant. Such observations remain local diagnostics outside `AcceptedBlockRecord`
 and cannot overwrite its assessment. `ConsensusHead.availability_assessment_ref` is the matching
@@ -996,16 +1210,21 @@ tagged `AvailabilityAssessmentRefV1` projection; the full accepted record remain
 binds the claim core to that reference.
 
 ```text
-execution_policy_id = H(Canonical(
-    execution_policy_domain, protocol_version, execution_parameter_root
-))
-consensus_policy_id = H(Canonical(
-    consensus_policy_domain, protocol_version,
-    execution_parameter_root, governance_authority_root
-))
-data_availability_policy_id = H(Canonical(
-    availability_policy_domain, protocol_version, execution_parameter_root
-))
+execution_policy_id = EnvelopeHashV1(
+    profile_transition_context,
+    execution_policy_domain,
+    Canonical(execution_parameter_root)
+)
+consensus_policy_id = EnvelopeHashV1(
+    profile_transition_context,
+    consensus_policy_domain,
+    Canonical(execution_parameter_root, governance_authority_root)
+)
+data_availability_policy_id = EnvelopeHashV1(
+    profile_transition_context,
+    availability_policy_domain,
+    Canonical(execution_parameter_root)
+)
 ```
 
 `AcceptedBlockRecord` is a neutral carrier name. A deterministic-finality profile may call
@@ -1015,26 +1234,35 @@ this envelope.
 
 A valid proposal requires this explicit checklist to pass:
 
-1. resolve the exact parent block and require its claimed consensus status to satisfy the selected
-   profile; verify height, epoch, round/view, parent history, and chain/genesis/world continuity;
-2. decode and verify the ordinary-or-migration profile transition context, typed pre/post execution
-   root references, candidate lineage, and every repeated context projection;
-3. verify parent-authorized proposer eligibility, key/suite resolution, and proposal signature;
-4. recompute canonical block context, candidate execution context, body, body root, transaction
-   root, availability payload, and every referenced byte commitment;
-5. enforce transaction, block, witness, signature/proof, state-growth, and execution resource limits
-   before unbounded materialization or work;
-6. obtain and decode the complete receipts, effects, and consensus-required witness bytes committed
-   by the availability payload;
-7. execute the ordered transactions and deterministic system transitions sequentially from the
-   typed pre-state under the parent-authorized execution policy;
-8. recompute every ordered effect and receipt, `receipts_root`, typed post-state root, and
-   `post_history_root`;
-9. require the execution-parameter, governance-authority, active-validator, optional-next-validator,
-   consensus-policy, and availability-policy values to equal their parent-authorized or explicitly
-   committed successor roles; and
-10. recompute `data_availability_commitment` from the exact payload under the declared availability
-    policy.
+1. apply the profile-independent bounded outer framing, fixed-width length/count checks, and checked
+   preallocation arithmetic before nested decoding, hashing, signature/proof work, or allocation;
+2. resolve the exact accepted parent from the bounded parent reference—or the verified
+   `ChainLaunchManifestV1` for the first record—and require its consensus status to satisfy the
+   active profile;
+3. derive the expected `EnvelopeOwnerProfileContextV1` from that parent/launch authority, select its
+   codec and object-hash suite without consulting candidate-selected fields, and bounded-decode the
+   header under only that resolution;
+4. verify launch-manifest identity, height, epoch, round/view, parent history,
+   chain/genesis/world continuity, ordinary-or-migration context, candidate lineage, and typed
+   pre/post root projections;
+5. resolve the parent's committed resource limits, execution parameters, governance authority,
+   validator schedule, consensus/availability policies, and allowed credential suites; require every
+   corresponding header field to match before it can select work or interpretation;
+6. enforce all declared header, body, transaction, receipt, effect, witness, proof/signature,
+   state-growth, and execution bounds, then verify proposer eligibility and signature over the
+   bounded header;
+7. obtain and bounded-decode the complete `Body`, receipts/effects, and consensus-required witnesses;
+   enforce `OrdinaryBodyV1` or the dedicated migration-body/schedule rule before execution;
+8. recompute canonical block context, candidate execution context, body and transaction roots,
+   receipt/effect commitments supplied by the proposer, the exact availability payload, and
+   `data_availability_commitment` under the already verified policies;
+9. execute the ordered ordinary transactions and deterministic system transitions sequentially from
+   the typed pre-state under the already verified execution or migration policy;
+10. recompute every ordered effect and receipt, `receipts_root`, typed post-state root, and
+    `post_history_root`; and
+11. require optional-next-validator and every other explicitly permitted successor value to equal
+    the recomputed post-state role. No pre-transition authority or policy check is deferred to this
+    post-state phase.
 
 Turning that valid proposal into an `AcceptedBlockRecord` additionally requires profile-specific
 `ConsensusEvidence` for the exact claimed finality or confirmation status and a valid
@@ -1043,11 +1271,22 @@ parent authorization, execution validity, consensus status, and availability are
 mismatch in any required field invalidates the proposal or accepted record rather than producing a
 partial successor.
 
+The accepted-record carrier has the same topological input discipline. Its profile-independent
+outer framing MUST bound the proposal, consensus-evidence, availability-assessment, proof/signature,
+and canonical-evidence byte lengths before nested decode, hashing, allocation, or verification.
+Only after proposal steps 1–6 establish the accepted parent or launch anchor, envelope owner,
+resource limits, and parent-authorized consensus/availability policies may the verifier
+bounded-decode the two detached evidence objects under their uniquely resolved codecs and schemes.
+It then hashes and verifies them against the exact `block_id`, status, predicate, authority/epoch,
+and policy fields. No unverified evidence variant, scheme ID, codec ID, hash-suite ID, length, or
+status may select its own parser or verification work.
+
 Each included transaction and deterministic system transition has a canonical,
 position-specific receipt:
 
 ```text
-effects_root_j = CommitOrdered(
+effects_root_j = EnvelopeCommitOrderedV1(
+    profile_transition_context,
     execution_effect_sequence_domain,
     effects_in_subject_order_for_receipt_j
 )
@@ -1126,29 +1365,36 @@ second genesis or require the launch package to claim that its later scope exist
 Any denormalized suite, role, feature, limit, state-domain, or root-schema value must be the exact
 canonical projection of its current owner.
 
-For launch, `genesis_id` and then the initial `profile_id` are derived in that order. For an in-place
+For launch, `genesis_id` and then the initial `profile_id` are derived in that order; the transition
+specification, admission record, root-parity record, admitted release, and `chain_launch_manifest_id`
+follow without entering either earlier preimage. For an in-place
 successor, the immutable `genesis_id` and predecessor profile already exist before the new candidate
 `profile_id` is derived. `TRANSITION-SPEC-1@profile` is then produced separately by resolving that
 candidate's active extension slots against the base contract and validated bounds; the candidate
 does not pre-commit a self-dependent resolved-specification digest. Every block, proof, and signed
 action MUST identify the exact profile context that interpreted it. Unknown versions, an unadmitted
-ordinary profile, a migration with an unknown predecessor or target candidate, missing chain-genesis
+ordinary profile, a migration with an unknown predecessor or a target not already admitted through
+the required `UPGRADE-1` evidence, missing chain-genesis or chain-launch
 data, unequal projections, and incompatible parameter roots MUST fail closed.
 
 Completing launch bytes is not genesis-root evidence. `GENESIS-ROOT-PARITY-1` rebuilds the initial
 profile-required root tuple independently from `ChainGenesisPayloadV1`; only after that gate may the
 initial candidate publish roots used by block-zero/header verification. A successor profile does not
 rerun that launch claim: `UPGRADE-1` independently derives its new typed roots from the accepted old
-state through the migration relation.
+state through the migration relation. Root parity and admission still do not launch the chain by
+themselves: the canonical launch manifest and detached launch authorization bind the one root/profile
+combination accepted by bootstrap and the first header.
 
 An upgrade is a deterministic, consensus-accepted state transition, not a changed constant in one
 binary. Its `InPlaceMigrationTransitionV1` and typed root references MUST bind the old and new
 protocol/profile/scope/registry contexts, activation height, migration specification or code hash,
 old root, expected new root, parameter deltas, and authorization proof. The old context remains the
 parent authority for proposer, governance, consensus, and availability policy during this dedicated
-transition unless an admitted upgrade framework specifies an equally explicit handoff. Every
-validator replays the same bounded migration before admitting the candidate profile and accepting
-the new root. Bedrock, supply, ownership, and authorization changes must appear as explicit deltas
+transition unless an admitted upgrade framework specifies an equally explicit handoff. The concrete
+`UPGRADE-1` bounded replay is verified before `PROFILE-1` admits the successor. A migration-block
+validator then replays that already admitted dedicated transition from the exact parent root before
+accepting its new root; only consensus acceptance activates the successor. Bedrock, supply,
+ownership, and authorization changes must appear as explicit deltas
 rather than emerge from serialization drift. A cryptographic migration must prevent downgrade,
 define any dual-validation window, and preserve verification of historical blocks. Emergency and
 rollback policy cannot silently rewrite history that the selected rule treats as irreversible.
@@ -1254,6 +1500,13 @@ protocol version, authenticated parameter roots, and typed domain entries carry 
 scope/genesis/version/root choices. Ordinary pre/post references use one admitted context; migration
 pre/post references use the explicitly named old/new contexts. This avoids a profile/root identifier
 cycle without allowing two profiles to reinterpret one root.
+
+`chain_launch_manifest_id` is likewise excluded from the initial application/execution root,
+genesis-parity record, and initial `RELEASE-1` preimages: all three must exist before the manifest ID
+can be derived. The manifest binds those already-derived objects, and transaction signing documents,
+proposal headers, accepted records, checkpoints, and bootstrap inputs carry its ID externally. This
+one-way binding avoids a launch self-hash cycle without letting a verifier substitute another initial
+profile, transition specification, parity record, release, or root under the same `genesis_id`.
 
 The `ProposalHeader` in §4.4 binds those typed roots to the ordinary-or-migration profile context,
 parent, transaction/receipt/history commitments, consensus policy, active validator set,
@@ -1499,7 +1752,7 @@ The initial threat inventory is:
 | --- | --- |
 | Forged action | Signature verification and canonical signed bytes |
 | Ambiguous or malleable encoding | Typed length framing, strict decoding, canonical signatures, and negative vectors |
-| Replay | Per-identity nonces, chain/genesis/profile/world binding, selected anchor rules, and bounded retention |
+| Replay | Per-identity nonces, chain/genesis/launch/profile/world binding, selected anchor rules, and bounded retention |
 | Double spend / duplicate occupancy | Single canonical state transition and live-token checks |
 | Same-coordinate race | Consensus-defined ordering and deterministic conflict results |
 | Validator equivocation | Signed votes, conflicting-certificate detection, and penalty/expulsion policy if applicable |
@@ -1578,10 +1831,19 @@ witness, then verify it locally. Pagination, historical queries, and event index
 consistency rule so an API cannot mix records from different verified consensus-status roots without saying
 so.
 
-Bootstrap MUST name its trust anchor: a pinned genesis package, a verified checkpoint, or a
-declared weak-subjectivity source. A snapshot is admissible only after its state root,
-validator-set root, consensus evidence/status proof, and parameter/version root are checked. A new node must
-also obtain the bodies or witnesses required by the declared availability rule.
+Bootstrap MUST name its trust anchor: a pinned and authorized `chain_launch_package`, a verified
+checkpoint that binds `chain_launch_manifest_id`, or a declared weak-subjectivity source that binds
+the same launch identity. A raw `genesis_package` is insufficient because it intentionally predates
+the initial profile, transition specification, admission, parity, and release records. A snapshot is
+admissible only after its launch-manifest ID, typed state root, validator-set root, consensus
+evidence/status proof, and parameter/version root are checked. A new node must also obtain the bodies
+or witnesses required by the declared availability rule.
+
+For genesis replay, the verifier MUST independently recompute and pin both the embedded `genesis_id`
+and the authorized `chain_launch_manifest_id`, then verify the detached launch authorization against
+the `G_0` launch-authority policy. Neither identifier substitutes for the other. Checkpoint and
+weak-subjectivity paths MUST transitively bind the same pair and the exact initial-profile identity;
+otherwise they are a different, explicitly named trust anchor rather than bootstrap for this chain.
 
 The protocol must choose its recovery guarantee. **Genesis replay** requires durable archival
 availability of every required historical body and every referenced protocol implementation.
@@ -1637,13 +1899,14 @@ restart criteria, and a public post-incident account for any widened trust assum
 ## 9. Determinism and formal refinement
 
 The single most important inherited property is replayability across every activated
-protocol version. Independent chain validation consumes the complete genesis package, each
+protocol version. Independent chain validation consumes the complete and authorized chain launch
+package, each
 canonical `AcceptedBlockRecord`—including availability payload, full receipts/effects,
 proposal signature, consensus evidence, and availability assessment—and an
 implementation/specification for every version referenced by that history:
 
 ```text
-(genesis_package,
+(chain_launch_package,
  canonical AcceptedBlockRecord sequence,
  implementation/specification for every referenced protocol and consensus version)
     -> exactly one verification disposition,
@@ -1694,7 +1957,10 @@ framework and emit a clearly labeled candidate artifact bound to `CandidateProfi
 same `profile_id` to a complete passing evidence closure may `RELEASE-1` publish profile-authority
 metadata that also binds the admitted-manifest digest, exact source, features, genesis, binary, and
 configuration. A candidate build must never inherit “admitted” from reproducibility alone, and an
-admitted record must reject any semantic projection or binary that differs from its candidate.
+admitted record must reject any semantic projection or binary that differs from its candidate. For
+the initial launch, `ChainLaunchManifestV1` then binds that exact `RELEASE-1` record alongside the
+admission, transition specification, and root-parity record; later release replacement cannot
+silently rewrite the launch anchor.
 
 The current Lean capsules prove only their declared abstract finite-support models: bedrock
 and edit/replay properties plus per-edit supply increments, decrements, and no-op
@@ -1824,7 +2090,7 @@ describes the current evidence class; this documentation pass did not rerun it.
 | G1 | Feature-gated coordinate-episode correspondence | Map-domain/injectivity, mint/burn, re-mint, and origin vectors | **Partial bounded/local; OPEN**—the independent vector does not replay history, and no durable asset claim exists |
 | G2 | Complete action/result accounting | Reconcile live submission, tape, tick outcome, edit history, rejection, and idle/control lanes | **Open**; any silently lost included action stops admission |
 | G3 | Canonical codec, genesis, and domain separation | Cross-implementation corpus, prefix/suffix/duplicate/unknown-field negatives, collision controls | **Open**; any alternate accepted bytes or ID collision stops the version |
-| G4 | Actor authentication and replay safety | Signature, key-validation, nonce, chain/genesis/profile/world, anchor, rotation/recovery, and mutation controls | **Open**; any unauthorized or cross-domain replay stops admission |
+| G4 | Actor authentication and replay safety | Signature, key-validation, nonce, chain/genesis/launch/profile/world, anchor, rotation/recovery, and mutation controls | **Open**; any unauthorized or cross-domain replay stops admission |
 | G5 | Transaction/interleaving semantics and conservation | **G5.core:** multi-actor schedules; failure/no-op/nonce atomicity; occupancy/episode conservation. **G5.asset:** transfer, fee, and wider asset/supply conservation only when activated | **Open; G5.core is mandatory**—any executor-dependent disposition or partial write stops every candidate. G5.asset is conditional, not a reason to exclude the core |
 | G6 | Authenticated state and receipt proofs | Scheme-specific membership/non-membership plus receipt path through an authenticated header accepted at the selected consensus status | **Open**; a bare digest or unbound witness does not pass |
 | G7 | Prefix safety and finality/confirmation | Formal argument plus partition/equivocation/fork adversarial harness under the named fault model | **Open**; evidence violating the selected profile's safety rule triggers safe halt, while ordinary probabilistic forks use fork choice |

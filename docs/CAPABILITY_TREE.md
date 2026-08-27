@@ -177,6 +177,9 @@ predicate. The role-aware graph for every realizable profile closure, plus the u
 structurally compatible role edges, must be acyclic. Mutually exclusive predicates may not be used
 to excuse a cycle inside any realizable closure.
 
+`always` is the reserved protocol predicate that is true for every candidate. It is not a
+candidate-controlled token, cannot be omitted or negated, and adds no predicate-entailment row.
+
 Predicate entailments are canonical direct edges too. Transitive closure is derived from this
 manifest; prose cannot add, reverse, or remove an entailment:
 
@@ -198,7 +201,12 @@ Roles select artifact instances, not aliases for a base node. In particular, `ne
 candidate admission being evaluated, `old-admitted-profile` is a previously admitted immutable
 `PROFILE-1@old-profile-id`, and `new-candidate-profile` is `PROFILE-D1@new-candidate-id`; the latter
 two IDs must differ. Thus CE-29–CE-31 are accepted only when the dependency is already settled in
-the role it names. Collapsing roles to base names would manufacture a cycle and is a checker error.
+the role it names. CE-42 resolves only the `VERKLE-R1@prototype` whose CE-40 candidate ID equals the
+candidate under `PROFILE-1@new-admission`. CE-43 binds every candidate to its exact current
+`PROFILE-SCOPE-D0@candidate-scope`: an initial candidate resolves that role to its genesis-owned
+scope, while a successor resolves it to the successor's current scope instance without regenerating
+or substituting immutable `GENESIS-D1`. Collapsing roles to base names would manufacture a cycle or
+erase those instance distinctions and is a checker error.
 
 | Edge | Owner base | Owner role | Predicate | Prerequisite base | Prerequisite role |
 | --- | --- | --- | --- | --- | --- |
@@ -243,6 +251,8 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 | CE-39 | VERKLE-R1 | prototype | verkle-prototype | UPGRADE-FRAMEWORK-1 | migration-framework |
 | CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |
 | CE-41 | PROFILE-SCOPE-D0 | candidate-scope | verkle-selected | VERKLE-R1 | feasibility |
+| CE-42 | PROFILE-1 | new-admission | verkle-selected | VERKLE-R1 | prototype |
+| CE-43 | PROFILE-D1 | new-candidate-profile | always | PROFILE-SCOPE-D0 | candidate-scope |
 
 ## Foundation nodes
 
@@ -1116,18 +1126,22 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 ### `PROFILE-D1` — ID-bound candidate activated-feature manifest
 
 - **Status:** **LOCKED** for the first network-profile draft.
-- **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`; it names rather than
-  implements optional features.
+- **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`; CE-43 always binds the exact
+  current candidate-scope instance, and the candidate names rather than implements optional features.
 - **Motive:** give programs, migrations, economics, and other optional features one immutable target
   without pretending their implementation has already passed.
-- **Artifact:** versioned canonical candidate manifest binding the pre-ID scope and domain-registry
-  digests, derived `genesis_id`, activated schemas/roles/capability nodes, validated parameters/limits/suites and
+- **Artifact:** versioned canonical candidate manifest binding its lineage, current pre-ID scope and
+  domain-registry digests, derived `genesis_id`, activated schemas/roles/capability nodes, validated
+  parameters/limits/suites and
   root/domain schema plus commitment-profile identifiers,
   the ordered active-or-inactive domain registry and `required_domain_set`, transitive prerequisites,
   and a stage×gate-subclaim matrix. Candidate bytes exclude their own `profile_id`; that identifier
   is derived afterward from a domain-separated digest.
 - **Gate:** independent codec/parser parity, non-circular identifier graph, no unknown/duplicate
-  activation, canonical ordering, and deterministic closure expansion. Every stage/gate subclaim has
+  activation, canonical ordering, and deterministic closure expansion. An initial candidate's
+  current-scope role equals the genesis-owned scope; a successor's role resolves to the exact current
+  scope named by that successor while `GENESIS-D1` remains the immutable chain-genesis artifact.
+  Every stage/gate subclaim has
   exactly one required, conditional-with-predicate, or excluded-with-reason entry: `G5.core` and
   `G15.resource` are always required; economic subclaims are conditional on their named economic
   predicate; each `G19.<feature>` is required exactly when that feature is active and otherwise is
@@ -1208,7 +1222,7 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
 - **Status:** **LOCKED** for the first testnet profile.
 - **Depends on:** `PROFILE-D1`, `TRANSITION-SPEC-1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`,
   `GENESIS-ROOT-PARITY-1`, `GOVERNANCE-1`, `EXECUTION-ROOT-1`; optional exact-version authority and
-  implementation prerequisites are CE-25–CE-29.
+  implementation prerequisites are CE-25–CE-29 and CE-42.
 - **Motive:** prevent a testnet or release from inheriting gates for the base profile while quietly
   activating an optional surface whose evidence is missing.
 - **Artifact:** immutable admitted-manifest digest plus a machine-readable mapping from every
@@ -1218,11 +1232,13 @@ the role it names. Collapsing roles to base names would manufacture a cycle and 
   mutually incompatible prerequisite, inactive-domain encoding, and unjustified gate exclusion.
   Every conditional predicate is resolved, its realizable role-aware closure and compatible union are
   acyclic, `G5.core` and `G15.resource` are required, economic subclaims follow their predicates, and
-  every `G19.<feature>` matches activation. A migration admission consumes the concrete old-admitted
-  to new-candidate `UPGRADE-1` evidence after verifying polarity; `TESTNET-1`, releases, and coverage
-  matrices bind the exact admitted digest.
-- **Non-claim:** profile admission does not prove properties outside the activated closure or make
-  its assumptions universally true.
+  every `G19.<feature>` matches activation. A `verkle-selected` admission consumes through CE-42 the
+  passing prototype whose CE-40 candidate ID equals the candidate being admitted. A migration
+  admission consumes the concrete old-admitted to new-candidate `UPGRADE-1` evidence after verifying
+  polarity; `TESTNET-1`, releases, and coverage matrices bind the exact admitted digest.
+- **Non-claim:** a passing candidate-bound Verkle prototype is necessary when Verkle is selected but
+  is not sufficient by itself for authority. Profile admission does not prove properties outside the
+  activated closure or make its assumptions universally true.
 
 ### `SIGNER-OPS-1` — validator signer safety
 

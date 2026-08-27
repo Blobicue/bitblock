@@ -24,16 +24,37 @@ DESIGN_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT.md"
 DESIGN_AUDIT_GIT_BLOB = "73d53bc6f3ca007b5faca8c499660b207ff048e2"
 SUCCESSOR_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md"
 SUCCESSOR_AUDIT_GIT_BLOB = "e8bd912f171d64c345b6fa71413bd9503e12f5f3"
+THIRD_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md"
+THIRD_AUDIT_GIT_BLOB = "fbee935d27617f47f913617ca2d8e19aba618c6e"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
 DESIGN_RECEIPT_GIT_BLOB = "c3005e7fc98971a7747ab125f1624d08aff31199"
 DESIGN_RECEIPT_CANONICAL_SHA256 = "38731565d149bedfc9a9e7570db0ca0a1478e4e7aa3cdeef0aa1a4e5a5888acb"
 DESIGN_RECEIPT_AUDITED_COMMIT = "694650f4028f5c1fb715384597326e0b0e31f0e1"
+FROZEN_TEXT_FILES = (
+    FIRST_AUDIT,
+    SECOND_AUDIT,
+    DESIGN_AUDIT,
+    SUCCESSOR_AUDIT,
+    THIRD_AUDIT,
+    DESIGN_RECEIPT,
+)
+EXPECTED_FROZEN_TEXT_PATHS = frozenset(
+    {
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
+        "docs/FUTURE_PLAN_AUDIT.md",
+        "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
+        "docs/design-source-receipt-v1.json",
+    }
+)
 PLANNING_FILES = (
     ROOT / "README.md",
     ROOT / "docs" / "PROJECT_INTENT.md",
     DESIGN_DISTILLATION,
     DESIGN_AUDIT,
     SUCCESSOR_AUDIT,
+    THIRD_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -45,6 +66,30 @@ PLANNING_FILES = (
     ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md",
     ROOT / "docs" / "PROTOCOL.md",
     ROOT / "docs" / "TIMELINES.md",
+)
+EXPECTED_PLANNING_PATHS = frozenset(
+    {
+        "README.md",
+        "docs/AUTHENTICATED_STATE_PLAN.md",
+        "docs/CAPABILITY_TREE.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
+        "docs/FUTURE_PLAN_AUDIT.md",
+        "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
+        "docs/HANDOFF.md",
+        "docs/LAYER1_DESIGN_AUDIT.md",
+        "docs/LAYER1_DESIGN_PAPER.md",
+        "docs/PROJECT_INTENT.md",
+        "docs/PROTOCOL.md",
+        "docs/SEMANTICS.md",
+        "docs/TIMELINES.md",
+        "docs/TRANSCRIPT_AUDIT.md",
+    }
+)
+EXPECTED_PLANNING_INVENTORY_DIGEST = (
+    "1e4ea0376a774f4400f0905ccb10b608c8d499ae75df2ebaf7af29ce6eb4bbfe"
 )
 NODE_ID = r"[A-Z][A-Z0-9-]*"
 DETAIL_HEADING = re.compile(rf"^### `({NODE_ID})`(?:\s|$)")
@@ -80,8 +125,8 @@ EXPECTED_NODE_IDS = frozenset(
     """.split()
 )
 EXPECTED_STATUS_DIGEST = "61f447102b3c6134d74338b05c6a6e1648d48cd2f9254d1e6a822349bab45dc3"
-EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 42))
-EXPECTED_CONDITIONAL_DIGEST = "3468248e99fcb12af5ed644dfbdc18d7c5ca0d40a40fb18b4ac499c33fe88df7"
+EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 44))
+EXPECTED_CONDITIONAL_DIGEST = "b19b9b0e83222f89e7db4da8224f7455148b77baeaf158bb9b2a006e3e2b200c"
 EXPECTED_PREDICATE_ENTAILMENT_IDS = frozenset(f"PE-{number:02d}" for number in range(1, 12))
 EXPECTED_PREDICATE_ENTAILMENT_DIGEST = "68d76604c6370932c8dcaab229ed1ed495922d0eac3e7ef741abe80b17534e85"
 
@@ -465,6 +510,87 @@ def heading_anchors(text: str) -> set[str]:
     return anchors
 
 
+def repository_relative_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError as error:
+        raise PlanningError(f"path escapes repository: {path}") from error
+
+
+def check_planning_inventory(paths: tuple[Path, ...]) -> None:
+    normalized = tuple(repository_relative_path(path) for path in paths)
+    duplicate_paths = sorted(
+        path for path in set(normalized) if normalized.count(path) > 1
+    )
+    if duplicate_paths:
+        raise PlanningError(
+            "planning authority inventory contains duplicate paths: "
+            + ", ".join(duplicate_paths)
+        )
+    actual_paths = frozenset(normalized)
+    if actual_paths != EXPECTED_PLANNING_PATHS:
+        missing = sorted(EXPECTED_PLANNING_PATHS - actual_paths)
+        extra = sorted(actual_paths - EXPECTED_PLANNING_PATHS)
+        raise PlanningError(
+            "planning authority inventory changed without updating its intentional guard: "
+            f"missing={missing}, extra={extra}"
+        )
+    manifest = "\n".join(sorted(actual_paths))
+    digest = hashlib.sha256(manifest.encode("utf-8")).hexdigest()
+    if digest != EXPECTED_PLANNING_INVENTORY_DIGEST:
+        raise PlanningError(
+            "planning authority inventory digest changed: "
+            f"expected {EXPECTED_PLANNING_INVENTORY_DIGEST}, got {digest}"
+        )
+
+
+def git_effective_eol_policy(paths: tuple[Path, ...]) -> dict[str, dict[str, str]]:
+    relative_paths = tuple(repository_relative_path(path) for path in paths)
+    try:
+        result = subprocess.run(
+            ["git", "check-attr", "-z", "text", "eol", "--", *relative_paths],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", b"").decode("utf-8", errors="replace").strip()
+        raise PlanningError(
+            f"cannot resolve frozen-text Git EOL policy: {detail or error}"
+        ) from error
+    fields = result.stdout.split(b"\0")
+    if fields and fields[-1] == b"":
+        fields.pop()
+    if len(fields) % 3:
+        raise PlanningError("git check-attr returned a malformed NUL-delimited response")
+    policy: dict[str, dict[str, str]] = {}
+    for index in range(0, len(fields), 3):
+        path = fields[index].decode("utf-8")
+        attribute = fields[index + 1].decode("utf-8")
+        value = fields[index + 2].decode("utf-8")
+        policy.setdefault(path, {})[attribute] = value
+    return policy
+
+
+def check_frozen_text_eol_policy(policy: dict[str, dict[str, str]]) -> None:
+    expected_paths = EXPECTED_FROZEN_TEXT_PATHS
+    actual_paths = frozenset(policy)
+    if actual_paths != expected_paths:
+        missing = sorted(expected_paths - actual_paths)
+        extra = sorted(actual_paths - expected_paths)
+        raise PlanningError(
+            f"frozen-text EOL policy path mismatch: missing={missing}, extra={extra}"
+        )
+    for path in sorted(expected_paths):
+        attributes = policy[path]
+        if attributes.get("text") != "set" or attributes.get("eol") != "lf":
+            raise PlanningError(
+                f"{path}: frozen text must have effective Git attributes text=set and eol=lf; "
+                f"got text={attributes.get('text')}, eol={attributes.get('eol')}"
+            )
+
+
 def git_tracked_or_staged_paths() -> frozenset[Path]:
     try:
         result = subprocess.run(
@@ -606,6 +732,16 @@ def check_frozen_successor_audit(data: bytes) -> None:
         raise PlanningError(
             "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md changed after its frozen first "
             f"addition: expected Git blob {SUCCESSOR_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def check_frozen_third_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != THIRD_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md changed after its frozen first "
+            f"addition: expected Git blob {THIRD_AUDIT_GIT_BLOB}, got {actual}"
         )
 
 
@@ -778,6 +914,14 @@ def expect_frozen_successor_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_third_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_third_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_frozen_design_receipt_failure(label: str, data: bytes) -> None:
     try:
         parse_frozen_design_receipt(data)
@@ -789,6 +933,25 @@ def expect_frozen_design_receipt_failure(label: str, data: bytes) -> None:
 def expect_frozen_design_receipt_bytes_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_design_receipt_bytes(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_planning_inventory_failure(label: str, paths: tuple[Path, ...]) -> None:
+    try:
+        check_planning_inventory(paths)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_text_eol_policy_failure(
+    label: str,
+    policy: dict[str, dict[str, str]],
+) -> None:
+    try:
+        check_frozen_text_eol_policy(policy)
     except PlanningError:
         return
     raise PlanningError(f"negative control did not fail: {label}")
@@ -866,11 +1029,39 @@ def run_self_tests(
     second_audit_bytes: bytes,
     design_audit_bytes: bytes,
     successor_audit_bytes: bytes,
+    third_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
     design_receipt: dict[str, object],
     tracked_paths: frozenset[Path],
+    frozen_eol_policy: dict[str, dict[str, str]],
 ) -> None:
+    reduced_inventory = tuple(
+        path for path in PLANNING_FILES if repository_relative_path(path) != "docs/PROTOCOL.md"
+    )
+    if len(reduced_inventory) != len(PLANNING_FILES) - 1:
+        raise PlanningError("self-test fixture drift: planning authority inventory")
+    expect_planning_inventory_failure(
+        "missing planning authority document",
+        reduced_inventory,
+    )
+
+    wrong_eol_policy = {
+        path: dict(attributes) for path, attributes in frozen_eol_policy.items()
+    }
+    eol_probe_path = repository_relative_path(THIRD_AUDIT)
+    wrong_eol_policy[eol_probe_path]["eol"] = "crlf"
+    expect_frozen_text_eol_policy_failure(
+        "fresh-checkout EOL policy changed from LF",
+        wrong_eol_policy,
+    )
+    missing_eol_policy = dict(frozen_eol_policy)
+    missing_eol_policy.pop(repository_relative_path(DESIGN_RECEIPT))
+    expect_frozen_text_eol_policy_failure(
+        "frozen artifact missing from EOL policy",
+        missing_eol_policy,
+    )
+
     unknown = text.replace(
         "- **Depends on:** `TICK-0`, `REPLAY-0`.",
         "- **Depends on:** `TICK-0`, `REPLAY-0`, `MISSING-9`.",
@@ -959,10 +1150,88 @@ def run_self_tests(
         raise PlanningError("self-test fixture drift: upgrade polarity")
     expect_conditional_failure("changed old/new profile polarity", wrong_polarity, nodes)
 
+    ce42 = "| CE-42 | PROFILE-1 | new-admission | verkle-selected | VERKLE-R1 | prototype |"
+    missing_verkle_admission = text.replace(ce42 + "\n", "", 1)
+    if missing_verkle_admission == text:
+        raise PlanningError("self-test fixture drift: CE-42 admission dependency")
+    expect_conditional_failure(
+        "missing candidate-bound Verkle admission dependency",
+        missing_verkle_admission,
+        nodes,
+        expected_message="conditional edge inventory changed without updating its intentional guard:",
+    )
+
+    wrong_verkle_admission_predicate = text.replace(
+        ce42,
+        "| CE-42 | PROFILE-1 | new-admission | verkle-prototype | VERKLE-R1 | prototype |",
+        1,
+    )
+    if wrong_verkle_admission_predicate == text:
+        raise PlanningError("self-test fixture drift: CE-42 predicate")
+    expect_conditional_failure(
+        "Verkle admission bypasses selected-profile predicate",
+        wrong_verkle_admission_predicate,
+        nodes,
+        expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
+    )
+
+    wrong_verkle_admission_role = text.replace(
+        ce42,
+        "| CE-42 | PROFILE-1 | old-admitted-profile | verkle-selected | VERKLE-R1 | feasibility |",
+        1,
+    )
+    if wrong_verkle_admission_role == text:
+        raise PlanningError("self-test fixture drift: CE-42 candidate binding")
+    expect_conditional_failure(
+        "Verkle admission loses new-candidate prototype binding",
+        wrong_verkle_admission_role,
+        nodes,
+        expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
+    )
+
+    ce43 = "| CE-43 | PROFILE-D1 | new-candidate-profile | always | PROFILE-SCOPE-D0 | candidate-scope |"
+    missing_current_scope = text.replace(ce43 + "\n", "", 1)
+    if missing_current_scope == text:
+        raise PlanningError("self-test fixture drift: CE-43 current scope")
+    expect_conditional_failure(
+        "missing mandatory current-scope dependency",
+        missing_current_scope,
+        nodes,
+        expected_message="conditional edge inventory changed without updating its intentional guard:",
+    )
+
+    optional_current_scope = text.replace(
+        ce43,
+        "| CE-43 | PROFILE-D1 | new-candidate-profile | migration-profile | PROFILE-SCOPE-D0 | candidate-scope |",
+        1,
+    )
+    if optional_current_scope == text:
+        raise PlanningError("self-test fixture drift: CE-43 always predicate")
+    expect_conditional_failure(
+        "current scope changed from mandatory to candidate-conditional",
+        optional_current_scope,
+        nodes,
+        expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
+    )
+
+    collapsed_current_scope_role = text.replace(
+        ce43,
+        "| CE-43 | PROFILE-D1 | candidate-scope | always | PROFILE-SCOPE-D0 | base |",
+        1,
+    )
+    if collapsed_current_scope_role == text:
+        raise PlanningError("self-test fixture drift: CE-43 role distinction")
+    expect_conditional_failure(
+        "current-scope instance roles collapsed to base aliases",
+        collapsed_current_scope_role,
+        nodes,
+        expected_message="conditional roles, predicates, or polarity changed without updating their guard:",
+    )
+
     conditional_cycle = text.replace(
         "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |",
         "| CE-40 | VERKLE-R1 | prototype | verkle-prototype | PROFILE-D1 | new-candidate-profile |\n"
-        "| CE-42 | PROFILE-D1 | new-candidate-profile | migration-profile | UPGRADE-1 | migration |",
+        "| CE-44 | PROFILE-D1 | new-candidate-profile | migration-profile | UPGRADE-1 | migration |",
         1,
     )
     if conditional_cycle == text:
@@ -1085,6 +1354,10 @@ def run_self_tests(
         "frozen successor audit mutation",
         successor_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_third_audit_failure(
+        "frozen third audit mutation",
+        third_audit_bytes + b"\nnegative-control",
+    )
     expect_frozen_design_receipt_bytes_failure(
         "byte-frozen design receipt mutation",
         design_receipt_bytes + b"\n",
@@ -1136,6 +1409,9 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="run powered in-memory failures")
     args = parser.parse_args()
 
+    check_planning_inventory(PLANNING_FILES)
+    frozen_eol_policy = git_effective_eol_policy(FROZEN_TEXT_FILES)
+    check_frozen_text_eol_policy(frozen_eol_policy)
     capability_text = CAPABILITY.read_text(encoding="utf-8")
     nodes = parse_capability(capability_text)
     conditional_edges = parse_conditional_edges(capability_text, nodes)
@@ -1149,6 +1425,8 @@ def main() -> int:
     check_frozen_design_audit(design_audit_bytes)
     successor_audit_bytes = SUCCESSOR_AUDIT.read_bytes()
     check_frozen_successor_audit(successor_audit_bytes)
+    third_audit_bytes = THIRD_AUDIT.read_bytes()
+    check_frozen_third_audit(third_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
     check_frozen_design_receipt_bytes(design_receipt_bytes)
     design_receipt = parse_frozen_design_receipt(design_receipt_bytes)
@@ -1168,10 +1446,12 @@ def main() -> int:
             second_audit_bytes,
             design_audit_bytes,
             successor_audit_bytes,
+            third_audit_bytes,
             design_receipt_bytes,
             design_text,
             design_receipt,
             tracked_paths,
+            frozen_eol_policy,
         )
 
     base_edge_count = sum(len(node.dependencies) for node in nodes.values())

@@ -9,6 +9,10 @@ against input commit `694650f4028f5c1fb715384597326e0b0e31f0e1`
 **Successor audit:**
 [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md), frozen
 against that first correction
+**Second correction:** `54926f52fa8ba9768e817ecb6139dcca41960e6a`
+**Third successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md), frozen
+against that second correction; its descendant remains a documentation/checker correction
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
 in `C:\Users\Owen\Downloads\design.txt`. The downloaded source remains untouched. It is a mixed
@@ -93,8 +97,10 @@ It removes or quarantines:
 
 The useful idea is not “state is an illusion.” It is:
 
-> Logical state at tick `n` is the deterministic projection of an admitted genesis state and an
-> ordered admitted transition sequence. Reconstructing or serving that state additionally requires
+> Logical state at tick `n` is the deterministic projection of an authorized chain-launch package
+> and an ordered admitted transition sequence. The launch package binds the pre-ID genesis bytes to
+> one post-ID initial admitted profile, transition specification, typed root-parity record, and
+> release authority. Reconstructing or serving that state additionally requires
 > the sequence, or equivalent state material, to remain available. A database is one possible
 > materialization and may be optional for some verifier roles.
 
@@ -106,6 +112,7 @@ G_p       one admitted profile and its exact scope, required-domain registry, li
 P_(p,d)   immutable commitment and value-codec parameters for required typed domain d under G_p
 T_t       exact transition specification or program selected by transition-specification ID t
 S_0       declared complete logical genesis state for G_p
+L_0       authorized post-ID launch manifest selecting the one initial G_p, T_t, and typed X_0
 C_n       exact RequiredDomainV1 -> typed domain-root map after tick n
 X_n       complete execution root composed from G_p and C_n
 H_n       separately typed history accumulator after tick n
@@ -129,6 +136,11 @@ single protocol-frozen `ProfileIdHashV1`; a candidate's selected cryptographic s
 or reinterpret the function that identifies the candidate. Profile-selected hashes apply only
 where the already identified and admitted profile assigns them.
 
+The raw `(genesis payload, genesis_id)` pair intentionally predates `profile_id` and cannot select
+an initial interpreter by itself. The Layer 1 `ChainLaunchManifestV1` is derived afterward without
+feeding back into `genesis_id`; bootstrap and the first accepted record verify that manifest and its
+detached launch authorization.
+
 Binding `D_n` makes replay inputs explicit; it does not prove an oracle value true, randomness
 unbiased, or acquisition honest.
 
@@ -141,10 +153,16 @@ This note deliberately defines no `TickCoreV1`, envelope codec, block identifier
 history formula. The repository's sole proposed byte-contract owner is
 [`LAYER1_DESIGN_PAPER.md` §4.4](LAYER1_DESIGN_PAPER.md#44-proposed-block-identifier-consensus-evidence-and-receipts).
 That proposal already separates ordered actions from deterministic auxiliary inputs, binds effects
-through receipts, binds one admitted profile plus parent-authorized execution/consensus/availability
-policies and authority context, commits the exact availability payload, derives a non-circular
+through receipts, binds the chain-launch identity and the deterministic envelope owner plus
+parent-authorized execution/consensus/availability policies and authority context, commits the exact availability payload, derives a non-circular
 block identifier, and keeps signatures and consensus evidence outside that identifier. It remains
 proposed, unimplemented, and non-authoritative.
+
+Its verifier rejects over-bound outer frames before nested materialization, resolves the accepted
+parent and envelope owner before selecting any codec/hash/signature suite, checks every
+parent-authorized limit/role/policy before execution, and only then decodes payloads, recomputes
+commitments, executes, and checks successor state. This is an ordering requirement, not evidence
+that the future implementation meets its budgets.
 
 A payload commitment establishes byte identity, not retrieval. Consensus and availability evidence
 must each bind the candidate identifier, selected policy, applicable authority/epoch context, and
@@ -173,9 +191,12 @@ admitted migration would additionally need parent-authorized activation, determi
 old/new correspondence, failure and restart semantics, retained old-profile verification context,
 and available migration material. Root correspondence alone would not authorize the upgrade or
 select its fork. Ordinary units carry one unchanged profile context; a migration unit carries the
-explicit old/new context, contains no ambiguously interpreted ordinary action, and uses the
-migration-specific commitment-set transition owned by the Layer 1 paper and authenticated-state
-plan.
+explicit old/new context while the old parent-admitted profile solely owns its envelope codec,
+object hashes, commitments, policies, and proposal credentials. The first migration form has an
+empty signed-transaction sequence, an empty application-subtick schedule, and exactly one
+authorized migration system transition and receipt. It uses the migration-specific commitment-set
+transition owned by the Layer 1 paper and authenticated-state plan. No mixed old/new ordinary-action
+interpretation is implied; such a form would require a separately versioned phase-tagged schema.
 
 ## Witnessed transition, stated precisely
 
@@ -279,9 +300,9 @@ The network must explicitly fund, require, or otherwise justify every availabili
 
 | Method | What the joining node obtains | Cost and trust boundary |
 | --- | --- | --- |
-| Genesis replay | Genesis plus every required historical transition and protocol version | Highest data and execution work; still needs a canonical-chain rule and complete archives. |
-| Verified snapshot | Materialized state chunks and a manifest at an authenticated checkpoint | Fast, but requires root recomputation plus an explicit checkpoint/finality trust model. |
-| Recursive validity proof plus state retrieval | Checkpoint, proof of a contiguous transition relation, final roots, and separately retrieved state | Compresses correctness checking; does not supply state values or availability. |
+| Genesis replay | Authorized chain-launch package plus every required historical transition and protocol version | Highest data and execution work; still needs a canonical-chain rule and complete archives. A raw genesis pair cannot select the initial profile. |
+| Verified snapshot | Materialized state chunks and a manifest at an authenticated checkpoint that binds the chain-launch ID | Fast, but requires root recomputation plus an explicit checkpoint/finality trust model. |
+| Recursive validity proof plus state retrieval | Launch-bound checkpoint, proof of a contiguous transition relation, final roots, and separately retrieved state | Compresses correctness checking; does not supply state values or availability. |
 
 No method allows a node to “instantly know every balance” from a root. It can rapidly verify one
 supplied balance witness, or verify that a root followed from a prior root, while full enumeration
@@ -426,7 +447,7 @@ the selected issuance policy is normatively or distributionally fair.
 | Every tick is a complete mathematical snapshot. | **REJECTED** | A root commits to a snapshot but does not contain its values. |
 | Tick 0 is the static base. | **REJECTED** | Commitment parameters, `S_0`, `X_0`, and `H_0` are separate typed objects. |
 | The permanent database disappears. | **REJECTED** | Full local state may disappear for one verifier role; system-wide information retention remains. |
-| Proof history is sufficient to replay state. | **REJECTED** | Full replay needs admitted genesis, complete ordered actions and deterministic inputs, and every applicable transition/codec version; stateless replay additionally needs witnesses. |
+| Proof history is sufficient to replay state. | **REJECTED** | Full replay needs an authorized post-ID launch binding, complete ordered actions and deterministic inputs, and every applicable transition/codec version; stateless replay additionally needs witnesses. |
 | A root lets a new node know every balance. | **REJECTED** | A root verifies supplied openings; it cannot enumerate committed data. |
 | A valid state witness proves a valid transaction. | **REJECTED** | Authorization and deterministic execution must also be checked, or separately validity-proven. |
 | PoH prevents forged forks and proves exact wall time. | **REJECTED** | It supplies a scoped sequence/delay claim; consensus and external assumptions remain. |
@@ -492,7 +513,7 @@ non-claim.
 7. What availability rule covers bodies, witnesses, program code, snapshots, and historical
    versions before any validator accepts a tick?
 8. What consensus/finality rule selects the canonical tick chain?
-9. Which bootstrap contract is supported: genesis replay, verified snapshot, recursive proof, or a
+9. Which launch-bound bootstrap contract is supported: authorized chain-launch replay, verified snapshot, recursive proof, or a
    precisely scoped combination?
 10. What concrete latency, bandwidth, or verifier-cost requirement would justify recursive proving?
 11. What property unavailable from height and consensus would justify a VDF or PoH-like clock?

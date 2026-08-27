@@ -711,6 +711,15 @@ byte-equal their projection inside `ProfileContextV1`; disagreement rejects rath
 one owner. A local storage profile resolves its own scope and registry under the explicit digest
 fields rather than inheriting network semantics implicitly.
 
+The post-ID `chain_launch_manifest_id` is also deliberately absent from logical map, composed-root,
+and `CommitmentSetV1` preimages used by the initial parity record: that manifest is derived only
+after the initial typed roots exist. The Layer 1 `GenesisRootParityRecordV1` binds the exact initial
+required-domain/root-entry digests and typed execution-root reference produced here; the later
+`ChainLaunchManifestV1` binds that parity-record ID, initial admitted profile/specification, and
+release/authorization identities. A network consumer accepts the genesis commitment set as launch
+authority only through the verified `chain_launch_package`; a raw `genesis_id`, root, or set ID is
+insufficient.
+
 `RequiredDomainV1` is byte-for-byte the active-entry projection from the subject's canonical
 `DomainRegistryV1`. `required_domain_set` is the canonically sorted set of unique
 `RequiredDomainV1` values fixed by that registry. `root_entries` contains exactly one
@@ -749,6 +758,14 @@ prior set, and its typed new execution-root reference MUST recompute from the ca
 deterministic migration. Consensus acceptance activates the previously admitted successor;
 admission, migration evidence, and the predecessor tag grant no activation authority by themselves.
 
+The referenced Layer 1 proposal MUST use the old parent-admitted profile as its sole envelope codec,
+object-hash, ordered-commitment, policy-selector, and proposal-credential owner. Its body MUST be the
+dedicated migration variant with an empty signed-transaction sequence, empty application-subtick
+schedule, and exactly one authorized migration system transition matching this predecessor edge.
+The resulting execution carries exactly one migration system receipt. Any ordinary transaction,
+additional system transition, new-profile envelope selector, or mixed old/new phase interpretation
+rejects before root publication.
+
 Overflow rejects. Forks may produce several ordinary or migration children of one parent, but no
 child may name itself, a descendant, a missing set, or a set from another chain/genesis/world
 context. The ledger record/head and migration record are derived without the current
@@ -760,12 +777,13 @@ prior set + ordinary transition input
   or prior set + authorized migration input
     -> canonical post-transition ledger state
     -> logical map roots
-    -> ledger record/head (which may embed those roots, never the current set ID)
     -> optional application/execution roots from those roots and fixed context
+    -> local ledger record or network proposal/header ID
+       (which may embed typed roots, never the current set ID)
     -> CommitmentSetV1 bytes
     -> CommitmentSetIdV1
     -> recoverable current-head pointer
-    -> later receipt/proposal/header references
+    -> later proof or recovery references
 ```
 
 Writers first acquire the exclusive pin/publication barrier described below. While holding it they

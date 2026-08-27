@@ -421,6 +421,30 @@ does not activate any capability. Broad Rust, Lean, vector, headless, network, p
 display testing begins only after the next complete read-only sweep either finds another material
 gap or records zero-new-gap convergence.
 
+### 29. “Keep running the same loop until diminishing returns, then actually test” (paraphrased)
+
+User intent: continue freezing each nonempty successor sweep before one coordinated correction,
+and treat diminishing returns as a complete independent sweep that finds no new material design
+gap—not as fatigue, elapsed time, or a smaller finding count. Only then begin broad implementation
+tests.
+
+Current truth: the second correction is pinned at
+`54926f52fa8ba9768e817ecb6139dcca41960e6a`. The next complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md) at
+commit `37a8a8a9a411462997f0f8c945f72c3e938bf7b8`, with Git blob
+`fbee935d27617f47f913617ca2d8e19aba618c6e`. It records eight new material gaps: the missing
+post-ID launch trust anchor, undefined migration-envelope ownership, an ambiguous mixed migration
+body, verifier work before bounds/authority, missing candidate-bound Verkle admission evidence,
+Windows checkout instability for frozen bytes, a shrinkable planning-authority inventory, and the
+remaining successor current-scope dependency.
+
+The coordinated descendant correction binds those protocol/planning/checker surfaces but still
+implements no network, trie, vector commitment, cryptocurrency, consensus, or Layer 1 property.
+Broad Rust, Python-vector, headless, release, Lean, network, performance, and display claims remain
+unmade until a later audit freezes a zero-new-material-gap sweep and the corresponding tests are
+actually run. A zero finding is evidence about the declared finite lenses and pinned input, not a
+universal proof that no design gap exists.
+
 ## Semantic lessons that should survive future checkpoints
 
 1. **Coordinate memory is the primitive.** An on bit is a fact about one address; absence means

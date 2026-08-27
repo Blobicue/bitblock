@@ -21,8 +21,18 @@ semantic history.
 - `fb5f5ca048144f84b0d600619202b3a6f400a02c` is the first-addition commit for
   `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`. It freezes the next read-only sweep over
   `ea9294b`, 11 successor findings, and audit blob
-  `e8bd912f171d64c345b6fa71413bd9503e12f5f3`. Its descendant correction must not be mistaken for
-  runtime, proof, cryptographic, consensus, or Layer 1 validation.
+  `e8bd912f171d64c345b6fa71413bd9503e12f5f3`.
+- `54926f52fa8ba9768e817ecb6139dcca41960e6a` is the coordinated correction for SG-01 through
+  SG-11. It freezes the pre-ID hash, separates migration evidence/admission/activation, adds the
+  availability carrier and Verkle feasibility edge, and powers the provenance/checker/CI controls.
+  Its narrow planning and whitespace checks passed; broad Rust, Python-vector, Lean, and display
+  suites were not run for that documentation/tooling checkpoint.
+- `37a8a8a9a411462997f0f8c945f72c3e938bf7b8` is the first-addition commit for
+  `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`. It freezes the complete successor sweep over
+  `54926f5`, eight new findings, and audit blob
+  `fbee935d27617f47f913617ca2d8e19aba618c6e`. Its descendant correction is still documentation,
+  checker, and checkout-policy work and must not be mistaken for runtime, proof, cryptographic,
+  consensus, or Layer 1 validation.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md` predates the design distillation. Its 16-finding closure and
   validation boundary do not audit `694650f` or the later correction.
 - `2a9e667` is the exact clean input to the second audit/fix loop. Its result is the first
@@ -61,16 +71,17 @@ Read in this order:
 4. `docs/DESIGN_RESEARCH_DISTILLATION.md` (source receipt, corrected research map, and open questions)
 5. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md` (frozen 15-gap successor audit and correction map)
 6. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md` (frozen 11-gap second successor audit)
-7. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (second future-plan audit/fix map and Verkle disposition)
-8. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
-9. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-10. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-11. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
-12. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
-13. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
-14. `README.md` (controls, commands, and feature boundaries)
-15. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
-16. `docs/TIMELINES.md` (actual CI trigger and command contract)
+7. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md` (frozen eight-gap third successor audit)
+8. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (second future-plan audit/fix map and Verkle disposition)
+9. `docs/FUTURE_PLAN_AUDIT.md` (immutable first future-plan audit)
+10. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+11. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+12. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
+13. `docs/LAYER1_DESIGN_PAPER.md` (sole proposed network byte graph; still unimplemented)
+14. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
+15. `README.md` (controls, commands, and feature boundaries)
+16. `docs/PROTOCOL.md` (canonical local bytes, hashes, history, and research boundaries)
+17. `docs/TIMELINES.md` (actual CI trigger and command contract)
 
 ## What is implemented
 
@@ -128,6 +139,8 @@ self-verified. Neither path produces physical display evidence.
   source receipts, and residual boundary for the first successor audit.
 - `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`: frozen `ea9294b` input, 11 finite findings,
   correction map, no-test boundary, and convergence criterion for the second successor audit.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`: frozen `54926f5` input, eight finite findings,
+  rejected candidates, one-sweep correction boundary, and the same zero-new-gap convergence rule.
 - `docs/design-source-receipt-v1.json`: byte-frozen external-source and pre-audit-distillation
   receipt. The checker reproduces its historical Git-object fields; it still does not contain,
   recover, or authenticate the external raw source.
@@ -136,10 +149,12 @@ self-verified. Neither path produces physical display evidence.
 - `docs/FUTURE_PLAN_AUDIT.md`: the finite audit/fix map for planning input `1624068`.
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md`: the second finite audit/fix map for input `2a9e667`, including
   the authenticated-state, activation-graph, checker, provenance, and Verkle corrections.
+- `.gitattributes`: forces LF checkout bytes for all six byte-frozen audit/receipt artifacts so
+  their Git-blob guards are reproducible under Windows `core.autocrlf=true`.
 - `tools/check_planning_docs.py`: retained dependency/Markdown checker with powered negative
-  controls, conditional-edge and predicate-entailment manifests, frozen-audit/receipt guards,
-  historical receipt-object reconstruction,
-  repository-contained tracked link/fragment checks, and authority-document inventory; it does not
+  controls, conditional-edge and predicate-entailment manifests, exact 17-document authority
+  inventory, effective frozen-file EOL policy, frozen-audit/receipt guards, historical
+  receipt-object reconstruction, and repository-contained tracked link/fragment checks; it does not
   validate edge completeness, prose meaning, external URLs, runtime semantics, or cryptographic
   security.
 
@@ -189,30 +204,34 @@ The candidate labels in `docs/DESIGN_RESEARCH_DISTILLATION.md` are research note
 nodes; promote one only through an explicit later capability-tree decision with dependencies,
 artifact, gate, and non-claim.
 
-1. The preferred next semantic implementation node is `ACCOUNT-1`: reconcile submitted, admitted,
+1. Finish the convergence protocol first: pin this third-audit correction, run another complete
+   independent read-only sweep, and freeze either its new findings or a zero-new-material-gap
+   result. Only the zero-gap result opens the broad Rust, Python-vector, headless, Lean, and
+   release-path test pass requested by the user. It still cannot replace physical display review.
+2. The preferred next semantic implementation node is `ACCOUNT-1`: reconcile submitted, admitted,
    executed, rejected, no-op, camera/control, edit-miss/overlap, and idle action/result lanes. This
    precedes durable episodes, signed actors, and executable rules.
-2. After `ACCOUNT-1`, freeze `LOCAL-BOUNDS-1` before `STORAGE-1`; do not make local durability wait
+3. After `ACCOUNT-1`, freeze `LOCAL-BOUNDS-1` before `STORAGE-1`; do not make local durability wait
    on a circular future network profile. `LEDGER-1` and `TRANSITION-SPEC-D1` follow their exact
    dependency fields.
-3. `COMMIT-R1` can proceed as a research-only checkpoint: freeze the common key/node/proof/resource
+4. `COMMIT-R1` can proceed as a research-only checkpoint: freeze the common key/node/proof/resource
    profiles and compare fixed-key binary Patricia with a 192-level sparse Merkle tree. Do not hook
    either into `World`, history publication, receipts, rendering, or collision until the shared
    assay passes and `LEDGER-1` exists.
-4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
+5. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
    field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
    end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
    Proof-size intuition alone cannot select it or delay `COMMIT-R1`.
-5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
+6. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-6. Run `SCALE-1`/`COST-1` measurements before designing a hierarchical chunk/LOD path.
+7. Run `SCALE-1`/`COST-1` measurements before designing a hierarchical chunk/LOD path.
    The present below-saturation renderer traverses on bits; no “near-infinite performance” claim
    is licensed yet.
-7. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
+8. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
    then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
    recorded disqualification of the examined
    Aethor TSH/PDH constructions and IterHash; do not conflate them with a different missing design.
-8. Only after `ACCOUNT-1`, consider `RULE-1`: one finite opt-in local transformation rule with a
+9. Only after `ACCOUNT-1`, consider `RULE-1`: one finite opt-in local transformation rule with a
    named neighborhood, ordering, resource bound, and deterministic
    `(initial state, accepted tape, rule version)` replay. Do not combine it with asset or network
    authority.
@@ -241,8 +260,15 @@ git diff --check 694650f4028f5c1fb715384597326e0b0e31f0e1..ea9294ba08b5e4bd339f8
 git show --check --format=fuller ea9294ba08b5e4bd339f82894ecb761461f5af13
 ```
 
-The second successor audit freezes `ea9294b` before its correction. Each documentation/checker
-correction is admitted only after:
+The second and third successor audits freeze `ea9294b` and `54926f5` before their corrections. The
+stable whitespace receipt for the complete second correction is:
+
+```powershell
+git diff --check fb5f5ca048144f84b0d600619202b3a6f400a02c..54926f52fa8ba9768e817ecb6139dcca41960e6a
+git show --check --format=fuller 54926f52fa8ba9768e817ecb6139dcca41960e6a
+```
+
+Each later documentation/checker correction is admitted only after:
 
 ```powershell
 python -B tools/check_planning_docs.py --self-test
@@ -253,8 +279,10 @@ The first command validates the pinned node inventory and status classes, declar
 graph, structured conditional edges and predicate entailments, Markdown shape,
 repository-contained tracked relative files and fragments, frozen audit/receipt blobs, the
 canonical source receipt plus Markdown agreement, and its historical Git-object/count claims.
-Powered controls exercise those paths. It does not decide predicate truth, prove prose or closure
-completeness, inspect external-link contents, establish future-profile satisfiability, validate
-runtime behavior, or prove cryptographic security. The second command checks the complete staged
-correction for whitespace errors. A later zero-new-gap audit must pin the second correction before
-broad tests are attributed to it; moving `HEAD` is never a stable historical receipt.
+It also pins the exact 17-document authority inventory and the effective LF checkout policy for
+all six frozen text artifacts. Powered controls exercise those paths. It does not decide predicate
+truth, prove prose or closure completeness, inspect external-link contents, establish
+future-profile satisfiability, validate runtime behavior, or prove cryptographic security. The
+second command checks the complete staged correction for whitespace errors. A later
+zero-new-material-gap audit must pin this third correction before broad tests are attributed to it;
+moving `HEAD` is never a stable historical receipt.

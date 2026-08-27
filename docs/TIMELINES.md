@@ -16,7 +16,8 @@ Three CI jobs gate every push and pull request:
   `rust-toolchain.toml`.
 - **python vector tools (ubuntu-latest)** — every standalone `tools/*.py`
   vector tool must exit zero; `tools/check_planning_docs.py --self-test` runs
-  the powered planning/audit/receipt/link controls from a full-history checkout;
+  the powered planning/audit/receipt/link controls, exact planning-authority inventory, and frozen
+  text EOL-policy checks from a full-history checkout;
   `tools/simulate_sequence.py examples/observer_walk_sequence.json --expect`
   checks one explicit scenario; and `tools/metric_registry.py audit` must report
   an exact manifest with zero unresolved references. Argument-taking tools are

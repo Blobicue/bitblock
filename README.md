@@ -44,8 +44,15 @@ The first correction is pinned at `ea9294ba08b5e4bd339f82894ecb761461f5af13`. A 
 read-only sweep of that corrected state is frozen in
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md).
 It records 11 successor type, dependency, provenance, checker, and CI gaps before their one
-coordinated documentation/tooling correction. Neither audit activates a runtime capability or
-constitutes Rust, Lean, cryptographic, consensus, or Layer 1 evidence.
+coordinated documentation/tooling correction at
+`54926f52fa8ba9768e817ecb6139dcca41960e6a`. A third complete read-only sweep of that correction is
+frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md).
+It records eight launch-anchor, migration-envelope/body, validation-order, Verkle-admission,
+checkout-EOL, authority-inventory, and successor-scope gaps before this descendant correction.
+None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
+cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
+deferred until a later complete sweep records zero new material design gaps.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
