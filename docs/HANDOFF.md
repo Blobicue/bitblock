@@ -9,8 +9,9 @@ semantic history.
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
-- The prior published checkpoint was `c9a93f6` (`docs: specify Bitblock Layer 1 security path`);
-  this paper-audit revision supersedes it at the branch tip.
+- The prior published documentation checkpoint was `dd19c5f` (`docs: audit and close Layer 1 paper gaps`).
+- The hardened checkpoint-0.3 Layer 1 paper is pinned at `034b7b2`; the second-loop
+  audit/handoff revision supersedes the earlier audit at the branch tip.
 - The branch contains the full non-build local checkpoint plus the semantic and transcript
   handoffs. Generated `target`, Lean `.lake`, and Python cache files are intentionally absent.
 - The original non-Git working folder was preserved separately; a new agent should clone the
@@ -40,10 +41,12 @@ The current product surface is deliberately small: a free observer in a sparse b
 world. `(0, 0, 0)` is permanent bedrock; the observer starts at `(0, 0, -1)`; all other absent
 coordinates are off. There are no entities, gravity, terrain, inventory, or autonomous block rules.
 
-The fixed 60 Hz reducer consumes accepted input, updates camera/world state, commits coordinate
-history, appends a tick outcome, and derives a new frame only when the surface is dirty. The window
-presentation step is separate. Empty ticks still produce outcome history and may reuse the last
-raster.
+The fixed 60 Hz reducer consumes aggregate live-input flags/floats plus ordered edit attempts,
+updates camera/world state, commits resolved exact edits to coordinate history, appends an
+aggregate tick outcome, and derives a new frame only when the surface is dirty. Resize,
+sidebar-toggle, and clear-motion actions mutate local application state before `fixed_tick`.
+The window presentation step is separate. Empty ticks still produce outcome history and may
+reuse the last raster.
 
 The observer has movement, look, logarithmic wheel dolly, placement, deletion, fit, crosshair, and
 an F3-style metrics sidebar. Point sweeps prevent movement through occupied voxels; an edit that
@@ -51,11 +54,15 @@ would occupy the observer's containing cell is rejected with an explicit disposi
 default starts beside the origin at distance `1.0`; the exact one-pixel camera constructor exists
 but is not the default startup path.
 
-The accepted-action boundary is replayable. `InteractionTape` stores contiguous tick records,
-preserves action order and floating-point bit patterns, enforces bounded canonical payload limits,
-and receives a `#bb.intent.sha256...` tag. `tools/simulate_sequence.py` converts JSON scenarios
-into tapes; the headless Rust path reports per-tick outcome/world/history/camera/frame
-commitments. It deliberately produces no physical display evidence and no ordinary frame receipts.
+Supplied `InteractionTape` values are bounded replay inputs: they store contiguous tick records,
+preserve action order and floating-point bit patterns, enforce canonical payload limits, and
+receive a `#bb.intent.sha256...` tag. They are not evidence that the live application records
+every accepted action. `TickOutcome` aggregates non-edit controls, while coordinate history omits
+aim misses, observer-overlap rejections, camera-only actions, and idle ticks.
+`tools/simulate_sequence.py` converts JSON scenarios into tapes; the headless Rust path reports
+per-tick outcome/world/history/camera/frame commitments. Ordinary stdout is not a canonical run
+receipt, and the opt-in `LocalReplayEvidence` carrier is feature-gated, in-memory, and locally
+self-verified. Neither path produces physical display evidence.
 
 ## File ownership map
 
@@ -92,6 +99,8 @@ commitments. It deliberately produces no physical display evidence and no ordina
 - Do not call the coordinate domain mathematically infinite or the renderer infinitely scalable.
 - Do not call a frame tag proof that a physical monitor displayed the pixels.
 - Do not call local history Proof-of-History, Proof-of-Stake, consensus, currency, or Layer 1.
+- Do not present feature-gated `CoordinateEpisodeEvidence` or `LocalReplayEvidence` as default,
+  durable, independently held authority.
 - Do not claim the user's ternary hash is integrated; its source and contract have not been
   identified in this repository.
 - Do not call the text edit language a self-executing programming language; no autonomous block
@@ -103,17 +112,22 @@ commitments. It deliberately produces no physical display evidence and no ordina
 
 ## Recommended next work order
 
-Make one semantic change at a time and update `docs/SEMANTICS.md` and
-`docs/TRANSCRIPT_AUDIT.md` in the same checkpoint.
+Ask the user which checkpoint they want to see next, then make one semantic change at a time
+and update `docs/SEMANTICS.md` and `docs/TRANSCRIPT_AUDIT.md` in the same checkpoint.
 
-1. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
+1. If continuing the Layer 1 path, start with checkpoint A in
+   `docs/LAYER1_DESIGN_PAPER.md`: reconcile the complete action/result lanes, then promote the
+   feature-gated coordinate-episode prototype into an optional durable local ledger. Do not
+   add networking, ownership, and economics in the same change.
+2. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-2. Measure the current renderer/collision cost before designing a hierarchical chunk/LOD path.
+3. Measure the current renderer/collision cost before designing a hierarchical chunk/LOD path.
    The present below-saturation renderer traverses on bits; no “near-infinite performance” claim
    is licensed yet.
-3. Locate the user's ternary hashing implementation and write down its exact input/output
-   contract. Compare it with the existing SHA-256 protocol before considering any bridge.
-4. Only after the baseline is stable, add one finite local transformation rule as an explicit
+4. Locate the user's intended balanced-trit hashing implementation and write down its exact
+   input/output and security contract. Preserve the recorded disqualification of the examined
+   Aethor TSH/PDH constructions and IterHash; do not conflate them with a different missing design.
+5. Only after the baseline is stable, add one finite local transformation rule as an explicit
    tick-scoped mode. Preserve deterministic `(initial state, accepted tape)` replay.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
