@@ -52,7 +52,7 @@
   "bitblock/sidebar/composite-frame-input/v1"
  ],
  "schemas_vectored": 44,
- "source_lines": 51819,
- "tests": 396,
+ "source_lines": 52307,
+ "tests": 398,
  "tools": 30
 }

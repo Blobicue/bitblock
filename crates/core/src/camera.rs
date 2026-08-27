@@ -209,6 +209,16 @@ impl CameraProjection {
         self.position
     }
 
+    /// The depth [`Self::project`] would report for `point`, without the screen coordinates.
+    ///
+    /// It evaluates the same expression on the same operands, so it agrees bit for bit with
+    /// the `depth` field of a successful projection. Callers that only need a traversal
+    /// order pay one dot product instead of a full projection.
+    pub(crate) fn view_depth(self, point: Vec3) -> f64 {
+        let relative = point - self.position;
+        relative.dot(self.basis.forward)
+    }
+
     pub(crate) fn project(self, point: Vec3) -> Option<ProjectedPoint> {
         if !point.is_finite() {
             return None;

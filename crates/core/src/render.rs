@@ -24,6 +24,30 @@ const NEAR_PLANE: f64 = 1.0e-7;
 const CROSSHAIR_GAP_RADIUS: i64 = 2;
 const CROSSHAIR_ARM_LENGTH: i64 = 3;
 const BARYCENTRIC_EPSILON: f64 = -1.0e-10;
+/// Buckets used to order occupied bits front to back.
+///
+/// The order is a heuristic and every order produces the same frame, so a linear quantization
+/// of view depth is enough. Two counting passes cost a fraction of a comparison sort, which at
+/// 12,699 bits spent more time ordering than the ordering saved.
+const DEPTH_BUCKETS: usize = 1_024;
+// Slack terms for the hidden-bit test in `nearest_possible_depth`. They bound the arithmetic
+// of the inner loop rather than describing the frame, so they are deliberately absent from
+// `renderer_profile_tag`: a skipped bit writes exactly what rasterising it would have written,
+// which is nothing, and no declared constant or ordering rule changes.
+//
+// A rasterised fragment's depth is `1.0 / (wa/za + wb/zb + wc/zc)`, which is at least
+// `min(za, zb, zc) / S` for `S` the sum of the positive weights. The three `edge` values sum
+// exactly to `area`, so `S` exceeds one only by the weights' own rounding plus the three
+// admitted negative weights:
+//
+// * `OCCLUSION_WEIGHT_SLACK` covers `3 * |BARYCENTRIC_EPSILON|` and the rounding of the sum.
+// * `OCCLUSION_EDGE_SLACK` is `34 * 2^-53 = 3.8e-15` rounded up: each `edge` evaluation carries
+//   at most `8.4 * 2^-53 * span_x * span_y` of absolute error, and four of them (three weights
+//   and the area itself) reach the weight sum divided by `area`.
+// * `OCCLUSION_ROUNDING_SLACK` covers the six roundings between the weights and the reciprocal.
+const OCCLUSION_WEIGHT_SLACK: f64 = 1.0e-9;
+const OCCLUSION_EDGE_SLACK: f64 = 1.0e-14;
+const OCCLUSION_ROUNDING_SLACK: f64 = 1.0e-12;
 const SMALL_BIT_EXTENT: f64 = 1.0;
 const PIXEL_CENTER_OFFSET: f64 = 0.5;
 const ORDINARY_TOP: u32 = 0x00ffffff;
@@ -136,6 +160,22 @@ pub struct Renderer {
     pixels: Vec<u32>,
     depth: Vec<f64>,
     world_pixels: u64,
+    /// Occupied bits paired with their view depth, retained between frames for its allocation.
+    keyed: Vec<(f64, Coord)>,
+    /// The same bits in front-to-back traversal order.
+    order: Vec<Coord>,
+    /// Test-only switch back to unordered traversal with no hidden-bit test, so a fixture can
+    /// compare the two traversals rather than compare the optimized one against itself.
+    #[cfg(test)]
+    reference_traversal: bool,
+    /// Test-only count of bits the hidden-bit test declined to rasterise, so a fixture can show
+    /// it is exercising that path rather than passing vacuously.
+    #[cfg(test)]
+    hidden_bits: u64,
+    /// Test-only switch that rasterises every skipped bit into a copy of the buffers and
+    /// requires that nothing moved. See `assert_hidden_bit_writes_nothing`.
+    #[cfg(test)]
+    verify_hidden_bits: bool,
 }
 
 /// First witness for a post-overlay game pixel outside the declared discrete RGB palette.
@@ -214,6 +254,14 @@ impl Renderer {
             pixels: Vec::new(),
             depth: Vec::new(),
             world_pixels: 0,
+            keyed: Vec::new(),
+            order: Vec::new(),
+            #[cfg(test)]
+            reference_traversal: false,
+            #[cfg(test)]
+            hidden_bits: 0,
+            #[cfg(test)]
+            verify_hidden_bits: false,
         };
         renderer.resize(width, height);
         renderer
@@ -262,6 +310,10 @@ impl Renderer {
         self.pixels.fill(BACKGROUND);
         self.depth.fill(f64::INFINITY);
         self.world_pixels = 0;
+        #[cfg(test)]
+        {
+            self.hidden_bits = 0;
+        }
 
         if self.width == 0 || self.height == 0 || world.is_empty() {
             return;
@@ -295,9 +347,73 @@ impl Renderer {
             }
         }
 
+        if !self.optimized_traversal() {
+            for coord in world.iter_on() {
+                self.draw_bit(projection, coord);
+            }
+            return;
+        }
+
+        // Nearest first. The depth buffer then holds the closest surfaces early, which is what
+        // makes the hidden-bit test in `draw_bit` succeed often enough to pay for itself.
+        // Traversal order is free to change: `plot` resolves equal depths by the lower RGB word,
+        // so the frame is a per-pixel minimum over the bits and does not depend on their order.
+        let mut keyed = std::mem::take(&mut self.keyed);
+        keyed.clear();
+        let mut nearest = f64::INFINITY;
+        let mut farthest = f64::NEG_INFINITY;
         for coord in world.iter_on() {
+            let key = projection.view_depth(coord_center(coord));
+            nearest = f64::min(nearest, key);
+            farthest = f64::max(farthest, key);
+            keyed.push((key, coord));
+        }
+
+        let span = farthest - nearest;
+        let scale = if span > 0.0 && span.is_finite() {
+            (DEPTH_BUCKETS - 1) as f64 / span
+        } else {
+            0.0
+        };
+        // `as usize` saturates, so a non-finite or out-of-range key lands in a real bucket
+        // instead of panicking. Which one does not matter: this only chooses an order.
+        let bucket = |key: f64| (((key - nearest) * scale) as usize).min(DEPTH_BUCKETS - 1);
+
+        let mut offsets = [0_usize; DEPTH_BUCKETS];
+        for &(key, _) in &keyed {
+            offsets[bucket(key)] += 1;
+        }
+        let mut start = 0;
+        for offset in &mut offsets {
+            let count = *offset;
+            *offset = start;
+            start += count;
+        }
+
+        let mut order = std::mem::take(&mut self.order);
+        order.clear();
+        order.resize(keyed.len(), BEDROCK_COORD);
+        for &(key, coord) in &keyed {
+            let slot = &mut offsets[bucket(key)];
+            order[*slot] = coord;
+            *slot += 1;
+        }
+
+        for &coord in &order {
             self.draw_bit(projection, coord);
         }
+        self.keyed = keyed;
+        self.order = order;
+    }
+
+    #[cfg(test)]
+    const fn optimized_traversal(&self) -> bool {
+        !self.reference_traversal
+    }
+
+    #[cfg(not(test))]
+    const fn optimized_traversal(&self) -> bool {
+        true
     }
 
     /// Draws a one-physical-pixel crosshair without covering the exact aim pixel.
@@ -343,12 +459,14 @@ impl Renderer {
         let mut max_x = f64::NEG_INFINITY;
         let mut min_y = f64::INFINITY;
         let mut max_y = f64::NEG_INFINITY;
+        let mut nearest_vertex = f64::INFINITY;
         for point in projected.iter().flatten() {
             visible = true;
             min_x = f64::min(min_x, point.x);
             max_x = f64::max(max_x, point.x);
             min_y = f64::min(min_y, point.y);
             max_y = f64::max(max_y, point.y);
+            nearest_vertex = f64::min(nearest_vertex, point.depth);
         }
         if !visible {
             return;
@@ -371,6 +489,53 @@ impl Renderer {
             return;
         }
 
+        if self.optimized_traversal() {
+            // Every face's clamped raster box is contained in this one, because each is built
+            // from a subset of these vertices by the same monotone `floor`/`ceil`/clamp
+            // expressions. An empty box means no face reaches a pixel inside the viewport.
+            let left = min_x.floor().max(0.0) as i64;
+            let right = max_x.ceil().min(self.width as f64) as i64;
+            let top = min_y.floor().max(0.0) as i64;
+            let bottom = max_y.ceil().min(self.height as f64) as i64;
+            if left >= right || top >= bottom {
+                return;
+            }
+
+            // The hidden-bit test. Front-to-back traversal fills the near surfaces first, so by
+            // the time a covered bit is reached the depth buffer already holds something strictly
+            // nearer at every pixel the bit could touch. Rasterising it would then lose every
+            // depth comparison in `plot` and write nothing, so skipping it writes nothing
+            // different.
+            if let Some(covering) = self.covering_depth(left, right, top, bottom, nearest_vertex)
+                && covering
+                    < nearest_possible_depth(
+                        projection,
+                        center,
+                        &projected,
+                        nearest_vertex,
+                        max_x - min_x,
+                        max_y - min_y,
+                    )
+            {
+                #[cfg(test)]
+                {
+                    self.hidden_bits += 1;
+                    self.assert_hidden_bit_writes_nothing(projection, coord, center, &projected);
+                }
+                return;
+            }
+        }
+
+        self.draw_faces(projection, coord, center, &projected);
+    }
+
+    fn draw_faces(
+        &mut self,
+        projection: CameraProjection,
+        coord: Coord,
+        center: Vec3,
+        projected: &[Option<ProjectedPoint>; 8],
+    ) {
         for face in FACES {
             if face.normal.dot(projection.position() - center) <= 0.0 {
                 continue;
@@ -391,6 +556,82 @@ impl Renderer {
             self.raster_triangle(a, b, c, color);
             self.raster_triangle(a, c, d, color);
         }
+    }
+
+    /// Rasterises a bit the hidden-bit test just rejected and requires that nothing moved.
+    ///
+    /// Comparing two complete frames can only show that a wrong skip survived to the end; a
+    /// second bit writing the same pixel would hide it. This checks the claim the test actually
+    /// makes -- that this bit, at this moment, would write nothing -- for every bit it skips.
+    /// It copies both buffers per skipped bit, so it is a fixture tool, not a debug assertion.
+    #[cfg(test)]
+    fn assert_hidden_bit_writes_nothing(
+        &mut self,
+        projection: CameraProjection,
+        coord: Coord,
+        center: Vec3,
+        projected: &[Option<ProjectedPoint>; 8],
+    ) {
+        if !self.verify_hidden_bits {
+            return;
+        }
+        let pixels = self.pixels.clone();
+        let depth = self.depth.clone();
+        let world_pixels = self.world_pixels;
+
+        self.draw_faces(projection, coord, center, projected);
+
+        let pixel = self
+            .pixels
+            .iter()
+            .zip(&pixels)
+            .position(|(after, before)| after != before);
+        assert_eq!(
+            pixel, None,
+            "skipped bit {coord:?} would have written a pixel"
+        );
+        let word = self
+            .depth
+            .iter()
+            .zip(&depth)
+            .position(|(after, before)| after.to_bits() != before.to_bits());
+        assert_eq!(
+            word, None,
+            "skipped bit {coord:?} would have written a depth"
+        );
+        assert_eq!(self.world_pixels, world_pixels);
+    }
+
+    /// The farthest retained depth over a half-open pixel box, or `None` if any pixel there is
+    /// already at or beyond `limit`.
+    ///
+    /// The early return is what keeps the test cheap for the bits that are actually visible:
+    /// an untouched pixel holds `f64::INFINITY`, so a bit over open background usually stops
+    /// after one word. A `NaN` would also stop it, which is the conservative direction.
+    fn covering_depth(
+        &self,
+        left: i64,
+        right: i64,
+        top: i64,
+        bottom: i64,
+        limit: f64,
+    ) -> Option<f64> {
+        let width = self.width as usize;
+        let mut covering = f64::NEG_INFINITY;
+        for y in top..bottom {
+            let row = y as usize * width;
+            for &depth in &self.depth[row + left as usize..row + right as usize] {
+                // Written as a `<` test rather than a `>=` one so that a `NaN` stops the scan.
+                // The depth buffer cannot hold one, but `plot` would treat it as farther than
+                // anything under `total_cmp`, so it must not be swallowed by `f64::max` below.
+                let below = depth < limit;
+                if !below {
+                    return None;
+                }
+                covering = f64::max(covering, depth);
+            }
+        }
+        Some(covering)
     }
 
     fn raster_triangle(
@@ -754,6 +995,53 @@ fn is_legal_final_game_rgb(rgb: u32) -> bool {
     FINAL_GAME_BASE_PALETTE.contains(&rgb) || FINAL_GAME_BASE_PALETTE.contains(&(rgb ^ RGB_MASK))
 }
 
+/// A lower bound on every depth the faces of one bit can write, given its projected vertices.
+///
+/// `raster_triangle` writes `1.0 / (wa/za + wb/zb + wc/zc)` at a pixel whose three weights are
+/// all at least `BARYCENTRIC_EPSILON`. Dropping the negative terms, that inverse depth is at
+/// most `S / nearest`, where `S` is the sum of the positive weights and `nearest` the smallest
+/// vertex depth of the bit, so the depth itself is at least `nearest / S`.
+///
+/// `S` would be exactly one in real arithmetic: the three `edge` numerators sum to the shared
+/// `area` denominator, and a weight is only negative by the admitted epsilon. What is left is
+/// rounding, which is bounded by the span of the coordinates entering `edge` divided by the
+/// smallest `area` any of the bit's drawable triangles will use. A sliver triangle therefore
+/// widens the bound rather than escaping it, and an unrepresentable span collapses it to zero
+/// or `NaN`, which fails the caller's strict comparison and rasterises.
+fn nearest_possible_depth(
+    projection: CameraProjection,
+    center: Vec3,
+    projected: &[Option<ProjectedPoint>; 8],
+    nearest: f64,
+    span_x: f64,
+    span_y: f64,
+) -> f64 {
+    let mut smallest_area = f64::INFINITY;
+    for face in FACES {
+        if face.normal.dot(projection.position() - center) <= 0.0 {
+            continue;
+        }
+        let corners = face.corners.map(|corner| projected[corner]);
+        let [Some(a), Some(b), Some(c), Some(d)] = corners else {
+            continue;
+        };
+        // The same two triangles `draw_bit` would submit, rejected on the same terms.
+        for area in [
+            edge(a.x, a.y, b.x, b.y, c.x, c.y),
+            edge(a.x, a.y, c.x, c.y, d.x, d.y),
+        ] {
+            if area.is_finite() && area.abs() >= f64::EPSILON {
+                smallest_area = f64::min(smallest_area, area.abs());
+            }
+        }
+    }
+
+    // A pixel center lies within one pixel of the vertex box on each axis, so no operand of an
+    // `edge` evaluation exceeds the span plus two.
+    let conditioning = OCCLUSION_EDGE_SLACK * (span_x + 2.0) * (span_y + 2.0) / smallest_area;
+    nearest * (1.0 - OCCLUSION_ROUNDING_SLACK) / (1.0 + OCCLUSION_WEIGHT_SLACK + conditioning)
+}
+
 fn edge(ax: f64, ay: f64, bx: f64, by: f64, px: f64, py: f64) -> f64 {
     (px - ax) * (by - ay) - (py - ay) * (bx - ax)
 }
@@ -763,6 +1051,7 @@ mod tests {
     use super::*;
     use crate::camera::Camera;
     use crate::frame::{FrameFacts, FrameRef};
+    use std::f64::consts::PI;
 
     #[test]
     fn declared_renderer_and_crosshair_profiles_match_independent_vectors() {
@@ -1370,6 +1659,198 @@ mod tests {
             + renderer.width() as usize / 2;
         assert_eq!(renderer.pixels()[center], BEDROCK_FRONT);
         assert_ne!(BEDROCK_FRONT, face_color(Coord::new(1, 0, 0), -Vec3::Z));
+    }
+
+    /// A hollow cube shell: the cheapest world in which most bits are hidden behind other bits.
+    fn shell_world(side: i64) -> World {
+        block_world(side, false)
+    }
+
+    /// A solid cube. Its interior bits are hidden by covering surfaces at many different depths,
+    /// which is the case a shell cannot produce: a shell's hidden bits sit far behind one smooth
+    /// near face, so the hidden-bit test never has to decide anything close.
+    fn solid_world(side: i64) -> World {
+        block_world(side, true)
+    }
+
+    fn block_world(side: i64, solid: bool) -> World {
+        let mut world = World::new();
+        for x in 0..side {
+            for y in 0..side {
+                for z in 0..side {
+                    let interior =
+                        x > 0 && y > 0 && z > 0 && x < side - 1 && y < side - 1 && z < side - 1;
+                    if solid || !interior {
+                        world.set_on(Coord::new(x - side / 2, y - side / 2, z - side / 2));
+                    }
+                }
+            }
+        }
+        world
+    }
+
+    fn views(world: &World) -> [Camera; 5] {
+        let (min, max) = bounds_aabb(world.bounds().unwrap());
+        let anchor = min + (max - min) * 0.5;
+        let radius = (max - min).length();
+        let fov = crate::camera::DEFAULT_VERTICAL_FOV_RADIANS;
+        [
+            Camera::from_anchor(anchor, radius * 1.5, 0.0, 0.0, fov),
+            Camera::from_anchor(anchor, radius * 1.5, 0.7, -0.4, fov),
+            Camera::from_anchor(anchor, radius * 0.9, 0.35, 0.15, fov),
+            Camera::from_anchor(anchor, radius * 0.55, -2.1, 0.3, fov),
+            Camera::from_anchor(anchor, radius * 0.12, 1.2, 1.1, fov),
+        ]
+    }
+
+    /// The frame fixtures above all use four bits or fewer, so none of them reaches the
+    /// hidden-bit test at scale. These do: most of each world hides behind the rest of it, and
+    /// the ordered traversal with the test enabled must still agree with the unordered traversal
+    /// without it, pixel for pixel and depth bit for depth bit.
+    ///
+    /// Whole-frame agreement is the weaker half. `verify_hidden_bits` also rasterises every bit
+    /// the test skips and requires that it moved nothing at the moment it was skipped, which a
+    /// later bit covering the same pixel cannot hide.
+    #[test]
+    fn hidden_bit_test_leaves_dense_worlds_identical_to_unordered_traversal() {
+        let size = 201;
+        for (name, world) in [("shell", shell_world(14)), ("solid", solid_world(9))] {
+            let mut hidden = 0;
+            for (index, camera) in views(&world).iter().enumerate() {
+                let mut reference = Renderer::new(size, size);
+                reference.reference_traversal = true;
+                reference.render(&world, camera);
+
+                let mut ordered = Renderer::new(size, size);
+                ordered.verify_hidden_bits = true;
+                ordered.render(&world, camera);
+
+                let pixel = ordered
+                    .pixels
+                    .iter()
+                    .zip(&reference.pixels)
+                    .position(|(actual, expected)| actual != expected);
+                assert_eq!(pixel, None, "{name} camera {index} pixel");
+                let word = ordered
+                    .depth
+                    .iter()
+                    .zip(&reference.depth)
+                    .position(|(actual, expected)| actual.to_bits() != expected.to_bits());
+                assert_eq!(word, None, "{name} camera {index} depth");
+                assert_eq!(
+                    ordered.world_pixel_count(),
+                    reference.world_pixel_count(),
+                    "{name} camera {index} world pixels"
+                );
+                assert_eq!(reference.hidden_bits, 0, "the reference must not skip bits");
+                hidden += ordered.hidden_bits;
+            }
+
+            // The closest camera sits inside the world, where almost nothing is hidden; the
+            // outside views are where the test does its work. Asserting on the total keeps the
+            // fixture from going quietly vacuous without demanding that every camera occlude.
+            assert!(
+                hidden > world.len() as u64,
+                "the {name} cameras skipped {hidden} bits of a {}-bit world in total, so this                  fixture no longer exercises the hidden-bit test",
+                world.len()
+            );
+        }
+    }
+
+    /// xorshift64*, so the corpus below is a fixed sequence rather than a fresh one per run.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next_u64(&mut self) -> u64 {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+        }
+
+        fn below(&mut self, bound: u64) -> u64 {
+            self.next_u64() % bound
+        }
+
+        /// A value in `[low, high)`.
+        fn range(&mut self, low: f64, high: f64) -> f64 {
+            let unit = (self.next_u64() >> 11) as f64 / (1_u64 << 53) as f64;
+            low + (high - low) * unit
+        }
+    }
+
+    /// Hand-built worlds agree too easily: in a shell or a solid block, a bit whose screen box is
+    /// fully covered is fully hidden, so even a deliberately broken depth bound keeps passing.
+    /// The configurations that could separate them -- two bits at nearly one depth, one of them
+    /// poking through the other, silhouettes, sliver faces, bits straddling the near plane and
+    /// the viewport edge -- are easier to find by search than by hand.
+    ///
+    /// Small frames and small worlds, so the whole corpus is a fraction of a second, with
+    /// `verify_hidden_bits` on throughout: every skipped bit is rasterised into a copy of the
+    /// buffers and must move nothing.
+    #[test]
+    fn hidden_bit_test_survives_a_seeded_corpus_of_worlds_and_cameras() {
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        let mut hidden = 0;
+        for case in 0..320 {
+            let extent = 1 + rng.below(3) as i64;
+            let density = rng.range(0.3, 1.0);
+            let mut world = World::new();
+            for x in -extent..=extent {
+                for y in -extent..=extent {
+                    for z in -extent..=extent {
+                        if rng.range(0.0, 1.0) < density {
+                            world.set_on(Coord::new(x, y, z));
+                        }
+                    }
+                }
+            }
+            let anchor = Vec3::new(
+                rng.range(-2.0, 2.0),
+                rng.range(-2.0, 2.0),
+                rng.range(-2.0, 2.0),
+            );
+            let camera = Camera::from_anchor(
+                anchor,
+                rng.range(0.4, 16.0),
+                rng.range(-PI, PI),
+                rng.range(-1.5, 1.5),
+                rng.range(0.2, 2.8),
+            );
+            let width = 9 + rng.below(48) as u32;
+            let height = 9 + rng.below(48) as u32;
+
+            let mut reference = Renderer::new(width, height);
+            reference.reference_traversal = true;
+            reference.render(&world, &camera);
+
+            let mut ordered = Renderer::new(width, height);
+            ordered.verify_hidden_bits = true;
+            ordered.render(&world, &camera);
+
+            let pixel = ordered
+                .pixels
+                .iter()
+                .zip(&reference.pixels)
+                .position(|(actual, expected)| actual != expected);
+            assert_eq!(pixel, None, "case {case} pixel");
+            let word = ordered
+                .depth
+                .iter()
+                .zip(&reference.depth)
+                .position(|(actual, expected)| actual.to_bits() != expected.to_bits());
+            assert_eq!(word, None, "case {case} depth");
+            assert_eq!(
+                ordered.world_pixel_count(),
+                reference.world_pixel_count(),
+                "case {case} world pixels"
+            );
+            hidden += ordered.hidden_bits;
+        }
+        assert!(
+            hidden > 2_000,
+            "the corpus skipped only {hidden} bits, so it no longer exercises the test"
+        );
     }
 
     #[test]
