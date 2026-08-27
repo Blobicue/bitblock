@@ -2,6 +2,10 @@
 
 Bitblock is a binary coordinate space observed through a free camera.
 
+For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md), then read
+[`docs/SEMANTICS.md`](docs/SEMANTICS.md) and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md)
+before changing the simulation boundary.
+
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
 - Every other unspecified coordinate is off.
