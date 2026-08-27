@@ -66,9 +66,11 @@ FULL = [
      "the recorded expectations about what the index answers"),
 ]
 
+# Not bare validators. bbmutate deliberately rewrites src/ and restores it from
+# git, so it must never run inside a verification sweep -- or in CI.
 SKIP_BARE = {
     "metric_registry.py", "mirror_timeline1.py", "simulate_sequence.py",
-    "bbindex.py", "bbgraph.py", "bbverify.py",
+    "bbindex.py", "bbgraph.py", "bbverify.py", "bbmutate.py",
 }
 
 

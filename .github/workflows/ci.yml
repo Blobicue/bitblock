@@ -30,13 +30,17 @@ jobs:
       - name: standalone vector tools
         run: |
           set -e
+          # Not bare validators, so they are not run here:
+          #   metric_registry   wants a subcommand (its own step runs the audit)
+          #   mirror_timeline1  needs the retired timeline-1 source directory
+          #   simulate_sequence takes a scenario argument
+          #   bbindex/bbgraph   write and query index/; the index job gates them
+          #   bbverify          is a local sweep of these same checks
+          #   bbmutate          rewrites src/ on purpose and must never run here
+          skip="metric_registry mirror_timeline1 simulate_sequence bbindex bbgraph bbverify bbmutate"
           for t in tools/*.py; do
-            # Not bare validators: metric_registry wants a subcommand;
-            # mirror_timeline1 needs the local timeline-1 source directory;
-            # simulate_sequence takes a scenario argument; bbindex writes
-            # index/ and bbgraph queries it, and both are gated by the
-            # dedicated index job below instead.
-            case "$t" in               tools/metric_registry.py|tools/mirror_timeline1.py|               tools/simulate_sequence.py|tools/bbindex.py|tools/bbgraph.py) continue ;;             esac
+            name=$(basename "$t" .py)
+            case " $skip " in *" $name "*) continue ;; esac
             echo "== $t"
             python3 "$t" > /dev/null
           done

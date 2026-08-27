@@ -3898,6 +3898,34 @@ fn axis(positive: bool, negative: bool) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    /// The three headless local-replay policy tags, pinned.
+    ///
+    /// These declare the deterministic initial state, the fold rules, and the admission
+    /// policy of the headless replay. They are the only canonical encoders in this file,
+    /// and until this test existed nothing asserted their values: a byte-order flip across
+    /// all eighteen encoding sites in main.rs left the whole suite green. Every other
+    /// module in the crate failed that same mutation.
+    ///
+    /// A change here is not necessarily wrong, but it is never incidental -- it means the
+    /// declared headless starting state or its rules moved, and every replay taken under
+    /// the old tags describes a different fold.
+    #[cfg(feature = "protocol-research")]
+    #[test]
+    fn headless_local_replay_policy_tags_are_pinned() {
+        assert_eq!(
+            headless_local_replay_genesis_policy_tag().to_string(),
+            "#bb.policy.sha256.eibnyx3zeig5myau5wyq5y4qsmp2pp6chclpeapjaiz5xojz7zcq"
+        );
+        assert_eq!(
+            headless_local_replay_rules_policy_tag().to_string(),
+            "#bb.policy.sha256.abg53isb3svtuxvxo2yq6mymbwnkv4rkwfzpg2euenjj3ug57yxq"
+        );
+        assert_eq!(
+            headless_local_replay_admission_policy_tag().to_string(),
+            "#bb.policy.sha256.f5mg62hs64szq5f4xumd76tpjd5dcmtxbqufwn2jnoxsmylzbrga"
+        );
+    }
+
     use super::*;
     #[cfg(all(windows, feature = "protocol-research"))]
     use std::fs;
