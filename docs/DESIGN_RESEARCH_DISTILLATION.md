@@ -26,8 +26,15 @@ at first-addition commit `0d0122d9bf84664511db7588bb09d5c590a006f9`, Git blob
 **Sixth successor audit:**
 [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md), frozen
 at first-addition commit `80b58e0a40408e03f16e2d0c739c177e05c22903`, Git blob
-`5374b160424b78bd516ffc598e9bbd3b29392227`, against that fifth correction; its descendant remains
-a documentation/checker correction
+`5374b160424b78bd516ffc598e9bbd3b29392227`, against that fifth correction
+**Sixth correction:** `62afdd24a8525704f5949584859bd7cbad300d4d`
+**Seventh successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md), frozen
+at first-addition commit `78d5494f930c7412c2d60162b44c0b72050f9f22`, commit tree
+`07aa851e422a5da9453d4409f91b62ad9442a7d5`, and Git blob
+`dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2`, against that sixth correction and its Git tree
+`ee346fb3aa9bc54591f851dcb482fd92be9da84a`; its descendant remains a documentation/checker
+correction
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
 in `C:\Users\Owen\Downloads\design.txt`. The downloaded source remains untouched. It is a mixed
@@ -161,12 +168,17 @@ X_n        = ComposeExecutionRoot(G_(p_n), C_n)
 Every scope, genesis, candidate-profile, and other pre-admission identifier is derived with the
 single protocol-frozen `ProfileIdHashV1`; a candidate's selected cryptographic suites cannot choose
 or reinterpret the function that identifies the candidate. Profile-selected hashes apply only
-where the already identified and admitted profile assigns them. `ProfileOwnedCryptographicMigrationV1`
-can replace those admitted profile-owned suites, but not this pre-profile trust anchor.
-`ProtocolIdentityHashCompromiseV1`—collision, practical second-preimage failure, or equivalent loss
-of identity binding in `ProfileIdHashV1`—is therefore a terminal safe-halt/new-genesis condition
-unless a different non-self-selecting transition authority was precommitted before launch; a
-successor named through the failed function cannot repair it.
+where the already identified and admitted profile assigns them.
+`PreventiveProfileOwnedCryptographicMigrationV1`
+can preventively replace a still-sound but deprecated admitted profile-owned suite only while the
+exact last-safe parent and every parent, consensus, availability, replay, activation, and historical-
+verification binding used to authorize the transition remain independently sound. An established
+collision, forgery, or equivalent failure in a live object-hash, proposal/vote-signature,
+governance/release-credential, proof/state, or other authority-binding role is
+`ProfileOwnedAuthorityBindingCompromiseV1`, not ordinary in-place migration. The lineage safe-halts;
+absent a recovery envelope independently anchored and precommitted before compromise, recovery
+requires a separately trusted new genesis. `ProtocolIdentityHashCompromiseV1` is the terminal case
+for loss of `ProfileIdHashV1`; a successor named through that failed function cannot repair it.
 
 The raw `(genesis payload, genesis_id)` pair intentionally predates `profile_id` and cannot select
 an initial interpreter by itself. The Layer 1 `ChainLaunchManifestV1` is derived afterward without
@@ -177,26 +189,36 @@ The authorized `chain_launch_package` also carries a bounded, acyclic `LaunchClo
 the exact scope, registry, candidate, profile-resolved transition specification, typed `PROFILE-1`
 admission manifest, genesis-root parity record, typed `RELEASE-1` record, and every supplementary
 preimage transitively required to verify admission and release. A fresh verifier recomputes the
-whole genesis→registry/scope→candidate→specification→admission/parity/release→bundle→manifest→
+whole registry→scope→genesis→candidate→specification→admission/parity/release→bundle→manifest→
 authorization chain under a unique, count/byte/depth-bounded inventory before selecting the first
 profile codec. This launch carrier is embedded-only: each of the seven explicit preimages and each
 supplementary preimage is carried exactly once, its dependency node is carried exactly once, and
-`internal_artifact_count = 7 + supplementary_artifact_count = dependency_node_count`.
-`external_root_count = 1`, so `complete_artifact_count = 8 + supplementary_artifact_count`.
-Internal/external edge and byte counts are checked separately and summed: internal preimage bytes
-are the seven explicit lengths plus supplementary lengths, and external-root bytes are the exact
-outer `GenesisPackageV1` length. Exact per-preimage lengths are also checked. Bundle/manifest/
-authorization framing, counters, dependency-node bytes, the external-root descriptor itself, and
-nested bytes already included in a top-level preimage are not counted again; the exact outer genesis
-bytes are counted once as external bytes. `LaunchClosureExternalGenesisRootV1` is the sole typed
-external dependency root for the already outer-carried `GenesisPackageV1`: its exact `genesis_id`,
-fixed rank 0 and external-root count 1 are bound. `LaunchClosureDependencyRefV1` separates internal
-refs from external-genesis refs, only the declared `ExternalGenesisIncomingDependencyClassV1` edge
-classes may point to it, and its bytes must equal the outer carrier. It is not silently folded into
-the seven-internal-artifact
-equations. Any duplicated genesis bytes, other external dependency, omitted genesis edge, or outer/
-root mismatch rejects. A hash with no carried preimage or an ambient local mapping is not bootstrap
-input.
+`internal_artifact_count_u32 = 7 + supplementary_artifact_count_u32 = Length(D)`.
+`external_root_count_u32 = 1`, so
+`complete_artifact_count_u32 = 8 + supplementary_artifact_count_u32 = Length(D) + 1`.
+Artifact, edge, and byte counts are partitioned and then summed: internal preimage bytes are the
+seven explicit lengths plus supplementary lengths, and external bytes are the exact outer
+`GenesisPackageV1` length. Exact per-preimage lengths are also checked. Bundle/manifest/
+authorization framing, counters, dependency-node bytes, the external-artifact descriptor itself,
+and nested bytes already included in a top-level preimage are not counted again; the exact outer
+genesis bytes are counted once as external bytes. The sole
+`LaunchClosureExternalGenesisDependencyNodeV1` owns those already outer-carried bytes, carries its
+outgoing refs at a nonzero checked rank, and must byte-equal the outer carrier. The internal
+artifacts use `LaunchClosureInternalDependencyNodeV1`. The combined DAG represents the references
+actually present in the preimages: an internal-to-internal
+`ProfileScopeV1 -> DomainRegistryV1` edge, external-to-internal
+`GenesisPackageV1 -> ProfileScopeV1/DomainRegistryV1` edges, and an internal-to-external
+`CandidateProfileV1 -> GenesisPackageV1` edge. One concrete valid prefix is registry rank 0, scope
+rank 1, genesis rank 2, and candidate rank 3; every dependency target has lower rank than its
+referrer. `LaunchClosureDependencyRefV1` plus `ExternalGenesisToInternalDependencyRefV1` types those
+three edge classes; `internal_to_internal_dependency_edge_count_u32`,
+`internal_to_external_dependency_edge_count_u32`, and
+`external_to_internal_dependency_edge_count_u32` are checked separately and sum to
+`complete_dependency_edge_count_u32`. The external artifact
+is not silently folded into the seven-internal-artifact equations. Duplicated genesis bytes, another
+external artifact, a missing or reversed genesis edge, a rank-zero genesis descriptor, or outer/
+artifact mismatch rejects. A hash with no carried preimage or an ambient local mapping is not
+bootstrap input.
 
 The carried release is likewise non-circular. An authorization-free canonical
 `AdmittedReleaseCoreV1` is identified first; a detached, tagged `ReleaseAuthorizationV1` authorizes
@@ -249,9 +271,15 @@ That ordering is inhabited by fixed profile-independent `ProposalOuterV1` and
 parent-or-launch lookup reference, and opaque inner byte ranges. An ordinary reference uses a
 fixed-hash `AcceptedParentLookupPayloadV1`/`accepted_parent_lookup_id` that binds chain/launch
 identity, envelope-owner profile, block-ID suite and type, and the exact bounded parent digest; a
-unique local index must return one byte-exact `AcceptedProposalCoreV1`, and the lookup payload and ID
-are recomputed after retrieval. Typed `VerifiedAcceptedEvidenceEntryV1` values live in a sorted,
-deduplicated `AcceptedEvidenceSetV1`, so several honest evidence objects may refer to the same core.
+unique local index must return one byte-exact, signature-free `AcceptedProposalCoreV1` containing
+the authority reference, header, and availability payload, and the lookup payload and ID are
+recomputed after retrieval. Each credential is a `VerifiedProposalCredentialEntryV1` under a
+`TypedProposalCredentialIdV1`; the bounded `AcceptedProposalCredentialSetV1` is sorted and
+deduplicated by that ID. At least one qualifying credential is required, while credential
+multiplicity adds no weight and cannot change the unsigned core. Typed
+`VerifiedAcceptedEvidenceEntryV1` values
+likewise live in a sorted, deduplicated `AcceptedEvidenceSetV1`, so several honest consensus or
+availability evidence objects may refer to the same core.
 The admitted-profile-owned, purpose-specific `ParentAuthorityEligibilityV1` defines evidence
 identity/conflict handling and is monotone: additional qualifying evidence cannot invalidate an
 already eligible core. Nonqualifying or conflicting evidence cannot create eligibility, and a true
@@ -263,6 +291,19 @@ first-record branch instead verifies the complete launch closure and detached la
 plus the manifest's first-record conditions; launch authorization is not coerced into parent
 consensus. After that branch selects the owner and its limits, every decoded inner object is re-
 encoded and required to equal its exact outer bytes.
+
+For `ConsensusEntailedAvailabilityV1`, the named `consensus_evidence_id` must equal the consensus
+evidence carried by that same `AcceptedRecordOuterV1`; the verifier checks the consensus evidence
+first and constructs `VerifiedConsensusEntailedAvailabilityDeltaV1`, atomically inserting the pair
+or neither. Its `SameWrapperConsensusDependencyWitnessV1` preserves the dependency bytes and ID.
+Detached evidence remains a distinct typed path. Wrappers remain bounded ingestion and archive
+carriers rather than replay records. Independent replay walks a parent-ordered sequence with exactly
+one `AcceptedCoreReplayEntryV1` per height and, for each unique core,
+`NormalizedAcceptedEvidenceSnapshotV1` or
+`RetainedAcceptedEligibilityWitnessV1` under an explicit `ReplayEvidenceCutoffV1`. Wrapper arrival
+order, duplicate
+credentials/evidence, and later status upgrades cannot create extra heights or choose different
+state transitions.
 
 A payload commitment establishes byte identity, not retrieval. Consensus and availability evidence
 must each bind the candidate identifier, selected policy, applicable authority/epoch context, and
@@ -298,11 +339,29 @@ trusted-parent-resolved `ActivationAuthorizationV1`; the migration context and
 `successor_profile_admission_manifest_id`, migration specification, height, and old/new roots. The
 bundle closes over the successor scope, registry, candidate, transition specification, admission,
 admitted release, `SuccessorUpgradeEvidenceManifestV1`, and all required implementation/evidence
-preimages, and must be completely verified before migration execution or activation. Root
-correspondence alone would not authorize the upgrade or select its fork. Ordinary units carry one
-unchanged profile context; a migration unit carries the explicit old/new context while the old
-parent-admitted profile solely owns its envelope codec, object hashes, commitments, policies,
-proposal credentials, and pre-activation parsing. The first migration form has an empty signed-
+preimages, and must be completely verified before migration execution or activation. That closure
+is explicitly internal-only relative to a typed `VerifiedSuccessorPredecessorContextV1` semantic
+input resolved before bundle processing. The context is neither serialized nor counted in the
+bundle. For seven explicit successor artifacts `E_s`, supplementary artifacts `S_s`, and internal
+dependency nodes `D_s`, `Length(E_s) = 7`,
+`supplementary_internal_artifact_count_u32 = Length(S_s)`, and
+`internal_artifact_count_u32 = 7 + Length(S_s) = Length(D_s)`;
+`internal_dependency_edge_count_u32` is the sum of each node's internal dependency count,
+`internal_canonical_preimage_bytes_u64` is the seven exact canonical lengths plus the declared
+supplementary lengths, and `explicit_internal_preimage_lengths_u64[i] = Length(E_s[i])`. Every
+artifact uses one `SuccessorActivationInternalDependencyNodeV1`, and every
+`SuccessorActivationInternalDependencyRefV1` targets a lower-ranked node in `D_s`. Predecessor
+accepted-core/evidence bytes, launch/genesis bytes,
+old state/context, authorization/framing/counter/dependency-node bytes, and nested bytes already
+owned by a top-level artifact are excluded. Internal dependency IDs cannot name external context.
+Every predecessor profile, launch/genesis, old-root, governance-root, and purpose-tagged activation-
+authority projection must instead equal the unique verified context. The admitted release's
+separately purpose-tagged authority ref must resolve from the same unique core and governance root;
+an ambient registry cannot supply a missing internal preimage. Root correspondence alone would not authorize the upgrade
+or select its fork. Ordinary units carry one unchanged profile context; a migration unit carries the
+explicit old/new context while the old parent-admitted profile solely owns its envelope codec,
+object hashes, commitments, policies, proposal credentials, and pre-activation parsing. The first
+migration form has an empty signed-
 transaction sequence, an empty application-subtick schedule, and exactly one
 authorized migration system transition and receipt. It uses the migration-specific commitment-set
 transition owned by the Layer 1 paper and authenticated-state plan. No mixed old/new ordinary-action
@@ -411,7 +470,7 @@ The network must explicitly fund, require, or otherwise justify every availabili
 
 | Method | What the joining node obtains | Cost and trust boundary |
 | --- | --- | --- |
-| Genesis replay | Authorized chain-launch package with its complete `LaunchClosureBundleV1`, plus every required historical accepted-record outer frame and protocol version | Highest data and execution work; still needs a canonical-chain rule and complete archives. A raw genesis pair or manifest with unavailable referenced preimages cannot select the initial profile. |
+| Genesis replay | Authorized chain-launch package with its complete `LaunchClosureBundleV1`, then the parent-ordered sequence with exactly one `AcceptedCoreReplayEntryV1` per height, carrying each core's `NormalizedAcceptedEvidenceSnapshotV1` or `RetainedAcceptedEligibilityWitnessV1` under an explicit `ReplayEvidenceCutoffV1`, plus every protocol version | Highest data and execution work; wrappers remain ingestion/archive carriers and do not create ledger heights. Replay still needs a canonical-chain rule and complete archives. A raw genesis pair or manifest with unavailable referenced preimages cannot select the initial profile. |
 | Verified snapshot | Materialized state chunks and a manifest at an authenticated checkpoint that binds the chain-launch ID | Fast, but requires root recomputation plus an explicit checkpoint/finality trust model. |
 | Recursive validity proof plus state retrieval | Launch-bound checkpoint, proof of a contiguous transition relation, final roots, and separately retrieved state | Compresses correctness checking; does not supply state values or availability. |
 

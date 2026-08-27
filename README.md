@@ -26,8 +26,9 @@ frozen
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
 and
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md)
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md)
 successor records.
 
 The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
@@ -84,10 +85,31 @@ capability-dependency/status, and corrected-audit-provenance gaps before correct
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
 whose first-addition Git blob is `5374b160424b78bd516ffc598e9bbd3b29392227`. It records four
 accepted-parent evidence-multiplicity, protocol-identity-hash failure, external-genesis-root, and
-phase-status-projection gaps before this coordinated descendant correction.
+phase-status-projection gaps before correction `62afdd24a8525704f5949584859bd7cbad300d4d`.
+A seventh complete sweep of that correction and Git tree
+`ee346fb3aa9bc54591f851dcb482fd92be9da84a` is frozen at first-addition commit
+`78d5494f930c7412c2d60162b44c0b72050f9f22`, whose Git tree is
+`07aa851e422a5da9453d4409f91b62ad9442a7d5`, in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md),
+whose first-addition Git blob is `dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2`. It records eight
+proposal-credential, live-authority-compromise, availability-dependency, replay, launch-DAG,
+successor-equation, unlock-frontier, and handoff-projection gaps before this coordinated descendant
+correction.
+The descendant proposal makes the indexed accepted core signature-free, separates the bounded
+no-double-weight `AcceptedProposalCredentialSetV1` from accepted evidence, pairs consensus-entailed
+availability through `SameWrapperConsensusDependencyWitnessV1`, and replays one parent-ordered
+`AcceptedCoreReplayEntryV1` sequence whose entries carry `NormalizedAcceptedEvidenceSnapshotV1` or
+`RetainedAcceptedEligibilityWitnessV1` under an explicit `ReplayEvidenceCutoffV1`.
+`PreventiveProfileOwnedCryptographicMigrationV1` is distinct from
+safe-halt/recovery after a live
+authority-binding compromise. Launch now uses the actual combined scope/registry/genesis/candidate
+DAG with one counted outer genesis artifact at a nonzero checked rank, while successor activation
+uses exact internal-only seven-plus-supplementary equations relative to an already verified semantic
+predecessor context. These are proposed byte and verifier contracts, not implemented behavior.
 None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
 cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
-deferred until the complete Loop 7 sweep records zero new material design gaps within its declared
+deferred until a complete Loop 8 sweep records zero new material design gaps and no falsely closed
+material residual within its declared
 finite lenses.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.

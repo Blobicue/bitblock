@@ -32,6 +32,10 @@ FIFTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md"
 FIFTH_AUDIT_GIT_BLOB = "519451b120b458735afaa59daa01aa23466e165e"
 SIXTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md"
 SIXTH_AUDIT_GIT_BLOB = "5374b160424b78bd516ffc598e9bbd3b29392227"
+SEVENTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md"
+SEVENTH_AUDIT_GIT_BLOB = "dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2"
+SEVENTH_AUDIT_ADDITION_COMMIT = "78d5494f930c7412c2d60162b44c0b72050f9f22"
+SEVENTH_AUDIT_ADDITION_TREE = "07aa851e422a5da9453d4409f91b62ad9442a7d5"
 LAYER1_DESIGN_AUDIT = ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md"
 LAYER1_DESIGN_AUDIT_GIT_BLOB = "124e066b418a61279abf90c1b1b2c2cc0604ef2a"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
@@ -47,6 +51,7 @@ FROZEN_TEXT_FILES = (
     FOURTH_AUDIT,
     FIFTH_AUDIT,
     SIXTH_AUDIT,
+    SEVENTH_AUDIT,
     LAYER1_DESIGN_AUDIT,
     DESIGN_RECEIPT,
 )
@@ -58,6 +63,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/LAYER1_DESIGN_AUDIT.md",
@@ -74,6 +80,7 @@ PLANNING_FILES = (
     FOURTH_AUDIT,
     FIFTH_AUDIT,
     SIXTH_AUDIT,
+    SEVENTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -98,6 +105,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -111,7 +119,30 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "807390d50af9e43e8a6a8cd72043e07385e00b754ab1a96c1389f465ab1fd6be"
+    "f9493a09c31ac9f51926f92b91c65411522545f108a46d3066e3e6b07772e4b3"
+)
+EXPECTED_HANDOFF_READ_ORDER = (
+    "docs/HANDOFF.md",
+    "docs/PROJECT_INTENT.md",
+    "docs/CAPABILITY_TREE.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
+    "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
+    "docs/FUTURE_PLAN_AUDIT.md",
+    "docs/SEMANTICS.md",
+    "docs/TRANSCRIPT_AUDIT.md",
+    "docs/AUTHENTICATED_STATE_PLAN.md",
+    "docs/LAYER1_DESIGN_PAPER.md",
+    "docs/LAYER1_DESIGN_AUDIT.md",
+    "README.md",
+    "docs/PROTOCOL.md",
+    "docs/TIMELINES.md",
 )
 NODE_ID = r"[A-Z][A-Z0-9-]*"
 PHASE_NODE_ID = r"[A-Z0-9]+(?:-[A-Z0-9]+)*"
@@ -134,6 +165,14 @@ STATUS_PROJECTION_TOKEN = re.compile(
     rf"`(PS-[0-9]{{3}}):({PHASE_NODE_ID})@([a-z0-9]+(?:-[a-z0-9]+)*)="
     r"(IMPLEMENTED|BOUNDED|READY|LOCKED|OPEN-DECISION|NOT-STARTED)`"
 )
+READY_FRONTIER_HEADER = "| Frontier ordinal | Authoritative READY projection |"
+READY_FRONTIER_SEPARATOR = "| ---: | --- |"
+READY_FRONTIER_ROW = re.compile(
+    rf"^\| ([0-9]+) \| `(PS-[0-9]{{3}}):({PHASE_NODE_ID})@"
+    r"([a-z0-9]+(?:-[a-z0-9]+)*)="
+    r"(IMPLEMENTED|BOUNDED|READY|LOCKED|OPEN-DECISION|NOT-STARTED)` \|$"
+)
+HANDOFF_READ_ORDER_ROW = re.compile(r"^([0-9]+)\. `([^`]+)`(?:\s+.*)?$")
 PHASE_DEPENDENCY_ROW = re.compile(
     rf"^\| (PD-[0-9]{{2}}) \| ({PHASE_NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
     rf"({PHASE_NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
@@ -235,7 +274,9 @@ EXPECTED_CHAIN_LAUNCH_ARTIFACT_FRAGMENTS = (
     "`ChainLaunchManifestV1` and ID",
     "`ChainLaunchAuthorizationV1`",
     "embedded-only inventory",
-    "`LaunchClosureExternalGenesisRootV1`",
+    "`LaunchClosureExternalGenesisDependencyNodeV1`",
+    "combined-graph node owns dependency refs",
+    "second copy of the outer genesis bytes",
     "entries and retrieval locators are not members of this carrier",
 )
 EXPECTED_SUCCESSOR_ACTIVATION_ARTIFACT_FRAGMENTS = (
@@ -244,9 +285,10 @@ EXPECTED_SUCCESSOR_ACTIVATION_ARTIFACT_FRAGMENTS = (
     "`successor_activation_bundle_id`",
     "exact target `ProfileAdmissionManifestV1`",
     "concrete `UPGRADE-1` evidence",
-    "old profile's envelope availability payload carries the complete bundle",
-    "seven explicit preimages",
-    "identical checked count, individual-length, byte-total, exclusion",
+    "carries the complete bundle before migration execution or activation",
+    "`VerifiedSuccessorPredecessorContextV1`",
+    "internal-only bundle",
+    "that is neither serialized nor",
 )
 EXPECTED_TESTNET_LAUNCH_ARTIFACT_FRAGMENTS = (
     "exact authorized `CHAIN-LAUNCH-1` package and closure bundle",
@@ -292,21 +334,57 @@ EXPECTED_LOOP6_PAPER_FRAGMENTS = {
         "AcceptedProposalCoreV1 = FixedPreProfileCanonicalV1(",
         "AcceptedEvidenceSetV1 = CanonicalSortedUniqueByTypedEvidenceId([",
         "AcceptedParentAuthorityRefV1 = Canonical(",
-        "ParentAuthorityEligibilityV1(core, use, E) = Eligible",
-        "Powered parent-index controls MUST include:",
+        "ParentAuthorityEligibilityV1(core, use, C, E) = Eligible",
+        "Powered evidence/parent-index controls MUST include:",
     ),
     "RG-02": (
-        "`ProfileOwnedCryptographicMigrationV1` may",
+        "This creates three explicitly different conditions. `PreventiveProfileOwnedCryptographicMigrationV1`",
         "`ProtocolIdentityHashCompromiseV1` is therefore terminal safe halt",
         "The protocol-identity control supplies colliding or",
-        "restart requires the separately trusted new-genesis procedure",
+        "safe-halts and requires a new genesis under a",
     ),
     "RG-03": (
         "ExternalGenesisIncomingDependencyClassV1 =",
-        "LaunchClosureExternalGenesisRootV1 = Canonical(",
+        "LaunchClosureExternalGenesisDependencyNodeV1 = Canonical(",
         "external_root_count_u32                 = 1",
-        "external root, other external dependency, duplicated external edge",
+        "Any second external root, other external",
         "mismatch the outer/root bytes or ID",
+    ),
+}
+EXPECTED_LOOP7_PAPER_FRAGMENTS = {
+    "LG-01": (
+        "TypedProposalCredentialIdV1 = ProposalCredentialIdV1(",
+        "AcceptedProposalCredentialSetV1 = CanonicalSortedUniqueByTypedProposalCredentialId([",
+        "additional valid credentials have exactly zero proposal, vote, eligibility, or fork-choice weight",
+    ),
+    "LG-02": (
+        "This creates three explicitly different conditions. `PreventiveProfileOwnedCryptographicMigrationV1`",
+        "`ProfileOwnedAuthorityBindingCompromiseV1` is instead an established collision",
+        "PrecommittedIndependentRecoveryEnvelopeV1",
+    ),
+    "LG-03": (
+        "VerifiedConsensusEntailedAvailabilityDeltaV1 = Canonical(",
+        "    SameWrapperConsensusDependencyWitnessV1(",
+        "consensus entry and availability-assessment entry atomically or inserts neither",
+    ),
+    "LG-04": (
+        "ReplayEvidenceCutoffV1 = Canonical(",
+        "NormalizedAcceptedEvidenceSnapshotV1 = Canonical(",
+        "RetainedAcceptedEligibilityWitnessV1 = Canonical(",
+        "parent-ordered unique AcceptedCoreReplayEntryV1 sequence",
+    ),
+    "LG-05": (
+        "LaunchClosureExternalGenesisDependencyNodeV1 = Canonical(",
+        "  | GenesisInitialDomainRegistryDependencyV1",
+        "internal_to_internal_dependency_edge_count_u32 = Length(InternalRefs(D))",
+        "internal_to_external_dependency_edge_count_u32 = Length(ExternalGenesisRefs(D))",
+        "external_to_internal_dependency_edge_count_u32 = Length(GenesisInternalRefs(X))",
+    ),
+    "LG-06": (
+        "VerifiedSuccessorPredecessorContextV1 = SemanticVerifierResult(",
+        "SuccessorActivationInternalDependencyRefV1 =",
+        "SuccessorActivationInternalDependencyNodeV1 = Canonical(",
+        "internal_artifact_count_u32                       = 7 + Length(S_s) = Length(D_s)",
     ),
 }
 
@@ -686,6 +764,105 @@ def parse_phase_statuses(
                 f"expected {EXPECTED_PHASE_STATUS_DIGEST}, got {digest}"
             )
     return tuple(statuses)
+
+
+def parse_ready_frontier(
+    text: str,
+    phase_statuses: tuple[PhaseStatus, ...],
+) -> tuple[PhaseStatus, ...]:
+    """Check the secondary scheduling projection against authoritative PS rows."""
+
+    lines = text.splitlines()
+    heading_indexes = [
+        index for index, line in enumerate(lines) if line == "## Current unlock frontier"
+    ]
+    if len(heading_indexes) != 1:
+        raise PlanningError(
+            "capability tree must contain exactly one Current unlock frontier section"
+        )
+    start = heading_indexes[0]
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].startswith("## ")
+        ),
+        len(lines),
+    )
+    header_indexes = [
+        index
+        for index in range(start + 1, end)
+        if lines[index] == READY_FRONTIER_HEADER
+    ]
+    if len(header_indexes) != 1:
+        raise PlanningError(
+            "Current unlock frontier must contain exactly one canonical READY table"
+        )
+    header = header_indexes[0]
+    if header + 1 >= end or lines[header + 1] != READY_FRONTIER_SEPARATOR:
+        raise PlanningError("Current unlock frontier READY table separator is not canonical")
+
+    projections: list[PhaseStatus] = []
+    ordinals: list[int] = []
+    seen_ids: set[str] = set()
+    seen_phases: set[tuple[str, str]] = set()
+    index = header + 2
+    while index < end and lines[index].startswith("|"):
+        match = READY_FRONTIER_ROW.fullmatch(lines[index])
+        if match is None:
+            raise PlanningError(
+                f"Current unlock frontier row {index + 1} is not canonical: {lines[index]}"
+            )
+        ordinal_text, status_id, node_id, phase, status = match.groups()
+        projection = PhaseStatus(status_id, node_id, phase, status)
+        if projection.status_id in seen_ids:
+            raise PlanningError(
+                f"Current unlock frontier duplicates status ID {projection.status_id}"
+            )
+        phase_key = (projection.node_id, projection.phase)
+        if phase_key in seen_phases:
+            raise PlanningError(
+                "Current unlock frontier duplicates phase "
+                f"{projection.node_id}@{projection.phase}"
+            )
+        if projection.status != "READY":
+            raise PlanningError(
+                f"Current unlock frontier entry {projection.status_id} is not READY"
+            )
+        seen_ids.add(projection.status_id)
+        seen_phases.add(phase_key)
+        ordinals.append(int(ordinal_text))
+        projections.append(projection)
+        index += 1
+
+    if not projections:
+        raise PlanningError("Current unlock frontier has no structured READY entries")
+    expected_ordinals = list(range(1, len(projections) + 1))
+    if ordinals != expected_ordinals:
+        raise PlanningError(
+            "Current unlock frontier ordinals are not continuous: "
+            f"expected={expected_ordinals}, got={ordinals}"
+        )
+    if any(line.startswith("|") for line in lines[index:end]):
+        raise PlanningError(
+            "Current unlock frontier contains a second or non-contiguous table"
+        )
+
+    expected = tuple(row for row in phase_statuses if row.status == "READY")
+    if tuple(projections) != expected:
+        projected = [
+            f"{row.status_id}:{row.node_id}@{row.phase}={row.status}"
+            for row in projections
+        ]
+        authoritative = [
+            f"{row.status_id}:{row.node_id}@{row.phase}={row.status}"
+            for row in expected
+        ]
+        raise PlanningError(
+            "Current unlock frontier disagrees with the ordered authoritative READY rows: "
+            f"projected={projected}, authoritative={authoritative}"
+        )
+    return tuple(projections)
 
 
 def parse_phase_dependencies(
@@ -1087,6 +1264,138 @@ def check_planning_inventory(paths: tuple[Path, ...]) -> None:
         )
 
 
+_COUNT_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
+
+
+def _displayed_count(token: str, label: str) -> int:
+    if token.isdecimal():
+        return int(token)
+    value = _COUNT_WORDS.get(token.lower())
+    if value is None:
+        raise PlanningError(f"HANDOFF {label} uses an unknown count token: {token}")
+    return value
+
+
+def check_handoff_read_order_and_counts(
+    text: str,
+    tracked_paths: frozenset[Path],
+) -> tuple[str, ...]:
+    """Validate the human reading path as an exact projection of planning authority."""
+
+    lines = text.splitlines()
+    markers = [index for index, line in enumerate(lines) if line == "Read in this order:"]
+    if len(markers) != 1:
+        raise PlanningError("HANDOFF must contain exactly one canonical read-order marker")
+    marker = markers[0]
+    if marker + 1 >= len(lines) or lines[marker + 1] != "":
+        raise PlanningError("HANDOFF read-order marker must be followed by one blank line")
+
+    rows: list[tuple[int, str]] = []
+    index = marker + 2
+    while index < len(lines) and lines[index] != "":
+        match = HANDOFF_READ_ORDER_ROW.fullmatch(lines[index])
+        if match is None:
+            raise PlanningError(
+                f"HANDOFF read-order row {index + 1} is not canonical: {lines[index]}"
+            )
+        ordinal_text, raw_path = match.groups()
+        rows.append((int(ordinal_text), raw_path))
+        index += 1
+    if not rows:
+        raise PlanningError("HANDOFF read-order block is empty")
+
+    ordinals = [ordinal for ordinal, _path in rows]
+    expected_ordinals = list(range(1, len(rows) + 1))
+    if ordinals != expected_ordinals:
+        raise PlanningError(
+            "HANDOFF read-order numbering is not continuous: "
+            f"expected={expected_ordinals}, got={ordinals}"
+        )
+
+    normalized: list[str] = []
+    for _ordinal, raw_path in rows:
+        candidate = Path(raw_path)
+        if candidate.is_absolute():
+            raise PlanningError(f"HANDOFF read-order path must be repository-relative: {raw_path}")
+        resolved = (ROOT / candidate).resolve()
+        canonical = repository_relative_path(resolved)
+        if canonical != raw_path:
+            raise PlanningError(
+                f"HANDOFF read-order path is not normalized: {raw_path} -> {canonical}"
+            )
+        if resolved not in tracked_paths:
+            raise PlanningError(f"HANDOFF read-order path is not tracked or staged: {raw_path}")
+        normalized.append(canonical)
+
+    duplicates = sorted(path for path in set(normalized) if normalized.count(path) > 1)
+    if duplicates:
+        raise PlanningError(
+            "HANDOFF read-order contains duplicate paths: " + ", ".join(duplicates)
+        )
+    if tuple(normalized) != EXPECTED_HANDOFF_READ_ORDER:
+        raise PlanningError(
+            "HANDOFF read-order disagrees with the exact canonical planning order: "
+            f"expected={list(EXPECTED_HANDOFF_READ_ORDER)}, got={normalized}"
+        )
+    if frozenset(normalized) != EXPECTED_PLANNING_PATHS:
+        raise PlanningError("HANDOFF read-order set disagrees with the planning inventory")
+
+    planning_count_matches = re.findall(
+        r"exact ([A-Za-z0-9-]+)-document authority inventory",
+        text,
+    )
+    if not planning_count_matches:
+        raise PlanningError("HANDOFF does not display its planning-document count")
+    for token in planning_count_matches:
+        planning_count = _displayed_count(token, "planning-document count")
+        if planning_count != len(PLANNING_FILES):
+            raise PlanningError(
+                "HANDOFF planning-document count is stale: "
+                f"expected={len(PLANNING_FILES)}, got={planning_count}"
+            )
+
+    frozen_count_matches = re.findall(
+        r"effective LF checkout policy for all\s+([A-Za-z0-9-]+) frozen text artifacts:\s+"
+        r"([A-Za-z0-9-]+) Markdown audits and one JSON source receipt",
+        text,
+    )
+    byte_frozen_count_matches = re.findall(
+        r"all\s+([A-Za-z0-9-]+) byte-frozen artifacts—([A-Za-z0-9-]+) Markdown audits\s+"
+        r"and one JSON source receipt",
+        text,
+    )
+    all_frozen_count_matches = frozen_count_matches + byte_frozen_count_matches
+    if not all_frozen_count_matches:
+        raise PlanningError("HANDOFF does not display its frozen-artifact counts")
+    expected_markdown_count = sum(path.suffix.lower() == ".md" for path in FROZEN_TEXT_FILES)
+    expected_json_count = sum(path.suffix.lower() == ".json" for path in FROZEN_TEXT_FILES)
+    if expected_json_count != 1:
+        raise PlanningError("internal frozen-artifact inventory no longer has exactly one JSON file")
+    for frozen_token, markdown_token in all_frozen_count_matches:
+        frozen_count = _displayed_count(frozen_token, "frozen-artifact count")
+        markdown_count = _displayed_count(markdown_token, "frozen Markdown count")
+        if frozen_count != len(FROZEN_TEXT_FILES) or markdown_count != expected_markdown_count:
+            raise PlanningError(
+                "HANDOFF frozen-artifact counts are stale: "
+                f"expected={len(FROZEN_TEXT_FILES)}/{expected_markdown_count}/1, "
+                f"got={frozen_count}/{markdown_count}/1"
+            )
+    return tuple(normalized)
+
+
 def git_effective_eol_policy(paths: tuple[Path, ...]) -> dict[str, dict[str, str]]:
     relative_paths = tuple(repository_relative_path(path) for path in paths)
     try:
@@ -1320,6 +1629,67 @@ def check_frozen_sixth_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_seventh_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != SEVENTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md changed after its frozen first "
+            f"addition: expected Git blob {SEVENTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def _git_rev_parse(revision: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", revision],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", "").strip()
+        raise PlanningError(
+            f"cannot resolve historical Git object {revision}: {detail or error}"
+        ) from error
+    return result.stdout.strip()
+
+
+def check_seventh_audit_addition_identity() -> None:
+    commit = _git_rev_parse(f"{SEVENTH_AUDIT_ADDITION_COMMIT}^{{commit}}")
+    if commit != SEVENTH_AUDIT_ADDITION_COMMIT:
+        raise PlanningError(
+            "Loop 7 audit addition commit mismatch: "
+            f"expected {SEVENTH_AUDIT_ADDITION_COMMIT}, got {commit}"
+        )
+    tree = _git_rev_parse(f"{SEVENTH_AUDIT_ADDITION_COMMIT}^{{tree}}")
+    if tree != SEVENTH_AUDIT_ADDITION_TREE:
+        raise PlanningError(
+            "Loop 7 audit addition tree mismatch: "
+            f"expected {SEVENTH_AUDIT_ADDITION_TREE}, got {tree}"
+        )
+    path = repository_relative_path(SEVENTH_AUDIT)
+    blob = _git_rev_parse(f"{SEVENTH_AUDIT_ADDITION_COMMIT}:{path}")
+    if blob != SEVENTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "Loop 7 audit addition blob mismatch: "
+            f"expected {SEVENTH_AUDIT_GIT_BLOB}, got {blob}"
+        )
+    parent_probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{SEVENTH_AUDIT_ADDITION_COMMIT}^:{path}"],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    if parent_probe.returncode == 0:
+        raise PlanningError(
+            "Loop 7 audit existed before its declared first-addition commit"
+        )
+
+
 def check_frozen_layer1_design_audit(data: bytes) -> None:
     header = f"blob {len(data)}\0".encode("ascii")
     actual = hashlib.sha1(header + data).hexdigest()
@@ -1342,6 +1712,16 @@ def check_loop5_paper_fragments(text: str) -> None:
 
 def check_loop6_paper_fragments(text: str) -> None:
     for finding_id, fragments in EXPECTED_LOOP6_PAPER_FRAGMENTS.items():
+        for fragment in fragments:
+            if text.count(fragment) != 1:
+                raise PlanningError(
+                    f"LAYER1_DESIGN_PAPER.md must contain exactly one {finding_id} protocol "
+                    f"fragment: {fragment}"
+                )
+
+
+def check_loop7_paper_fragments(text: str) -> None:
+    for finding_id, fragments in EXPECTED_LOOP7_PAPER_FRAGMENTS.items():
         for fragment in fragments:
             if text.count(fragment) != 1:
                 raise PlanningError(
@@ -1579,6 +1959,14 @@ def expect_frozen_sixth_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_seventh_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_seventh_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_frozen_layer1_design_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_layer1_design_audit(data)
@@ -1699,6 +2087,51 @@ def expect_loop6_paper_fragment_failure(label: str, text: str) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_loop7_paper_fragment_failure(label: str, text: str) -> None:
+    try:
+        check_loop7_paper_fragments(text)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_ready_frontier_failure(
+    label: str,
+    text: str,
+    *,
+    expected_message: str | None = None,
+) -> None:
+    try:
+        nodes = parse_capability(text)
+        phase_statuses = parse_phase_statuses(text, nodes)
+        parse_ready_frontier(text, phase_statuses)
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_handoff_failure(
+    label: str,
+    text: str,
+    tracked_paths: frozenset[Path],
+    *,
+    expected_message: str | None = None,
+) -> None:
+    try:
+        check_handoff_read_order_and_counts(text, tracked_paths)
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_status_projection_failure(
     label: str,
     text: str,
@@ -1768,6 +2201,7 @@ def expect_predicate_entailment_failure(
 
 def run_self_tests(
     text: str,
+    handoff_text: str,
     first_audit_bytes: bytes,
     second_audit_bytes: bytes,
     design_audit_bytes: bytes,
@@ -1776,6 +2210,7 @@ def run_self_tests(
     fourth_audit_bytes: bytes,
     fifth_audit_bytes: bytes,
     sixth_audit_bytes: bytes,
+    seventh_audit_bytes: bytes,
     layer1_design_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
@@ -1784,7 +2219,7 @@ def run_self_tests(
     tracked_paths: frozenset[Path],
     frozen_eol_policy: dict[str, dict[str, str]],
 ) -> None:
-    reduced_inventory = tuple(path for path in PLANNING_FILES if path != SIXTH_AUDIT)
+    reduced_inventory = tuple(path for path in PLANNING_FILES if path != SEVENTH_AUDIT)
     if len(reduced_inventory) != len(PLANNING_FILES) - 1:
         raise PlanningError("self-test fixture drift: planning authority inventory")
     expect_planning_inventory_failure(
@@ -1795,7 +2230,7 @@ def run_self_tests(
     wrong_eol_policy = {
         path: dict(attributes) for path, attributes in frozen_eol_policy.items()
     }
-    eol_probe_path = repository_relative_path(SIXTH_AUDIT)
+    eol_probe_path = repository_relative_path(SEVENTH_AUDIT)
     wrong_eol_policy[eol_probe_path]["eol"] = "crlf"
     expect_frozen_text_eol_policy_failure(
         "fresh-checkout EOL policy changed from LF",
@@ -1806,6 +2241,140 @@ def run_self_tests(
     expect_frozen_text_eol_policy_failure(
         "frozen artifact missing from EOL policy",
         missing_eol_policy,
+    )
+
+    handoff_omission = re.sub(
+        r"^21\. `docs/TIMELINES\.md`.*(?:\n|$)",
+        "",
+        handoff_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if handoff_omission == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF read-order omission")
+    expect_handoff_failure(
+        "HANDOFF read-order omission",
+        handoff_omission,
+        tracked_paths,
+        expected_message="disagrees with the exact canonical planning order",
+    )
+
+    handoff_insertion = re.sub(
+        r"^(21\. `docs/TIMELINES\.md`.*)$",
+        r"\1\n22. `Cargo.toml` (tracked non-planning negative control)",
+        handoff_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if handoff_insertion == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF read-order insertion")
+    expect_handoff_failure(
+        "HANDOFF read-order insertion",
+        handoff_insertion,
+        tracked_paths,
+        expected_message="disagrees with the exact canonical planning order",
+    )
+
+    handoff_duplicate = handoff_text.replace(
+        "21. `docs/TIMELINES.md`",
+        "21. `docs/PROTOCOL.md`",
+        1,
+    )
+    if handoff_duplicate == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF read-order duplicate")
+    expect_handoff_failure(
+        "HANDOFF read-order duplicate",
+        handoff_duplicate,
+        tracked_paths,
+        expected_message="contains duplicate paths",
+    )
+
+    handoff_gap = handoff_text.replace(
+        "2. `docs/PROJECT_INTENT.md`",
+        "3. `docs/PROJECT_INTENT.md`",
+        1,
+    )
+    if handoff_gap == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF numbering gap")
+    expect_handoff_failure(
+        "HANDOFF numbering gap",
+        handoff_gap,
+        tracked_paths,
+        expected_message="numbering is not continuous",
+    )
+
+    handoff_swap = handoff_text.replace(
+        "1. `docs/HANDOFF.md`",
+        "1. `docs/PROJECT_INTENT.md`",
+        1,
+    ).replace(
+        "2. `docs/PROJECT_INTENT.md`",
+        "2. `docs/HANDOFF.md`",
+        1,
+    )
+    if handoff_swap == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF read-order swap")
+    expect_handoff_failure(
+        "HANDOFF read-order swap",
+        handoff_swap,
+        tracked_paths,
+        expected_message="disagrees with the exact canonical planning order",
+    )
+
+    handoff_wrong_count = handoff_text.replace(
+        "exact 21-document authority inventory",
+        "exact 20-document authority inventory",
+        1,
+    )
+    if handoff_wrong_count == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF planning count")
+    expect_handoff_failure(
+        "HANDOFF wrong planning count",
+        handoff_wrong_count,
+        tracked_paths,
+        expected_message="planning-document count is stale",
+    )
+
+    handoff_wrong_frozen_count = handoff_text.replace(
+        "eleven frozen text artifacts: ten Markdown audits and one JSON source receipt",
+        "ten frozen text artifacts: nine Markdown audits and one JSON source receipt",
+        1,
+    )
+    if handoff_wrong_frozen_count == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF frozen count")
+    expect_handoff_failure(
+        "HANDOFF wrong frozen-artifact count",
+        handoff_wrong_frozen_count,
+        tracked_paths,
+        expected_message="frozen-artifact counts are stale",
+    )
+
+    handoff_outside = handoff_text.replace(
+        "21. `docs/TIMELINES.md`",
+        "21. `../outside-read-order-negative-control.md`",
+        1,
+    )
+    if handoff_outside == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF outside path")
+    expect_handoff_failure(
+        "HANDOFF outside-repository read-order path",
+        handoff_outside,
+        tracked_paths,
+        expected_message="path escapes repository",
+    )
+
+    handoff_untracked = handoff_text.replace(
+        "21. `docs/TIMELINES.md`",
+        "21. `docs/untracked-read-order-negative-control.md`",
+        1,
+    )
+    if handoff_untracked == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF untracked path")
+    expect_handoff_failure(
+        "HANDOFF untracked read-order path",
+        handoff_untracked,
+        tracked_paths,
+        expected_message="is not tracked or staged",
     )
 
     unknown = text.replace(
@@ -1895,6 +2464,76 @@ def run_self_tests(
     if boundary_probe == text:
         raise PlanningError("self-test fixture drift: post-node section boundary")
     parse_capability(boundary_probe)
+
+    frontier_locked = text.replace(
+        "| 4 | `PS-017:VERKLE-R1@feasibility=READY` |",
+        "| 4 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
+        1,
+    )
+    if frontier_locked == text:
+        raise PlanningError("self-test fixture drift: locked READY-frontier substitution")
+    expect_ready_frontier_failure(
+        "locked phase projected into READY frontier",
+        frontier_locked,
+        expected_message="is not READY",
+    )
+
+    frontier_substitution = text.replace(
+        "| 1 | `PS-009:ACCOUNT-1@base=READY` |",
+        "| 1 | `PS-010:LOCAL-BOUNDS-1@base=READY` |",
+        1,
+    )
+    if frontier_substitution == text:
+        raise PlanningError("self-test fixture drift: READY-frontier tuple substitution")
+    expect_ready_frontier_failure(
+        "unknown tuple substituted into READY frontier",
+        frontier_substitution,
+        expected_message="disagrees with the ordered authoritative READY rows",
+    )
+
+    frontier_omission = text.replace(
+        "| 14 | `PS-087:RELEASE-R1@framework=READY` |\n",
+        "",
+        1,
+    )
+    if frontier_omission == text:
+        raise PlanningError("self-test fixture drift: READY-frontier omission")
+    expect_ready_frontier_failure(
+        "READY-frontier omission",
+        frontier_omission,
+        expected_message="disagrees with the ordered authoritative READY rows",
+    )
+
+    frontier_duplicate = text.replace(
+        "| 14 | `PS-087:RELEASE-R1@framework=READY` |",
+        "| 14 | `PS-087:RELEASE-R1@framework=READY` |\n"
+        "| 15 | `PS-009:ACCOUNT-1@base=READY` |",
+        1,
+    )
+    if frontier_duplicate == text:
+        raise PlanningError("self-test fixture drift: READY-frontier duplicate")
+    expect_ready_frontier_failure(
+        "READY-frontier duplicate",
+        frontier_duplicate,
+        expected_message="duplicates status ID",
+    )
+
+    frontier_reorder = text.replace(
+        "| 1 | `PS-009:ACCOUNT-1@base=READY` |",
+        "| 1 | `PS-015:COMMIT-R1@base=READY` |",
+        1,
+    ).replace(
+        "| 2 | `PS-015:COMMIT-R1@base=READY` |",
+        "| 2 | `PS-009:ACCOUNT-1@base=READY` |",
+        1,
+    )
+    if frontier_reorder == text:
+        raise PlanningError("self-test fixture drift: READY-frontier reorder")
+    expect_ready_frontier_failure(
+        "READY-frontier reorder",
+        frontier_reorder,
+        expected_message="disagrees with the ordered authoritative READY rows",
+    )
 
     missing_chain_codec = text.replace(
         "  `IDENTITY-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`, `CRYPTO-1`, `CODEC-1`.",
@@ -2597,6 +3236,10 @@ def run_self_tests(
         "frozen sixth audit mutation",
         sixth_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_seventh_audit_failure(
+        "frozen seventh audit mutation",
+        seventh_audit_bytes + b"\nnegative-control",
+    )
     expect_frozen_layer1_design_audit_failure(
         "frozen corrected checkpoint-0.3 audit mutation",
         layer1_design_audit_bytes + b"\nnegative-control",
@@ -2628,6 +3271,21 @@ def run_self_tests(
                     f"self-test fixture drift: {finding_id} paper fragment {index}"
                 )
             expect_loop6_paper_fragment_failure(
+                f"{finding_id} paper fragment mutation {index}",
+                mutated_paper,
+            )
+    for finding_id, fragments in EXPECTED_LOOP7_PAPER_FRAGMENTS.items():
+        for index, fragment in enumerate(fragments, 1):
+            mutated_paper = layer1_design_paper_text.replace(
+                fragment,
+                f"mutated-{finding_id.lower()}-paper-fragment-{index}",
+                1,
+            )
+            if mutated_paper == layer1_design_paper_text:
+                raise PlanningError(
+                    f"self-test fixture drift: {finding_id} paper fragment {index}"
+                )
+            expect_loop7_paper_fragment_failure(
                 f"{finding_id} paper fragment mutation {index}",
                 mutated_paper,
             )
@@ -2688,6 +3346,7 @@ def main() -> int:
     capability_text = CAPABILITY.read_text(encoding="utf-8")
     nodes = parse_capability(capability_text)
     phase_statuses = parse_phase_statuses(capability_text, nodes)
+    parse_ready_frontier(capability_text, phase_statuses)
     phase_dependencies = parse_phase_dependencies(
         capability_text,
         nodes,
@@ -2696,6 +3355,8 @@ def main() -> int:
     conditional_edges = parse_conditional_edges(capability_text, nodes)
     predicate_entailments = parse_predicate_entailments(capability_text, conditional_edges)
     tracked_paths = git_tracked_or_staged_paths()
+    handoff_text = (ROOT / "docs" / "HANDOFF.md").read_text(encoding="utf-8")
+    check_handoff_read_order_and_counts(handoff_text, tracked_paths)
     first_audit_bytes = FIRST_AUDIT.read_bytes()
     check_frozen_first_audit(first_audit_bytes)
     second_audit_bytes = SECOND_AUDIT.read_bytes()
@@ -2712,6 +3373,9 @@ def main() -> int:
     check_frozen_fifth_audit(fifth_audit_bytes)
     sixth_audit_bytes = SIXTH_AUDIT.read_bytes()
     check_frozen_sixth_audit(sixth_audit_bytes)
+    seventh_audit_bytes = SEVENTH_AUDIT.read_bytes()
+    check_frozen_seventh_audit(seventh_audit_bytes)
+    check_seventh_audit_addition_identity()
     layer1_design_audit_bytes = LAYER1_DESIGN_AUDIT.read_bytes()
     check_frozen_layer1_design_audit(layer1_design_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
@@ -2725,6 +3389,7 @@ def main() -> int:
     )
     check_loop5_paper_fragments(layer1_design_paper_text)
     check_loop6_paper_fragments(layer1_design_paper_text)
+    check_loop7_paper_fragments(layer1_design_paper_text)
     for path in PLANNING_FILES:
         check_markdown(
             path,
@@ -2734,6 +3399,7 @@ def main() -> int:
     if args.self_test:
         run_self_tests(
             capability_text,
+            handoff_text,
             first_audit_bytes,
             second_audit_bytes,
             design_audit_bytes,
@@ -2742,6 +3408,7 @@ def main() -> int:
             fourth_audit_bytes,
             fifth_audit_bytes,
             sixth_audit_bytes,
+            seventh_audit_bytes,
             layer1_design_audit_bytes,
             design_receipt_bytes,
             design_text,

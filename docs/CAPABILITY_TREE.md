@@ -616,16 +616,21 @@ a checker error.
 - **Artifact:** immutable pre-ID genesis payload from `GENESIS-D1` and derived `genesis_id`;
   chain/world/version domains;
   pre-genesis authorization descriptor encoding; acyclic transaction, body, context, proposal,
-  block, receipt, effect, availability, and consensus-evidence identifier graph; unique
-  `AcceptedProposalCoreV1` identity separated from its typed, possibly multiple
-  `AcceptedEvidenceSetV1`; explicit system transition subjects; and the protocol-frozen
-  `ProfileIdHashV1` trust anchor with a named `ProtocolIdentityHashCompromiseV1` terminal boundary.
+  block, receipt, effect, availability, and consensus-evidence identifier graph; one signature-free
+  `AcceptedProposalCoreV1` separated from its bounded, typed `AcceptedProposalCredentialSetV1` and
+  `AcceptedEvidenceSetV1`; atomic same-wrapper consensus-entailed availability dependencies;
+  explicit system transition subjects; and the protocol-frozen `ProfileIdHashV1` trust anchor with
+  named profile-owned and protocol-identity compromise boundaries.
 - **Gate:** dependency-graph cycle check plus cross-domain, self-reference, field-omission,
   duplicate-field, alternate-body, wrong-parent, and wrong-version mutation corpus. Every
   authority-relevant byte reaches exactly the intended identifier before it can be signed. Two
-  valid evidence wrappers for one proposal resolve one semantic parent, while a distinct-core
-  collision rejects; a `ProfileIdHashV1` collision or second preimage reaches terminal safe halt and
-  never an in-place successor.
+  valid proposal signatures and split evidence wrappers for one unsigned core normalize without
+  extra weight or parent multiplication; same-wrapper availability dependencies insert atomically;
+  a genuine distinct-unsigned-core collision rejects and is classified from its reconstructed lookup
+  preimages: one byte-identical lookup payload with different valid core content reaches
+  `ProfileOwnedAuthorityBindingCompromiseV1`, while different lookup payloads under one
+  `ProfileIdHashV1` output reach `ProtocolIdentityHashCompromiseV1`. Either class safe-halts and
+  never selects one core or treats the event as an ordinary in-place successor.
 - **Non-claim:** identifiers and genesis bytes do not establish trusted distribution, valid keys,
   honest execution, consensus, availability, a fair initial allocation, or the cryptographic
   soundness of `ProfileIdHashV1`.
@@ -1001,11 +1006,14 @@ a checker error.
 - **Artifact:** implementation and evidence for the selected quantitative adversary/network model;
   proposal/vote/certificate domains; fork-choice or deterministic-finality rule; exact consumption of
   committed validator-schedule transitions; data-before-vote; confirmation/finality status;
-  safe-halt and recovery rules.
+  safe-halt and recovery rules; and a parent-ordered unique-core replay input whose bounded normalized
+  credential/evidence snapshot or retained eligibility witness is evaluated at one explicit cutoff.
 - **Gate:** formal/model safety argument appropriate to the profile plus a deterministic reference
-  harness over adversarial proposal, vote, partition, missing-data, set-change, and long-range
-  traces. Independent multi-process, restart, and operational fault evidence belongs to
-  `TESTNET-1`; sampled/model liveness evidence stays bounded to its assumptions.
+  harness over adversarial proposal, vote, partition, missing-data, set-change, long-range,
+  split-wrapper, arrival-permutation, duplicate, and post-acceptance status-upgrade traces. Every
+  replay produces one core and one cutoff status per height. Independent multi-process, restart, and
+  operational fault evidence belongs to `TESTNET-1`; sampled/model liveness evidence stays bounded
+  to its assumptions.
 - **Non-claim:** consensus evidence does not imply correct execution or available bodies unless
   those checks are separately bound into the profile.
 
@@ -1369,16 +1377,22 @@ a checker error.
 - **Artifact:** either an immutable-version policy requiring a new genesis/chain for change, or an
   in-place-upgrade framework with activation authority, old/new profile roles, bounded migration
   interface, downgrade rule, historical verifier, interruption/restart, rollback/safe-halt policy.
-  In-place migration owns profile-selected object-hash, signature, proof, credential, codec, VM, and
-  state-layout changes; it explicitly excludes compromise of the pre-profile identity hash.
+  Preventive in-place migration owns still-sound-but-deprecated profile-selected object-hash,
+  signature, proof, credential, codec, VM, and state-layout changes only while one exact last-safe
+  parent and every live authority binding remain independently sound. An established live-role
+  failure is `ProfileOwnedAuthorityBindingCompromiseV1`, not an ordinary migration input; compromise
+  of the pre-profile identity hash remains separately excluded.
 - **Gate:** genesis rejects fabricated old-profile inputs; the no-upgrade policy rejects changed
   versions as a different chain; the migration framework refuses a target without an admitted old
-  profile and new candidate, and powered version/downgrade/history mutants fail. A profile-owned
-  suite-failure control may activate only its fully admitted successor, while
-  `ProtocolIdentityHashCompromiseV1` forbids that path and requires terminal safe halt/new genesis
-  under a separately trusted recovery anchor.
-- **Non-claim:** a framework does not prove any concrete migration or authorize an upgrade, and an
-  in-place successor cannot repair the identity function used to identify and authorize itself.
+  profile and new candidate, and powered version/downgrade/history mutants fail. Preventive
+  role-by-role suite controls may activate only a fully admitted successor while all old bindings
+  remain sound. Collision/forgery, ambiguous-last-safe-parent, failed-role-authorized,
+  post-compromise-precommit, and no-precommit controls reach safe halt; only an independently anchored
+  recovery envelope precommitted before compromise may resume in place, otherwise restart requires a
+  separately trusted new genesis. `ProtocolIdentityHashCompromiseV1` remains terminal.
+- **Non-claim:** a framework does not prove any concrete migration or authorize an upgrade. Neither
+  an in-place successor nor a recovery object selected through a failed live authority binding can
+  repair that binding; no independent recovery envelope is currently specified.
 
 ### `UPGRADE-1` — deterministic version migration
 
@@ -1395,9 +1409,10 @@ a checker error.
   migration extension implemented after the migration specification is frozen.
 - **Gate:** old/new-root vectors and full bounded migration replay agree independently; invariant,
   interruption, restart, unauthorized activation, downgrade, and historical-proof tests pass.
-- **Non-claim:** governance approval or old-root equality alone does not prove migration correctness,
-  especially if the old profile-owned hash or implementation is compromised. This capability does
-  not recover `ProfileIdHashV1`; its compromise is a terminal chain boundary.
+- **Non-claim:** governance approval or old-root equality alone does not prove migration correctness.
+  This capability covers preventive migration while the old authority bindings remain sound; it does
+  not recover an established `ProfileOwnedAuthorityBindingCompromiseV1` or `ProfileIdHashV1`
+  compromise through the authority that failed.
 
 ### `PROFILE-1` — admitted activated-feature closure
 
@@ -1483,8 +1498,9 @@ a checker error.
 - **Artifact:** `CHAIN-LAUNCH-1@chain-launch-manifest-id`, the canonical `LaunchClosureBundleV1`,
   its `launch_closure_bundle_id`, and `chain_launch_package`: a bounded, complete, uniquely typed
   carrier with one outer genesis package/payload and ID. The bundle is an embedded-only inventory
-  for its internal artifacts plus exactly one `LaunchClosureExternalGenesisRootV1` descriptor bound
-  to the exact outer `GenesisPackageV1`; initial `ProfileScopeV1` and `DomainRegistryV1`, initial
+  for its internal artifacts plus exactly one `LaunchClosureExternalGenesisDependencyNodeV1` bound
+  to the exact outer `GenesisPackageV1`. That combined-graph node owns dependency refs but not a
+  second copy of the outer genesis bytes; initial `ProfileScopeV1` and `DomainRegistryV1`, initial
   `CandidateProfileV1` and profile ID,
   `TransitionSpecAtProfileV1` and ID, `ProfileAdmissionManifestV1` and ID,
   `GenesisRootParityRecordV1` and initial typed execution-root reference, `RELEASE-1` record and ID,
@@ -1495,27 +1511,30 @@ a checker error.
   omitted, over-limit, unavailable, or type-substituted entries, and hash-check every embedded
   preimage. The seven explicit artifacts are the scope, registry, candidate, transition
   specification, admission manifest, parity record, and admitted release. If `S` is the carried
-  supplementary-artifact list, `D` the internal dependency-node list, and `G` the exact outer
-  genesis-package bytes, the checked equations include `internal_artifact_count_u32 = 7 + |S| =
-  |D|`, `external_root_count_u32 = 1`, `complete_artifact_count_u32 = 8 + |S|`, separate internal
-  and external dependency-edge counts whose checked sum is the complete count, and separate internal
-  and external byte counts whose checked sum includes `len(G)` exactly once. Every declared
+  supplementary-artifact list, `D` the internal dependency-node list, `X` the external genesis node,
+  and `G` the exact outer genesis-package bytes, the checked equations include
+  `internal_artifact_count_u32 = 7 + |S| = |D|`, `external_root_count_u32 = 1`, and
+  `complete_artifact_count_u32 = 8 + |S| = |D| + 1`. Internal-to-internal,
+  internal-to-external, and external-to-internal dependency-edge counts are checked separately and
+  sum to the complete count; separate internal and external byte counts include `len(G)` exactly
+  once. Every declared
   individual preimage/root length equals its exact slice. Bundle schema/counter/length fields,
   dependency-node/descriptor bytes, collection framing, `launch_closure_bundle_id`,
   `ChainLaunchManifestV1`, and launch authorization remain excluded from that byte total.
   Fixed-width counters and length prefixes are streaming-preflighted with checked arithmetic before
   allocation, copying, hashing, nested decode, profile-owned work, or materialization. The verifier
-  then reproduces the acyclic genesis -> scope/registry -> candidate -> transition
-  specification -> admission/parity/release -> launch-manifest derivation. Every repeated
-  projection and typed ID matches its unique owner; the sole rank-zero external root byte-equals the
-  outer genesis package, permits only the typed incoming genesis-dependency classes, and every other
-  external root rejects; the initial target and launch predicate
+  then validates one combined DAG with actual dependency edges scope -> registry, genesis ->
+  scope/registry, and candidate -> genesis before the later specification, admission, parity,
+  release, and launch-manifest derivations. A valid prefix is registry rank 0, scope rank 1, external
+  genesis rank 2, and candidate rank 3 or higher. Every repeated projection and typed ID matches its
+  unique owner; the sole external node byte-equals the outer genesis package and every other external
+  artifact rejects; the initial target and launch predicate
   contexts are identical; the detached authorization verifies only under the launch policy already
   committed in genesis. Missing-preimage, wrong-profile/specification/admission/parity/root/release,
-  candidate-selected-authority, altered authorization, omitted-genesis-edge, injected-external-root,
-  outer/root mismatch, rank-to-unranked-root, off-by-one count, arithmetic overflow, double-count,
-  locator-only, and manifest/package self-reference mutants fail before bootstrap or the first
-  accepted record.
+  candidate-selected-authority, altered authorization, reversed or omitted genesis edge,
+  missing genesis outgoing ref, rank-zero genesis, injected external artifact, outer/node mismatch,
+  off-by-one edge/artifact count, arithmetic overflow, double-count, locator-only, and
+  manifest/package self-reference mutants fail before bootstrap or the first accepted record.
 - **Non-claim:** a complete authorized launch package does not prove archive availability after
   launch, validator honesty, consensus safety, transition correctness, operator custody, or the
   security of its cryptographic primitives.
@@ -1529,22 +1548,27 @@ a checker error.
 - **Motive:** let a fresh verifier validate an in-place old-to-new profile transition without an
   ambient artifact registry or a profile label standing in for the closure that label denotes.
 - **Artifact:** `SUCCESSOR-ACTIVATION-1@old-profile-id->new-profile-id`, a bounded canonical
-  `SuccessorActivationBundleV1` and fixed `successor_activation_bundle_id` carrying embedded
-  canonical bytes for the target scope and registry, candidate profile, resolved transition
-  specification, exact target `ProfileAdmissionManifestV1`, admitted release, every implementation
-  artifact transitively consumed by admission, and the concrete `UPGRADE-1` evidence. The migration
-  context and detached activation authorization bind both the bundle ID and exact target admission
-  ID. The old profile's envelope availability payload carries the complete bundle before migration
-  execution or activation. Its seven explicit preimages and supplementary/dependency inventories use
-  the identical checked count, individual-length, byte-total, exclusion, and prefix-first preflight
-  equations defined for the launch carrier.
+  `SuccessorActivationBundleV1` and fixed `successor_activation_bundle_id`, verified relative to one
+  pre-resolved semantic `VerifiedSuccessorPredecessorContextV1` that is neither serialized nor
+  counted. The internal-only bundle carries canonical bytes for the target scope and registry,
+  candidate profile, resolved transition specification, exact target `ProfileAdmissionManifestV1`,
+  admitted release, every implementation artifact transitively consumed by admission, and the
+  concrete `UPGRADE-1` evidence. The migration context and detached activation authorization bind
+  both the bundle ID and exact target admission ID. The old profile's envelope availability payload
+  carries the complete bundle before migration execution or activation.
 - **Gate:** two independent implementations preflight and bounded-decode the old-envelope carrier,
-  verify its availability commitment, recompute every typed ID and the bundle ID, walk one complete
-  old-profile -> new-scope/registry -> candidate -> specification -> admission/release -> migration
-  closure, verify old/new role polarity and activation authorization under the already admitted
-  governance/crypto policy, and execute the frozen migration only after closure acceptance. Missing,
-  duplicate, substituted, unavailable, over-limit, wrong-admission, wrong-release, wrong-upgrade,
-  ambient-map-only, authorization, and availability mutants reject before migration state changes.
+  verify its availability commitment, resolve the exact predecessor context, recompute every typed
+  internal ID and the bundle ID, and walk one complete new-scope/registry -> candidate ->
+  specification -> admission/release -> migration closure. If `S` is the supplementary internal
+  sequence and `D` the internal dependency nodes, it checks `7 + |S| = |D|`, internal-only edge and
+  byte totals, individual lengths, exclusions, and prefix-first preflight independently of launch's
+  external-root grammar. Prior accepted core/evidence/credential, launch/genesis, old-profile/state,
+  framing/counter, dependency-node, and predecessor-context bytes are not counted or duplicated;
+  every external projection byte-equals the unique predecessor context. The verifier then checks
+  old/new role polarity and activation authorization under the already admitted governance/crypto
+  policy and executes only after closure acceptance. Count/length/edge, external-ID injection,
+  context/purpose mismatch, different-evidence-same-parent, duplicate-prior-bytes, ambient-map,
+  authorization, and availability mutants reject before migration state changes.
 - **Non-claim:** a complete successor bundle does not authorize itself, prove the migration correct,
   make its artifacts durably available after activation, or establish consensus safety.
 
@@ -1565,17 +1589,27 @@ a checker error.
 
 ## Current unlock frontier
 
-The current branch has three kinds of eligible next work, but only one should alter semantics in a
-single checkpoint:
+The phase-status manifest is the sole scheduling authority. This table is its complete ordered
+projection of every currently **READY** row; it grants only checkpoint eligibility, never
+implementation, activation, or profile authority. Each entry must remain byte-equal to its cited
+`PS` row.
 
-1. **Semantic trunk:** `ACCOUNT-1` is the first implementation prerequisite shared by the ledger,
-   multiplayer, and programming branches.
-2. **Research without authority:** `COMMIT-R1`, `VERKLE-R1@feasibility`, `REFINE-1`, `LANGUAGE-R1`,
-   `SCALE-1`, `COST-1`, `CODEC-1`, `THREAT-D0`, `HASH-SOURCE-R1`, and the reusable mechanics of
-   `RELEASE-R1@framework` can produce comparisons, vectors, or build evidence without changing live
-   state or profile authority.
-3. **Visual decision:** the exact one-pixel-startup choice remains independent and can be handled as
-   a small observer checkpoint, provided its source, vectors, and docs change together.
+| Frontier ordinal | Authoritative READY projection |
+| ---: | --- |
+| 1 | `PS-009:ACCOUNT-1@base=READY` |
+| 2 | `PS-015:COMMIT-R1@base=READY` |
+| 3 | `PS-016:VERKLE-R1@base=READY` |
+| 4 | `PS-017:VERKLE-R1@feasibility=READY` |
+| 5 | `PS-021:REFINE-1@base=READY` |
+| 6 | `PS-022:REFINE-1@world=READY` |
+| 7 | `PS-044:LANGUAGE-R1@base=READY` |
+| 8 | `PS-051:SCALE-1@base=READY` |
+| 9 | `PS-062:COST-1@base=READY` |
+| 10 | `PS-064:CODEC-1@base=READY` |
+| 11 | `PS-066:THREAT-D0@base=READY` |
+| 12 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 13 | `PS-086:RELEASE-R1@base=READY` |
+| 14 | `PS-087:RELEASE-R1@framework=READY` |
 
 `LEDGER-1`, a token/ownership system, networking, and autonomous rules should not be combined in
 one change. The strongest next trunk sequence is:
@@ -1642,15 +1676,18 @@ When a checkpoint changes a node:
 
 Run `python -B tools/check_planning_docs.py --self-test` after every tree edit. It checks all
 foundation and detailed nodes, required fields, undefined dependencies, the exact 94-row
-phase-status manifest, the five-row phase-dependency manifest, the unconditional conservative DAG,
-the exact 44 context-bearing conditional-instance rows, the direct predicate-entailment manifest and
-its context-local acyclic closure, the compatible role-edge union, links/fences/tables in the
-planning set, and powered in-memory mutations for those surfaces. Its controls must reject a
-phase-status promotion/demotion, duplicate or omitted phase tuple, phase-edge mutation, a missing
-CE-35–CE-42 Verkle prerequisite, a launch row evaluated as target, a target row evaluated as launch,
-collapse of the two contexts on a successor, a missing `CHAIN-LAUNCH-1` or
-`SUCCESSOR-ACTIVATION-1` dependency, and a wrong or omitted launch/successor-closure reference. It
-still does **not** decide which predicates are true,
+phase-status manifest and its complete ordered READY-frontier projection, the five-row
+phase-dependency manifest, the unconditional conservative DAG, the exact 44 context-bearing
+conditional-instance rows, the direct predicate-entailment manifest and its context-local acyclic
+closure, the compatible role-edge union, the exact 21-document handoff order and displayed counts,
+the eleven-artifact frozen inventory/EOL policy, links/fences/tables in the planning set, and powered
+in-memory mutations for those surfaces. Its controls must reject a phase-status promotion/demotion,
+duplicate or omitted phase tuple, locked/substituted/omitted/duplicated/reordered frontier entry,
+phase-edge mutation, a missing CE-35–CE-42 Verkle prerequisite, a launch row evaluated as target, a
+target row evaluated as launch, collapse of the two contexts on a successor, a missing
+`CHAIN-LAUNCH-1` or `SUCCESSOR-ACTIVATION-1` dependency, a wrong or omitted
+launch/successor-closure reference, and handoff-order/count drift. It still does **not** decide which
+predicates are true,
 prove that the manifest is semantically complete, or expand and validate each realizable
 profile-specific artifact closure. Before `PROFILE-1` can admit anything, that admission checker
 must resolve both launch and target predicate contexts and their roles against exact artifacts,

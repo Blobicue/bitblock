@@ -11,7 +11,7 @@ planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronol
 that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md), the
 second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md), and the
 design-successor chronology through
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md).
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md).
 Those audits cover planning/proposed-protocol corrections only; none silently extends or reruns the
 checkpoint-0.3 paper audit. Changes to named source/proof files or this chronology stale the
 corresponding statements.
@@ -525,12 +525,14 @@ and unchecked phase-status projections in node prose.
 The coordinated descendant correction makes one byte-exact `AcceptedProposalCoreV1` the lookup
 identity while a sorted, deduplicated `AcceptedEvidenceSetV1` feeds purpose-specific, monotone
 `ParentAuthorityEligibilityV1`; a true distinct-core collision still rejects. It separates
-`ProfileOwnedCryptographicMigrationV1`
+the then-named `ProfileOwnedCryptographicMigrationV1`
 from `ProtocolIdentityHashCompromiseV1`: failure of `ProfileIdHashV1` is a terminal safe-halt/new-
 genesis boundary, while ordinary in-place upgrades remain limited to profile-owned suites. It gives
 the already outer-carried `GenesisPackageV1` exactly one `LaunchClosureExternalGenesisRootV1` role
 at rank 0/count 1 with separate internal/external equations, and requires every canonical
 `PS-NNN:NODE@phase=STATUS` prose projection to equal exactly one authoritative phase tuple.
+Section 33 preserves the seventh audit's concrete demonstration that the core, generic migration,
+and rank-zero launch claims in this historical correction were falsely closed and supersedes them.
 
 These are proposed-protocol, planning, attribute-policy, and checker corrections only. They do not
 implement parent indexing, evidence verification, consensus eligibility, a safe-halt mechanism, a
@@ -538,6 +540,59 @@ new-genesis ceremony, launch retrieval, cryptography, networking, authenticated 
 execution. No broad Rust, Python-vector, headless, release, Lean, network, performance, or display
 test is attributed to this correction. A seventh complete sweep must pin it and freeze zero new
 material gaps within its declared lenses before those broad tests begin.
+
+### 33. Seventh bounded successor sweep and actual-reference closure
+
+User intent: continue the same freeze-before-fix loop, challenge apparent closures rather than
+accepting a smaller gap count, and start broad tests only after a complete successor sweep finds
+neither a new material gap nor a falsely closed residual.
+
+Current truth: the sixth correction is pinned at
+`62afdd24a8525704f5949584859bd7cbad300d4d`, Git tree
+`ee346fb3aa9bc54591f851dcb482fd92be9da84a`. The next complete read-only sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md) at
+first-addition commit `78d5494f930c7412c2d60162b44c0b72050f9f22`, whose Git tree is
+`07aa851e422a5da9453d4409f91b62ad9442a7d5`, with Git blob
+`dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2`. It records eight material findings: signatures still
+inside the allegedly unique accepted core; unsafe in-place recovery after compromise of a live
+authority-binding suite; an unbound consensus-evidence dependency for consensus-entailed
+availability; replay over plural wrappers instead of unique cores and a normalized evidence cutoff;
+an external genesis artifact whose fixed rank and edge directions cannot represent its actual scope/
+registry references; contradictory successor internal-versus-launch equations; an unparsed unlock-
+frontier projection; and an unchecked handoff read order/count projection.
+
+The coordinated descendant correction makes the indexed accepted core signature-free and moves
+`VerifiedProposalCredentialEntryV1` values into a bounded, sorted/deduplicated, no-double-weight
+`AcceptedProposalCredentialSetV1`. It requires `VerifiedConsensusEntailedAvailabilityDeltaV1` with
+`SameWrapperConsensusDependencyWitnessV1` for evidence-first atomic insertion and defines replay
+over one parent-ordered `AcceptedCoreReplayEntryV1` per height, carrying
+`NormalizedAcceptedEvidenceSnapshotV1` or `RetainedAcceptedEligibilityWitnessV1` under an explicit
+`ReplayEvidenceCutoffV1`.
+`PreventiveProfileOwnedCryptographicMigrationV1` remains available only while every authority
+binding is independently sound; an established collision/forgery in a live role safe-
+halts and can recover only through an independently anchored envelope precommitted before compromise
+or a separately trusted new genesis.
+
+The launch correction keeps the outer genesis bytes physically present and counted once, but gives
+`LaunchClosureExternalGenesisDependencyNodeV1` outgoing refs and a nonzero checked rank in the
+combined actual-reference
+DAG: registry rank 0, scope rank 1, genesis rank 2, and candidate rank 3 is one valid prefix.
+Successor activation deliberately does not embed prior history: its bundle has explicit internal-
+only `internal_artifact_count_u32 = 7 + Length(S_s) = Length(D_s)` artifact/node equation plus
+`SuccessorActivationInternalDependencyNodeV1`/`SuccessorActivationInternalDependencyRefV1` edge,
+byte, and length fields relative to a typed `VerifiedSuccessorPredecessorContextV1` semantic input
+that is verified first and neither serialized nor counted. Every external projection must match
+that unique context. Structured unlock-frontier
+and handoff read-order/count projections close the two checker omissions without making prose
+authority.
+
+These remain proposed-protocol, planning, attribute-policy, and checker corrections. They implement
+no signature/evidence index, consensus or availability verifier, replay store, authority-compromise
+recovery mechanism, launch/successor closure verifier, cryptographic primitive, networking,
+authenticated state, cryptocurrency, or Layer 1 execution. No broad Rust, Python-vector, headless,
+release, Lean, network, performance, or display test is attributed to this correction. A complete
+Loop 8 sweep must freeze zero new material gaps and zero falsely closed material residuals within
+its declared lenses before those broad tests begin.
 
 ## Semantic lessons that should survive future checkpoints
 
