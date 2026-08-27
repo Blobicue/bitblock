@@ -758,7 +758,7 @@ impl TargetRouteFacts {
             .then_with(|| self.desktop_image.cmp(&other.desktop_image))
     }
 
-    fn canonical_cmp(&self, other: &Self) -> Ordering {
+    pub(crate) fn canonical_cmp(&self, other: &Self) -> Ordering {
         self.stable_cmp(other)
             .then_with(|| self.identity.annotation_cmp(&other.identity))
     }

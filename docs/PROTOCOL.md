@@ -2281,7 +2281,7 @@ powered Rust subject control weakened the production comparator to ordinary
 struct equality; the annotation-only duplicate test then failed. Restoring the
 material comparator returned the test to green.
 
-### PresentationOutput v1 and mixed replay
+### PresentationOutput v1, raw output color, and mixed replay
 
 `src/presentation_output.rs` defines kind `presentation-output-artifact` and
 schema `bitblock/presentation-output-artifact/v1`. Its canonical layout is:
@@ -2318,6 +2318,25 @@ its display, timing, topology, and derived-stability tags. It does not supply
 the referenced TickOutcome, FrameInput, or policy objects and therefore is not
 transitive content-reference closure.
 
+`src/output_color.rs` adds the separate `output-color-observation` v1 carrier.
+It binds an ordered raw Windows Advanced Color result to the exact canonical
+`OutputTopology` tag: each route carries either opaque `flags_raw`,
+`color_encoding_raw`, and `bits_per_color_channel` words or a query error. The
+object never retains transient target IDs, decodes a mode as HDR/WCG, or claims
+composition, scanout, emitted light, or physical pixels. Its stdlib-only Python
+oracle (`tools/output_color_vectors.py`) checks canonical tags and rejects
+malformed, changed-parent, and noncanonical candidates.
+
+`src/presentation_output_v2.rs` adds a schema-v2 wrapper under the existing
+`presentation-output-artifact` kind. Its payload retains byte-for-byte v1
+bytes plus exact pre/post `OutputColorObservation` bytes. Admission verifies
+each color object against its respective nested v1 topology. The only derived
+configuration relation is raw `Stable`, `Changed`, or `Unavailable`, and it is
+not serialized as a claimed display mode. Journal replay dispatches v1 versus
+v2 by exact schema and keeps the legacy/v1/v2 objects in one storage-parent and
+embedded display-receipt-parent chain. V1 inventory entries have no color tags;
+v2 entries retain their pre/post color tags and raw configuration relation.
+
 ### F5 authority order and live assay
 
 F5 arms one observation of the next normally produced successful composite
@@ -2329,15 +2348,16 @@ presentation consumes it exactly once in this order:
 ```text
 checked presentation and committed composite receipt
 same-call CompositionTimingEnvelope
-OutputTopology before capture
+paired OutputTopology and raw Advanced Color before capture
 one visible-client GDI capture
-OutputTopology after capture
-canonical wrapper admission and synchronized journal append
+paired OutputTopology and raw Advanced Color after capture
+canonical v2 wrapper admission and synchronized journal append
 ```
 
 A nonpoisoning storage refusal retains the exact already-observed wrapper for a
-storage-only F5 retry; it does not resample timing, topology, or pixels. F4 and
-F5 are mutually exclusive while either request or retained object is pending.
+storage-only F5 retry; it does not resample timing, topology, raw configuration,
+or pixels. F4 and F5 are mutually exclusive while either request or retained
+object is pending.
 
 A fresh live Windows run used
 `target/live-f5-assay-20260826-02.bbj`. F5 first changed the title to

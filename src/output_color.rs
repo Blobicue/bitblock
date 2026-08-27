@@ -194,7 +194,10 @@ impl OutputColorObservation {
                 actual: routes.len(),
             });
         }
-        Self::from_facts(parent_topology.tag(), OutputColorFacts::Available { routes })
+        Self::from_facts(
+            parent_topology.tag(),
+            OutputColorFacts::Available { routes },
+        )
     }
 
     /// Retains a failed/unavailable color query while still naming the topology it was about.
@@ -462,7 +465,10 @@ impl fmt::Display for OutputColorObservationError {
                 "output-color has {actual} routes, exceeding {maximum}"
             ),
             Self::UnknownMarker { field, marker } => {
-                write!(formatter, "{field} uses unknown output-color marker {marker}")
+                write!(
+                    formatter,
+                    "{field} uses unknown output-color marker {marker}"
+                )
             }
             Self::NonCanonicalEncoding => {
                 formatter.write_str("output-color bytes are not canonical")
@@ -680,10 +686,13 @@ mod tests {
         decoded.verify().unwrap();
         decoded.verify_against(&parent).unwrap();
 
-        let unavailable_parent = OutputTopologyObservation::new_unavailable(acquisition(), 8, 87).unwrap();
-        let unavailable = OutputColorObservation::new_unavailable(&unavailable_parent, 9, 88).unwrap();
-        let decoded = OutputColorObservation::decode_canonical(&unavailable.encode_canonical().unwrap())
-            .unwrap();
+        let unavailable_parent =
+            OutputTopologyObservation::new_unavailable(acquisition(), 8, 87).unwrap();
+        let unavailable =
+            OutputColorObservation::new_unavailable(&unavailable_parent, 9, 88).unwrap();
+        let decoded =
+            OutputColorObservation::decode_canonical(&unavailable.encode_canonical().unwrap())
+                .unwrap();
         assert_eq!(decoded, unavailable);
         decoded.verify_against(&unavailable_parent).unwrap();
     }
@@ -702,7 +711,8 @@ mod tests {
             })
         );
 
-        let unavailable_parent = OutputTopologyObservation::new_unavailable(acquisition(), 8, 87).unwrap();
+        let unavailable_parent =
+            OutputTopologyObservation::new_unavailable(acquisition(), 8, 87).unwrap();
         assert_eq!(
             OutputColorObservation::new_available(
                 &unavailable_parent,
@@ -791,5 +801,35 @@ mod tests {
             OutputColorObservation::decode_canonical(&trailing),
             Err(OutputColorObservationError::TrailingBytes { actual: 1 })
         ));
+    }
+
+    #[test]
+    fn independent_python_known_answer_vector_decodes_and_retags() {
+        const VECTOR: [u8; 53] = [
+            0x75, 0x20, 0xbc, 0x7b, 0x7d, 0xae, 0x8e, 0x9c, 0x1d, 0x37, 0x12, 0x39, 0xb4, 0x56,
+            0xf9, 0xbf, 0x03, 0x78, 0xbc, 0x51, 0xe8, 0x58, 0xf2, 0x20, 0xeb, 0xeb, 0x1d, 0x58,
+            0xb3, 0x6e, 0x70, 0x4f, 0x00, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0x0f, 0xff, 0xff,
+            0xff, 0xfe, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x00, 0x04, 0x90,
+        ];
+        let observation = OutputColorObservation::decode_canonical(&VECTOR).unwrap();
+        assert_eq!(observation.encode_canonical().unwrap(), VECTOR);
+        assert_eq!(
+            observation.tag().to_string(),
+            "#bb.output-color-observation.sha256.aw75drwp3saetgieirtggy6k6okgjiqgdamuqfl5xb2wtqslicgq"
+        );
+        assert_eq!(
+            observation.routes(),
+            Some(
+                [
+                    AdvancedColorRouteFacts::Available {
+                        flags_raw: 0x8000_000f,
+                        color_encoding_raw: 0xffff_fffe,
+                        bits_per_color_channel: u32::MAX,
+                    },
+                    AdvancedColorRouteFacts::Unavailable { error_code: 1168 },
+                ]
+                .as_slice()
+            )
+        );
     }
 }

@@ -28,6 +28,8 @@ pub mod physical_sensor;
 pub mod presentation;
 #[cfg(any(test, feature = "protocol-research"))]
 pub mod presentation_output;
+#[cfg(any(test, feature = "protocol-research"))]
+pub mod presentation_output_v2;
 pub mod program;
 pub mod protocol;
 pub mod render;

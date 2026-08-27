@@ -18,9 +18,11 @@ Bitblock is a binary coordinate space observed through a free camera.
 - A research-only Windows timing audit can bind that exact composite receipt to raw
   before/after DWM session timing, QPC brackets, and barrier outcomes. Its per-frame
   attribution is always `Unknown`; it does not claim displayed, dropped, scanout, or light.
-- A one-shot research bundle can additionally retain bounded active-output topology before and
-  after one OS screen-raster capture. Stable routes and matching pixels still do not prove
-  per-frame DWM attribution, scanout, or physical light.
+- A one-shot research bundle can additionally retain bounded active-output topology and raw
+  Windows Advanced Color configuration before and after one OS screen-raster capture. The raw
+  flags, encoding word, and bits-per-channel are configuration reports only: stable routes or
+  matching configuration do not prove HDR presentation, per-frame DWM attribution, scanout, or
+  physical light.
 - A feature-gated physical-sensor carrier can retain a full presentation tag, declared integer
   RGB tolerance profile, ordered XRGB challenge positions, and caller-supplied RGB16 values. It
   has no device collector, source attestation, or physical observation yet: `N/A`, unavailable,
@@ -44,8 +46,8 @@ Bitblock is a binary coordinate space observed through a free camera.
 - `F4`: with a fresh research display journal configured, archive one exact committed composite
   frame and one Windows desktop-raster observation without creating a simulation tick
 - `F5`: arm the next normally changed successful presentation, then archive its exact receipt,
-  composition timing, pre/post active-output topology, and one desktop-raster observation; an
-  idle request waits visibly and does not resubmit the old surface
+  composition timing, paired pre/post active-output topology/raw configuration, and one
+  desktop-raster observation; an idle request waits visibly and does not resubmit the old surface
 - `Escape`: release the mouse; click to capture it again
 
 ## Shared edit language
@@ -110,6 +112,36 @@ For a smaller source-semantics check, run:
 
 ```powershell
 python -B tools/semantic_batch_vectors.py
+```
+
+For longer scripted interaction checks, use a structured sequence:
+
+```powershell
+python -B tools/simulate_sequence.py examples/observer_walk_sequence.json --verbose
+```
+
+The script converts each `ticks[i]` entry into one fixed tick on the accepted-action side:
+
+- each tick is a list of action strings, or an object with `actions` (or `commands`),
+- command text is passed through to the tape parser exactly as text,
+- optional `expected` fields can be checked with `--expect`.
+
+Example JSON schema:
+
+```json
+{
+  "name": "observer_walk_sequence",
+  "ticks": [
+    [],
+    ["wheel -10", "place"],
+    ["move right down", "look 2.5 -1.25"]
+  ],
+  "expected": {
+    "final": {
+      "on_bits": 1
+    }
+  }
+}
 ```
 
 It independently reconstructs eight bounded one-coordinate history cases (mint, burn, no-op,
@@ -210,16 +242,19 @@ records continuously. Local sync/reread is not sudden-power durability,
 latest-prefix authority, external custody, scanout, or physical-light evidence.
 
 The same journal can mix legacy display artifacts with `PresentationOutput` v1
-records. F5 waits for the next normal successful composite presentation and
+and v2 records. F5 waits for the next normal successful composite presentation and
 uses the timing envelope produced around that exact backend call even when the
 continuous timing logger is disabled. It then records bounded active-output
-topology, captures the visible client once, records topology again, and admits
-one outer object only when the nested display and timing receipts are exactly
-equal, their QPC frequencies agree, and capture did not begin before the timing
-post-call bracket. F4 and F5 are mutually exclusive. A nonpoisoning F5 storage
-refusal retains the exact whole wrapper for a storage-only retry; it never
-recaptures or resamples timing/topology. The live mode remains create-only, so a
-poisoned journal needs external typed recovery rather than an in-process retry.
+topology plus raw Advanced Color configuration, captures the visible client once,
+records the paired observations again, and admits one outer object only when the
+nested display and timing receipts are exactly equal, their QPC frequencies agree,
+and capture did not begin before the timing post-call bracket. The v2 wrapper
+binds each raw configuration report to its exact pre/post topology; it does not
+interpret those raw words as HDR, color-managed output, scanout, or light. F4 and
+F5 are mutually exclusive. A nonpoisoning F5 storage refusal retains the exact
+whole wrapper for a storage-only retry; it never recaptures or resamples
+timing/topology/configuration. The live mode remains create-only, so a poisoned
+journal needs external typed recovery rather than an in-process retry.
 
 A separate stdlib-only Python oracle now checks a bounded renderer corpus without
 calling the Rust renderer: it intersects six cube-face planes per client-raster-pixel
@@ -432,14 +467,18 @@ discontinuous/reset. Modern Windows exposes this query at desktop-composition
 session scope rather than Bitblock-frame scope, so counter movement never changes
 the exact frame's fate from `Unknown`.
 
-F5 also queries the active route set before and after capture. The canonical
+F5 also queries the active route set and raw Advanced Color configuration before
+and after capture. The canonical
 observation retains exact UTF-16 source/target names, source/monitor geometry,
 mode and signal words, every clone target route, raw flags, and a bounded query
 attempt transcript, while excluding transient HWND/HMONITOR/LUID/source/target
-join identifiers. Query failure is explicit. The derived route result is
-`Stable`, `Changed`, or `Unavailable`; it is not encoded and does not by itself
-establish collection time or displayed-frame fate. ICC/HDR state, output bit
-depth, applied transform order, scanout, and panel light remain unobserved.
+join identifiers. The v2 wrapper additionally preserves opaque per-route
+Advanced Color flags, encoding word, and bits-per-channel (or explicit query
+unavailability) in the same canonical route order. Query failure is explicit.
+The derived route and raw-configuration results are `Stable`, `Changed`, or
+`Unavailable`; neither is encoded as a claimed display mode and neither by
+itself establishes collection time or displayed-frame fate. ICC/profile state,
+applied transform order, scanout, and panel light remain unobserved.
 
 ## External-sensor boundary
 

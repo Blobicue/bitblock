@@ -3,9 +3,13 @@
 //! Handles, adapter LUIDs, source/target identifiers, clone-group identifiers, path positions,
 //! and mode-table indices remain collector-local join keys. None enter the canonical observation.
 
+use std::fmt;
 use std::mem::size_of;
 use std::ptr;
 
+use crate::output_color::{
+    AdvancedColorRouteFacts, OutputColorObservation, OutputColorObservationError,
+};
 use crate::output_topology::{
     AcquisitionAttempt, AcquisitionFacts, DesktopImageFacts, EdidIdentity,
     MAX_OUTPUT_TOPOLOGY_ROUTES, OutputTopologyError, OutputTopologyObservation, PixelSize,
@@ -13,7 +17,8 @@ use crate::output_topology::{
     TargetRouteFacts, TargetSignalTiming, Utf16Text,
 };
 use windows_sys::Win32::Devices::Display::{
-    DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+    DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+    DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
     DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_MODE_INFO_TYPE_DESKTOP_IMAGE,
     DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE, DISPLAYCONFIG_MODE_INFO_TYPE_TARGET,
     DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_SOURCE_DEVICE_NAME, DISPLAYCONFIG_TARGET_DEVICE_NAME,
@@ -78,6 +83,7 @@ const R_ROUTE_CAP: u32 = u32::from_be_bytes(*b"RCAP");
 const I_CALL: u32 = u32::from_be_bytes(*b"TCAL");
 const I_STRING: u32 = u32::from_be_bytes(*b"TSTR");
 const I_PATH: u32 = u32::from_be_bytes(*b"TPTH");
+const C_TOPOLOGY_UNAVAILABLE: u32 = u32::from_be_bytes(*b"CTOP");
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct AdapterKey {
@@ -111,6 +117,16 @@ struct SourceKey {
 struct TargetKey {
     adapter: AdapterKey,
     id: u32,
+}
+
+/// Collector-local raw result of one Windows Advanced Color query.
+///
+/// No target ID or decoded mode survives into the canonical output-color observation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RawAdvancedColorInfo {
+    flags_raw: u32,
+    color_encoding_raw: u32,
+    bits_per_color_channel: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -148,6 +164,7 @@ trait DisplayTopologyApi {
     ) -> QueryCall;
     fn source_name(&mut self, key: SourceKey) -> Result<[u16; 32], u32>;
     fn target_name(&mut self, key: TargetKey) -> Result<DISPLAYCONFIG_TARGET_DEVICE_NAME, u32>;
+    fn advanced_color(&mut self, key: TargetKey) -> Result<RawAdvancedColorInfo, u32>;
 }
 
 struct WinApi;
@@ -307,6 +324,95 @@ impl DisplayTopologyApi for WinApi {
             Err(result as u32)
         }
     }
+
+    fn advanced_color(&mut self, key: TargetKey) -> Result<RawAdvancedColorInfo, u32> {
+        let mut packet = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO::default();
+        packet.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+        packet.header.size = size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32;
+        packet.header.adapterId = key.adapter.into_luid();
+        packet.header.id = key.id;
+        // SAFETY: header describes the complete writable packet following it.
+        let result = unsafe { DisplayConfigGetDeviceInfo(&mut packet.header) };
+        if result == ERROR_SUCCESS as i32 {
+            // SAFETY: the successful documented request initializes this raw 32-bit union lane.
+            let flags_raw = unsafe { packet.Anonymous.value };
+            Ok(RawAdvancedColorInfo {
+                flags_raw,
+                color_encoding_raw: packet.colorEncoding as u32,
+                bits_per_color_channel: packet.bitsPerColorChannel,
+            })
+        } else {
+            Err(result as u32)
+        }
+    }
+}
+
+/// Paired active-output configuration reports from one shared topology collection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActiveOutputWithColor {
+    topology: OutputTopologyObservation,
+    color: OutputColorObservation,
+}
+
+impl ActiveOutputWithColor {
+    /// Builds one verified paired observation from already-bound topology and color objects.
+    ///
+    /// This does not perform a Windows call; it is useful when a caller already owns the exact
+    /// pair and needs the same validation boundary as the live collector.
+    pub fn new(
+        topology: OutputTopologyObservation,
+        color: OutputColorObservation,
+    ) -> Result<Self, ActiveOutputObservationError> {
+        let observation = Self { topology, color };
+        observation.verify()?;
+        Ok(observation)
+    }
+
+    pub const fn topology(&self) -> &OutputTopologyObservation {
+        &self.topology
+    }
+
+    pub const fn color(&self) -> &OutputColorObservation {
+        &self.color
+    }
+
+    pub fn verify(&self) -> Result<(), ActiveOutputObservationError> {
+        self.topology
+            .verify()
+            .map_err(ActiveOutputObservationError::Topology)?;
+        self.color
+            .verify_against(&self.topology)
+            .map_err(ActiveOutputObservationError::Color)
+    }
+}
+
+#[derive(Debug)]
+pub enum ActiveOutputObservationError {
+    Topology(OutputTopologyError),
+    Color(OutputColorObservationError),
+}
+
+impl fmt::Display for ActiveOutputObservationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Topology(source) => write!(formatter, "active output topology failed: {source}"),
+            Self::Color(source) => write!(formatter, "active output color failed: {source}"),
+        }
+    }
+}
+
+impl std::error::Error for ActiveOutputObservationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Topology(source) => Some(source),
+            Self::Color(source) => Some(source),
+        }
+    }
+}
+
+struct CollectedActiveOutput {
+    topology: OutputTopologyObservation,
+    target_keys: Option<Vec<TargetKey>>,
 }
 
 /// Collects the active output selected by `window` without canonicalizing transient join keys.
@@ -324,10 +430,68 @@ pub unsafe fn observe_active_output(
     observe_active_output_with(&mut api, window as usize)
 }
 
+/// Collects one active topology and its raw per-route Advanced Color configuration together.
+///
+/// The topology and color reports share one QueryDisplayConfig collection. Per-target Advanced
+/// Color failures become explicit unavailable route facts; they do not erase an otherwise usable
+/// topology observation.
+///
+/// # Safety
+///
+/// `window` must be a live HWND owned by the calling thread for this synchronous observation.
+pub unsafe fn observe_active_output_with_color(
+    window: HWND,
+) -> Result<ActiveOutputWithColor, ActiveOutputObservationError> {
+    let mut api = WinApi;
+    observe_active_output_with_color_with(&mut api, window as usize)
+}
+
 fn observe_active_output_with<A: DisplayTopologyApi>(
     api: &mut A,
     window: usize,
 ) -> Result<OutputTopologyObservation, OutputTopologyError> {
+    Ok(collect_active_output_with(api, window)?.topology)
+}
+
+fn observe_active_output_with_color_with<A: DisplayTopologyApi>(
+    api: &mut A,
+    window: usize,
+) -> Result<ActiveOutputWithColor, ActiveOutputObservationError> {
+    let CollectedActiveOutput {
+        topology,
+        target_keys,
+    } = collect_active_output_with(api, window).map_err(ActiveOutputObservationError::Topology)?;
+    let color = match target_keys {
+        Some(target_keys) => {
+            let mut routes = Vec::new();
+            routes.try_reserve_exact(target_keys.len()).map_err(|_| {
+                ActiveOutputObservationError::Color(OutputColorObservationError::AllocationFailed {
+                    requested: target_keys.len(),
+                })
+            })?;
+            for key in target_keys {
+                routes.push(match api.advanced_color(key) {
+                    Ok(raw) => AdvancedColorRouteFacts::Available {
+                        flags_raw: raw.flags_raw,
+                        color_encoding_raw: raw.color_encoding_raw,
+                        bits_per_color_channel: raw.bits_per_color_channel,
+                    },
+                    Err(error_code) => AdvancedColorRouteFacts::Unavailable { error_code },
+                });
+            }
+            OutputColorObservation::new_available(&topology, routes)
+                .map_err(ActiveOutputObservationError::Color)?
+        }
+        None => OutputColorObservation::new_unavailable(&topology, C_TOPOLOGY_UNAVAILABLE, 0)
+            .map_err(ActiveOutputObservationError::Color)?,
+    };
+    ActiveOutputWithColor::new(topology, color)
+}
+
+fn collect_active_output_with<A: DisplayTopologyApi>(
+    api: &mut A,
+    window: usize,
+) -> Result<CollectedActiveOutput, OutputTopologyError> {
     let mut attempts = Vec::new();
     let mut flags = PRIMARY_QUERY_FLAGS;
 
@@ -338,7 +502,7 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
         }
         Err(error) => {
             push_attempt(&mut attempts, flags, OP_MONITOR, FAIL, error, 0, 0);
-            return unavailable(attempts, flags, R_MONITOR, error);
+            return unavailable_collected(attempts, flags, R_MONITOR, error);
         }
     };
     let monitor_info = match api.monitor_info(monitor) {
@@ -348,7 +512,7 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
         }
         Err(error) => {
             push_attempt(&mut attempts, flags, OP_MONITOR_INFO, FAIL, error, 0, 0);
-            return unavailable(attempts, flags, R_MONITOR_INFO, error);
+            return unavailable_collected(attempts, flags, R_MONITOR_INFO, error);
         }
     };
     let client_rect = match api.client_screen_rect(window) {
@@ -358,22 +522,22 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
         }
         Ok(_) => {
             push_attempt(&mut attempts, flags, OP_CLIENT_RECT, FAIL, 0, 0, 0);
-            return unavailable(attempts, flags, R_CLIENT_RECT, 0);
+            return unavailable_collected(attempts, flags, R_CLIENT_RECT, 0);
         }
         Err(error) => {
             push_attempt(&mut attempts, flags, OP_CLIENT_RECT, FAIL, error, 0, 0);
-            return unavailable(attempts, flags, R_CLIENT_RECT, error);
+            return unavailable_collected(attempts, flags, R_CLIENT_RECT, error);
         }
     };
     if !valid_rect(monitor_info.monitor_rect) || !valid_rect(monitor_info.work_rect) {
         push_attempt(&mut attempts, flags, OP_VALIDATE, FAIL, 0, 0, 0);
-        return unavailable(attempts, flags, R_MONITOR_INFO, 0);
+        return unavailable_collected(attempts, flags, R_MONITOR_INFO, 0);
     }
     let monitor_units = match fixed_utf16(&monitor_info.device_name) {
         Ok(units) if !units.is_empty() => units,
         _ => {
             push_attempt(&mut attempts, flags, OP_VALIDATE, FAIL, 0, 0, 0);
-            return unavailable(attempts, flags, R_MONITOR_INFO, 0);
+            return unavailable_collected(attempts, flags, R_MONITOR_INFO, 0);
         }
     };
     let monitor_name = Utf16Text::from_units(monitor_units)?;
@@ -404,7 +568,7 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
                 last_retry_error = sizes.error_code;
                 continue;
             }
-            return unavailable(attempts, flags, R_SIZE, sizes.error_code);
+            return unavailable_collected(attempts, flags, R_SIZE, sizes.error_code);
         }
         if sizes.path_count == 0
             || sizes.mode_count == 0
@@ -426,7 +590,7 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
             } else {
                 R_QUERY_SHAPE
             };
-            return unavailable(attempts, flags, reason, 0);
+            return unavailable_collected(attempts, flags, reason, 0);
         }
         push_attempt(
             &mut attempts,
@@ -458,7 +622,7 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
                 query.mode_count,
             );
             if !valid {
-                return unavailable(attempts, flags, R_QUERY_SHAPE, 0);
+                return unavailable_collected(attempts, flags, R_QUERY_SHAPE, 0);
             }
             paths.truncate(query.path_count as usize);
             modes.truncate(query.mode_count as usize);
@@ -485,10 +649,10 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
             last_retry_error = query.error_code;
             continue;
         }
-        return unavailable(attempts, flags, R_QUERY, query.error_code);
+        return unavailable_collected(attempts, flags, R_QUERY, query.error_code);
     }
     let Some((paths, modes)) = queried else {
-        return unavailable(attempts, flags, R_RETRY_EXHAUSTED, last_retry_error);
+        return unavailable_collected(attempts, flags, R_RETRY_EXHAUSTED, last_retry_error);
     };
 
     match build_available(
@@ -531,11 +695,15 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
                 paths.len() as u32,
                 modes.len() as u32,
             );
-            OutputTopologyObservation::new_available(
+            let topology = OutputTopologyObservation::new_available(
                 acquisition(attempts, flags),
                 built.source,
                 built.routes,
-            )
+            )?;
+            Ok(CollectedActiveOutput {
+                topology,
+                target_keys: Some(built.target_keys),
+            })
         }
         Err(CollectorError::Observed { reason, error }) => {
             push_attempt(
@@ -547,7 +715,7 @@ fn observe_active_output_with<A: DisplayTopologyApi>(
                 paths.len() as u32,
                 modes.len() as u32,
             );
-            unavailable(attempts, flags, reason, error)
+            unavailable_collected(attempts, flags, reason, error)
         }
         Err(CollectorError::Core(error)) => Err(error),
     }
@@ -586,6 +754,18 @@ fn unavailable(
     error: u32,
 ) -> Result<OutputTopologyObservation, OutputTopologyError> {
     OutputTopologyObservation::new_unavailable(acquisition(attempts, flags), reason, error)
+}
+
+fn unavailable_collected(
+    attempts: Vec<AcquisitionAttempt>,
+    flags: u32,
+    reason: u32,
+    error: u32,
+) -> Result<CollectedActiveOutput, OutputTopologyError> {
+    unavailable(attempts, flags, reason, error).map(|topology| CollectedActiveOutput {
+        topology,
+        target_keys: None,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -644,9 +824,15 @@ impl From<OutputTopologyError> for CollectorError {
 struct BuiltTopology {
     source: SourceFacts,
     routes: Vec<TargetRouteFacts>,
+    target_keys: Vec<TargetKey>,
     source_name_calls: u32,
     target_name_calls: u32,
     target_name_failures: u32,
+}
+
+struct CanonicalRouteRow {
+    target_key: TargetKey,
+    route: TargetRouteFacts,
 }
 
 fn build_available<A: DisplayTopologyApi>(
@@ -725,12 +911,11 @@ fn build_available<A: DisplayTopologyApi>(
         mode: source_mode,
         status_flags_raw: source_status,
     };
-    let mut routes = Vec::new();
-    routes.try_reserve_exact(selected.len()).map_err(|_| {
-        OutputTopologyError::AllocationFailed {
+    let mut rows = Vec::new();
+    rows.try_reserve_exact(selected.len())
+        .map_err(|_| OutputTopologyError::AllocationFailed {
             requested: selected.len(),
-        }
-    })?;
+        })?;
     let mut target_name_failures = 0_u32;
     for path in &selected {
         let target_mode = resolve_target_mode(path, modes)?;
@@ -738,7 +923,8 @@ fn build_available<A: DisplayTopologyApi>(
         // SAFETY: videoStandard spans the initialized 32-bit union and remains an uninterpreted
         // raw value; the alternate bitfield is never accessed.
         let video_standard_raw = unsafe { signal.Anonymous.videoStandard };
-        let identity = match api.target_name(target_key(path)) {
+        let target_key = target_key(path);
+        let identity = match api.target_name(target_key) {
             Ok(packet) => match target_identity(packet)? {
                 IdentityDecode::Available(value) => value,
                 IdentityDecode::Unavailable(reason) => {
@@ -757,37 +943,41 @@ fn build_available<A: DisplayTopologyApi>(
                 }
             }
         };
-        routes.push(TargetRouteFacts {
-            identity,
-            output_technology_raw: path.targetInfo.outputTechnology as u32,
-            target_available: path.targetInfo.targetAvailable == 1,
-            status_flags_raw: path.targetInfo.statusFlags,
-            rotation_raw: path.targetInfo.rotation as u32,
-            scaling_raw: path.targetInfo.scaling as u32,
-            refresh_rate: rational(path.targetInfo.refreshRate),
-            path_flags_raw: path.flags,
-            signal: TargetSignalTiming {
-                pixel_rate: signal.pixelRate,
-                h_sync: rational(signal.hSyncFreq),
-                v_sync: rational(signal.vSyncFreq),
-                active_size: PixelSize {
-                    width: signal.activeSize.cx,
-                    height: signal.activeSize.cy,
+        rows.push(CanonicalRouteRow {
+            target_key,
+            route: TargetRouteFacts {
+                identity,
+                output_technology_raw: path.targetInfo.outputTechnology as u32,
+                target_available: path.targetInfo.targetAvailable == 1,
+                status_flags_raw: path.targetInfo.statusFlags,
+                rotation_raw: path.targetInfo.rotation as u32,
+                scaling_raw: path.targetInfo.scaling as u32,
+                refresh_rate: rational(path.targetInfo.refreshRate),
+                path_flags_raw: path.flags,
+                signal: TargetSignalTiming {
+                    pixel_rate: signal.pixelRate,
+                    h_sync: rational(signal.hSyncFreq),
+                    v_sync: rational(signal.vSyncFreq),
+                    active_size: PixelSize {
+                        width: signal.activeSize.cx,
+                        height: signal.activeSize.cy,
+                    },
+                    total_size: PixelSize {
+                        width: signal.totalSize.cx,
+                        height: signal.totalSize.cy,
+                    },
+                    video_standard_raw,
+                    scanline_ordering_raw: signal.scanLineOrdering as u32,
                 },
-                total_size: PixelSize {
-                    width: signal.totalSize.cx,
-                    height: signal.totalSize.cy,
-                },
-                video_standard_raw,
-                scanline_ordering_raw: signal.scanLineOrdering as u32,
+                desktop_image: resolve_desktop_image(path, modes)?,
             },
-            desktop_image: resolve_desktop_image(path, modes)?,
         });
     }
-    for index in 0..routes.len() {
-        if routes[index + 1..]
+    rows.sort_by(|left, right| left.route.canonical_cmp(&right.route));
+    for index in 0..rows.len() {
+        if rows[index + 1..]
             .iter()
-            .any(|other| routes[index].stable_cmp(other).is_eq())
+            .any(|other| rows[index].route.stable_cmp(&other.route).is_eq())
         {
             // Two unnamed/materially identical targets cannot be distinguished without reviving a
             // transient numeric ID. Friendly annotation is deliberately excluded: it is not a
@@ -795,10 +985,27 @@ fn build_available<A: DisplayTopologyApi>(
             return Err(CollectorError::observed(R_PATH_SHAPE));
         }
     }
+    let mut routes = Vec::new();
+    routes
+        .try_reserve_exact(rows.len())
+        .map_err(|_| OutputTopologyError::AllocationFailed {
+            requested: rows.len(),
+        })?;
+    let mut target_keys = Vec::new();
+    target_keys.try_reserve_exact(rows.len()).map_err(|_| {
+        OutputTopologyError::AllocationFailed {
+            requested: rows.len(),
+        }
+    })?;
+    for row in rows {
+        routes.push(row.route);
+        target_keys.push(row.target_key);
+    }
 
     Ok(BuiltTopology {
         source,
         routes,
+        target_keys,
         source_name_calls: source_keys.len() as u32,
         target_name_calls: selected.len() as u32,
         target_name_failures,
@@ -1020,6 +1227,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
+    use crate::output_color::{AdvancedColorRouteFacts, OutputColorFacts};
     use crate::output_topology::OutputTopologyFacts;
     use windows_sys::Win32::Devices::Display::{
         DISPLAYCONFIG_2DREGION, DISPLAYCONFIG_PIXELFORMAT_32BPP, DISPLAYCONFIG_RATIONAL,
@@ -1037,6 +1245,7 @@ mod tests {
         Query(u32, usize, usize),
         SourceName(SourceKey),
         TargetName(TargetKey),
+        AdvancedColor(TargetKey),
     }
 
     struct FakeQuery {
@@ -1053,6 +1262,7 @@ mod tests {
         queries: VecDeque<FakeQuery>,
         source_names: VecDeque<(SourceKey, Result<[u16; 32], u32>)>,
         target_names: VecDeque<(TargetKey, Result<DISPLAYCONFIG_TARGET_DEVICE_NAME, u32>)>,
+        advanced_colors: VecDeque<(TargetKey, Result<RawAdvancedColorInfo, u32>)>,
         calls: Vec<Call>,
     }
 
@@ -1111,6 +1321,16 @@ mod tests {
                 .target_names
                 .pop_front()
                 .expect("unexpected target-name call");
+            assert_eq!(key, expected);
+            result
+        }
+
+        fn advanced_color(&mut self, key: TargetKey) -> Result<RawAdvancedColorInfo, u32> {
+            self.calls.push(Call::AdvancedColor(key));
+            let (expected, result) = self
+                .advanced_colors
+                .pop_front()
+                .expect("unexpected advanced-color call");
             assert_eq!(key, expected);
             result
         }
@@ -1246,6 +1466,22 @@ mod tests {
                 )
             })
             .collect();
+        let advanced_colors = target_ids
+            .iter()
+            .map(|target| {
+                (
+                    TargetKey {
+                        adapter,
+                        id: *target,
+                    },
+                    Ok(RawAdvancedColorInfo {
+                        flags_raw: *target,
+                        color_encoding_raw: target.wrapping_add(0x8000_0000),
+                        bits_per_color_channel: 10,
+                    }),
+                )
+            })
+            .collect();
         FakeApi {
             monitor: Ok(44),
             monitor_info: Ok(RawMonitorInfo {
@@ -1292,6 +1528,7 @@ mod tests {
                 Ok(display_name()),
             )]),
             target_names,
+            advanced_colors,
             calls: Vec::new(),
         }
     }
@@ -1323,6 +1560,102 @@ mod tests {
                 Call::SourceName(SourceKey { adapter, id: 3 }),
                 Call::TargetName(TargetKey { adapter, id: 4 }),
             ]
+        );
+    }
+
+    #[test]
+    fn paired_color_rows_follow_canonical_routes_not_query_order() {
+        let adapter = AdapterKey { low: 10, high: -2 };
+        let mut api = base_api(adapter, 20, &[30, 31]);
+        api.queries[0].paths.reverse();
+        // Target-name collection follows raw query order, but Advanced Color is deliberately
+        // queried only after target rows have been sorted by the canonical route comparator.
+        api.target_names.make_contiguous().reverse();
+
+        let paired = observe_active_output_with_color_with(&mut api, 99).unwrap();
+        paired.verify().unwrap();
+        assert_eq!(paired.topology().available().unwrap().routes.len(), 2);
+        assert_eq!(
+            paired.color().routes(),
+            Some(
+                [
+                    AdvancedColorRouteFacts::Available {
+                        flags_raw: 30,
+                        color_encoding_raw: 0x8000_001e,
+                        bits_per_color_channel: 10,
+                    },
+                    AdvancedColorRouteFacts::Available {
+                        flags_raw: 31,
+                        color_encoding_raw: 0x8000_001f,
+                        bits_per_color_channel: 10,
+                    },
+                ]
+                .as_slice()
+            )
+        );
+        let advanced_calls: Vec<_> = api
+            .calls
+            .iter()
+            .filter_map(|call| match call {
+                Call::AdvancedColor(key) => Some(*key),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            advanced_calls,
+            [TargetKey { adapter, id: 30 }, TargetKey { adapter, id: 31 },]
+        );
+    }
+
+    #[test]
+    fn paired_color_keeps_per_target_failure_and_high_raw_words() {
+        let adapter = AdapterKey { low: 1, high: 2 };
+        let mut api = base_api(adapter, 3, &[4, 5]);
+        api.advanced_colors[0].1 = Ok(RawAdvancedColorInfo {
+            flags_raw: 0x8000_000f,
+            color_encoding_raw: 0xffff_fffe,
+            bits_per_color_channel: u32::MAX,
+        });
+        api.advanced_colors[1].1 = Err(1168);
+
+        let paired = observe_active_output_with_color_with(&mut api, 99).unwrap();
+        paired.verify().unwrap();
+        assert!(paired.topology().available().is_some());
+        assert_eq!(
+            paired.color().facts(),
+            &OutputColorFacts::Available {
+                routes: vec![
+                    AdvancedColorRouteFacts::Available {
+                        flags_raw: 0x8000_000f,
+                        color_encoding_raw: 0xffff_fffe,
+                        bits_per_color_channel: u32::MAX,
+                    },
+                    AdvancedColorRouteFacts::Unavailable { error_code: 1168 },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn paired_unavailable_topology_skips_color_queries_and_retains_reason() {
+        let adapter = AdapterKey { low: 1, high: 2 };
+        let mut api = base_api(adapter, 3, &[4]);
+        api.monitor = Err(6);
+
+        let paired = observe_active_output_with_color_with(&mut api, 99).unwrap();
+        paired.verify().unwrap();
+        assert!(paired.topology().unavailable().is_some());
+        assert_eq!(
+            paired.color().facts(),
+            &OutputColorFacts::Unavailable {
+                reason_code_raw: C_TOPOLOGY_UNAVAILABLE,
+                error_code: 0,
+            }
+        );
+        assert!(
+            !api.calls
+                .iter()
+                .any(|call| matches!(call, Call::AdvancedColor(_)))
         );
     }
 

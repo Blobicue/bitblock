@@ -38,6 +38,8 @@ use bitblock::interaction::{
 };
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::journal::AnchorPolicy;
+#[cfg(all(test, windows, feature = "protocol-research"))]
+use bitblock::output_topology::{OutputTopologyError, OutputTopologyObservation};
 use bitblock::program::{Edit as WorldEdit, Operation, Program, TickBatch};
 use bitblock::protocol::ContentTag;
 #[cfg(feature = "protocol-research")]
@@ -68,15 +70,17 @@ use bitblock::windows_present::WindowsPixelSurface;
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::windows_timing::observe_checked_present;
 #[cfg(all(windows, feature = "protocol-research"))]
-use bitblock::windows_topology::observe_active_output;
+use bitblock::windows_topology::{
+    ActiveOutputObservationError, ActiveOutputWithColor, observe_active_output_with_color,
+};
 use bitblock::world::{BEDROCK_COORD, CHUNK_SIDE, CHUNK_WORDS, Coord, World};
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::{display_artifact::DisplayCaptureArtifact, storage::StorageLimits};
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::{
-    output_topology::{OutputTopologyError, OutputTopologyObservation},
     presentation::{CompositionTimingEnvelope, PresentationProtocolError},
     presentation_output::PresentationOutputArtifact,
+    presentation_output_v2::PresentationOutputArtifactV2,
 };
 #[cfg(not(windows))]
 use softbuffer::{Context, Surface};
@@ -479,7 +483,7 @@ fn print_display_journal_verification(
     );
     for entry in state.entries() {
         println!(
-            "display-journal-evidence\tstorage={}\tobject={}\tartifact={}\tdisplay_receipt={}\tframe_receipt={}\ttick_outcome={}\tframe_input={}\texpected_frame={}\tcaptured_frame={}\tpolicy={}\tcapture_outcome={:?}\tcapture_stage={:?}\tmismatches={}\tfirst_mismatch={}\tcaptured_form={:?}\ttiming={}\ttopology_before={}\ttopology_after={}\troute_stability={:?}",
+            "display-journal-evidence\tstorage={}\tobject={}\tartifact={}\tdisplay_receipt={}\tframe_receipt={}\ttick_outcome={}\tframe_input={}\texpected_frame={}\tcaptured_frame={}\tpolicy={}\tcapture_outcome={:?}\tcapture_stage={:?}\tmismatches={}\tfirst_mismatch={}\tcaptured_form={:?}\ttiming={}\ttopology_before={}\ttopology_after={}\troute_stability={:?}\tcolor_before={}\tcolor_after={}\treported_color_state={:?}",
             entry.storage_record,
             entry.stored_object,
             entry.artifact,
@@ -499,6 +503,9 @@ fn print_display_journal_verification(
             optional_tag(entry.topology_before),
             optional_tag(entry.topology_after),
             entry.route_stability,
+            optional_tag(entry.color_before),
+            optional_tag(entry.color_after),
+            entry.reported_color_state,
         );
     }
 }
@@ -605,10 +612,28 @@ struct PendingRenderedFrame {
 }
 
 #[cfg(all(windows, feature = "protocol-research"))]
+enum PendingPresentationOutput {
+    #[cfg(test)]
+    V1(Box<PresentationOutputArtifact>),
+    V2(Box<PresentationOutputArtifactV2>),
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
+impl PendingPresentationOutput {
+    const fn tag(&self) -> ContentTag {
+        match self {
+            #[cfg(test)]
+            Self::V1(presentation) => presentation.tag(),
+            Self::V2(presentation) => presentation.tag(),
+        }
+    }
+}
+
+#[cfg(all(windows, feature = "protocol-research"))]
 struct LiveDisplayArtifactArchive {
     journal: DisplayArtifactJournal,
     pending_artifact: Option<DisplayCaptureArtifact>,
-    pending_presentation_output: Option<PresentationOutputArtifact>,
+    pending_presentation_output: Option<PendingPresentationOutput>,
     faulted: bool,
 }
 
@@ -645,7 +670,7 @@ impl LiveDisplayArtifactArchive {
     fn pending_presentation_output(&self) -> Option<bitblock::protocol::ContentTag> {
         self.pending_presentation_output
             .as_ref()
-            .map(PresentationOutputArtifact::tag)
+            .map(PendingPresentationOutput::tag)
     }
 
     fn prepare_and_append(
@@ -699,6 +724,7 @@ impl LiveDisplayArtifactArchive {
         }
     }
 
+    #[cfg(test)]
     fn prepare_and_append_presentation_output(
         &mut self,
         expected_receipt: FrameReceiptV2,
@@ -736,7 +762,69 @@ impl LiveDisplayArtifactArchive {
                     });
                 }
             };
-        self.pending_presentation_output = Some(presentation);
+        self.pending_presentation_output =
+            Some(PendingPresentationOutput::V1(Box::new(presentation)));
+        self.append_pending_presentation_output()
+    }
+
+    fn prepare_and_append_presentation_output_v2(
+        &mut self,
+        expected_receipt: FrameReceiptV2,
+        expected: FrameRef<'_>,
+        capture: &DisplayCapture,
+        timing: CompositionTimingEnvelope,
+        pre_output: ActiveOutputWithColor,
+        post_output: ActiveOutputWithColor,
+    ) -> Result<PresentationOutputAppendReceipt, LiveDisplayArtifactFailure> {
+        debug_assert!(self.can_capture_new());
+        let display =
+            match self
+                .journal
+                .prepare_capture_artifact(expected_receipt, expected, capture)
+            {
+                Ok(artifact) => artifact,
+                Err(error) => {
+                    self.faulted = true;
+                    return Err(LiveDisplayArtifactFailure {
+                        error: Box::new(error),
+                        artifact: None,
+                        poisoned: self.journal.is_poisoned(),
+                    });
+                }
+            };
+        let v1 = match PresentationOutputArtifact::new(
+            display,
+            timing,
+            pre_output.topology().clone(),
+            post_output.topology().clone(),
+        ) {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                self.faulted = true;
+                return Err(LiveDisplayArtifactFailure {
+                    error: Box::new(DisplayArtifactStoreError::from(error)),
+                    artifact: None,
+                    poisoned: self.journal.is_poisoned(),
+                });
+            }
+        };
+        let presentation = match PresentationOutputArtifactV2::new(
+            v1,
+            pre_output.color().clone(),
+            post_output.color().clone(),
+        ) {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                self.faulted = true;
+                return Err(LiveDisplayArtifactFailure {
+                    error: Box::new(DisplayArtifactStoreError::from(error)),
+                    artifact: None,
+                    poisoned: self.journal.is_poisoned(),
+                });
+            }
+        };
+        self.pending_presentation_output =
+            Some(PendingPresentationOutput::V2(Box::new(presentation)));
         self.append_pending_presentation_output()
     }
 
@@ -748,7 +836,16 @@ impl LiveDisplayArtifactArchive {
             .as_ref()
             .expect("an explicit F5 retry requires one retained presentation-output artifact");
         let presentation_tag = presentation.tag();
-        match self.journal.append_presentation_output(presentation) {
+        let append = match presentation {
+            #[cfg(test)]
+            PendingPresentationOutput::V1(presentation) => {
+                self.journal.append_presentation_output(presentation)
+            }
+            PendingPresentationOutput::V2(presentation) => {
+                self.journal.append_presentation_output_v2(presentation)
+            }
+        };
+        match append {
             Ok(receipt) => {
                 self.pending_presentation_output = None;
                 Ok(receipt)
@@ -870,14 +967,20 @@ enum LivePresentationOutputFailure {
         timing: bitblock::protocol::ContentTag,
     },
     MissingWindowHandle,
+    #[cfg(test)]
     Topology {
         stage: &'static str,
         error: OutputTopologyError,
+    },
+    OutputObservation {
+        stage: &'static str,
+        error: ActiveOutputObservationError,
     },
     Store(LiveDisplayArtifactFailure),
 }
 
 #[cfg(all(windows, feature = "protocol-research"))]
+#[cfg(test)]
 fn attempt_presentation_output_observation<ObserveTopology, Capture>(
     archive: &mut LiveDisplayArtifactArchive,
     presented: PresentedFrameObservation,
@@ -912,6 +1015,44 @@ where
         .map_err(LivePresentationOutputFailure::Store)
 }
 
+/// Captures one F5 candidate from paired topology/color observations collected immediately
+/// before and after the GDI capture. A retained storage retry reuses the complete v2 wrapper and
+/// never samples a later Windows configuration.
+#[cfg(all(windows, feature = "protocol-research"))]
+fn attempt_presentation_output_v2_observation<ObserveOutput, Capture>(
+    archive: &mut LiveDisplayArtifactArchive,
+    presented: PresentedFrameObservation,
+    expected: FrameRef<'_>,
+    timing: CompositionTimingEnvelope,
+    mut observe_output: ObserveOutput,
+    capture: Capture,
+) -> Result<PresentationOutputAppendReceipt, LivePresentationOutputFailure>
+where
+    ObserveOutput:
+        FnMut(&'static str) -> Result<ActiveOutputWithColor, LivePresentationOutputFailure>,
+    Capture: FnOnce() -> DisplayCapture,
+{
+    if timing.receipt() != presented.receipt_v2 {
+        return Err(LivePresentationOutputFailure::TimingReceiptMismatch {
+            presented: presented.receipt_v2.tag(),
+            timing: timing.receipt().tag(),
+        });
+    }
+    let pre_output = observe_output("before-capture")?;
+    let capture = capture();
+    let post_output = observe_output("after-capture")?;
+    archive
+        .prepare_and_append_presentation_output_v2(
+            presented.receipt_v2,
+            expected,
+            &capture,
+            timing,
+            pre_output,
+            post_output,
+        )
+        .map_err(LivePresentationOutputFailure::Store)
+}
+
 #[cfg(all(windows, feature = "protocol-research"))]
 fn service_presentation_output_request_with<'a, Attempt>(
     requested: &mut bool,
@@ -940,7 +1081,7 @@ where
     )?;
 
     // F5 owns one exact post-presentation observation attempt. Any later storage retry retains
-    // the complete wrapper and performs no timing, topology, capture, or pixel calls.
+    // the complete wrapper and performs no timing, topology/color, capture, or pixel calls.
     *requested = false;
     Some(attempt(archive, presented, expected))
 }
@@ -968,7 +1109,7 @@ fn service_presentation_output_request(
                 None => return Err(LivePresentationOutputFailure::MissingTiming),
             };
             let mut cached_hwnd = None;
-            attempt_presentation_output_observation(
+            attempt_presentation_output_v2_observation(
                 archive,
                 presented,
                 expected,
@@ -987,8 +1128,9 @@ fn service_presentation_output_request(
                     // SAFETY: winit owns this HWND on the event-loop thread for the duration of
                     // each synchronous observation. The collector retains no handle or transient
                     // numeric join key.
-                    unsafe { observe_active_output(hwnd) }
-                        .map_err(|error| LivePresentationOutputFailure::Topology { stage, error })
+                    unsafe { observe_active_output_with_color(hwnd) }.map_err(|error| {
+                        LivePresentationOutputFailure::OutputObservation { stage, error }
+                    })
                 },
                 || capture_visible_client(window, expected),
             )
@@ -1008,13 +1150,16 @@ fn report_presentation_output_result(
                 receipt.artifact_count
             ));
             eprintln!(
-                "presentation-output-stored\toutput={}\tdisplay={}\ttiming={}\ttopology_before={}\ttopology_after={}\tstability={:?}\trecord={}\trange=[{}, {})\tcount={}",
+                "presentation-output-stored\toutput={}\tdisplay={}\ttiming={}\ttopology_before={}\ttopology_after={}\tstability={:?}\tcolor_before={}\tcolor_after={}\treported_color_state={:?}\trecord={}\trange=[{}, {})\tcount={}",
                 receipt.presentation_output,
                 receipt.artifact,
                 receipt.timing_artifact,
                 receipt.topology_before,
                 receipt.topology_after,
                 receipt.route_stability,
+                optional_tag(receipt.color_before),
+                optional_tag(receipt.color_after),
+                receipt.reported_color_state,
                 receipt.carrier_append.record_tag,
                 receipt.carrier_append.start_offset,
                 receipt.carrier_append.end_offset,
@@ -1046,10 +1191,17 @@ fn report_presentation_output_result(
                 presented, timing,
             );
         }
+        #[cfg(test)]
         Err(LivePresentationOutputFailure::Topology { stage, error }) => {
             window.set_title("bitblock — output topology refused");
             eprintln!(
                 "presentation-output-refused\tdisposition=topology-admission-fault\tstage={stage}\t{error}"
+            );
+        }
+        Err(LivePresentationOutputFailure::OutputObservation { stage, error }) => {
+            window.set_title("bitblock — output configuration refused");
+            eprintln!(
+                "presentation-output-refused\tdisposition=output-configuration-admission-fault\tstage={stage}\t{error}"
             );
         }
         Err(LivePresentationOutputFailure::MissingTiming) => {
@@ -3876,6 +4028,18 @@ mod tests {
     }
 
     #[cfg(all(windows, feature = "protocol-research"))]
+    fn test_output_with_color(profile: u32) -> ActiveOutputWithColor {
+        let topology = test_unavailable_topology(profile);
+        let color = bitblock::output_color::OutputColorObservation::new_unavailable(
+            &topology,
+            0x4354_4f50,
+            1168,
+        )
+        .unwrap();
+        ActiveOutputWithColor::new(topology, color).unwrap()
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
     fn test_complete_capture(expected: FrameRef<'_>) -> DisplayCapture {
         let rect = bitblock::display::CaptureRect {
             left: 0,
@@ -4097,7 +4261,10 @@ mod tests {
         assert_ne!(edited.post_world(), edited.pre_world());
         assert_eq!(edited.post_world(), world_tag(&app.world));
         assert_eq!(edited.post_world(), app.history.current_world());
-        assert_eq!(app.history.receipts().last().unwrap().post_world(), edited.post_world());
+        assert_eq!(
+            app.history.receipts().last().unwrap().post_world(),
+            edited.post_world()
+        );
         let replayed = app.history.verify(&World::new()).unwrap();
         assert_eq!(world_tag(&replayed), world_tag(&app.world));
     }
@@ -4780,6 +4947,104 @@ mod tests {
 
     #[cfg(all(windows, feature = "protocol-research"))]
     #[test]
+    fn f5_v2_pairs_color_with_each_topology_before_and_after_capture() {
+        let path = TempDisplayJournal::new("f5-v2-paired-order");
+        let (journal, _) =
+            DisplayArtifactJournal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
+        let mut archive = LiveDisplayArtifactArchive::new(journal);
+
+        let mut app = App::new();
+        app.resize(PhysicalSize::new(3, 2));
+        assert!(app.fixed_tick());
+        let submitted = submit_live_frame_pair(
+            &app.tick_outcomes,
+            &mut app.frame_ledger,
+            &mut app.output_frame_ledger,
+            app.frame_ledgers_v2.as_mut().unwrap(),
+            Some(app.pending_frame.unwrap()),
+            app.pending_output_frame.unwrap(),
+            |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+        let presented = submitted.output;
+        let receipt = presented.receipt_v2;
+        let expected = FrameRef::new(
+            app.compositor.width(),
+            app.compositor.height(),
+            app.compositor.pixels(),
+        )
+        .unwrap();
+
+        let mismatch_events = std::cell::RefCell::new(Vec::new());
+        let mismatch = attempt_presentation_output_v2_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                mismatch_events.borrow_mut().push(stage);
+                Err(LivePresentationOutputFailure::OutputObservation {
+                    stage,
+                    error: ActiveOutputObservationError::Topology(
+                        OutputTopologyError::DuplicateRoute,
+                    ),
+                })
+            },
+            || {
+                mismatch_events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        );
+        assert!(matches!(
+            mismatch,
+            Err(LivePresentationOutputFailure::OutputObservation {
+                stage: "before-capture",
+                ..
+            })
+        ));
+        assert_eq!(*mismatch_events.borrow(), ["before-capture"]);
+
+        let events = std::cell::RefCell::new(Vec::new());
+        let calls = std::cell::Cell::new(0_u32);
+        let stored = match attempt_presentation_output_v2_observation(
+            &mut archive,
+            presented,
+            expected,
+            test_timing(receipt),
+            |stage| {
+                events.borrow_mut().push(stage);
+                let call = calls.get();
+                calls.set(call + 1);
+                Ok(test_output_with_color(call + 1))
+            },
+            || {
+                events.borrow_mut().push("capture");
+                test_complete_capture(expected)
+            },
+        ) {
+            Ok(stored) => stored,
+            Err(_) => panic!("complete paired output observation must store"),
+        };
+        assert_eq!(
+            *events.borrow(),
+            ["before-capture", "capture", "after-capture"]
+        );
+        assert!(stored.color_before.is_some());
+        assert!(stored.color_after.is_some());
+        assert_eq!(
+            stored.reported_color_state,
+            Some(bitblock::presentation_output_v2::ReportedColorState::Unavailable)
+        );
+        assert_eq!(stored.artifact_count, 1);
+        let entry = &archive.journal.state().entries()[0];
+        assert_eq!(entry.color_before, stored.color_before);
+        assert_eq!(entry.color_after, stored.color_after);
+        assert_eq!(entry.reported_color_state, stored.reported_color_state);
+        assert!(archive.can_capture_new());
+    }
+
+    #[cfg(all(windows, feature = "protocol-research"))]
+    #[test]
     fn f4_and_f5_requests_are_mutually_exclusive_without_state_conversion() {
         let f5_path = TempDisplayJournal::new("f5-blocks-f4");
         let (f5_journal, _) =
@@ -4947,13 +5212,13 @@ mod tests {
         };
         let receipt = submitted.output.receipt_v2;
         let first_failure = archive
-            .prepare_and_append_presentation_output(
+            .prepare_and_append_presentation_output_v2(
                 receipt,
                 expected,
                 &capture,
                 test_timing(receipt),
-                test_unavailable_topology(1),
-                test_unavailable_topology(2),
+                test_output_with_color(1),
+                test_output_with_color(2),
             )
             .unwrap_err();
         assert!(!first_failure.poisoned);
@@ -4962,6 +5227,10 @@ mod tests {
             archive.pending_presentation_output()
         );
         assert_eq!(archive.pending_artifact(), None);
+        assert!(matches!(
+            archive.pending_presentation_output.as_ref(),
+            Some(PendingPresentationOutput::V2(_))
+        ));
         let retained = archive.pending_presentation_output().unwrap();
         drop(capture);
 
