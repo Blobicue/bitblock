@@ -364,6 +364,25 @@ risk. It is not a third arm in the current MPT/SMT assay, is not selected, and i
 No trie, vector commitment, network authority, asset, consensus, cryptocurrency, or Layer 1
 security property is added by this planning correction.
 
+### 26. “Copy and restructure `design.txt`; purge irrelevant tokens into useful notes” (paraphrased)
+
+User intent: preserve the useful state/Verkle/tick/proof ideas from the large downloaded research
+conversation while removing repeated invitations, search-interface residue, hype, unsupported
+numbers, and restatements that consume context without changing the design.
+
+Current truth: [`DESIGN_RESEARCH_DISTILLATION.md`](DESIGN_RESEARCH_DISTILLATION.md) fingerprints the
+untouched source, preserves its question spine, gives each retained claim a scope, separates state,
+history, witnesses, execution, canonicality, and data availability, and records false or
+unsupported formulations in a rejected-claim ledger. It also names three possible research lanes
+for witnessed transitions, recursive validity, and a sequential clock, but leaves them as notes
+rather than silently adding capability-tree nodes.
+
+This is a **source-receipted documentation checkpoint**. It changes no Rust behavior, trie,
+vector commitment, recursive proof, history network, clock, consensus, asset, or Layer 1 claim.
+The original `C:\Users\Owen\Downloads\design.txt` remains outside the repository and is bound by
+the byte count and SHA-256 receipt recorded in the distilled note. A clone cannot reconstruct the
+omitted raw text from that receipt.
+
 ## Semantic lessons that should survive future checkpoints
 
 1. **Coordinate memory is the primitive.** An on bit is a fact about one address; absence means

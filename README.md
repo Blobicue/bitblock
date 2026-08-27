@@ -29,6 +29,12 @@ latest second-loop audit, including the Verkle disposition and its own frozen in
 [`docs/FUTURE_PLAN_AUDIT_LOOP2.md`](docs/FUTURE_PLAN_AUDIT_LOOP2.md). They audit specifications and
 dependencies, not implementation or security evidence.
 
+The large state/Verkle/tick/proof research conversation from `design.txt` is source-receipted and
+compressed in
+[`docs/DESIGN_RESEARCH_DISTILLATION.md`](docs/DESIGN_RESEARCH_DISTILLATION.md). That file is a
+notes-only question map with corrected boundaries, rejected claims, and candidate research lanes;
+it does not activate a capability-tree node or change the runtime.
+
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.
 - Every other unspecified coordinate is off.

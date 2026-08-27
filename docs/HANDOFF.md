@@ -9,6 +9,9 @@ semantic history.
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
 - Continuation branch: `codex/bitblock-progress-2026-08-26`
 - Base branch: `timeline-2`
+- The current descendant adds `docs/DESIGN_RESEARCH_DISTILLATION.md`: a fingerprinted,
+  source-receipted compression of the downloaded state/Verkle/tick/proof conversation. Its three
+  named research candidates remain notes only and have not been inserted into the capability DAG.
 - `2a9e667` is the exact clean input to the second audit/fix loop. Its result is the first
   descendant commit that adds `docs/FUTURE_PLAN_AUDIT_LOOP2.md`; that audit also records why Verkle
   is a separate feasibility lane rather than a silently selected third trie.
@@ -42,15 +45,16 @@ Read in this order:
 1. `docs/HANDOFF.md` (this file)
 2. `docs/PROJECT_INTENT.md` (why Bitblock exists and what must remain separate)
 3. `docs/CAPABILITY_TREE.md` (dependency DAG, statuses, artifacts, gates, and non-claims)
-4. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (latest frozen audit/fix map and Verkle disposition)
-5. `docs/FUTURE_PLAN_AUDIT.md` (immutable first-loop audit)
-6. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
-7. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
-8. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
-9. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
-10. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
-11. `README.md` (controls, commands, and feature boundaries)
-12. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
+4. `docs/DESIGN_RESEARCH_DISTILLATION.md` (source receipt, corrected research map, and open questions)
+5. `docs/FUTURE_PLAN_AUDIT_LOOP2.md` (latest frozen audit/fix map and Verkle disposition)
+6. `docs/FUTURE_PLAN_AUDIT.md` (immutable first-loop audit)
+7. `docs/SEMANTICS.md` (current meaning of state/ticks/receipts)
+8. `docs/TRANSCRIPT_AUDIT.md` (design chronology and truth labels)
+9. `docs/AUTHENTICATED_STATE_PLAN.md` (research-only MPT/SMT plus separate Verkle feasibility)
+10. `docs/LAYER1_DESIGN_PAPER.md` (proposed identity, ledger, replication, and security path)
+11. `docs/LAYER1_DESIGN_AUDIT.md` (pinned paper findings and residual repository obligations)
+12. `README.md` (controls, commands, and feature boundaries)
+13. `docs/PROTOCOL.md` (canonical bytes, hash/tag, history, and research boundaries)
 
 ## What is implemented
 
@@ -102,6 +106,8 @@ self-verified. Neither path produces physical display evidence.
   cheap runtime subset.
 - `docs/PROJECT_INTENT.md`: durable motive chain and architectural separations.
 - `docs/CAPABILITY_TREE.md`: capability dependencies, unlock gates, and current frontier.
+- `docs/DESIGN_RESEARCH_DISTILLATION.md`: fingerprinted compression of the external design
+  conversation into typed objects, retained rules, rejected claims, and notes-only candidates.
 - `docs/AUTHENTICATED_STATE_PLAN.md`: unimplemented authenticated-map comparison and integration
   constraints.
 - `docs/FUTURE_PLAN_AUDIT.md`: the finite audit/fix map for planning input `1624068`.
@@ -127,6 +133,9 @@ self-verified. Neither path produces physical display evidence.
 - Do not call the coordinate domain mathematically infinite or the renderer infinitely scalable.
 - Do not call a frame tag proof that a physical monitor displayed the pixels.
 - Do not call local history Proof-of-History, Proof-of-Stake, consensus, currency, or Layer 1.
+- Do not claim that a state root contains its values, that a recursive proof supplies discarded
+  data, that a sequential clock selects the canonical fork, or that stateless verification makes
+  the whole network storage-free.
 - Do not present feature-gated `CoordinateEpisodeEvidence` or `LocalReplayEvidence` as default,
   durable, independently held authority.
 - Do not claim the user's ternary hash is integrated; its source and contract have not been
@@ -146,6 +155,9 @@ self-verified. Neither path produces physical display evidence.
 The motive and skill-tree checkpoint has been selected and documented. For later work, use the
 node gates in `docs/CAPABILITY_TREE.md`, make one semantic change at a time, and update
 `docs/SEMANTICS.md`, `docs/TRANSCRIPT_AUDIT.md`, and this handoff when their truth changes.
+The candidate labels in `docs/DESIGN_RESEARCH_DISTILLATION.md` are research notes, not new graph
+nodes; promote one only through an explicit later capability-tree decision with dependencies,
+artifact, gate, and non-claim.
 
 1. The preferred next semantic implementation node is `ACCOUNT-1`: reconcile submitted, admitted,
    executed, rejected, no-op, camera/control, edit-miss/overlap, and idle action/result lanes. This
