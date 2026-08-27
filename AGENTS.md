@@ -18,7 +18,8 @@ covers only the index — how to query the tree, and what the index will not tel
 python tools/bbgraph.py ask "canonical framebuffer bytes"
 ```
 
-Also: `dup` and `dead` (see **How compressible is this tree** below),
+Also: `bbverify` and `bbmutate` (see **Proving a change did not break anything**),
+`dup` and `dead` (see **How compressible is this tree**),
 `node <name>` (everything known about one module, tool, proof or doc),
 `schema [name]` (the protocol surface, and what independently checks each
 object), `metric <words>` (registry families), `dag` (dependency strata and
@@ -164,6 +165,72 @@ declared inside a `#[cfg(test)] mod` is scaffolding. Counting them reported 81
 objects and 50 covered, overstating both the surface and the gap —
 `bitblock/test-object/v1` is a throwaway name that `frame.rs` and `storage.rs`
 each coined in their own tests, and it was fusing them into a shared subsystem.
+
+## Proving a change did not break anything
+
+```bash
+python tools/bbverify.py quick     # 11s, per edit
+python tools/bbverify.py full      # 40s, per commit
+```
+
+"Nothing broke" means something specific in this repository: **no canonical byte
+moved**. 101 literal content tags are asserted across the Rust tests, and 24
+Python suites rebuild those same payloads without importing any Rust, so a moved
+byte fails both from opposite directions.
+
+The two tiers split by what each detects, not by thoroughness. `quick` is
+`cargo test` plus clippy -- the literal tag assertions live inside the Rust
+tests, so that is what actually catches a moved byte. `full` adds fmt, the
+metric registry, the index gates and the independent vectors, and runs the Rust
+tests with `--features protocol-research`. The vector suites execute no Rust at
+all; what they detect is the two implementations *disagreeing*, which is why
+they belong to the per-commit tier.
+
+All 58 protocol objects are guarded. The last two -- `journal/rejected-tail/v1`
+and `storage-record/envelope/v1` -- had neither an independent vector nor a
+literal tag until both were added, with each side asserting the same digest.
+
+### How sensitive it actually is
+
+```bash
+python tools/bbmutate.py           # 25 modules, ~2.5 minutes
+python tools/bbmutate.py frame     # before refactoring one module
+```
+
+A green suite proves nothing until it has been watched failing for the change
+you care about, which is this repository's own rule. `bbmutate` performs exactly
+that change and nothing else: every `to_be_bytes()` in a module's production
+scope becomes `to_le_bytes()` -- a byte-order flip inside the hashed domain, no
+behaviour, no error text, no control flow. If a module's canonical bytes are
+pinned, this must fail.
+
+**25 of 25 modules are killed.** That is the number that licenses refactoring:
+the suite demonstrably notices a canonical byte moving in every module that
+encodes one. Run it against a module before restructuring it; it takes seconds
+and tells you whether the net is under you.
+
+It found one genuine hole. `main.rs`'s only canonical encoders are three
+headless local-replay policy tags, and nothing asserted their values -- all
+eighteen encoding sites could be reordered with the suite still green. They are
+pinned now.
+
+The first run reported that survivor for the wrong reason, which is the more
+useful lesson. It ran `cargo test --lib`, so `main.rs` was not a target at all,
+and without `--features protocol-research` those three functions are not
+compiled. **A mutation inside code that was never built cannot fail anything,
+and reports identically to a real gap.** The harness now runs every target with
+the feature enabled. The finding survived the correction; it could as easily
+have been an artefact.
+
+`bbmutate` is local-only and never runs in CI -- it rewrites `src/` and restores
+it from git.
+
+### What still is not covered
+
+CI's rust job runs bare `cargo test` on windows-latest, so the
+`all(windows, feature = "protocol-research")` modules are never compiled there.
+`bbverify full` does compile them. Until CI gains a feature-enabled step, that
+gap is closed locally or not at all.
 
 ## How compressible is this tree
 
