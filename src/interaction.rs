@@ -656,7 +656,8 @@ fn parse_action(
     };
     require_field_count(instruction, line, command, expected_fields)?;
     let mut fields = instruction.split_whitespace();
-    debug_assert_eq!(fields.next(), Some(command));
+    let parsed_command = fields.next();
+    debug_assert_eq!(parsed_command, Some(command));
 
     Ok(match command {
         "move" => {

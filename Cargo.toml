@@ -6,6 +6,7 @@ rust-version = "1.96"
 
 [features]
 default = []
+headless-console = []
 protocol-research = []
 
 [dependencies]

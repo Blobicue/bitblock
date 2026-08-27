@@ -1,7 +1,11 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(not(debug_assertions), not(feature = "headless-console")),
+    windows_subsystem = "windows"
+)]
 
+use std::collections::HashSet;
 use std::error::Error;
-use std::io;
+use std::io::{self, Read};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,7 +28,9 @@ use bitblock::frame_v2::{
     FrameReceiptV2AdmissionError, FrameReceiptV2Error, FrameStream, admit_frame_pair_derived,
 };
 use bitblock::history::{History, world_tag};
-use bitblock::interaction::{AcceptedAction, InteractionTape, MoveControl};
+use bitblock::interaction::{
+    AcceptedAction, InteractionTape, MAX_INTERACTION_TAPE_PAYLOAD_BYTES, MoveControl,
+};
 use bitblock::program::{Edit as WorldEdit, Operation, Program, TickBatch};
 use bitblock::protocol::ContentTag;
 use bitblock::render::{
@@ -45,9 +51,7 @@ use bitblock::windows_present::WindowsPixelSurface;
 use bitblock::windows_timing::observe_checked_present;
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::windows_topology::observe_active_output;
-#[cfg(test)]
-use bitblock::world::BEDROCK_COORD;
-use bitblock::world::World;
+use bitblock::world::{BEDROCK_COORD, World};
 #[cfg(all(windows, feature = "protocol-research"))]
 use bitblock::{display_artifact::DisplayCaptureArtifact, storage::StorageLimits};
 #[cfg(all(windows, feature = "protocol-research"))]
@@ -84,6 +88,14 @@ const MAX_TICKS_PER_FRAME: usize = 15;
 const BLOCK_FILL_DISTANCE: f64 = 0.25;
 const OBSERVER_COLLISION_CLEARANCE: f64 = 1.0e-6;
 const HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS: u64 = 16_777_216;
+const HEADLESS_SIMULATION_MAX_RESIZE_PIXEL_WRITES: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS: u128 = 1_073_741_824;
+const HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS: u128 = 268_435_456;
+const HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS: u128 = 1_073_741_824;
+const HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND: u128 = 12;
+const HEADLESS_SIMULATION_MAX_SOURCE_BYTES: usize = MAX_INTERACTION_TAPE_PAYLOAD_BYTES;
 const DISPLAY_JOURNAL_ENV: &str = "BITBLOCK_DISPLAY_JOURNAL_NEW";
 #[cfg(all(windows, feature = "protocol-research"))]
 const PRESENTATION_AUDIT_ENV: &str = "BITBLOCK_PRESENTATION_AUDIT";
@@ -184,7 +196,7 @@ fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
             )
             .into());
         }
-        let source = std::fs::read_to_string(&path)?;
+        let source = read_bounded_utf8(&path, HEADLESS_SIMULATION_MAX_SOURCE_BYTES)?;
         let tape = InteractionTape::parse(&source).map_err(|error| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -213,6 +225,28 @@ fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
             )
             .into()
         })
+}
+
+fn read_bounded_utf8(path: &std::path::Path, maximum: usize) -> Result<String, io::Error> {
+    let file = std::fs::File::open(path)?;
+    let limit = u64::try_from(maximum)
+        .expect("the interaction source limit fits u64")
+        .checked_add(1)
+        .expect("the interaction source limit has one-byte headroom");
+    let mut bytes = Vec::new();
+    file.take(limit).read_to_end(&mut bytes)?;
+    if bytes.len() > maximum {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("interaction source exceeds the bounded {maximum}-byte input policy"),
+        ));
+    }
+    String::from_utf8(bytes).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("interaction source is not UTF-8: {error}"),
+        )
+    })
 }
 
 #[cfg(windows)]
@@ -1025,6 +1059,70 @@ impl Inputs {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AcceptedActionApplyError {
+    NonFiniteLane {
+        field: &'static str,
+        bits: u64,
+    },
+    NonFiniteAccumulation {
+        field: &'static str,
+        prior_bits: u64,
+        delta_bits: u64,
+    },
+}
+
+impl std::fmt::Display for AcceptedActionApplyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::NonFiniteLane { field, bits } => {
+                write!(
+                    formatter,
+                    "accepted {field} lane is nonfinite: {bits:#018x}"
+                )
+            }
+            Self::NonFiniteAccumulation {
+                field,
+                prior_bits,
+                delta_bits,
+            } => write!(
+                formatter,
+                "accepted {field} accumulation is nonfinite: prior={prior_bits:#018x} delta={delta_bits:#018x}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AcceptedActionApplyError {}
+
+fn checked_accepted_accumulation(
+    field: &'static str,
+    prior: f64,
+    delta: f64,
+) -> Result<f64, AcceptedActionApplyError> {
+    if !delta.is_finite() {
+        return Err(AcceptedActionApplyError::NonFiniteLane {
+            field,
+            bits: delta.to_bits(),
+        });
+    }
+    let next = prior + delta;
+    if !next.is_finite() {
+        return Err(AcceptedActionApplyError::NonFiniteAccumulation {
+            field,
+            prior_bits: prior.to_bits(),
+            delta_bits: delta.to_bits(),
+        });
+    }
+    Ok(next)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AppMode {
+    Live,
+    Headless,
+}
+
 struct App {
     display: Option<Display>,
     world: World,
@@ -1036,6 +1134,7 @@ struct App {
     mouse_captured: bool,
     cursor_position: Option<PhysicalPosition<f64>>,
     sidebar_visible: bool,
+    display_predecessor_override: Option<DisplayStatus>,
     last_frame: Instant,
     next_tick: Instant,
     accumulator: Duration,
@@ -1102,6 +1201,14 @@ impl App {
     }
 
     fn with_program(program: Program) -> Self {
+        Self::with_program_mode(program, AppMode::Live)
+    }
+
+    fn for_headless_simulation() -> Self {
+        Self::with_program_mode(Program::new(), AppMode::Headless)
+    }
+
+    fn with_program_mode(program: Program, mode: AppMode) -> Self {
         let now = Instant::now();
         let mut inputs = Inputs::default();
         inputs
@@ -1124,6 +1231,8 @@ impl App {
             mouse_captured: false,
             cursor_position: None,
             sidebar_visible: true,
+            display_predecessor_override: (mode == AppMode::Headless)
+                .then_some(DisplayStatus::AuditDisabled),
             last_frame: now,
             next_tick: now,
             accumulator: Duration::ZERO,
@@ -1143,7 +1252,8 @@ impl App {
             last_presented_output: None,
             last_presented_sidebar_facts: None,
             #[cfg(windows)]
-            display_ledger: display_audit_enabled().then(DisplayLedgerV2::default),
+            display_ledger: (mode == AppMode::Live && display_audit_enabled())
+                .then(DisplayLedgerV2::default),
             #[cfg(all(windows, feature = "protocol-research"))]
             display_artifact_archive: None,
             #[cfg(all(windows, feature = "protocol-research"))]
@@ -1151,7 +1261,7 @@ impl App {
             #[cfg(all(windows, feature = "protocol-research"))]
             presentation_output_capture_requested: false,
             #[cfg(all(windows, feature = "protocol-research"))]
-            presentation_audit_enabled: presentation_audit_enabled(),
+            presentation_audit_enabled: mode == AppMode::Live && presentation_audit_enabled(),
         }
     }
 
@@ -1160,7 +1270,10 @@ impl App {
     /// Live winit input and headless tapes both enter through this method. Raw device routing,
     /// mouse-grab success, synthetic-event filtering, redraw, and all display observations stay
     /// outside this accepted-action boundary.
-    fn apply_accepted_action(&mut self, action: AcceptedAction) {
+    fn apply_accepted_action(
+        &mut self,
+        action: AcceptedAction,
+    ) -> Result<(), AcceptedActionApplyError> {
         match action {
             AcceptedAction::MoveEdge(control, pressed) => match control {
                 MoveControl::Forward => self.inputs.forward = pressed,
@@ -1171,10 +1284,18 @@ impl App {
                 MoveControl::Down => self.inputs.down = pressed,
             },
             AcceptedAction::LookDelta(x, y) => {
-                self.inputs.mouse_x += x;
-                self.inputs.mouse_y += y;
+                let next_x = checked_accepted_accumulation("look_x", self.inputs.mouse_x, x)?;
+                let next_y = checked_accepted_accumulation("look_y", self.inputs.mouse_y, y)?;
+                self.inputs.mouse_x = next_x;
+                self.inputs.mouse_y = next_y;
             }
             AcceptedAction::WheelLines(lines) => {
+                if !lines.is_finite() {
+                    return Err(AcceptedActionApplyError::NonFiniteLane {
+                        field: "wheel",
+                        bits: lines.to_bits(),
+                    });
+                }
                 self.inputs.wheel = (self.inputs.wheel + lines).clamp(-64.0, 64.0);
             }
             AcceptedAction::AimDelete => {
@@ -1196,6 +1317,12 @@ impl App {
             }
             AcceptedAction::ClearMotion => self.inputs.clear_motion(),
         }
+        Ok(())
+    }
+
+    fn apply_infallible_accepted_action(&mut self, action: AcceptedAction) {
+        self.apply_accepted_action(action)
+            .expect("a non-analog accepted action cannot fail finite aggregation");
     }
 
     fn capture_mouse(&mut self, capture: bool) {
@@ -1215,7 +1342,7 @@ impl App {
             let _ = display.window.set_cursor_grab(CursorGrabMode::None);
             display.window.set_cursor_visible(true);
             self.mouse_captured = false;
-            self.apply_accepted_action(AcceptedAction::ClearMotion);
+            self.apply_infallible_accepted_action(AcceptedAction::ClearMotion);
         }
     }
 
@@ -1232,7 +1359,9 @@ impl App {
         if !self.mouse_captured && self.pointer_in_sidebar() {
             return;
         }
-        self.apply_accepted_action(AcceptedAction::WheelLines(lines));
+        if let Err(error) = self.apply_accepted_action(AcceptedAction::WheelLines(lines)) {
+            eprintln!("accepted-action-refused\t{error}");
+        }
     }
 
     fn resize(&mut self, size: PhysicalSize<u32>) {
@@ -1376,6 +1505,9 @@ impl App {
     fn sidebar_display_predecessor(
         &self,
     ) -> (Option<bitblock::protocol::ContentTag>, u64, DisplayStatus) {
+        if let Some(status) = self.display_predecessor_override {
+            return (None, 0, status);
+        }
         let Some(ledger) = self.display_ledger.as_ref() else {
             return (None, 0, DisplayStatus::AuditDisabled);
         };
@@ -1396,6 +1528,9 @@ impl App {
     fn sidebar_display_predecessor(
         &self,
     ) -> (Option<bitblock::protocol::ContentTag>, u64, DisplayStatus) {
+        if let Some(status) = self.display_predecessor_override {
+            return (None, 0, status);
+        }
         (None, 0, DisplayStatus::Unsupported)
     }
 
@@ -2063,29 +2198,34 @@ impl App {
 
     fn key(&mut self, code: KeyCode, pressed: bool) {
         match code {
-            KeyCode::KeyW => {
-                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Forward, pressed))
-            }
-            KeyCode::KeyS => {
-                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Backward, pressed))
-            }
-            KeyCode::KeyA => {
-                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Left, pressed))
-            }
-            KeyCode::KeyD => {
-                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Right, pressed))
-            }
-            KeyCode::Space => {
-                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Up, pressed))
-            }
-            KeyCode::ShiftLeft | KeyCode::ShiftRight => {
-                self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Down, pressed))
-            }
+            KeyCode::KeyW => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Forward,
+                pressed,
+            )),
+            KeyCode::KeyS => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Backward,
+                pressed,
+            )),
+            KeyCode::KeyA => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Left,
+                pressed,
+            )),
+            KeyCode::KeyD => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Right,
+                pressed,
+            )),
+            KeyCode::Space => self.apply_infallible_accepted_action(AcceptedAction::MoveEdge(
+                MoveControl::Up,
+                pressed,
+            )),
+            KeyCode::ShiftLeft | KeyCode::ShiftRight => self.apply_infallible_accepted_action(
+                AcceptedAction::MoveEdge(MoveControl::Down, pressed),
+            ),
             KeyCode::KeyF if pressed => {
-                self.apply_accepted_action(AcceptedAction::FitWorld);
+                self.apply_infallible_accepted_action(AcceptedAction::FitWorld);
             }
             KeyCode::F3 if pressed => {
-                self.apply_accepted_action(AcceptedAction::ToggleSidebar);
+                self.apply_infallible_accepted_action(AcceptedAction::ToggleSidebar);
             }
             KeyCode::F4 if pressed => self.request_display_artifact_capture(),
             KeyCode::F5 if pressed => self.request_presentation_output_capture(),
@@ -2095,31 +2235,360 @@ impl App {
     }
 }
 
-fn validate_headless_action(action: AcceptedAction) -> Result<(), io::Error> {
-    let AcceptedAction::Resize(width, height) = action else {
-        return Ok(());
-    };
-    if width == 0 || height == 0 {
-        return Ok(());
-    }
-    let pixels = u64::from(width)
-        .checked_mul(u64::from(height))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "resize pixel count overflow"))?;
-    if pixels > HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS {
+fn headless_pixel_shape(width: u32, height: u32) -> Result<(u128, u128), io::Error> {
+    let output_pixels = u128::from(width)
+        .checked_mul(u128::from(height))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pixel count overflow"))?;
+    if output_pixels > u128::from(HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "headless resize {width}x{height} requires {pixels} output pixels; policy limit is {HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS}"
+                "headless resize {width}x{height} requires {output_pixels} output pixels; policy limit is {HEADLESS_SIMULATION_MAX_OUTPUT_PIXELS}"
             ),
         ));
     }
+    let sidebar_width = SIDEBAR_WIDTH.min(width.saturating_sub(1));
+    let simulation_pixels = u128::from(width - sidebar_width)
+        .checked_mul(u128::from(height))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "simulation pixel count overflow",
+            )
+        })?;
+    Ok((output_pixels, simulation_pixels))
+}
+
+fn checked_headless_charge(
+    accumulated: &mut u128,
+    addition: u128,
+    limit: u128,
+    lane: &str,
+    tick: u64,
+) -> Result<(), io::Error> {
+    let next = accumulated.checked_add(addition).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("headless {lane} overflow at tick {tick}"),
+        )
+    })?;
+    if next > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "headless {lane} policy exceeded at tick {tick}: required {next}, limit {limit}"
+            ),
+        ));
+    }
+    *accumulated = next;
+    Ok(())
+}
+
+fn headless_possible_world_bits(
+    possible_exact_bits: usize,
+    unresolved_aim_place_bits: u128,
+) -> Result<u128, io::Error> {
+    (possible_exact_bits as u128)
+        .checked_add(unresolved_aim_place_bits)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "possible world population overflow",
+            )
+        })
+}
+
+fn headless_world_ordering_units(population: u128) -> Result<u128, io::Error> {
+    let levels = if population <= 1 {
+        1
+    } else {
+        u128::BITS - (population - 1).leading_zeros()
+    };
+    population
+        .checked_mul(u128::from(levels))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "world-ordering charge overflow"))
+}
+
+/// Refuses an expensive tape before constructing or mutating the simulation.
+///
+/// The accounting follows a pure dirty-state shadow while conservatively assuming that requested
+/// movement succeeds. Exact edits update possible/definite coordinate sets, unresolved aimed
+/// placements only raise the possible population, and each voxel can cover the complete viewport
+/// once per cube triangle. Every nonzero resize is charged separately because repeated grow/shrink
+/// actions allocate and clear buffers even when the final dimensions are small.
+fn preflight_headless_tape(tape: &InteractionTape) -> Result<(), io::Error> {
+    let mut width = INITIAL_OUTPUT_WIDTH;
+    let mut height = INITIAL_VIEWPORT;
+    let mut possible_exact_bits = HashSet::from([BEDROCK_COORD]);
+    let mut definite_exact_bits = HashSet::from([BEDROCK_COORD]);
+    let mut unresolved_aim_place_bits = 0_u128;
+    let mut movement = [false; 6];
+    let mut resize_pixel_writes = 0_u128;
+    let mut output_pixel_ticks = 0_u128;
+    let mut raster_sample_tests = 0_u128;
+    let mut world_coordinate_tests = 0_u128;
+    let mut edit_coordinate_tests = 0_u128;
+    let mut world_ordering_units = 0_u128;
+
+    for record in tape.records() {
+        let mut record_peak_possible_bits =
+            headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+        let mut aim_actions = 0_u128;
+        let mut wheel = 0.0_f64;
+        let mut look_x = 0.0_f64;
+        let mut look_y = 0.0_f64;
+        let mut has_edit_action = false;
+        let mut has_resize = false;
+        let mut fit_requested = false;
+        let mut game_dirty = record.ordinal() == 0;
+        let mut sidebar_dirty = false;
+        for (action_index, &action) in record.actions().iter().enumerate() {
+            match action {
+                AcceptedAction::MoveEdge(control, pressed) => {
+                    let index = match control {
+                        MoveControl::Forward => 0,
+                        MoveControl::Backward => 1,
+                        MoveControl::Left => 2,
+                        MoveControl::Right => 3,
+                        MoveControl::Up => 4,
+                        MoveControl::Down => 5,
+                    };
+                    movement[index] = pressed;
+                }
+                AcceptedAction::LookDelta(x, y) => {
+                    let map_error = |error: AcceptedActionApplyError| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "interaction tick {} action {action_index} was refused during preflight: {error}",
+                                record.ordinal()
+                            ),
+                        )
+                    };
+                    let next_x =
+                        checked_accepted_accumulation("look_x", look_x, x).map_err(map_error)?;
+                    let next_y =
+                        checked_accepted_accumulation("look_y", look_y, y).map_err(map_error)?;
+                    look_x = next_x;
+                    look_y = next_y;
+                }
+                AcceptedAction::WheelLines(lines) => {
+                    wheel = (wheel + lines).clamp(-64.0, 64.0);
+                }
+                AcceptedAction::Resize(next_width, next_height)
+                    if next_width != 0 && next_height != 0 =>
+                {
+                    let (output_pixels, simulation_pixels) =
+                        headless_pixel_shape(next_width, next_height)?;
+                    let resize_charge = simulation_pixels
+                        .checked_mul(2)
+                        .and_then(|simulation_buffers| {
+                            output_pixels.checked_add(simulation_buffers)
+                        })
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "resize pixel-write charge overflow",
+                            )
+                        })?;
+                    checked_headless_charge(
+                        &mut resize_pixel_writes,
+                        resize_charge,
+                        HEADLESS_SIMULATION_MAX_RESIZE_PIXEL_WRITES,
+                        "resize-pixel-write",
+                        record.ordinal(),
+                    )?;
+                    width = next_width;
+                    height = next_height;
+                    has_resize = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::AimDelete => {
+                    aim_actions = aim_actions.checked_add(1).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "aim-action count overflow")
+                    })?;
+                    has_edit_action = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::AimPlace => {
+                    aim_actions = aim_actions.checked_add(1).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "aim-action count overflow")
+                    })?;
+                    unresolved_aim_place_bits =
+                        unresolved_aim_place_bits.checked_add(1).ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "possible aimed-placement population overflow",
+                            )
+                        })?;
+                    has_edit_action = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::ExactEdit(edit) => {
+                    let possible_before = headless_possible_world_bits(
+                        possible_exact_bits.len(),
+                        unresolved_aim_place_bits,
+                    )?;
+                    if matches!(edit.operation, Operation::Off | Operation::Toggle) {
+                        checked_headless_charge(
+                            &mut edit_coordinate_tests,
+                            possible_before,
+                            HEADLESS_SIMULATION_MAX_EDIT_COORDINATE_TESTS,
+                            "edit-coordinate-test",
+                            record.ordinal(),
+                        )?;
+                    }
+                    if edit.coord != BEDROCK_COORD {
+                        match edit.operation {
+                            Operation::On => {
+                                possible_exact_bits.insert(edit.coord);
+                            }
+                            Operation::Off => {
+                                possible_exact_bits.remove(&edit.coord);
+                                definite_exact_bits.remove(&edit.coord);
+                            }
+                            Operation::Toggle => {
+                                if definite_exact_bits.remove(&edit.coord) {
+                                    possible_exact_bits.remove(&edit.coord);
+                                } else {
+                                    possible_exact_bits.insert(edit.coord);
+                                }
+                            }
+                        }
+                    }
+                    has_edit_action = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::FitWorld => {
+                    fit_requested = true;
+                    game_dirty = true;
+                }
+                AcceptedAction::ToggleSidebar => sidebar_dirty = true,
+                AcceptedAction::ClearMotion => {
+                    movement.fill(false);
+                    look_x = 0.0;
+                    look_y = 0.0;
+                }
+                _ => {}
+            }
+            record_peak_possible_bits = record_peak_possible_bits.max(
+                headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?,
+            );
+        }
+
+        let possible_world_bits =
+            headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+        let (output_pixels, simulation_pixels) = headless_pixel_shape(width, height)?;
+        let movement_active =
+            movement[0] != movement[1] || movement[2] != movement[3] || movement[4] != movement[5];
+        game_dirty |= look_x != 0.0 || look_y != 0.0 || movement_active || wheel != 0.0;
+        if game_dirty || sidebar_dirty {
+            checked_headless_charge(
+                &mut output_pixel_ticks,
+                output_pixels,
+                HEADLESS_SIMULATION_MAX_OUTPUT_PIXEL_TICKS,
+                "output-pixel-tick",
+                record.ordinal(),
+            )?;
+        }
+        if game_dirty {
+            let tick_raster_sample_tests = simulation_pixels
+                .checked_mul(possible_world_bits)
+                .and_then(|candidate_pixels| {
+                    candidate_pixels.checked_mul(HEADLESS_RENDER_TRIANGLES_PER_BIT_BOUND)
+                })
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "raster-sample test charge overflow",
+                    )
+                })?;
+            checked_headless_charge(
+                &mut raster_sample_tests,
+                tick_raster_sample_tests,
+                HEADLESS_SIMULATION_MAX_RASTER_SAMPLE_TESTS,
+                "raster-sample-test",
+                record.ordinal(),
+            )?;
+        }
+
+        // Two baseline scans cover the pre/post world commitments. The remaining terms bound a
+        // possible edit-receipt commitment, render traversal, raycasts, collision sweeps, and the
+        // debug invariant sweeps performed by movement, wheel, resize-refit, and explicit fit.
+        let world_scans = 2_u128
+            .checked_add(u128::from(has_edit_action))
+            .and_then(|scans| scans.checked_add(u128::from(game_dirty)))
+            .and_then(|scans| scans.checked_add(u128::from(has_resize)))
+            .and_then(|scans| scans.checked_add(u128::from(fit_requested)))
+            .and_then(|scans| {
+                aim_actions
+                    .checked_mul(2)
+                    .and_then(|aim_scans| scans.checked_add(aim_scans))
+            })
+            .and_then(|scans| scans.checked_add(if movement_active { 2 } else { 0 }))
+            .and_then(|scans| scans.checked_add(if wheel != 0.0 { 2 } else { 0 }))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "world-scan count overflow")
+            })?;
+        let tick_world_coordinate_tests = world_scans
+            .checked_mul(record_peak_possible_bits)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "world-coordinate test charge overflow",
+                )
+            })?;
+        checked_headless_charge(
+            &mut world_coordinate_tests,
+            tick_world_coordinate_tests,
+            HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
+            "world-coordinate-test",
+            record.ordinal(),
+        )?;
+        let world_tag_scans = 2_u128
+            .checked_add(u128::from(has_edit_action))
+            .and_then(|scans| scans.checked_add(u128::from(game_dirty)))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "world-tag scan count overflow")
+            })?;
+        let tick_world_ordering_units = headless_world_ordering_units(record_peak_possible_bits)?
+            .checked_mul(world_tag_scans)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "world-ordering charge overflow")
+            })?;
+        checked_headless_charge(
+            &mut world_ordering_units,
+            tick_world_ordering_units,
+            HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS,
+            "world-ordering",
+            record.ordinal(),
+        )?;
+    }
+    let final_tick = tape.records().last().map_or(0, |record| record.ordinal());
+    let possible_world_bits =
+        headless_possible_world_bits(possible_exact_bits.len(), unresolved_aim_place_bits)?;
+    checked_headless_charge(
+        &mut world_coordinate_tests,
+        possible_world_bits,
+        HEADLESS_SIMULATION_MAX_WORLD_COORDINATE_TESTS,
+        "world-coordinate-test",
+        final_tick,
+    )?;
+    checked_headless_charge(
+        &mut world_ordering_units,
+        headless_world_ordering_units(possible_world_bits)?,
+        HEADLESS_SIMULATION_MAX_WORLD_ORDERING_UNITS,
+        "world-ordering",
+        final_tick,
+    )?;
     Ok(())
 }
 
 fn simulate_interaction_tape(
     tape: &InteractionTape,
 ) -> Result<HeadlessSimulationSummary, io::Error> {
-    let mut app = App::with_program(Program::new());
+    preflight_headless_tape(tape)?;
+    let mut app = App::for_headless_simulation();
     let mut ticks = Vec::new();
     ticks.try_reserve(tape.len()).map_err(|_| {
         io::Error::new(
@@ -2129,9 +2598,16 @@ fn simulate_interaction_tape(
     })?;
 
     for record in tape.records() {
-        for &action in record.actions() {
-            validate_headless_action(action)?;
-            app.apply_accepted_action(action);
+        for (action_index, &action) in record.actions().iter().enumerate() {
+            app.apply_accepted_action(action).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "interaction tick {} action {action_index} was refused: {error}",
+                        record.ordinal()
+                    ),
+                )
+            })?;
         }
         app.fixed_tick();
         let outcome = app
@@ -2210,7 +2686,7 @@ fn camera_bits_text(bits: [u64; 10]) -> String {
 
 fn print_headless_summary(summary: &HeadlessSimulationSummary) {
     println!(
-        "interaction-simulation\ttape={}\tticks={}\tactions={}\tauthority=fixed-tick-only",
+        "interaction-simulation\ttape={}\tticks={}\tactions={}\tscope=fixed-tick-projection\trun_receipt=unavailable",
         summary.tape,
         summary.ticks.len(),
         summary.action_count,
@@ -2363,7 +2839,7 @@ impl ApplicationHandler for App {
                 window,
             });
         }
-        self.resize(size);
+        self.apply_infallible_accepted_action(AcceptedAction::Resize(size.width, size.height));
         let now = Instant::now();
         self.last_frame = now;
         self.next_tick = now + TICK_DURATION;
@@ -2401,7 +2877,10 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
-                self.apply_accepted_action(AcceptedAction::Resize(size.width, size.height))
+                self.apply_infallible_accepted_action(AcceptedAction::Resize(
+                    size.width,
+                    size.height,
+                ));
             }
             WindowEvent::Focused(false) => self.capture_mouse(false),
             WindowEvent::KeyboardInput {
@@ -2436,8 +2915,12 @@ impl ApplicationHandler for App {
                     }
                 } else {
                     match button {
-                        MouseButton::Left => self.apply_accepted_action(AcceptedAction::AimDelete),
-                        MouseButton::Right => self.apply_accepted_action(AcceptedAction::AimPlace),
+                        MouseButton::Left => {
+                            self.apply_infallible_accepted_action(AcceptedAction::AimDelete)
+                        }
+                        MouseButton::Right => {
+                            self.apply_infallible_accepted_action(AcceptedAction::AimPlace)
+                        }
                         _ => {}
                     }
                 }
@@ -2473,7 +2956,9 @@ impl ApplicationHandler for App {
             return;
         }
         if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
-            self.apply_accepted_action(AcceptedAction::LookDelta(x, y));
+            if let Err(error) = self.apply_accepted_action(AcceptedAction::LookDelta(x, y)) {
+                eprintln!("accepted-action-refused\t{error}");
+            }
         }
     }
 }
@@ -4081,11 +4566,11 @@ fit
         .unwrap();
         let summary = simulate_interaction_tape(&tape).unwrap();
 
-        let mut direct = App::new();
+        let mut direct = App::for_headless_simulation();
         let mut direct_tags = Vec::new();
         for record in tape.records() {
             for &action in record.actions() {
-                direct.apply_accepted_action(action);
+                direct.apply_accepted_action(action).unwrap();
             }
             direct.fixed_tick();
             direct_tags.push(direct.tick_outcomes.last().unwrap().tag());
@@ -4109,7 +4594,7 @@ fit
 
     #[test]
     fn physical_w_key_adapter_and_normalized_tape_map_to_the_same_action() {
-        let mut live_adapter = App::new();
+        let mut live_adapter = App::for_headless_simulation();
         live_adapter.key(KeyCode::KeyW, true);
         live_adapter.fixed_tick();
 
@@ -4162,5 +4647,129 @@ fit
 
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         assert!(error.to_string().contains("policy limit"));
+    }
+
+    #[test]
+    fn headless_display_predecessor_is_platform_neutral_and_overrides_live_audit_state() {
+        let baseline = App::for_headless_simulation();
+        assert_eq!(
+            baseline.sidebar_display_predecessor(),
+            (None, 0, DisplayStatus::AuditDisabled)
+        );
+
+        #[cfg(windows)]
+        {
+            let mut audit_enabled = App::for_headless_simulation();
+            audit_enabled.display_ledger = Some(DisplayLedgerV2::default());
+            assert_eq!(
+                baseline.sidebar_snapshot(0).tag(),
+                audit_enabled.sidebar_snapshot(0).tag()
+            );
+        }
+    }
+
+    #[test]
+    fn headless_preflight_refuses_finite_look_values_whose_sum_is_nonfinite() {
+        let tape = InteractionTape::parse(
+            "tick\nlook 1.7976931348623157e308 0\nlook 1.7976931348623157e308 0\n",
+        )
+        .unwrap();
+        let error = simulate_interaction_tape(&tape).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("action 1"));
+        assert!(error.to_string().contains("accumulation is nonfinite"));
+    }
+
+    #[test]
+    fn headless_preflight_preserves_the_full_idle_record_allowance() {
+        let tape = InteractionTape::parse(&"tick\n".repeat(16_384)).unwrap();
+        preflight_headless_tape(&tape).unwrap();
+
+        let toggles = format!("tick\n{}", "exact toggle 1 0 0\n".repeat(140));
+        let toggles = InteractionTape::parse(&toggles).unwrap();
+        preflight_headless_tape(&toggles).unwrap();
+    }
+
+    #[test]
+    fn headless_preflight_charges_each_resize_even_when_the_tape_shrinks_before_tick() {
+        let source = format!("tick\n{}resize 1 1\n", "resize 4096 4096\n".repeat(6));
+        let tape = InteractionTape::parse(&source).unwrap();
+        let error = preflight_headless_tape(&tape).unwrap_err();
+
+        assert!(error.to_string().contains("resize-pixel-write"));
+    }
+
+    #[test]
+    fn headless_preflight_bounds_composition_raster_and_world_scan_lanes() {
+        let composition_source =
+            format!("tick\nresize 4096 4096\n{}", "tick\nsidebar\n".repeat(16));
+        let composition = InteractionTape::parse(&composition_source).unwrap();
+        assert!(
+            preflight_headless_tape(&composition)
+                .unwrap_err()
+                .to_string()
+                .contains("output-pixel-tick")
+        );
+
+        let raster_source = "tick\nresize 4096 4096\nexact on 1 0 0\nexact on 2 0 0\nexact on 3 0 0\nexact on 4 0 0\nexact on 5 0 0\n";
+        let raster = InteractionTape::parse(&raster_source).unwrap();
+        assert!(
+            preflight_headless_tape(&raster)
+                .unwrap_err()
+                .to_string()
+                .contains("raster-sample-test")
+        );
+
+        let exact_coordinates = (1..=5_000)
+            .map(|x| format!("exact on {x} 0 0\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        let world_scan_source = format!(
+            "tick\nresize 1 1\n{}{}",
+            exact_coordinates,
+            "delete\n".repeat(60_000)
+        );
+        let world_scan = InteractionTape::parse(&world_scan_source).unwrap();
+        assert!(
+            preflight_headless_tape(&world_scan)
+                .unwrap_err()
+                .to_string()
+                .contains("world-coordinate-test")
+        );
+
+        let ascending = (1..=25_000)
+            .map(|x| format!("exact on {x} 0 0\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        let descending = (1..=25_000)
+            .rev()
+            .map(|x| format!("exact off {x} 0 0\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        let edit_scan_source = format!("tick\nresize 1 1\n{ascending}{descending}");
+        let edit_scan = InteractionTape::parse(&edit_scan_source).unwrap();
+        assert!(
+            preflight_headless_tape(&edit_scan)
+                .unwrap_err()
+                .to_string()
+                .contains("edit-coordinate-test")
+        );
+
+        let ordering_coordinates = (1..=10_000)
+            .map(|x| format!("exact on {x} 0 0\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        let ordering_source = format!(
+            "tick\nresize 1 1\n{ordering_coordinates}{}",
+            "tick\n".repeat(4_000)
+        );
+        let ordering = InteractionTape::parse(&ordering_source).unwrap();
+        assert!(
+            preflight_headless_tape(&ordering)
+                .unwrap_err()
+                .to_string()
+                .contains("world-ordering")
+        );
     }
 }

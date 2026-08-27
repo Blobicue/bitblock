@@ -12,7 +12,6 @@ look 2.5 -1.25
 tick
 move right up
 sidebar
-exact on 3 0 0
 
 tick
 fit

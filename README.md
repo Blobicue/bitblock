@@ -69,6 +69,47 @@ This is deliberately an **edit language**, not yet a self-executing programming
 language. Blocks are memory and ticks are the execution clock; transformation
 rules will be a later checkpoint.
 
+## Headless interaction tapes
+
+An interaction tape can now execute a specific observer-action sequence without opening or
+controlling a window. Each `tick` starts one contiguous fixed-tick record; the lines below it are
+the ordered actions accepted before that tick. Empty records are meaningful idle ticks.
+
+```text
+tick
+move forward down
+look 2.5 -1.25
+
+tick
+move forward up
+wheel -10
+place
+sidebar
+```
+
+The commands are `move <forward|backward|left|right|up|down> <down|up>`, `look <x> <y>`,
+`wheel <lines>`, `delete`, `place`, `fit`, `sidebar`, `resize <width> <height>`, and
+`clear-motion`. `exact <on|off|toggle> <x> <y> <z>` is also available as an explicitly scripted
+Edit-channel action; no current mouse or keyboard adapter emits it. Comments and blank lines are
+ignored. Parsing is all-or-nothing, finite floating-point bit patterns and action order are
+preserved, and the canonical binary tape is named by a `#bb.intent.sha256...` content tag.
+
+This boundary begins *after* platform input acceptance. It does not claim to reproduce device or
+window identity, focus/capture success, synthetic/repeat filtering, pixel-wheel conversion, raw
+timestamps, redraw scheduling, or F4/F5 evidence capture. Live input and tapes do share the same
+accepted-action reducer and fixed-tick function.
+
+Headless runs always start from the empty program, permanent bedrock, observer spawn, visible
+sidebar, and the default 1201 x 801 output. Before state is constructed, a pure shadow interpreter
+checks the complete tape against payload/action limits and cumulative resize, composition, raster,
+and world-scan work budgets. Invalid finite accumulation and over-budget work fail closed.
+
+The report contains the tape tag, per-tick outcome/world/history/camera and CPU-frame commitments,
+and the final state. Those lines are reproducible projections, not yet one canonical run receipt
+binding the tape, build/rules, and result chain. Headless frames are intentionally unsubmitted:
+frame admissions and receipt heads remain empty, and no OS raster, scanout, or physical-light
+evidence is produced.
+
 The app retains the most recent tick's resolved, ordered integer-coordinate
 batch in memory. That batch can be replayed without the camera or renderer and
 is the shared semantic surface for mouse input, text input, Rust tests, and
@@ -265,6 +306,12 @@ cargo run --release
 
 # Start from the origin and apply a text program during tick zero
 cargo run --release -- examples/first.bb
+
+# Replay normalized observer actions without opening a window
+cargo run -- --simulate-actions examples/observer_walk.tape
+
+# Windows release builds need the console feature for a reliable captured report
+cargo run --release --features headless-console -- --simulate-actions examples/observer_walk.tape
 
 # Opt in to an expensive full-client OS screen-raster audit on each changed frame.
 # Use a debug run to retain the detailed terminal receipt; the window title also
