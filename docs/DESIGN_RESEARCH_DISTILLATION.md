@@ -39,7 +39,14 @@ documentation/checker correction
 **Eighth successor audit:**
 [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md), frozen
 with exact input and first-addition provenance projected once in
-[`HANDOFF.md#loop8provenancev1`](HANDOFF.md#loop8provenancev1); this derivative note projects only
+[`HANDOFF.md#loop8provenancev1`](HANDOFF.md#loop8provenancev1); its descendant remains a
+documentation/checker correction
+**Eighth correction:** exact input identity projected once in
+[`HANDOFF.md#loop9provenancev1`](HANDOFF.md#loop9provenancev1)
+**Ninth successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md), frozen
+with exact input and first-addition provenance projected once in
+[`HANDOFF.md#loop9provenancev1`](HANDOFF.md#loop9provenancev1); this derivative note projects only
 the resulting design semantics
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
@@ -357,26 +364,48 @@ policy, predicate, attained status, exact `AcceptedParentAuthorityConsumerRefV1`
 required consensus position and all certificate, consensus, availability, bounds, and
 equivocation/liveness rules from a certificate-independent
 `ParentAuthorityCertificateConsumerContextV1` derived before any historical ref or final consumer
-ID. A certificate is consumable only after its authorization, exact evidence commitment with a
-complete `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1` and exact
-`AcceptedParentAuthorityWitnessReceiptCoverageV1`. Every receipt is total-decoded and its credential,
-consensus, assessment, and dependency components must exactly equal the committed projections,
-including conflict material. Only then do consensus evidence, availability assessment, position, and status pass
+ID. The resolver fixes the rule for selecting the last complete consensus state before admission;
+the required certificate position and parent consensus history derive the concrete
+`ConsensusNativeParentAuthorityEvidenceCutoffV1`, which consensus authenticates. The parent
+consensus state atomically inserts every
+accepted wrapper into an authenticated ordered occurrence universe under its lookup, unique core,
+and `ConsensusNativeAcceptedRecordOccurrencePositionV1`;
+`ConsensusNativeAcceptedRecordOccurrenceReceiptV1` binds that live position and the exact bounded
+outer bytes. `ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1` authenticates the
+cutoff, universe root, entry count, and state inclusion rather than allowing a certificate candidate
+to choose them.
+
+A certificate is consumable only after its authorization and exact evidence commitment carry
+`CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1`. That result binds the exact
+`ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1`—lookup, core, inclusive consensus-history
+start, and `ConsensusNativeParentAuthorityEvidenceCutoffPositionV1`—the range-derived
+`ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1`, and
+`ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1`; authenticated lower-
+boundary exclusion, gap-free range, and upper-boundary exclusion prove that no relevant pre-cutoff
+or cutoff-position occurrence was omitted. Every receipt is total-decoded and canonically re-encoded, and its
+credential, consensus, assessment, and dependency components must exactly equal the committed
+projections through `AcceptedParentAuthorityWitnessReceiptCoverageV1`, including conflict material.
+Only then do consensus evidence, availability assessment, position, and status pass
 `ConsensusNativeParentAuthorityCertificateAdmissionV1`; the final admission ID is derived last.
 The child header, release sign document, or activation sign document binds that exact accepted
-admission. Candidate evidence subsets may create different certificate IDs, but consensus accepts
-exactly one per parent/purpose/required position.
+admission. For one `(parent core, purpose, consumer context, required consensus position)`, the
+profile accepts exactly one admission on canonical history.
 
 Replay carries that accepted certificate, and the authenticated authority-use event commits its full
 canonical bytes through `AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1`.
 `ConsensusToReplayParentAuthorityCommitmentProofV1`
 reconstructs its exact credential/evidence commitment from raw wrapper-occurrence events in a
-complete authorized archive prefix, byte-equals every outer preimage and receipt ID to the receipt
-set already inside the accepted commitment, and recomputes same-wrapper dependencies, dependency
-closure, and the same purpose/status. A later synthetic wrapper cannot repair admission. Those
-occurrences remain pinned even if later normalized retention keeps an equivalent witness. The
-archive checkpoint may postdate the consumer; its ordering and append-
-consistency proofs protect replay custody, not live authorization. A later named
+complete authorized archive prefix. Each archive occurrence carries and recomputes the earlier
+consensus-native position and receipt ID, and the archive witness set must be exactly total over the
+range-derived receipt set in the accepted commitment. The verifier rechecks the cutoff consensus
+proof and authenticated range-completeness proof, then recomputes same-wrapper dependencies,
+dependency closure, and the same purpose/status. Archive bytes absent from the pre-admission
+universe cannot justify the certificate, even if their content matches another receipt. Conversely,
+a later archive event may recover byte-identical bytes for an already positioned occurrence; its
+later ordinal is custody order, not live creation time. Those occurrences and positions remain
+pinned even if later normalized retention keeps an equivalent witness. The archive checkpoint may
+postdate the consumer; its ordering and append-consistency proofs protect replay custody, not live
+authorization. A later named
 view separately carries
 `ReplayParentAuthorityStatusProjectionV1` values in
 `ReplayParentAuthorityStatusProjectionSetV1`; later evidence may update that projection but cannot

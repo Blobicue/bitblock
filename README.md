@@ -12,6 +12,13 @@ The forward-looking security architecture is documented in
 local deterministic world from the proposed identity, ownership, replication, consensus,
 availability, and Layer 1 requirements.
 
+At the ninth audit's frozen input, that mutable paper still presented itself as historical
+checkpoint 0.3 even though its contents had accumulated the later successor corrections. The Loop 9
+descendant now preserves the pinned checkpoint and its audit as historical, labels the mutable paper
+as the current proposed descendant, links the complete successor-review chain, and scopes its
+checkpoint-obligations table to the historical artifact. This is a provenance repair, not a protocol,
+runtime, or security activation.
+
 The paper's historical checkpoint-0.3 gap review has a canonical corrected reading copy in
 [`docs/LAYER1_DESIGN_AUDIT.md`](docs/LAYER1_DESIGN_AUDIT.md). Its current Git blob
 `124e066b418a61279abf90c1b1b2c2cc0604ef2a` is frozen from the fifth-successor correction onward;
@@ -31,8 +38,9 @@ and
 
 The current successor records are
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md),
 and
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md)
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md)
 with exact provenance projected in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
@@ -121,30 +129,51 @@ authority, replay-archive commitment, historical replay authority, unavailable r
 exact-invariant guard, and provenance/count-projection issues before the coordinated
 descendant correction.
 
-That descendant now derives each normalized-authority entry ID from one proof-free canonical core
+The corrected descendant retains the eighth proposal to derive each normalized-authority entry ID from one proof-free canonical core
 and derives the view root from sorted unique `(lookup_id, entry_id)` pairs; retained projections
 cannot substitute an uncommitted subset. Live consumers bind an exact consensus-native parent-
 authority certificate only after its certificate-independent consumer context, evidence commitment,
 exact component-total witness-to-accepted-wrapper receipt coverage (including conflicting evidence),
 authorization, consensus admission, availability,
 position, and status verify; the replay archive never selects live authority. Replay later
-authenticates the full accepted-certificate bytes in the authority-use event and byte-matches pinned
-raw wrapper occurrences and their receipt IDs to that already accepted commitment, even when its
-archive checkpoint is produced after the consumer. A later synthetic wrapper cannot repair an
-earlier admission. Later evidence can
+authenticates the full accepted-certificate bytes in the authority-use event and reconstructs every
+range-derived receipt from pinned raw wrapper occurrences, their live consensus positions, and their
+receipt IDs, even when its archive checkpoint is produced after the consumer. The later archive
+ordinal proves custody order only; live authority comes from the pre-admission consensus universe.
+Later evidence can
 change a named status projection, but cannot alter the already accepted certificate. These remain
 proposed schemas and controls.
+
+The ninth sweep broke the occurrence-universe and chronology closure claims at its frozen input.
+Component-total coverage of a candidate-selected receipt set did not prove that it contained every relevant accepted
+occurrence before admission, and a content-derived receipt could not distinguish the original live
+occurrence from byte-identical content archived later. The coordinated correction now derives and
+authenticates a consensus-positioned evidence cutoff and complete accepted-occurrence universe before
+admission. Its exact inclusive scoped range and lower/gap-free/upper exclusion witnesses derive the
+receipt and status inputs rather than trusting a candidate subset. Each receipt binds its live
+consensus position and exact bytes. Replay may archive identical bytes later only as recovery of that
+already positioned receipt; it cannot invent an occurrence absent from the live universe root or
+become live authority.
 
 Planning now assigns live certificate issuance/admission to `CONSENSUS-1@base`. `SYNC-1@base`
 only transports and retains bounded bytes; its separate post-consensus
 `SYNC-1@replay-authority` phase reconstructs historical use for `TESTNET-1` and never feeds live
 authority backward into consensus.
 
+The coordinated checker correction now tests one compatible inherited-base/phase/conditional role
+union, guards the complete named live-certificate/replay assignment chain and its hash contexts,
+derives each current audit cardinality from the frozen finding table, scans every mutable planning
+authority for malformed semantic projections, proves each first-addition commit reaches the explicit
+checked lineage, and requires cycle controls to fail on the named cycle mechanism. These remain
+planning controls, not implementation security properties or capability promotions.
+
 None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
 cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
-deferred until a later complete successor sweep records zero new material design gaps and no falsely closed
-material residual within its declared
-finite lenses.
+deferred. The ninth sweep found material gaps and falsely closed residuals, so it did not satisfy
+the declared diminishing-returns boundary. Its only executed repository checks were the narrow
+planning-checker self-test and whitespace check; a later complete successor sweep must freeze zero
+new material gaps and zero falsely closed material residuals within its declared finite lenses
+before broad tests begin.
 
 - `(0, 0, 0)` is permanent orange bedrock; it is always on and cannot be broken.
 - The observer starts at `(0, 0, -1)`, in the adjacent empty cell facing bedrock.

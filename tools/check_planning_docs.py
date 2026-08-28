@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
@@ -38,14 +39,19 @@ SEVENTH_AUDIT_INPUT_COMMIT = "62afdd24a8525704f5949584859bd7cbad300d4d"
 SEVENTH_AUDIT_INPUT_TREE = "ee346fb3aa9bc54591f851dcb482fd92be9da84a"
 SEVENTH_AUDIT_ADDITION_COMMIT = "78d5494f930c7412c2d60162b44c0b72050f9f22"
 SEVENTH_AUDIT_ADDITION_TREE = "07aa851e422a5da9453d4409f91b62ad9442a7d5"
-SEVENTH_AUDIT_FINDING_COUNT = 8
 EIGHTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md"
 EIGHTH_AUDIT_GIT_BLOB = "b247d7585a9e4be06558b0076511fa1064252049"
 EIGHTH_AUDIT_INPUT_COMMIT = "e3650eb5d4ea390ac0023cb67325bae3c5351c60"
 EIGHTH_AUDIT_INPUT_TREE = "91378e4fe123a96298d73905ea2b1b3974137791"
 EIGHTH_AUDIT_ADDITION_COMMIT = "b9d441097c6c4dce013a3dad71cefb7ec2d5f0bf"
 EIGHTH_AUDIT_ADDITION_TREE = "916f7c22304d969d809f2f01f5032602a1a81b3b"
-EIGHTH_AUDIT_FINDING_COUNT = 6
+NINTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md"
+NINTH_AUDIT_GIT_BLOB = "0fa04587f3715c22f3b39017583e32000d8ba871"
+NINTH_AUDIT_INPUT_COMMIT = "e6baa331f89d8b367d97ae218ad8506c103eb82c"
+NINTH_AUDIT_INPUT_TREE = "044f210a7ae854a9416573a8f326d414da3ad4b5"
+NINTH_AUDIT_ADDITION_COMMIT = "bf62cb4848eeb3481eb413112cd33c06a63f1451"
+NINTH_AUDIT_ADDITION_TREE = "8f4c14e4926a5d5bcf77147cbfe724e55e234492"
+CHECKED_GIT_REF = "HEAD"
 LAYER1_DESIGN_AUDIT = ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md"
 LAYER1_DESIGN_AUDIT_GIT_BLOB = "124e066b418a61279abf90c1b1b2c2cc0604ef2a"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
@@ -63,6 +69,7 @@ FROZEN_TEXT_FILES = (
     SIXTH_AUDIT,
     SEVENTH_AUDIT,
     EIGHTH_AUDIT,
+    NINTH_AUDIT,
     LAYER1_DESIGN_AUDIT,
     DESIGN_RECEIPT,
 )
@@ -76,6 +83,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/LAYER1_DESIGN_AUDIT.md",
@@ -94,6 +102,7 @@ PLANNING_FILES = (
     SIXTH_AUDIT,
     SEVENTH_AUDIT,
     EIGHTH_AUDIT,
+    NINTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -120,6 +129,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -133,7 +143,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "ccb2af07c2d8a1203af8f4968ed6e61c1bcb8eb7ac8fc6b4b75ca98551ddc1ec"
+    "4a778b207044b86d9085ece05113a388d9852ed11273964b57e8e2b9e89a6928"
 )
 EXPECTED_HANDOFF_READ_ORDER = (
     "docs/HANDOFF.md",
@@ -148,6 +158,7 @@ EXPECTED_HANDOFF_READ_ORDER = (
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
     "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
     "docs/FUTURE_PLAN_AUDIT.md",
     "docs/SEMANTICS.md",
@@ -748,6 +759,121 @@ EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS = {
     ),
 }
 
+# Loop 9 freezes the complete parsed assignment surface spanning live
+# consensus-native occurrence/certificate admission through replay
+# checkpoint/view/completeness reconstruction.  Each digest is over compact
+# JSON of ``_parse_exact_schema_assignment``'s ordered variant/field result;
+# it therefore binds variant order, field order, domain strings, and context
+# arguments while keeping this already-large checker manifest reviewable.
+EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256 = {
+    "AcceptedParentAuthorityUseV1": "b017ba1a930b313587e1490f9f3b78e366a1eefc6ba99eb69f0cda788775a7fd",
+    "AcceptedParentAuthorityRefV1": "f5837a033dc9a840a2240481a880733749eb5433283166a46169a0d49439d90e",
+    "ParentAuthorityCertificateConsumerContextV1": "04cd61c45dc7cca94ac051eb27a10e6ff9132ae66149480511795ff2fc601960",
+    "parent_authority_certificate_consumer_context_id": "4b143ecd090383530c005f1cae579b30c9161bee9df2879bcefa09e866cb73cd",
+    "ConsensusNativeParentAuthorityPositionV1": "1dbb4167f75483c23958d0aedee2aecbc5ae136f3b7d7450d69ca3decea0a62a",
+    "ConsensusNativeParentAuthorityEvidenceCutoffPositionV1": "3b5f50dc732f922e36e16f203d373c698bb5a268f418cc1353ad5737652effc5",
+    "ConsensusNativeAcceptedRecordOccurrencePositionV1": "4f03afe01a52b1e73d269af2f42a1ccc6bfaa789f7cb26cd67166ad42792119c",
+    "ConsensusNativeAcceptedRecordOccurrenceIndexKeyV1": "022ad5bb7d9e62d6830d403a747145e5b887d9fea838f7b4bcfa42b1c5456c83",
+    "ConsensusNativeAcceptedRecordOccurrenceReceiptV1": "1dcaff1b2403caae442f523b22b52b3bcb7f54ac720f5bb5b0261b6f8be67b11",
+    "consensus_native_accepted_record_occurrence_receipt_id": "1fdcaf77b471f81160bb23e2c55e66a5ea75c3c77e3b7ee1fc5a558df1cd1689",
+    "ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1": "2701756b147a9da14125e459b7cadd5e15ebc55f41927ff0882da1f2a48cdaa7",
+    "consensus_native_accepted_record_occurrence_receipt_set_id": "9afc9d2514f13ea9b4c13a367d6baf0e8389ca457d80905dfc0ec91e9c4d32c3",
+    "ConsensusNativeAcceptedRecordOccurrenceUniverseEntryV1": "137396aa74b1aa9d05ce0e72ea41ba1bdc0d468cd13a9c4e605e6c1f4d731237",
+    "consensus_native_accepted_record_occurrence_universe_root": "c6b1bbf73f1fbfa18b858e3cbd9c3d1af5bb70737d8e7e09e9a611021f83cb4f",
+    "ConsensusNativeParentAuthorityEvidenceCutoffV1": "a5d419866cc8e59ae368470a077aa967c08a249e6fcde850a9e2af832a5a47ba",
+    "consensus_native_parent_authority_evidence_cutoff_id": "67779a0be6f4075f4f76dd234e57e78728caadc12d92b027b30feaf07dbc26e0",
+    "ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1": "9ba382c376cf78b9e58d9297ca209f763363c633cbb66ae44a71622374467d57",
+    "ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1": "d71a3a9138efcad230cdd9d495f5df46da2f14b6f88488f03568bdeb22e573a7",
+    "ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1": "11d0c7b75afc0249f9e69e8125fa21bea6778f34074b361cca9cf721290fefb9",
+    "CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1": "883e92729dde0369f90aee2caf45d0e79a55f05118b297564fdfb156a0cd41f4",
+    "AcceptedParentAuthorityReceiptComponentProjectionV1": "132315b5f1bac44aaedd26bae68a8034da6cf54f9dea094e2d7fd6c74ffc54e7",
+    "AcceptedParentAuthorityWitnessReceiptCoverageV1": "731ce5e41701dce1bf55dbb7bd98c863c2ca00ba9587f6d77337c8d87870a518",
+    "AcceptedParentAuthorityEvidenceCommitmentV1": "be3836894333169e115978d3505b88cada7d960c66047027208392359096f78e",
+    "accepted_parent_authority_evidence_commitment_id": "8d1f29ac7bbdc9f80d9d444f7e5025cc9183256f7aa0c2690bf93fe7064d3479",
+    "ConsensusNativeParentAuthorityCertificateCoreV1": "ccc93bfdb45c7475976b6ad455b9d3402262e6394a9648c5523d143a3ad40100",
+    "consensus_native_parent_authority_certificate_id": "9191f98293e1923cc3667771ce36e8eefe4972a165b35ab7bbd1b814c8ee7df6",
+    "ConsensusNativeParentAuthorityCertificateSignDocV1": "9b41c1b7b965749262bdd89c7e32f3a0e987b5a9ea2eeea7748739aabc938728",
+    "ConsensusNativeParentAuthorityCertificateAuthorizationV1": "8202df8c4d3f7eae69dbd664ee1cc1285f94aa720314c8f01fd2212a12f06826",
+    "consensus_native_parent_authority_certificate_authorization_id": "e20f5ee825e060ab83c74ee1f669251f7ae44ce94140de2790211b7d773cd44d",
+    "AuthorizedConsensusNativeParentAuthorityCertificateV1": "b7eb434c24cc9af7bc0151be2649b6dcdcd3557943a58e7c718115e283583286",
+    "ConsensusNativeParentAuthorityCertificateAdmissionCoreV1": "ad353b1e046aeb98c3ccb308fdbf9da016cf9587d24d336dd1c919d04984edc0",
+    "consensus_native_parent_authority_certificate_admission_core_id": "9794e98919ae19e8645715ee09810fd9924619722600164c6a45b04fcfc4fcf9",
+    "ConsensusNativeParentAuthorityCertificateAdmissionV1": "6df2ec1859ace912960e2519b1611f212b88d09524fb304b009ac3f0d22f9b6e",
+    "consensus_native_parent_authority_certificate_admission_id": "1b99fa39a9f06d361097c1a9cf85e1e29d7f8e2845b6866e6e5abc6984934fd5",
+    "AcceptedConsensusNativeParentAuthorityCertificateV1": "88a703f9930ccd5108eaa7362a24d66a33048bcec4bb064d0d624637a697b8e9",
+    "ConsensusNativeParentAuthorityCertificateRefV1": "e5f6cb605766a9d56a631b449ead85062ab90bde54a80f9ae993b2d9cb70a7dc",
+    "CertificateEvidenceReplayCheckpointRefV1": "be45e8083985dcc53631c4dac26c2b547a13d5a09f46ecf1dbb2c23fceded6b5",
+    "HistoricalAcceptedParentAuthorityUseRefV1": "1079b7564c734f2167f55de4ad672ef962ac96cfb61fbafda38e360c6895c593",
+    "ReplayEvidenceArchiveResolutionV1": "b0ead3701d205cd4a564dcdd8f37527d4f3ded9de29851e48a26d598a2ec52ce",
+    "ReplayEvidenceArchiveHashV1(framed_input)": "a940ab4dd84a6021cb38a1bdab7adaa68a7eac0aebb7ce34a9cee32a0b2fa50e",
+    "AcceptedRecordOuterOccurrenceV1": "d5df82b6ae2b792b4118c8361fc255059b74aac933e02a182af09b5b02618570",
+    "accepted_record_outer_occurrence_id": "f83e80378d6b68d12e1a8fab46a58f53150a44817d5bd9a08174f66906cf7837",
+    "AcceptedParentAuthorityConsumerRefV1": "e47e2b9e3539b967f0c1570a5e215669142f455c48644ff0cbdb3c3e80807ab6",
+    "AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1": "2ee50de59bf5c26c34bdfeb4ec8701bc8a139e9888264a707cc4ed5a7dc469b4",
+    "accepted_parent_authority_certificate_occurrence_id": "536b5983560549ead80a222015e156b7d4606680e6877f5ece1dc04c7c6939a7",
+    "ReplayEvidenceEventV1": "f207cea22f1cc0be6578228f49ff768593be16c107e211dee1f8e0a1ae59fab2",
+    "ReplayEvidenceEventRecordV1": "8dfa117554bea34acf4dbf7a9d6c0d82c162fc90900a4c515e95c7f46a443e7d",
+    "replay_evidence_event_id": "524ca4fccb503ddb6d3b5751eebb6ba175c92512bda3d8d21491237e18e29767",
+    "ReplayParentAuthorityStatusProjectionCoreV1": "1746d96494ebaa023f6ba83c373dd0830cf75c379e15edb7c9ce5ad4f3f42ec2",
+    "ReplayParentAuthorityStatusProjectionCoreSetV1": "3f12ce78d627fcef076f08f9a4b28a9ca841863f0c1bbec13077e111b8193ef4",
+    "NormalizedAcceptedAuthorityEntryCoreV1": "b0919ed66902dee9204986eb377939a93df3aacbe89065661ec0fbb6cb9dcee1",
+    "normalized_authority_entry_id": "f61d78613e52da307d588d21117ab43eff4894740bf60b7a1f18b6eda12ad738",
+    "NormalizedAuthorityViewEntryV1": "2c7b4b2a36bb396a59360f6c013d0152a0eeba1f7d4542782ad5910b63f92495",
+    "NormalizedAuthorityViewEntrySetV1": "cf134fc6e2c9ca167f19d985b80f041e89d1c29566d7a3eceb0e9953397ab19c",
+    "normalized_authority_view_root": "a3b931f316ef811d022410ac948e81bf60b53c86c98f8934cb0db5ea4376a3b4",
+    "ReplayEvidenceArchiveCheckpointCoreV1": "36c5921855edf750f36a1e67dada271e449fb16f7f830b51429b1c781c48d9ab",
+    "replay_evidence_archive_checkpoint_id": "cb6b5a374117588a0600e6558e7ab4013981f64d7cc2e15f8265902ea99bc99d",
+    "ReplayEvidenceArchiveCheckpointSignDocV1": "bc08977844534726a84c4843f66235fece8be41e0d8397a239c63cc4d1fc152f",
+    "ReplayEvidenceArchiveCheckpointAuthorizationV1": "18b3368f08ddcf26c60d3d3d8d4e657ca7763b6a2ca7aa3114ad476a165a14d7",
+    "replay_evidence_archive_checkpoint_authorization_id": "63b094d0f11643ee579c10341073e56a40e9e48eb2cbba83e5bc89c3225bc18f",
+    "ReplayEvidenceArchiveCheckpointV1": "47c1d0760f0f5ff9fd5ace6443943dda97671c3ee99784909af3e0d4cb23d9ec",
+    "ReplayEvidenceCheckpointConsistencyProofV1": "e0e5df4b9cbcc8512c90a6b0a89e6a0d79b8df2bf9d00e31266b33bbfb94fbac",
+    "ReplayEvidenceEventInclusionProofV1": "48d7b4231382e9e81b18e07f38f72aaafb19ff9da56420408fa3993ca1f5d3f6",
+    "ReplayEvidencePrefixCompletenessProofV1": "3e8025b0dcc31e17bfc5f9696838ba3cb30f8a7c01a58fb98954be61fd650841",
+    "ReplayEvidenceCutoffV1": "bf9463783db613b82a7fb8dc4a213cb4c482f621934ded42cca23f5f19c43b30",
+    "ReplayEvidenceViewCoreV1": "92fd20e3c6724f78986975d2b7b8d19bda6247e1f41cfc6f2c321f21e33281b6",
+    "replay_evidence_view_id": "d3dafb290ff623ec04ef8b6637fb601582ecafc1c9c5ca391819f5a4437bcc70",
+    "ReplayEvidenceViewV1": "a802537905faf7ec1f3e309519865891e2aa71a80a4813c874f4f2518f6b1e06",
+    "SameWrapperAcceptedRecordOccurrenceWitnessV1": "33bd0661173b165193b314040652d87630f5e2e723a8cb83100213575a7040e9",
+    "ReplayEvidenceNormalizedEntryProofV1": "0bd3eb4e9b41eb9f7329f24d921beff854171d9268be072d299d9a1e6359655b",
+    "CertificateEvidenceArchiveOccurrenceWitnessV1": "8306448e64822a32d1c12fd95dcbc04274fe22e351d75f95c14b53d500fe33e5",
+    "CertificateEvidenceArchiveOccurrenceWitnessSetV1": "fd726cae6b603ee5540fc93626507447fa6781a0d0528439faa84885fbc5e040",
+    "ConsensusToReplayParentAuthorityCommitmentProofV1": "82fb5dd8b497591ae54d2a5b6ad4960f079a40f0a0caa24657418a134c2e5f79",
+    "ReplayParentAuthorityStatusProjectionV1": "7d4001fdaadf3fe01de22119d32bde8d7633b3f28dcde34cb48b3f0d53bfe074",
+    "ReplayParentAuthorityStatusProjectionSetV1": "30d122d592f5721980de0a4d130ba3551990e77b0a31f47a25d0656c66c9f80b",
+    "NormalizedAcceptedEvidenceSnapshotV1": "62e7738e282b34f0d2a38c507332b4fd17943bd8ce74a3d2b17f64f716b94e73",
+    "RetainedAcceptedEligibilityProjectionV1": "a7617047934f7435744671be3bed7aec082b7b1391b4f2ce006de0efe7df9bb5",
+    "ReplayEvidenceRetentionProjectionProofV1": "a78f391f8cba45883ad243d56c6750b86c45072e89b4a606098c4f6cc929b6ff",
+    "RetainedAcceptedEligibilityWitnessV1": "c82ab7b7ef0949fbf1a3cddd2d21c52ebc81a8008a5e6c9b7ca3cc1762bc2a56",
+    "ReplayAcceptedAuthorityInputV1": "3f33efca53074dda11882bf2d27b25a24b1f2c2d640a12e8d9e0960563c70964",
+    "HistoricalAcceptedParentAuthorityUseWitnessV1": "cffd714de1c56b00acfb592224f7d75259dc4d146bb3b5cc521a29e5acb32b1a",
+    "HistoricalAcceptedParentAuthorityUseWitnessSetV1": "18b8b842930f29693fb1af5c4fdc89519864c71617dfa9f13f0712650dec361b",
+    "AcceptedCoreReplayEntryV1": "f5f2804bb69296f40a58f6cc0fdabb4cf6ddf97a9d775302117b1c67015abe89",
+}
+
+EXPECTED_LOOP9_DOMAIN_CONTEXT_ASSIGNMENTS = frozenset(
+    {
+        name
+        for name in EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256
+        if name[0].islower()
+    }
+)
+
+EXPECTED_LOOP9_SPECIAL_CONTEXT_MUTATIONS = {
+    "ReplayEvidenceArchiveResolutionV1": (
+        (
+            "replay_evidence_archive_policy_id",
+            "wrong_replay_evidence_archive_policy_id",
+        ),
+    ),
+    "ReplayEvidenceArchiveHashV1(framed_input)": (
+        (
+            "ReplayEvidenceArchiveResolutionV1.hash_suite_id",
+            "ReplayEvidenceArchiveResolutionV1.wrong_hash_suite_id",
+        ),
+    ),
+}
+
 EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS = (
     "accepted_proposal_core_version_u16_be",
     "accepted_parent_lookup_id",
@@ -1145,8 +1271,13 @@ def _parse_exact_schema_assignment(
     alternatives = _split_schema_top_level(rhs, "|", schema_name)
     parsed: list[tuple[str, tuple[str, ...]]] = []
     for alternative in alternatives:
+        bare_type = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", alternative)
+        if bare_type is not None:
+            parsed.append(("BareTypeRef", (bare_type.group(0),)))
+            continue
         call = re.fullmatch(
-            r"([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)",
+            r"([A-Za-z_][A-Za-z0-9_.]*(?:\[[A-Za-z_][A-Za-z0-9_.]*\])?)"
+            r"\s*\((.*)\)",
             alternative,
             flags=re.DOTALL,
         )
@@ -1183,12 +1314,46 @@ def check_loop8_exact_schemas(
     if unknown:
         raise PlanningError(f"unknown Loop 8 exact schemas requested: {unknown}")
     for schema_name in selected:
+        if schema_name in EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256:
+            check_loop9_exact_assignments(text, (schema_name,))
+            continue
         expected = EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS[schema_name]
         actual = _parse_exact_schema_assignment(text, schema_name)
         if actual != expected:
             raise PlanningError(
                 f"LAYER1_DESIGN_PAPER.md: {schema_name} exact ordered variants/fields "
                 f"disagree: expected={expected}, got={actual}"
+            )
+
+
+def _exact_assignment_sha256(
+    parsed: tuple[tuple[str, tuple[str, ...]], ...],
+) -> str:
+    canonical = json.dumps(parsed, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def check_loop9_exact_assignments(
+    text: str,
+    schema_names: tuple[str, ...] | None = None,
+) -> None:
+    selected = (
+        tuple(EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256)
+        if schema_names is None
+        else schema_names
+    )
+    unknown = sorted(set(selected) - EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256.keys())
+    if unknown:
+        raise PlanningError(f"unknown Loop 9 exact assignments requested: {unknown}")
+    for schema_name in selected:
+        actual = _parse_exact_schema_assignment(text, schema_name)
+        digest = _exact_assignment_sha256(actual)
+        expected = EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256[schema_name]
+        if digest != expected:
+            raise PlanningError(
+                f"LAYER1_DESIGN_PAPER.md: {schema_name} exact ordered variants/fields "
+                "disagree (including Loop 9 domain/context): "
+                f"expected_sha256={expected}, got_sha256={digest}, got={actual}"
             )
 
 
@@ -1251,7 +1416,11 @@ def _without_heading_section(text: str, heading: str) -> str:
     return "\n".join(lines[:start] + lines[end:])
 
 
-def parse_capability(text: str) -> dict[str, Node]:
+def parse_capability(
+    text: str,
+    *,
+    enforce_manifest: bool = True,
+) -> dict[str, Node]:
     lines = text.splitlines()
     nodes: dict[str, Node] = {}
     detail_fields: dict[str, dict[str, str]] = {}
@@ -1405,7 +1574,7 @@ def parse_capability(text: str) -> dict[str, Node]:
     base_dependency_digest = hashlib.sha256(
         base_dependency_manifest.encode("utf-8")
     ).hexdigest()
-    if base_dependency_digest != EXPECTED_BASE_DEPENDENCY_DIGEST:
+    if enforce_manifest and base_dependency_digest != EXPECTED_BASE_DEPENDENCY_DIGEST:
         raise PlanningError(
             "unconditional base dependencies changed without updating their intentional guard: "
             f"expected {EXPECTED_BASE_DEPENDENCY_DIGEST}, got {base_dependency_digest}"
@@ -1800,6 +1969,61 @@ def parse_conditional_edges(
     return tuple(edges)
 
 
+def check_compatible_dependency_union(
+    nodes: dict[str, Node],
+    phase_statuses: tuple[PhaseStatus, ...],
+    phase_dependencies: tuple[PhaseDependency, ...],
+    conditional_edges: tuple[ConditionalEdge, ...],
+) -> None:
+    """Reject cycles spanning inherited base, phase, and compatible role edges.
+
+    Phase names and conditional roles name the same graph instance exactly when
+    their ``node@phase-or-role`` strings are equal.  All instances inherit the
+    owning capability node's unconditional base prerequisites.  Checking this
+    union is necessary because the PD-only and CE-only projections can each be
+    acyclic while their compatible union contains a cross-class cycle.
+    """
+
+    instances: set[tuple[str, str]] = {
+        (status.node_id, status.phase) for status in phase_statuses
+    }
+    instances.update(
+        (dependency.owner_node, dependency.owner_phase)
+        for dependency in phase_dependencies
+    )
+    instances.update(
+        (dependency.prerequisite_node, dependency.prerequisite_phase)
+        for dependency in phase_dependencies
+    )
+    instances.update(
+        (edge.owner_base, edge.owner_role) for edge in conditional_edges
+    )
+    instances.update(
+        (edge.dependency_base, edge.dependency_role) for edge in conditional_edges
+    )
+    instances.update((node_id, "base") for node_id in nodes)
+
+    adjacency: dict[str, list[str]] = {
+        f"{node_id}@{role}": [
+            f"{dependency}@base" for dependency in nodes[node_id].dependencies
+        ]
+        for node_id, role in sorted(instances)
+    }
+    for dependency in phase_dependencies:
+        adjacency[f"{dependency.owner_node}@{dependency.owner_phase}"].append(
+            f"{dependency.prerequisite_node}@{dependency.prerequisite_phase}"
+        )
+    for edge in conditional_edges:
+        adjacency[f"{edge.owner_base}@{edge.owner_role}"].append(
+            f"{edge.dependency_base}@{edge.dependency_role}"
+        )
+
+    _assert_acyclic(
+        {instance: tuple(prerequisites) for instance, prerequisites in adjacency.items()},
+        "compatible base-phase-role dependency union",
+    )
+
+
 def parse_predicate_entailments(
     text: str,
     conditional_edges: tuple[ConditionalEdge, ...],
@@ -2129,6 +2353,27 @@ def check_audit_provenance_projection(
     schema_name: str,
     expected: dict[str, str],
 ) -> tuple[tuple[str, str], ...]:
+    audit_count_sources = {
+        "Loop7ProvenanceV1": (SEVENTH_AUDIT, "LG", "Loop 7 audit"),
+        "Loop8ProvenanceV1": (EIGHTH_AUDIT, "EG", "Loop 8 audit"),
+        "Loop9ProvenanceV1": (NINTH_AUDIT, "NG", "Loop 9 audit"),
+    }
+    if schema_name not in audit_count_sources:
+        raise PlanningError(f"unknown audit provenance schema {schema_name}")
+    audit_path, finding_prefix, audit_label = audit_count_sources[schema_name]
+    derived_count = len(
+        _parse_frozen_audit_finding_ids(
+            audit_path.read_bytes(),
+            prefix=finding_prefix,
+            label=audit_label,
+        )
+    )
+    expected_count = expected.get("material_finding_count_u32")
+    if expected_count != str(derived_count):
+        raise PlanningError(
+            f"{schema_name} audit-derived finding count mismatch: frozen {finding_prefix} "
+            f"table derives {derived_count}, caller supplied {expected_count}"
+        )
     rows = _parse_named_two_column_table(
         handoff_text,
         f"### {schema_name}",
@@ -2178,43 +2423,40 @@ _COUNT_WORD_BY_VALUE = {
 }
 
 
-def _exact_count_token(value: int) -> str:
-    variants = [re.escape(str(value))]
-    if value in _COUNT_WORD_BY_VALUE:
-        variants.append(re.escape(_COUNT_WORD_BY_VALUE[value]))
-    return "(?:" + "|".join(variants) + ")"
+_ANY_COUNT_TOKEN = "(?:[0-9]+|" + "|".join(
+    re.escape(word) for word in _COUNT_WORD_BY_VALUE.values()
+) + ")"
 
 
 def _summary_prose_count_patterns(
-    planning_summary: dict[str, int],
 ) -> tuple[tuple[str, re.Pattern[str]], ...]:
-    count = lambda field: _exact_count_token(planning_summary[field])
-    return (
+    count = _ANY_COUNT_TOKEN
+    forward = (
         (
             "capability_node_count_u32",
             re.compile(
-                rf"\b{count('capability_node_count_u32')}\s+capability\s+nodes?\b",
+                rf"\b{count}\s+capability\s+nodes?\b",
                 re.IGNORECASE,
             ),
         ),
         (
             "foundation_node_count_u32",
             re.compile(
-                rf"\b{count('foundation_node_count_u32')}\s+foundation\s+(?:nodes?|rows?)\b",
+                rf"\b{count}\s+foundation\s+(?:nodes?|rows?)\b",
                 re.IGNORECASE,
             ),
         ),
         (
             "detailed_node_count_u32",
             re.compile(
-                rf"\b{count('detailed_node_count_u32')}\s+detailed\s+nodes?\b",
+                rf"\b{count}\s+detailed\s+nodes?\b",
                 re.IGNORECASE,
             ),
         ),
         (
             "phase_status_count_u32",
             re.compile(
-                rf"\b{count('phase_status_count_u32')}(?:-row|\s+structured)?\s+"
+                rf"\b{count}(?:-row|\s+structured)?\s+"
                 r"phase-status(?:\s+(?:rows?|tuples?))?\b",
                 re.IGNORECASE,
             ),
@@ -2222,7 +2464,7 @@ def _summary_prose_count_patterns(
         (
             "ready_frontier_count_u32",
             re.compile(
-                rf"\b{count('ready_frontier_count_u32')}\s+(?:ordered\s+)?"
+                rf"\b{count}\s+(?:ordered\s+)?"
                 r"READY(?:[- ]frontier)?\s+(?:rows?|tuples?)\b",
                 re.IGNORECASE,
             ),
@@ -2230,7 +2472,7 @@ def _summary_prose_count_patterns(
         (
             "base_dependency_edge_count_u32",
             re.compile(
-                rf"\b{count('base_dependency_edge_count_u32')}\s+(?:unconditional\s+)?"
+                rf"\b{count}\s+(?:unconditional\s+)?"
                 r"base(?:[- ]dependency)?\s+edges?\b",
                 re.IGNORECASE,
             ),
@@ -2238,7 +2480,7 @@ def _summary_prose_count_patterns(
         (
             "phase_dependency_edge_count_u32",
             re.compile(
-                rf"\b{count('phase_dependency_edge_count_u32')}\s+phase"
+                rf"\b{count}\s+phase"
                 r"(?:[- ]dependency\s+edges?|\s+dependencies)\b",
                 re.IGNORECASE,
             ),
@@ -2246,7 +2488,7 @@ def _summary_prose_count_patterns(
         (
             "conditional_edge_count_u32",
             re.compile(
-                rf"\b{count('conditional_edge_count_u32')}\s+(?:context-bearing\s+)?"
+                rf"\b{count}\s+(?:context-bearing\s+)?"
                 r"conditional(?:-instance|\s+instance)?\s+edges?\b",
                 re.IGNORECASE,
             ),
@@ -2254,7 +2496,7 @@ def _summary_prose_count_patterns(
         (
             "total_declared_edge_count_u32",
             re.compile(
-                rf"\b{count('total_declared_edge_count_u32')}\s+"
+                rf"\b{count}\s+"
                 r"(?:(?:total\s+)?declared(?:\s+base-plus-phase-plus-conditional)?|combined)"
                 r"\s+edges?\b",
                 re.IGNORECASE,
@@ -2263,14 +2505,14 @@ def _summary_prose_count_patterns(
         (
             "predicate_entailment_count_u32",
             re.compile(
-                rf"\b{count('predicate_entailment_count_u32')}\s+predicate\s+entailments?\b",
+                rf"\b{count}\s+predicate\s+entailments?\b",
                 re.IGNORECASE,
             ),
         ),
         (
             "planning_markdown_count_u32",
             re.compile(
-                rf"\b{count('planning_markdown_count_u32')}"
+                rf"\b{count}"
                 r"(?:(?:-document|\s+documents?)\s+(?:planning\s+)?(?:authority\s+)?inventory"
                 r"|\s+planning\s+Markdown\s+(?:files?|documents?))\b",
                 re.IGNORECASE,
@@ -2279,7 +2521,7 @@ def _summary_prose_count_patterns(
         (
             "frozen_text_artifact_count_u32",
             re.compile(
-                rf"\b{count('frozen_text_artifact_count_u32')}\s+(?:byte-)?"
+                rf"\b{count}\s+(?:byte-)?"
                 r"frozen(?:\s+text)?\s+artifacts?\b",
                 re.IGNORECASE,
             ),
@@ -2287,7 +2529,7 @@ def _summary_prose_count_patterns(
         (
             "frozen_markdown_audit_count_u32",
             re.compile(
-                rf"\b{count('frozen_markdown_audit_count_u32')}\s+"
+                rf"\b{count}\s+"
                 r"(?:frozen\s+)?Markdown\s+audits?\b",
                 re.IGNORECASE,
             ),
@@ -2295,11 +2537,62 @@ def _summary_prose_count_patterns(
         (
             "frozen_json_receipt_count_u32",
             re.compile(
-                rf"\b{count('frozen_json_receipt_count_u32')}\s+"
+                rf"\b{count}\s+"
                 r"(?:frozen\s+)?JSON\s+source\s+receipts?\b",
                 re.IGNORECASE,
             ),
         ),
+    )
+    reverse_nouns = {
+        "capability_node_count_u32": r"capability[- ]nodes?",
+        "foundation_node_count_u32": r"foundation[- ](?:nodes?|rows?)",
+        "detailed_node_count_u32": r"detailed[- ]nodes?",
+        "phase_status_count_u32": (
+            r"phase[- ]status(?:[- ](?:rows?|tuples?))?"
+        ),
+        "ready_frontier_count_u32": (
+            r"(?:ordered[- ])?READY(?:[- ]frontier)?(?:[- ](?:rows?|tuples?))?"
+        ),
+        "base_dependency_edge_count_u32": (
+            r"(?:unconditional[- ])?base(?:[- ]dependency)?[- ]edges?"
+        ),
+        "phase_dependency_edge_count_u32": (
+            r"phase[- ]dependenc(?:y|ies)(?:[- ]edges?)?"
+        ),
+        "conditional_edge_count_u32": (
+            r"(?:context-bearing[- ])?conditional(?:[- ]instance)?[- ]edges?"
+        ),
+        "total_declared_edge_count_u32": (
+            r"(?:(?:total[- ])?declared(?:[- ]base-plus-phase-plus-conditional)?|combined)"
+            r"[- ]edges?"
+        ),
+        "predicate_entailment_count_u32": r"predicate[- ]entailments?",
+        "planning_markdown_count_u32": (
+            r"(?:(?:planning[- ])?(?:authority[- ])?inventory|"
+            r"planning[- ]Markdown[- ](?:files?|documents?))"
+        ),
+        "frozen_text_artifact_count_u32": (
+            r"(?:byte[- ])?frozen(?:[- ]text)?[- ]artifacts?"
+        ),
+        "frozen_markdown_audit_count_u32": (
+            r"(?:frozen[- ])?Markdown[- ]audits?"
+        ),
+        "frozen_json_receipt_count_u32": (
+            r"(?:frozen[- ])?JSON[- ]source[- ]receipts?"
+        ),
+    }
+    if set(reverse_nouns) != set(PLANNING_SUMMARY_FIELD_ORDER):
+        raise PlanningError("reverse planning-count semantic manifest is incomplete")
+    return tuple(
+        (
+            field,
+            re.compile(
+                rf"(?:{pattern.pattern}|\b(?:{reverse_nouns[field]})"
+                rf"(?:\s+count)?\s*(?:is|=|:)\s*\b{count}\b)",
+                re.IGNORECASE,
+            ),
+        )
+        for field, pattern in forward
     )
 
 
@@ -2307,10 +2600,45 @@ def check_no_duplicate_exact_projections(
     texts: dict[str, str],
     planning_summary: dict[str, int],
 ) -> None:
+    expected_mutable_paths = EXPECTED_PLANNING_PATHS - EXPECTED_FROZEN_TEXT_PATHS
+    actual_mutable_paths = frozenset(texts)
+    if actual_mutable_paths != expected_mutable_paths:
+        missing = sorted(expected_mutable_paths - actual_mutable_paths)
+        extra = sorted(actual_mutable_paths - expected_mutable_paths)
+        raise PlanningError(
+            "sole-projection scan must cover every non-frozen mutable planning authority: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    for field in PLANNING_SUMMARY_FIELD_ORDER:
+        field_token = re.compile(
+            rf"(?<![A-Za-z0-9_]){re.escape(field)}(?![A-Za-z0-9_])"
+        )
+        occurrences = [
+            (path, match.group(0))
+            for path, text in texts.items()
+            for match in field_token.finditer(text)
+        ]
+        if len(occurrences) != 1:
+            raise PlanningError(
+                f"exact PlanningCheckerSummaryV1 field {field} must occur exactly once "
+                "in its canonical CAPABILITY_TREE table cell; "
+                f"occurrences={occurrences}"
+            )
+
     audit_markers = {
         "Loop7ProvenanceV1": (
-            ("design_research_distillation_audit_loop7.md", "loop 7", "seventh"),
-            SEVENTH_AUDIT_FINDING_COUNT,
+            (
+                "design_research_distillation_audit_loop7.md",
+                "loop 7",
+                "seventh",
+                "loop7provenancev1",
+            ),
+            len(
+                _parse_frozen_audit_finding_ids(
+                    SEVENTH_AUDIT.read_bytes(), prefix="LG", label="Loop 7 audit"
+                )
+            ),
             (
                 SEVENTH_AUDIT_INPUT_COMMIT,
                 SEVENTH_AUDIT_INPUT_TREE,
@@ -2320,8 +2648,17 @@ def check_no_duplicate_exact_projections(
             ),
         ),
         "Loop8ProvenanceV1": (
-            ("design_research_distillation_audit_loop8.md", "loop 8", "eighth"),
-            EIGHTH_AUDIT_FINDING_COUNT,
+            (
+                "design_research_distillation_audit_loop8.md",
+                "loop 8",
+                "eighth",
+                "loop8provenancev1",
+            ),
+            len(
+                _parse_frozen_audit_finding_ids(
+                    EIGHTH_AUDIT.read_bytes(), prefix="EG", label="Loop 8 audit"
+                )
+            ),
             (
                 EIGHTH_AUDIT_INPUT_COMMIT,
                 EIGHTH_AUDIT_INPUT_TREE,
@@ -2330,11 +2667,34 @@ def check_no_duplicate_exact_projections(
                 EIGHTH_AUDIT_GIT_BLOB,
             ),
         ),
+        "Loop9ProvenanceV1": (
+            (
+                "design_research_distillation_audit_loop9.md",
+                "loop 9",
+                "ninth",
+                "loop9provenancev1",
+            ),
+            len(
+                _parse_frozen_audit_finding_ids(
+                    NINTH_AUDIT.read_bytes(), prefix="NG", label="Loop 9 audit"
+                )
+            ),
+            (
+                NINTH_AUDIT_INPUT_COMMIT,
+                NINTH_AUDIT_INPUT_TREE,
+                NINTH_AUDIT_ADDITION_COMMIT,
+                NINTH_AUDIT_ADDITION_TREE,
+                NINTH_AUDIT_GIT_BLOB,
+            ),
+        ),
     }
     for schema_name, (_markers, _expected_count, object_ids) in audit_markers.items():
         for object_id in object_ids:
+            recognized_forms = tuple(
+                object_id[:length] for length in range(len(object_id), 6, -1)
+            )
             object_token = re.compile(
-                rf"(?<![0-9a-f])(?:{re.escape(object_id)}|{re.escape(object_id[:7])})"
+                rf"(?<![0-9a-f])(?:{'|'.join(map(re.escape, recognized_forms))})"
                 r"(?![0-9a-f])",
                 re.IGNORECASE,
             )
@@ -2350,21 +2710,32 @@ def check_no_duplicate_exact_projections(
                     f"object={object_id}, occurrences={occurrences}"
                 )
 
-    count_words = {6: "six", 8: "eight"}
     for path, text in texts.items():
         for paragraph in re.split(r"\n\s*\n", text):
             lowered = paragraph.lower()
-            for schema_name, (markers, expected_count, object_ids) in audit_markers.items():
+            for schema_name, (markers, _expected_count, _object_ids) in audit_markers.items():
                 if not any(marker in lowered for marker in markers):
                     continue
-                expected_count_token = (
-                    rf"(?:{expected_count}|{count_words[expected_count]})"
-                )
-                finding_count = re.compile(
-                    rf"(?:\b{expected_count_token}\b[^.\n]{{0,60}}"
+                marker_pattern = "(?:" + "|".join(map(re.escape, markers)) + ")"
+                count_and_finding = (
+                    rf"(?:\b{_ANY_COUNT_TOKEN}\b[^.\n]{{0,60}}"
                     rf"\b(?:material\s+)?(?:findings?|gaps?)\b|"
                     rf"\b(?:material\s+)?(?:findings?|gaps?)\b[^.\n]{{0,60}}"
-                    rf"\b{expected_count_token}\b)",
+                    rf"\b{_ANY_COUNT_TOKEN}\b)"
+                )
+                finding_count_field = (
+                    r"(?:material[ _-]+)?(?:finding|gap)[ _-]+count"
+                    r"(?:[ _-]+u32)?"
+                )
+                finding_count = re.compile(
+                    rf"(?:{marker_pattern}[^.\n]{{0,100}}{count_and_finding}|"
+                    rf"{count_and_finding}[^.\n]{{0,100}}{marker_pattern}|"
+                    rf"{marker_pattern}[^.\n]{{0,100}}"
+                    rf"\b{finding_count_field}\b"
+                    rf"[^.\n]{{0,40}}(?:is|=|:)\s*\b{_ANY_COUNT_TOKEN}\b|"
+                    rf"\b{finding_count_field}\b"
+                    rf"[^.\n]{{0,40}}(?:for|of)\s+{marker_pattern}"
+                    rf"[^.\n]{{0,40}}(?:is|=|:)\s*\b{_ANY_COUNT_TOKEN}\b)",
                     re.IGNORECASE,
                 )
                 if finding_count.search(paragraph):
@@ -2373,8 +2744,55 @@ def check_no_duplicate_exact_projections(
                         "canonical HANDOFF projection"
                     )
 
+                object_field_separator = r"[ _-]+"
+                object_field_pattern = (
+                    rf"(?:audited{object_field_separator}input{object_field_separator}"
+                    rf"(?:commit|tree)|addition{object_field_separator}(?:commit|tree)|"
+                    rf"first{object_field_separator}addition{object_field_separator}commit|"
+                    rf"audit(?:{object_field_separator}git)?{object_field_separator}blob)"
+                )
+                forward_full_claim_pattern = re.compile(
+                    rf"{marker_pattern}[^.\n]{{0,100}}{object_field_pattern}"
+                    r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])",
+                    flags=re.IGNORECASE,
+                )
+                reverse_full_claim_pattern = re.compile(
+                    rf"{object_field_pattern}[^.\n]{{0,60}}"
+                    r"(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])"
+                    rf"[^.\n]{{0,100}}{marker_pattern}",
+                    flags=re.IGNORECASE,
+                )
+                wrong_claim = forward_full_claim_pattern.search(paragraph)
+                if wrong_claim is None:
+                    wrong_claim = reverse_full_claim_pattern.search(paragraph)
+                if wrong_claim is not None:
+                    raise PlanningError(
+                        f"{path}: non-canonical Git object claim for {schema_name}: "
+                        f"{wrong_claim.group(1)}"
+                    )
+
+                forward_abbreviated_claim_pattern = re.compile(
+                    rf"{marker_pattern}[^.\n]{{0,100}}{object_field_pattern}"
+                    r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{7,39})(?![0-9a-f])",
+                    flags=re.IGNORECASE,
+                )
+                reverse_abbreviated_claim_pattern = re.compile(
+                    rf"{object_field_pattern}[^.\n]{{0,60}}"
+                    r"(?<![0-9a-f])([0-9a-f]{7,39})(?![0-9a-f])"
+                    rf"[^.\n]{{0,100}}{marker_pattern}",
+                    flags=re.IGNORECASE,
+                )
+                abbreviated_claim = forward_abbreviated_claim_pattern.search(paragraph)
+                if abbreviated_claim is None:
+                    abbreviated_claim = reverse_abbreviated_claim_pattern.search(paragraph)
+                if abbreviated_claim is not None:
+                    raise PlanningError(
+                        f"{path}: abbreviated Git object claim for {schema_name} is disallowed: "
+                        f"{abbreviated_claim.group(1)}"
+                    )
+
     for path, text in texts.items():
-        for field, pattern in _summary_prose_count_patterns(planning_summary):
+        for field, pattern in _summary_prose_count_patterns():
             match = pattern.search(text)
             if match is not None:
                 raise PlanningError(
@@ -2636,6 +3054,69 @@ def check_frozen_eighth_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_ninth_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != NINTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md changed after its frozen first "
+            f"addition: expected Git blob {NINTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def _parse_frozen_audit_finding_ids(
+    data: bytes,
+    *,
+    prefix: str,
+    label: str,
+) -> tuple[str, ...]:
+    """Derive finding cardinality from one exact contiguous frozen audit table."""
+
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise PlanningError(f"{label} is not valid UTF-8") from error
+    headers = [
+        index
+        for index, line in enumerate(lines)
+        if line == "| ID | Priority | Gap at `e6baa331` | Concrete loss mechanism | One-sweep correction |"
+        or line.startswith("| ID | Priority | Gap at `")
+        and line.endswith("| Concrete loss mechanism | One-sweep correction |")
+    ]
+    if len(headers) != 1:
+        raise PlanningError(
+            f"{label} must contain exactly one frozen finding table, got {len(headers)}"
+        )
+    header_index = headers[0]
+    if header_index + 1 >= len(lines) or not re.fullmatch(
+        r"\|(?: --- \|){5}", lines[header_index + 1]
+    ):
+        raise PlanningError(f"{label} frozen finding table separator is not canonical")
+
+    finding_ids: list[str] = []
+    index = header_index + 2
+    row_pattern = re.compile(r"^\| ([A-Z]{2}-[0-9]{2}) \|")
+    while index < len(lines) and lines[index].startswith("|"):
+        match = row_pattern.match(lines[index])
+        if match is None:
+            raise PlanningError(
+                f"{label} frozen finding row {index + 1} is not canonical: {lines[index]}"
+            )
+        finding_ids.append(match.group(1))
+        index += 1
+    if not finding_ids:
+        raise PlanningError(f"{label} frozen finding table is empty")
+    expected = tuple(
+        f"{prefix}-{ordinal:02d}" for ordinal in range(1, len(finding_ids) + 1)
+    )
+    if tuple(finding_ids) != expected:
+        raise PlanningError(
+            f"{label} finding IDs must be unique and contiguous from {prefix}-01: "
+            f"expected={list(expected)}, got={finding_ids}"
+        )
+    return tuple(finding_ids)
+
+
 def _git_rev_parse(revision: str) -> str:
     try:
         result = subprocess.run(
@@ -2654,6 +3135,42 @@ def _git_rev_parse(revision: str) -> str:
     return result.stdout.strip()
 
 
+def _git_is_ancestor(ancestor: str, checked_ref: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, checked_ref],
+            cwd=ROOT,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as error:
+        raise PlanningError(
+            f"cannot test Git ancestry {ancestor} -> {checked_ref}: {error}"
+        ) from error
+    if result.returncode not in (0, 1):
+        raise PlanningError(
+            f"cannot test Git ancestry {ancestor} -> {checked_ref}: "
+            f"{result.stderr.strip() or f'exit {result.returncode}'}"
+        )
+    return result.returncode == 0
+
+
+def _require_audit_addition_reachable(
+    *,
+    label: str,
+    addition_commit: str,
+    checked_ref: str,
+    ancestor_probe: Callable[[str, str], bool],
+) -> None:
+    if not ancestor_probe(addition_commit, checked_ref):
+        raise PlanningError(
+            f"{label} first-addition commit {addition_commit} is not an ancestor of "
+            f"the explicitly checked ref {checked_ref}"
+        )
+
+
 def _check_audit_addition_identity(
     *,
     label: str,
@@ -2663,7 +3180,9 @@ def _check_audit_addition_identity(
     addition_commit: str,
     addition_tree: str,
     addition_blob: str,
-    finding_count: int,
+    finding_prefix: str,
+    checked_ref: str,
+    ancestor_probe: Callable[[str, str], bool],
 ) -> dict[str, str]:
     resolved_input = _git_rev_parse(f"{input_commit}^{{commit}}")
     if resolved_input != input_commit:
@@ -2705,17 +3224,32 @@ def _check_audit_addition_identity(
     )
     if parent_probe.returncode == 0:
         raise PlanningError(f"{label} existed before its declared first-addition commit")
+    _require_audit_addition_reachable(
+        label=label,
+        addition_commit=addition_commit,
+        checked_ref=checked_ref,
+        ancestor_probe=ancestor_probe,
+    )
+    finding_ids = _parse_frozen_audit_finding_ids(
+        path.read_bytes(),
+        prefix=finding_prefix,
+        label=label,
+    )
     return {
         "audited_input_commit": input_commit,
         "audited_input_tree": input_tree,
         "addition_commit": addition_commit,
         "addition_tree": addition_tree,
         "audit_git_blob": addition_blob,
-        "material_finding_count_u32": str(finding_count),
+        "material_finding_count_u32": str(len(finding_ids)),
     }
 
 
-def check_seventh_audit_addition_identity() -> dict[str, str]:
+def check_seventh_audit_addition_identity(
+    *,
+    checked_ref: str = CHECKED_GIT_REF,
+    ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+) -> dict[str, str]:
     return _check_audit_addition_identity(
         label="Loop 7 audit",
         path=SEVENTH_AUDIT,
@@ -2724,11 +3258,17 @@ def check_seventh_audit_addition_identity() -> dict[str, str]:
         addition_commit=SEVENTH_AUDIT_ADDITION_COMMIT,
         addition_tree=SEVENTH_AUDIT_ADDITION_TREE,
         addition_blob=SEVENTH_AUDIT_GIT_BLOB,
-        finding_count=SEVENTH_AUDIT_FINDING_COUNT,
+        finding_prefix="LG",
+        checked_ref=checked_ref,
+        ancestor_probe=ancestor_probe,
     )
 
 
-def check_eighth_audit_addition_identity() -> dict[str, str]:
+def check_eighth_audit_addition_identity(
+    *,
+    checked_ref: str = CHECKED_GIT_REF,
+    ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+) -> dict[str, str]:
     return _check_audit_addition_identity(
         label="Loop 8 audit",
         path=EIGHTH_AUDIT,
@@ -2737,7 +3277,28 @@ def check_eighth_audit_addition_identity() -> dict[str, str]:
         addition_commit=EIGHTH_AUDIT_ADDITION_COMMIT,
         addition_tree=EIGHTH_AUDIT_ADDITION_TREE,
         addition_blob=EIGHTH_AUDIT_GIT_BLOB,
-        finding_count=EIGHTH_AUDIT_FINDING_COUNT,
+        finding_prefix="EG",
+        checked_ref=checked_ref,
+        ancestor_probe=ancestor_probe,
+    )
+
+
+def check_ninth_audit_addition_identity(
+    *,
+    checked_ref: str = CHECKED_GIT_REF,
+    ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+) -> dict[str, str]:
+    return _check_audit_addition_identity(
+        label="Loop 9 audit",
+        path=NINTH_AUDIT,
+        input_commit=NINTH_AUDIT_INPUT_COMMIT,
+        input_tree=NINTH_AUDIT_INPUT_TREE,
+        addition_commit=NINTH_AUDIT_ADDITION_COMMIT,
+        addition_tree=NINTH_AUDIT_ADDITION_TREE,
+        addition_blob=NINTH_AUDIT_GIT_BLOB,
+        finding_prefix="NG",
+        checked_ref=checked_ref,
+        ancestor_probe=ancestor_probe,
     )
 
 
@@ -2910,10 +3471,11 @@ def expect_failure(
     label: str,
     text: str,
     *,
+    enforce_manifest: bool = True,
     expected_message: str | None = None,
 ) -> None:
     try:
-        parse_capability(text)
+        parse_capability(text, enforce_manifest=enforce_manifest)
     except PlanningError as error:
         if expected_message is not None and expected_message not in str(error):
             raise PlanningError(
@@ -3032,6 +3594,32 @@ def expect_frozen_eighth_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_eighth_audit(data)
     except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_ninth_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_ninth_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_audit_finding_id_failure(
+    label: str,
+    data: bytes,
+    *,
+    prefix: str,
+    expected_message: str,
+) -> None:
+    try:
+        _parse_frozen_audit_finding_ids(data, prefix=prefix, label=label)
+    except PlanningError as error:
+        if expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
         return
     raise PlanningError(f"negative control did not fail: {label}")
 
@@ -3190,6 +3778,49 @@ def expect_loop8_exact_schema_failure(
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_loop9_exact_assignment_failure(
+    label: str,
+    text: str,
+    schema_name: str,
+    *,
+    expected_message: str,
+) -> None:
+    try:
+        check_loop9_exact_assignments(text, (schema_name,))
+    except PlanningError as error:
+        if expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_compatible_union_failure(
+    label: str,
+    nodes: dict[str, Node],
+    phase_statuses: tuple[PhaseStatus, ...],
+    phase_dependencies: tuple[PhaseDependency, ...],
+    conditional_edges: tuple[ConditionalEdge, ...],
+    *,
+    expected_message: str,
+) -> None:
+    try:
+        check_compatible_dependency_union(
+            nodes,
+            phase_statuses,
+            phase_dependencies,
+            conditional_edges,
+        )
+    except PlanningError as error:
+        if expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_exact_invariant_failure(
     label: str,
     text: str,
@@ -3225,10 +3856,16 @@ def expect_provenance_projection_failure(
     handoff_text: str,
     schema_name: str,
     expected: dict[str, str],
+    *,
+    expected_message: str | None = None,
 ) -> None:
     try:
         check_audit_provenance_projection(handoff_text, schema_name, expected)
-    except PlanningError:
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
         return
     raise PlanningError(f"negative control did not fail: {label}")
 
@@ -3368,6 +4005,7 @@ def run_self_tests(
     sixth_audit_bytes: bytes,
     seventh_audit_bytes: bytes,
     eighth_audit_bytes: bytes,
+    ninth_audit_bytes: bytes,
     layer1_design_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
@@ -3378,6 +4016,7 @@ def run_self_tests(
     planning_summary: dict[str, int],
     loop7_provenance: dict[str, str],
     loop8_provenance: dict[str, str],
+    loop9_provenance: dict[str, str],
     projection_texts: dict[str, str],
 ) -> None:
     def mutate_manifest_fragment(
@@ -3477,6 +4116,13 @@ def run_self_tests(
     ) -> str:
         rendered_variants = []
         for variant_name, arguments in variants:
+            if variant_name == "BareTypeRef":
+                if len(arguments) != 1:
+                    raise PlanningError(
+                        f"self-test fixture drift: {schema_name} malformed bare type variant"
+                    )
+                rendered_variants.append(arguments[0])
+                continue
             rendered_arguments = ",\n        ".join(arguments)
             rendered_variants.append(
                 f"{variant_name}(\n        {rendered_arguments}\n    )"
@@ -3537,6 +4183,84 @@ def run_self_tests(
         "frozen eighth audit mutation",
         eighth_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_ninth_audit_failure(
+        "frozen ninth audit mutation",
+        ninth_audit_bytes + b"\nnegative-control",
+    )
+
+    for audit_label, audit_bytes, prefix, omitted_id in (
+        ("Loop 7 audit", seventh_audit_bytes, "LG", "LG-04"),
+        ("Loop 8 audit", eighth_audit_bytes, "EG", "EG-03"),
+        ("Loop 9 audit", ninth_audit_bytes, "NG", "NG-05"),
+    ):
+        rows = audit_bytes.splitlines(keepends=True)
+        omitted = [row for row in rows if not row.startswith(f"| {omitted_id} |".encode())]
+        if len(omitted) != len(rows) - 1:
+            raise PlanningError(
+                f"self-test fixture drift: {audit_label} finding row {omitted_id}"
+            )
+        expect_audit_finding_id_failure(
+            f"{audit_label} non-contiguous finding table",
+            b"".join(omitted),
+            prefix=prefix,
+            expected_message="finding IDs must be unique and contiguous",
+        )
+
+    observed_ancestry_operands: list[tuple[str, str]] = []
+
+    def asserting_unrelated_lineage_probe(addition: str, checked_ref: str) -> bool:
+        operands = (addition, checked_ref)
+        expected_operands = (NINTH_AUDIT_ADDITION_COMMIT, CHECKED_GIT_REF)
+        if operands != expected_operands:
+            raise PlanningError(
+                "self-test fixture drift: ancestry probe operands "
+                f"expected={expected_operands}, got={operands}"
+            )
+        observed_ancestry_operands.append(operands)
+        return False
+
+    try:
+        _require_audit_addition_reachable(
+            label="Loop 9 audit",
+            addition_commit=NINTH_AUDIT_ADDITION_COMMIT,
+            checked_ref=CHECKED_GIT_REF,
+            ancestor_probe=asserting_unrelated_lineage_probe,
+        )
+    except PlanningError as error:
+        expected_ancestry_mechanism = "is not an ancestor of the explicitly checked ref HEAD"
+        if expected_ancestry_mechanism not in str(error):
+            raise PlanningError(
+                "negative control failed by the wrong mechanism: unrelated Loop 9 "
+                f"first-addition lineage: {error}"
+            ) from error
+    else:
+        raise PlanningError(
+            "negative control did not fail: unrelated Loop 9 first-addition lineage"
+        )
+    if observed_ancestry_operands != [
+        (NINTH_AUDIT_ADDITION_COMMIT, CHECKED_GIT_REF)
+    ]:
+        raise PlanningError(
+            "self-test fixture drift: ancestry probe was not called exactly once"
+        )
+
+    try:
+        _require_audit_addition_reachable(
+            label="Loop 9 audit real Git reverse-lineage control",
+            addition_commit=NINTH_AUDIT_ADDITION_COMMIT,
+            checked_ref=NINTH_AUDIT_INPUT_COMMIT,
+            ancestor_probe=_git_is_ancestor,
+        )
+    except PlanningError as error:
+        if "is not an ancestor of the explicitly checked ref" not in str(error):
+            raise PlanningError(
+                "negative control failed by the wrong mechanism: real Git reverse-lineage "
+                f"control: {error}"
+            ) from error
+    else:
+        raise PlanningError(
+            "negative control did not fail: real Git reverse-lineage control"
+        )
 
     exact_invariant_sources = (
         ("LAYER1_DESIGN_PAPER.md", layer1_design_paper_text),
@@ -3939,6 +4663,287 @@ def run_self_tests(
                         expected_message=exact_schema_failure_message,
                     )
 
+    loop9_exact_failure_message = "exact ordered variants/fields disagree"
+    for schema_name in EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256:
+        expected_variants = _parse_exact_schema_assignment(
+            layer1_design_paper_text,
+            schema_name,
+        )
+        baseline_assignment = render_loop8_schema_assignment(
+            schema_name,
+            expected_variants,
+        )
+        check_loop9_exact_assignments(baseline_assignment, (schema_name,))
+        duplicate_assignment = (
+            baseline_assignment
+            + f"\n\n{schema_name} = ContradictoryLoop9NegativeControlV1()\n"
+        )
+        expect_loop9_exact_assignment_failure(
+            f"{schema_name} duplicate Loop 9 assignment",
+            duplicate_assignment,
+            schema_name,
+            expected_message="must have exactly one assignment",
+        )
+
+        if len(expected_variants) > 1:
+            for omitted_variant_index, (variant_name, _arguments) in enumerate(
+                expected_variants
+            ):
+                omitted_variants = (
+                    expected_variants[:omitted_variant_index]
+                    + expected_variants[omitted_variant_index + 1 :]
+                )
+                mutated_paper = replace_loop8_schema_assignment(
+                    baseline_assignment,
+                    schema_name,
+                    omitted_variants,
+                    f"{schema_name} omit Loop 9 variant {variant_name}",
+                )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name} Loop 9 variant omission {variant_name}",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+
+            for left_variant in range(len(expected_variants)):
+                for right_variant in range(left_variant + 1, len(expected_variants)):
+                    reordered_variants = list(expected_variants)
+                    reordered_variants[left_variant], reordered_variants[right_variant] = (
+                        reordered_variants[right_variant],
+                        reordered_variants[left_variant],
+                    )
+                    mutated_paper = replace_loop8_schema_assignment(
+                        baseline_assignment,
+                        schema_name,
+                        tuple(reordered_variants),
+                        f"{schema_name} reorder Loop 9 variants "
+                        f"{left_variant + 1}/{right_variant + 1}",
+                    )
+                    expect_loop9_exact_assignment_failure(
+                        f"{schema_name} Loop 9 variant reorder "
+                        f"{left_variant + 1}/{right_variant + 1}",
+                        mutated_paper,
+                        schema_name,
+                        expected_message=loop9_exact_failure_message,
+                    )
+
+        for variant_insertion_index in range(len(expected_variants) + 1):
+            added_variants = list(expected_variants)
+            added_variants.insert(
+                variant_insertion_index,
+                (
+                    "UnexpectedLoop9NegativeControlVariantV1",
+                    ("unexpected_loop9_negative_control_field",),
+                ),
+            )
+            mutated_paper = replace_loop8_schema_assignment(
+                baseline_assignment,
+                schema_name,
+                tuple(added_variants),
+                f"{schema_name} add Loop 9 variant at {variant_insertion_index + 1}",
+            )
+            expect_loop9_exact_assignment_failure(
+                f"{schema_name} Loop 9 variant addition at {variant_insertion_index + 1}",
+                mutated_paper,
+                schema_name,
+                expected_message=loop9_exact_failure_message,
+            )
+
+        for variant_index, (variant_name, arguments) in enumerate(expected_variants):
+            if variant_name == "BareTypeRef":
+                if len(arguments) != 1:
+                    raise PlanningError(
+                        f"self-test fixture drift: {schema_name} malformed Loop 9 bare type"
+                    )
+                mutated_variants = list(expected_variants)
+                mutated_variants[variant_index] = (
+                    "BareTypeRef",
+                    ("UnexpectedLoop9NegativeControlTypeV1",),
+                )
+                mutated_paper = replace_loop8_schema_assignment(
+                    baseline_assignment,
+                    schema_name,
+                    tuple(mutated_variants),
+                    f"{schema_name} substitute Loop 9 bare type",
+                )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name} Loop 9 bare type substitution",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+                continue
+
+            for omitted_argument_index, omitted_argument in enumerate(arguments):
+                remaining_arguments = (
+                    arguments[:omitted_argument_index]
+                    + arguments[omitted_argument_index + 1 :]
+                )
+                mutated_variants = list(expected_variants)
+                mutated_variants[variant_index] = (variant_name, remaining_arguments)
+                mutated_paper = replace_loop8_schema_assignment(
+                    baseline_assignment,
+                    schema_name,
+                    tuple(mutated_variants),
+                    f"{schema_name}.{variant_name} omit Loop 9 field {omitted_argument}",
+                )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name}.{variant_name} Loop 9 field omission "
+                    f"{omitted_argument}",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+
+            for argument_insertion_index in range(len(arguments) + 1):
+                added_arguments = list(arguments)
+                added_arguments.insert(
+                    argument_insertion_index,
+                    f"unexpected_loop9_field_{variant_index + 1}_"
+                    f"{argument_insertion_index + 1}",
+                )
+                mutated_variants = list(expected_variants)
+                mutated_variants[variant_index] = (variant_name, tuple(added_arguments))
+                mutated_paper = replace_loop8_schema_assignment(
+                    baseline_assignment,
+                    schema_name,
+                    tuple(mutated_variants),
+                    f"{schema_name}.{variant_name} add Loop 9 field at "
+                    f"{argument_insertion_index + 1}",
+                )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name}.{variant_name} Loop 9 field addition at "
+                    f"{argument_insertion_index + 1}",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+
+            for left_argument in range(len(arguments)):
+                for right_argument in range(left_argument + 1, len(arguments)):
+                    reordered_arguments = list(arguments)
+                    reordered_arguments[left_argument], reordered_arguments[right_argument] = (
+                        reordered_arguments[right_argument],
+                        reordered_arguments[left_argument],
+                    )
+                    mutated_variants = list(expected_variants)
+                    mutated_variants[variant_index] = (
+                        variant_name,
+                        tuple(reordered_arguments),
+                    )
+                    mutated_paper = replace_loop8_schema_assignment(
+                        baseline_assignment,
+                        schema_name,
+                        tuple(mutated_variants),
+                        f"{schema_name}.{variant_name} reorder Loop 9 fields "
+                        f"{left_argument + 1}/{right_argument + 1}",
+                    )
+                    expect_loop9_exact_assignment_failure(
+                        f"{schema_name}.{variant_name} Loop 9 field reorder "
+                        f"{left_argument + 1}/{right_argument + 1}",
+                        mutated_paper,
+                        schema_name,
+                        expected_message=loop9_exact_failure_message,
+                    )
+
+        if schema_name in EXPECTED_LOOP9_DOMAIN_CONTEXT_ASSIGNMENTS:
+            mutable_variants = [
+                (variant_name, list(arguments))
+                for variant_name, arguments in expected_variants
+            ]
+            domain_location = next(
+                (
+                    (variant_index, argument_index)
+                    for variant_index, (_variant_name, arguments) in enumerate(
+                        mutable_variants
+                    )
+                    for argument_index, argument in enumerate(arguments)
+                    if "domain" in argument.lower()
+                ),
+                None,
+            )
+            if domain_location is None:
+                raise PlanningError(
+                    f"self-test fixture drift: {schema_name} has no domain-bearing argument"
+                )
+            variant_index, argument_index = domain_location
+            mutable_variants[variant_index][1][argument_index] += "_wrong_domain"
+            domain_mutation = tuple(
+                (variant_name, tuple(arguments))
+                for variant_name, arguments in mutable_variants
+            )
+            mutated_paper = replace_loop8_schema_assignment(
+                baseline_assignment,
+                schema_name,
+                domain_mutation,
+                f"{schema_name} domain substitution",
+            )
+            expect_loop9_exact_assignment_failure(
+                f"{schema_name} domain substitution",
+                mutated_paper,
+                schema_name,
+                expected_message=loop9_exact_failure_message,
+            )
+
+            context_location = next(
+                (
+                    (variant_index, argument_index)
+                    for variant_index, (_variant_name, arguments) in enumerate(
+                        expected_variants
+                    )
+                    for argument_index, argument in enumerate(arguments)
+                    if "OrdinaryProfileTransitionV1(parent_profile_context)" in argument
+                ),
+                None,
+            )
+            if context_location is not None:
+                context_variants = [
+                    (variant_name, list(arguments))
+                    for variant_name, arguments in expected_variants
+                ]
+                variant_index, argument_index = context_location
+                context_variants[variant_index][1][argument_index] = (
+                    context_variants[variant_index][1][argument_index].replace(
+                        "OrdinaryProfileTransitionV1(parent_profile_context)",
+                        "OrdinaryProfileTransitionV1(wrong_parent_profile_context)",
+                        1,
+                    )
+                )
+                context_mutation = tuple(
+                    (variant_name, tuple(arguments))
+                    for variant_name, arguments in context_variants
+                )
+                mutated_paper = replace_loop8_schema_assignment(
+                    baseline_assignment,
+                    schema_name,
+                    context_mutation,
+                    f"{schema_name} context substitution",
+                )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name} context substitution",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+
+        for original, replacement in EXPECTED_LOOP9_SPECIAL_CONTEXT_MUTATIONS.get(
+            schema_name,
+            (),
+        ):
+            if baseline_assignment.count(original) != 1:
+                raise PlanningError(
+                    f"self-test fixture drift: {schema_name} special context "
+                    f"fragment {original} count={baseline_assignment.count(original)}"
+                )
+            mutated_paper = baseline_assignment.replace(original, replacement, 1)
+            expect_loop9_exact_assignment_failure(
+                f"{schema_name} special policy/hash context substitution {original}",
+                mutated_paper,
+                schema_name,
+                expected_message=loop9_exact_failure_message,
+            )
+
     predecessor_schema = "VerifiedSuccessorPredecessorBaseContextV1"
     predecessor_variants = EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS[predecessor_schema]
     predecessor_variant_name, predecessor_arguments = predecessor_variants[0]
@@ -3999,9 +5004,35 @@ def run_self_tests(
         planning_summary,
     )
 
+    compact_projection_texts = {path: "" for path in projection_texts}
+    compact_projection_texts["docs/HANDOFF.md"] = "\n\n".join(
+        "\n".join(
+            (
+                f"### {schema_name}",
+                PROVENANCE_TABLE_HEADER,
+                PROVENANCE_TABLE_SEPARATOR,
+                *(
+                    f"| `{field}` | `{provenance[field]}` |"
+                    for field in PROVENANCE_FIELD_ORDER
+                ),
+            )
+        )
+        for schema_name, provenance in (
+            ("Loop7ProvenanceV1", loop7_provenance),
+            ("Loop8ProvenanceV1", loop8_provenance),
+            ("Loop9ProvenanceV1", loop9_provenance),
+        )
+    )
+    compact_projection_texts["docs/CAPABILITY_TREE.md"] = "\n".join(
+        f"| `{field}` | `{planning_summary[field]}` |"
+        for field in PLANNING_SUMMARY_FIELD_ORDER
+    )
+    check_no_duplicate_exact_projections(compact_projection_texts, planning_summary)
+
     for schema_name, provenance in (
         ("Loop7ProvenanceV1", loop7_provenance),
         ("Loop8ProvenanceV1", loop8_provenance),
+        ("Loop9ProvenanceV1", loop9_provenance),
     ):
         for field, value in provenance.items():
             mutated_value = (
@@ -4040,14 +5071,45 @@ def run_self_tests(
             provenance,
         )
 
+        fake_provenance = dict(provenance)
+        fake_count = str(int(provenance["material_finding_count_u32"]) + 1)
+        fake_provenance["material_finding_count_u32"] = fake_count
+        canonical_count_row = (
+            "| `material_finding_count_u32` | `"
+            + provenance["material_finding_count_u32"]
+            + "` |"
+        )
+        fake_count_row = f"| `material_finding_count_u32` | `{fake_count}` |"
+        matched_fake_handoff = handoff_text.replace(
+            canonical_count_row,
+            fake_count_row,
+            1,
+        )
+        if matched_fake_handoff == handoff_text:
+            raise PlanningError(
+                f"self-test fixture drift: {schema_name} matched fake finding count"
+            )
+        expect_provenance_projection_failure(
+            f"{schema_name} matched caller/HANDOFF wrong finding count",
+            matched_fake_handoff,
+            schema_name,
+            fake_provenance,
+            expected_message="audit-derived finding count mismatch",
+        )
+
     for schema_name, provenance in (
         ("Loop7ProvenanceV1", loop7_provenance),
         ("Loop8ProvenanceV1", loop8_provenance),
+        ("Loop9ProvenanceV1", loop9_provenance),
     ):
         for field in PROVENANCE_FIELD_ORDER[:-1]:
             object_id = provenance[field]
-            for token_kind, token in (("full", object_id), ("short", object_id[:7])):
-                duplicate_object = dict(projection_texts)
+            for token_kind, token in (
+                ("full", object_id),
+                ("short", object_id[:7]),
+                ("eight-character", object_id[:8]),
+            ):
+                duplicate_object = dict(compact_projection_texts)
                 duplicate_object["README.md"] += (
                     f"\n\nPinned exact object `{token}` without an audit label.\n"
                 )
@@ -4060,31 +5122,31 @@ def run_self_tests(
                     ),
                 )
 
-    loop8_last_row = (
+    loop9_last_row = (
         "| `material_finding_count_u32` | `"
-        + loop8_provenance["material_finding_count_u32"]
+        + loop9_provenance["material_finding_count_u32"]
         + "` |"
     )
-    trailing_provenance_handoff = handoff_text.replace(
-        loop8_last_row,
-        loop8_last_row
+    trailing_provenance_handoff = compact_projection_texts["docs/HANDOFF.md"].replace(
+        loop9_last_row,
+        loop9_last_row
         + "\n\nTrailing exact object `"
-        + loop8_provenance["addition_commit"]
+        + loop9_provenance["addition_commit"]
         + "` remains inside this canonical provenance section.",
         1,
     )
-    if trailing_provenance_handoff == handoff_text:
+    if trailing_provenance_handoff == compact_projection_texts["docs/HANDOFF.md"]:
         raise PlanningError("self-test fixture drift: trailing provenance-section prose")
-    trailing_provenance = dict(projection_texts)
+    trailing_provenance = dict(compact_projection_texts)
     trailing_provenance["docs/HANDOFF.md"] = trailing_provenance_handoff
     expect_duplicate_projection_failure(
         "duplicate exact object in trailing canonical provenance-section prose",
         trailing_provenance,
         planning_summary,
-        expected_message="exact Git object for Loop8ProvenanceV1 must occur exactly once",
+        expected_message="exact Git object for Loop9ProvenanceV1 must occur exactly once",
     )
 
-    duplicate_loop8_finding_count = dict(projection_texts)
+    duplicate_loop8_finding_count = dict(compact_projection_texts)
     duplicate_loop8_finding_count["docs/TRANSCRIPT_AUDIT.md"] += (
         "\n\nLoop 8 duplicate has "
         + loop8_provenance["material_finding_count_u32"]
@@ -4096,6 +5158,44 @@ def run_self_tests(
         planning_summary,
         expected_message="exact finding count for Loop8ProvenanceV1",
     )
+
+    wrong_loop8_finding_count = dict(compact_projection_texts)
+    wrong_loop8_finding_count["docs/PROTOCOL.md"] += (
+        "\n\nLoop 8 is claimed to have 7 material findings.\n"
+    )
+    expect_duplicate_projection_failure(
+        "wrong Loop 8 semantic finding count",
+        wrong_loop8_finding_count,
+        planning_summary,
+        expected_message="exact finding count for Loop8ProvenanceV1",
+    )
+
+    wrong_loop8_object = dict(compact_projection_texts)
+    wrong_loop8_object["docs/PROJECT_INTENT.md"] += (
+        "\n\nLoop 8 addition commit `ffffffffffffffffffffffffffffffffffffffff`.\n"
+    )
+    expect_duplicate_projection_failure(
+        "wrong Loop 8 full Git object claim",
+        wrong_loop8_object,
+        planning_summary,
+        expected_message="non-canonical Git object claim for Loop8ProvenanceV1",
+    )
+
+    for path in compact_projection_texts:
+        for field in PLANNING_SUMMARY_FIELD_ORDER:
+            duplicate_summary_field = dict(compact_projection_texts)
+            duplicate_summary_field[path] += (
+                "\n\nPlanningCheckerSummaryV1 "
+                f"{field} = {planning_summary[field] + 1000}.\n"
+            )
+            expect_duplicate_projection_failure(
+                f"duplicate canonical summary field {field} in {path}",
+                duplicate_summary_field,
+                planning_summary,
+                expected_message=(
+                    f"exact PlanningCheckerSummaryV1 field {field} must occur exactly once"
+                ),
+            )
 
     summary_duplicate_phrases = {
         "capability_node_count_u32": (
@@ -4144,9 +5244,27 @@ def run_self_tests(
     }
     if set(summary_duplicate_phrases) != set(PLANNING_SUMMARY_FIELD_ORDER):
         raise PlanningError("self-test fixture drift: planning-summary duplicate phrases")
-    for path in projection_texts:
+    summary_reverse_phrases = {
+        "capability_node_count_u32": "capability-node count is",
+        "foundation_node_count_u32": "foundation-node count is",
+        "detailed_node_count_u32": "detailed-node count is",
+        "phase_status_count_u32": "phase-status row count is",
+        "ready_frontier_count_u32": "READY frontier count is",
+        "base_dependency_edge_count_u32": "base dependency edge count is",
+        "phase_dependency_edge_count_u32": "phase dependency count is",
+        "conditional_edge_count_u32": "conditional edge count is",
+        "total_declared_edge_count_u32": "combined edge count is",
+        "predicate_entailment_count_u32": "predicate entailment count is",
+        "planning_markdown_count_u32": "planning authority inventory count is",
+        "frozen_text_artifact_count_u32": "frozen text artifact count is",
+        "frozen_markdown_audit_count_u32": "frozen Markdown audit count is",
+        "frozen_json_receipt_count_u32": "frozen JSON source receipt count is",
+    }
+    if set(summary_reverse_phrases) != set(PLANNING_SUMMARY_FIELD_ORDER):
+        raise PlanningError("self-test fixture drift: reverse planning-summary phrases")
+    for path in compact_projection_texts:
         for field in PLANNING_SUMMARY_FIELD_ORDER:
-            duplicate_summary_count = dict(projection_texts)
+            duplicate_summary_count = dict(compact_projection_texts)
             duplicate_summary_count[path] += (
                 f"\n\nDuplicate projection: {summary_duplicate_phrases[field]}.\n"
             )
@@ -4157,7 +5275,179 @@ def run_self_tests(
                 expected_message=f"field={field}",
             )
 
-    benign_protocol_counts = dict(projection_texts)
+            wrong_count_phrase = re.sub(
+                rf"\b{planning_summary[field]}\b",
+                str(planning_summary[field] + 1000),
+                summary_duplicate_phrases[field],
+                count=1,
+            )
+            if wrong_count_phrase == summary_duplicate_phrases[field]:
+                raise PlanningError(
+                    f"self-test fixture drift: wrong prose count for {field}"
+                )
+            wrong_summary_count = dict(compact_projection_texts)
+            wrong_summary_count[path] += (
+                f"\n\nWrong projection: {wrong_count_phrase}.\n"
+            )
+            expect_duplicate_projection_failure(
+                f"wrong {field} in {path}",
+                wrong_summary_count,
+                planning_summary,
+                expected_message=f"field={field}",
+            )
+
+            reverse_summary_count = dict(compact_projection_texts)
+            reverse_summary_count[path] += (
+                "\n\nReverse wrong projection: "
+                f"{summary_reverse_phrases[field]} {planning_summary[field] + 1000}.\n"
+            )
+            expect_duplicate_projection_failure(
+                f"reverse wrong {field} in {path}",
+                reverse_summary_count,
+                planning_summary,
+                expected_message=f"field={field}",
+            )
+
+    for path in compact_projection_texts:
+        wrong_loop9_count = dict(compact_projection_texts)
+        wrong_loop9_count[path] += "\n\nLoop 9 has 999 material findings.\n"
+        expect_duplicate_projection_failure(
+            f"wrong Loop 9 finding count in {path}",
+            wrong_loop9_count,
+            planning_summary,
+            expected_message="exact finding count for Loop9ProvenanceV1",
+        )
+
+        reverse_loop9_count = dict(compact_projection_texts)
+        reverse_loop9_count[path] += (
+            "\n\nThe material finding count for Loop 9 is 999.\n"
+        )
+        expect_duplicate_projection_failure(
+            f"reverse wrong Loop 9 finding count in {path}",
+            reverse_loop9_count,
+            planning_summary,
+            expected_message="exact finding count for Loop9ProvenanceV1",
+        )
+
+        wrong_loop9_git_object = dict(compact_projection_texts)
+        wrong_loop9_git_object[path] += (
+            "\n\nLoop 9 addition commit "
+            "`eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee`.\n"
+        )
+        expect_duplicate_projection_failure(
+            f"wrong Loop 9 Git object in {path}",
+            wrong_loop9_git_object,
+            planning_summary,
+            expected_message="non-canonical Git object claim for Loop9ProvenanceV1",
+        )
+
+        reverse_loop9_git_object = dict(compact_projection_texts)
+        reverse_loop9_git_object[path] += (
+            "\n\nAddition commit `dddddddddddddddddddddddddddddddddddddddd` "
+            "is claimed for Loop 9.\n"
+        )
+        expect_duplicate_projection_failure(
+            f"reverse wrong Loop 9 Git object in {path}",
+            reverse_loop9_git_object,
+            planning_summary,
+            expected_message="non-canonical Git object claim for Loop9ProvenanceV1",
+        )
+
+        abbreviated_loop9_git_object = dict(compact_projection_texts)
+        abbreviated_loop9_git_object[path] += (
+            f"\n\nLoop 9 addition commit `{NINTH_AUDIT_ADDITION_COMMIT[:8]}`.\n"
+        )
+        expect_duplicate_projection_failure(
+            f"abbreviated Loop 9 Git object in {path}",
+            abbreviated_loop9_git_object,
+            planning_summary,
+            expected_message="exact Git object for Loop9ProvenanceV1 must occur exactly once",
+        )
+
+        reverse_abbreviated_loop9_git_object = dict(compact_projection_texts)
+        reverse_abbreviated_loop9_git_object[path] += (
+            "\n\nAddition commit `deadbeef` is claimed for Loop 9.\n"
+        )
+        expect_duplicate_projection_failure(
+            f"reverse abbreviated Loop 9 Git object in {path}",
+            reverse_abbreviated_loop9_git_object,
+            planning_summary,
+            expected_message="abbreviated Git object claim for Loop9ProvenanceV1",
+        )
+
+        for fixture_label, fixture_text in (
+            (
+                "forward canonical finding-count field",
+                "Loop8ProvenanceV1 material_finding_count_u32 = 7",
+            ),
+            (
+                "reverse canonical finding-count field",
+                "material_finding_count_u32 for Loop 8 is 7",
+            ),
+        ):
+            wrong_canonical_finding_count = dict(compact_projection_texts)
+            wrong_canonical_finding_count[path] += f"\n\n{fixture_text}.\n"
+            expect_duplicate_projection_failure(
+                f"{fixture_label} in {path}",
+                wrong_canonical_finding_count,
+                planning_summary,
+                expected_message="exact finding count for Loop8ProvenanceV1",
+            )
+
+        provenance_object_aliases = tuple(
+            (field, field.replace("_", separator))
+            for field in PROVENANCE_FIELD_ORDER[:-1]
+            for separator in (" ", "-", "_")
+        )
+        for field, field_alias in provenance_object_aliases:
+            for token_kind, token, expected_message in (
+                (
+                    "full",
+                    "f" * 40,
+                    "non-canonical Git object claim for Loop8ProvenanceV1",
+                ),
+                (
+                    "abbreviated",
+                    "deadbeef",
+                    "abbreviated Git object claim for Loop8ProvenanceV1",
+                ),
+            ):
+                schema_field_claim = dict(compact_projection_texts)
+                schema_field_claim[path] += (
+                    f"\n\nLoop8ProvenanceV1 {field_alias} = {token}.\n"
+                )
+                expect_duplicate_projection_failure(
+                    f"{token_kind} schema marker {field}/{field_alias} in {path}",
+                    schema_field_claim,
+                    planning_summary,
+                    expected_message=expected_message,
+                )
+
+        for field_alias in ("addition_commit", "audit_git_blob"):
+            for token_kind, token, expected_message in (
+                (
+                    "full",
+                    "f" * 40,
+                    "non-canonical Git object claim for Loop8ProvenanceV1",
+                ),
+                (
+                    "abbreviated",
+                    "deadbeef",
+                    "abbreviated Git object claim for Loop8ProvenanceV1",
+                ),
+            ):
+                loop_marker_field_claim = dict(compact_projection_texts)
+                loop_marker_field_claim[path] += (
+                    f"\n\nLoop 8 {field_alias} = {token}.\n"
+                )
+                expect_duplicate_projection_failure(
+                    f"{token_kind} Loop 8 marker {field_alias} in {path}",
+                    loop_marker_field_claim,
+                    planning_summary,
+                    expected_message=expected_message,
+                )
+
+    benign_protocol_counts = dict(compact_projection_texts)
     benign_protocol_counts["docs/LAYER1_DESIGN_PAPER.md"] += (
         "\n\nA protocol example may mention 72 validators, 94 signature slots, 311 messages, "
         "5 authority witnesses, 44 proof limbs, 360 bytes, 10 predicates, 14 candidates, "
@@ -4167,7 +5457,7 @@ def run_self_tests(
     check_no_duplicate_exact_projections(benign_protocol_counts, planning_summary)
 
     handoff_omission = re.sub(
-        r"^22\. `docs/TIMELINES\.md`(?:\n|$)",
+        r"^23\. `docs/TIMELINES\.md`(?:\n|$)",
         "",
         handoff_text,
         count=1,
@@ -4183,8 +5473,8 @@ def run_self_tests(
     )
 
     handoff_insertion = re.sub(
-        r"^(22\. `docs/TIMELINES\.md`)$",
-        r"\1\n23. `Cargo.toml`",
+        r"^(23\. `docs/TIMELINES\.md`)$",
+        r"\1\n24. `Cargo.toml`",
         handoff_text,
         count=1,
         flags=re.MULTILINE,
@@ -4199,8 +5489,8 @@ def run_self_tests(
     )
 
     handoff_duplicate = handoff_text.replace(
-        "22. `docs/TIMELINES.md`",
-        "22. `docs/PROTOCOL.md`",
+        "23. `docs/TIMELINES.md`",
+        "23. `docs/PROTOCOL.md`",
         1,
     )
     if handoff_duplicate == handoff_text:
@@ -4245,8 +5535,8 @@ def run_self_tests(
     )
 
     handoff_description = handoff_text.replace(
-        "22. `docs/TIMELINES.md`",
-        "22. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
+        "23. `docs/TIMELINES.md`",
+        "23. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
         1,
     )
     if handoff_description == handoff_text:
@@ -4259,8 +5549,8 @@ def run_self_tests(
     )
 
     handoff_outside = handoff_text.replace(
-        "22. `docs/TIMELINES.md`",
-        "22. `../outside-read-order-negative-control.md`",
+        "23. `docs/TIMELINES.md`",
+        "23. `../outside-read-order-negative-control.md`",
         1,
     )
     if handoff_outside == handoff_text:
@@ -4273,8 +5563,8 @@ def run_self_tests(
     )
 
     handoff_untracked = handoff_text.replace(
-        "22. `docs/TIMELINES.md`",
-        "22. `docs/untracked-read-order-negative-control.md`",
+        "23. `docs/TIMELINES.md`",
+        "23. `docs/untracked-read-order-negative-control.md`",
         1,
     )
     if handoff_untracked == handoff_text:
@@ -4304,7 +5594,12 @@ def run_self_tests(
     )
     if foundation_cycle == text:
         raise PlanningError("self-test fixture drift: OBSERVE-0 foundation row")
-    expect_failure("foundation dependency cycle", foundation_cycle)
+    expect_failure(
+        "foundation dependency cycle",
+        foundation_cycle,
+        enforce_manifest=False,
+        expected_message="base dependency cycle:",
+    )
 
     missing_field = text.replace("- **Gate:**", "- **Removed gate:**", 1)
     expect_failure("missing required field", missing_field)
@@ -4602,7 +5897,7 @@ def run_self_tests(
 
     nodes = parse_capability(text)
     phase_statuses = parse_phase_statuses(text, nodes)
-    parse_phase_dependencies(text, nodes, phase_statuses)
+    phase_dependencies = parse_phase_dependencies(text, nodes, phase_statuses)
 
     prototype_projection = "`PS-019:VERKLE-R1@prototype=LOCKED`"
     missing_projection = text.replace(f", {prototype_projection}", "", 1)
@@ -4814,6 +6109,116 @@ def run_self_tests(
     )
 
     conditional_edges = parse_conditional_edges(text, nodes)
+    check_compatible_dependency_union(
+        nodes,
+        phase_statuses,
+        phase_dependencies,
+        conditional_edges,
+    )
+
+    cross_class_cycle = text.replace(
+        "| PD-07 | TESTNET-1 | base | SYNC-1 | replay-authority |",
+        "| PD-07 | TESTNET-1 | base | SYNC-1 | replay-authority |\n"
+        "| PD-96 | VERKLE-R1 | prototype | SUCCESSOR-ACTIVATION-1 | activation |",
+        1,
+    )
+    cross_class_cycle = cross_class_cycle.replace(
+        "| CE-44 | TESTNET-1 | testnet | target-profile | in-place-upgrade | "
+        "SUCCESSOR-ACTIVATION-1 | activation |",
+        "| CE-44 | TESTNET-1 | testnet | target-profile | in-place-upgrade | "
+        "SUCCESSOR-ACTIVATION-1 | activation |\n"
+        "| CE-45 | SUCCESSOR-ACTIVATION-1 | activation | target-profile | "
+        "verkle-selected | VERKLE-R1 | prototype |",
+        1,
+    )
+    if cross_class_cycle == text:
+        raise PlanningError("self-test fixture drift: compatible cross-class cycle")
+    cross_phase_statuses = parse_phase_statuses(cross_class_cycle, nodes)
+    cross_phase_dependencies = parse_phase_dependencies(
+        cross_class_cycle,
+        nodes,
+        cross_phase_statuses,
+        enforce_manifest=False,
+    )
+    cross_conditional_edges = parse_conditional_edges(
+        cross_class_cycle,
+        nodes,
+        enforce_manifest=False,
+    )
+    expect_compatible_union_failure(
+        "matched PD/CE cross-class cycle",
+        nodes,
+        cross_phase_statuses,
+        cross_phase_dependencies,
+        cross_conditional_edges,
+        expected_message="compatible base-phase-role dependency union cycle:",
+    )
+
+    three_class_nodes = {
+        "DOC-0": Node("DOC-0", (), "IMPLEMENTED", (), "negative control"),
+        "OBSERVE-0": Node(
+            "OBSERVE-0",
+            ("WORLD-0",),
+            "BOUNDED",
+            (),
+            "negative control",
+        ),
+        "WORLD-0": Node("WORLD-0", (), "IMPLEMENTED", (), "negative control"),
+    }
+    three_class_phase_statuses = (
+        PhaseStatus("PS-NG04-1", "DOC-0", "base", "IMPLEMENTED"),
+        PhaseStatus("PS-NG04-2", "OBSERVE-0", "claim-scope", "BOUNDED"),
+        PhaseStatus("PS-NG04-3", "WORLD-0", "base", "IMPLEMENTED"),
+    )
+    three_class_phase_dependency = (
+        PhaseDependency(
+            "PD-NG04",
+            "DOC-0",
+            "base",
+            "OBSERVE-0",
+            "claim-scope",
+        ),
+    )
+    three_class_conditional_edge = (
+        ConditionalEdge(
+            "CE-NG04",
+            "WORLD-0",
+            "base",
+            "ng04-negative-control",
+            "ng04-negative-control",
+            "DOC-0",
+            "base",
+        ),
+    )
+    check_compatible_dependency_union(
+        three_class_nodes,
+        three_class_phase_statuses,
+        (),
+        (),
+    )
+    check_compatible_dependency_union(
+        three_class_nodes,
+        three_class_phase_statuses,
+        three_class_phase_dependency,
+        (),
+    )
+    check_compatible_dependency_union(
+        three_class_nodes,
+        three_class_phase_statuses,
+        (),
+        three_class_conditional_edge,
+    )
+    expect_compatible_union_failure(
+        "matched inherited-base/PD/CE three-class cycle",
+        three_class_nodes,
+        three_class_phase_statuses,
+        three_class_phase_dependency,
+        three_class_conditional_edge,
+        expected_message=(
+            "compatible base-phase-role dependency union cycle: "
+            "DOC-0@base -> OBSERVE-0@claim-scope -> WORLD-0@base -> DOC-0@base"
+        ),
+    )
     predicate_entailments = parse_predicate_entailments(text, conditional_edges)
 
     in_place_upgrade_active = frozenset(
@@ -5328,6 +6733,12 @@ def main() -> int:
         phase_statuses,
     )
     conditional_edges = parse_conditional_edges(capability_text, nodes)
+    check_compatible_dependency_union(
+        nodes,
+        phase_statuses,
+        phase_dependencies,
+        conditional_edges,
+    )
     predicate_entailments = parse_predicate_entailments(capability_text, conditional_edges)
     planning_summary = derive_planning_checker_summary(
         capability_text,
@@ -5365,8 +6776,12 @@ def main() -> int:
     eighth_audit_bytes = EIGHTH_AUDIT.read_bytes()
     check_frozen_eighth_audit(eighth_audit_bytes)
     loop8_provenance = check_eighth_audit_addition_identity()
+    ninth_audit_bytes = NINTH_AUDIT.read_bytes()
+    check_frozen_ninth_audit(ninth_audit_bytes)
+    loop9_provenance = check_ninth_audit_addition_identity()
     check_audit_provenance_projection(handoff_text, "Loop7ProvenanceV1", loop7_provenance)
     check_audit_provenance_projection(handoff_text, "Loop8ProvenanceV1", loop8_provenance)
+    check_audit_provenance_projection(handoff_text, "Loop9ProvenanceV1", loop9_provenance)
     layer1_design_audit_bytes = LAYER1_DESIGN_AUDIT.read_bytes()
     check_frozen_layer1_design_audit(layer1_design_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
@@ -5383,19 +6798,13 @@ def main() -> int:
     check_loop7_paper_fragments(layer1_design_paper_text)
     check_loop8_paper_fragments(layer1_design_paper_text)
     check_loop8_exact_schemas(layer1_design_paper_text)
+    check_loop9_exact_assignments(layer1_design_paper_text)
     check_accepted_parent_exact_invariants(layer1_design_paper_text, "LAYER1_DESIGN_PAPER.md")
+    frozen_paths = frozenset(path.resolve() for path in FROZEN_TEXT_FILES)
     projection_texts = {
-        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
-        "docs/HANDOFF.md": handoff_text,
-        "docs/TRANSCRIPT_AUDIT.md": (ROOT / "docs" / "TRANSCRIPT_AUDIT.md").read_text(
-            encoding="utf-8"
-        ),
-        "docs/CAPABILITY_TREE.md": capability_text,
-        "docs/DESIGN_RESEARCH_DISTILLATION.md": design_text,
-        "docs/AUTHENTICATED_STATE_PLAN.md": (
-            ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md"
-        ).read_text(encoding="utf-8"),
-        "docs/LAYER1_DESIGN_PAPER.md": layer1_design_paper_text,
+        repository_relative_path(path): path.read_text(encoding="utf-8")
+        for path in PLANNING_FILES
+        if path.resolve() not in frozen_paths
     }
     check_no_duplicate_exact_projections(projection_texts, planning_summary)
     for path in PLANNING_FILES:
@@ -5418,6 +6827,7 @@ def main() -> int:
             sixth_audit_bytes,
             seventh_audit_bytes,
             eighth_audit_bytes,
+            ninth_audit_bytes,
             layer1_design_audit_bytes,
             design_receipt_bytes,
             design_text,
@@ -5428,6 +6838,7 @@ def main() -> int:
             planning_summary,
             loop7_provenance,
             loop8_provenance,
+            loop9_provenance,
             projection_texts,
         )
 

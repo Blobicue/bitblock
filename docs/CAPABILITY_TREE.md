@@ -1712,6 +1712,16 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 This is the sole exact numeric projection of the retained planning checker. Every value is derived
 from its canonical parsed source; prose elsewhere links here instead of repeating these numbers.
 
+The frozen ninth audit found that the audited checker could accept a cross-class cycle because it
+checked phase and conditional role graphs separately. The coordinated correction now checks one
+compatible inherited-base/phase/conditional role union and powers an exact cross-class cycle. It
+also guards the complete named live-certificate/replay assignment chain and hash contexts, derives
+current audit cardinalities from the frozen finding tables, scans every mutable planning authority
+for malformed semantic projections, requires first-addition commits to reach the explicit checked
+lineage, and makes the base-cycle control fail on the named cycle mechanism. The real compatible
+graph at the audited input and corrected descendant is acyclic. These are checker controls, not a
+capability promotion or protocol-security proof.
+
 | Summary field | Canonical decimal value |
 | --- | ---: |
 | `capability_node_count_u32` | `72` |
@@ -1724,9 +1734,9 @@ from its canonical parsed source; prose elsewhere links here instead of repeatin
 | `conditional_edge_count_u32` | `44` |
 | `total_declared_edge_count_u32` | `363` |
 | `predicate_entailment_count_u32` | `10` |
-| `planning_markdown_count_u32` | `22` |
-| `frozen_text_artifact_count_u32` | `12` |
-| `frozen_markdown_audit_count_u32` | `11` |
+| `planning_markdown_count_u32` | `23` |
+| `frozen_text_artifact_count_u32` | `13` |
+| `frozen_markdown_audit_count_u32` | `12` |
 | `frozen_json_receipt_count_u32` | `1` |
 
 `LEDGER-1`, a token/ownership system, networking, and autonomous rules should not be combined in

@@ -83,6 +83,16 @@ semantic history.
   successor authority purposes, replay archive/history proof, the unavailable current recovery
   path, exact core/collision guards, and exact provenance/count projections. It remains
   documentation/checker work, not implementation, testing, or security validation.
+- The coordinated EG-01 through EG-06 correction is the exact input identified by
+  `Loop9ProvenanceV1`. It remains proposed-protocol, planning, checker, and checkout-policy work,
+  with no runtime or Layer 1 capability activated.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md` is identified only through the canonical
+  `Loop9ProvenanceV1` projection below. Its frozen findings cover live certificate occurrence-
+  universe completeness, occurrence chronology, current-paper provenance, compatible dependency-
+  graph union safety, exact authority/archive schema guards, audit-cardinality derivation, semantic
+  projection coverage, first-addition reachability, and mechanism-specific cycle controls. The
+  coordinated descendant closes those bounded break witnesses in proposed schemas, projections, and
+  powered checker controls. It does not establish implementation or Layer 1 security.
 
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md` predates the design distillation. Its 16-finding closure and
   validation boundary do not audit `694650f` or the later correction.
@@ -132,6 +142,17 @@ semantic history.
 | `audit_git_blob` | `b247d7585a9e4be06558b0076511fa1064252049` |
 | `material_finding_count_u32` | `6` |
 
+### Loop9ProvenanceV1
+
+| Provenance field | Canonical value |
+| --- | --- |
+| `audited_input_commit` | `e6baa331f89d8b367d97ae218ad8506c103eb82c` |
+| `audited_input_tree` | `044f210a7ae854a9416573a8f326d414da3ad4b5` |
+| `addition_commit` | `bf62cb4848eeb3481eb413112cd33c06a63f1451` |
+| `addition_tree` | `8f4c14e4926a5d5bcf77147cbfe724e55e234492` |
+| `audit_git_blob` | `0fa04587f3715c22f3b39017583e32000d8ba871` |
+| `material_finding_count_u32` | `9` |
+
 Start from a fresh clone or an existing checkout with:
 
 ```powershell
@@ -154,18 +175,23 @@ Read in this order:
 10. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`
 11. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`
 12. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`
-13. `docs/FUTURE_PLAN_AUDIT_LOOP2.md`
-14. `docs/FUTURE_PLAN_AUDIT.md`
-15. `docs/SEMANTICS.md`
-16. `docs/TRANSCRIPT_AUDIT.md`
-17. `docs/AUTHENTICATED_STATE_PLAN.md`
-18. `docs/LAYER1_DESIGN_PAPER.md`
-19. `docs/LAYER1_DESIGN_AUDIT.md`
-20. `README.md`
-21. `docs/PROTOCOL.md`
-22. `docs/TIMELINES.md`
+13. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`
+14. `docs/FUTURE_PLAN_AUDIT_LOOP2.md`
+15. `docs/FUTURE_PLAN_AUDIT.md`
+16. `docs/SEMANTICS.md`
+17. `docs/TRANSCRIPT_AUDIT.md`
+18. `docs/AUTHENTICATED_STATE_PLAN.md`
+19. `docs/LAYER1_DESIGN_PAPER.md`
+20. `docs/LAYER1_DESIGN_AUDIT.md`
+21. `README.md`
+22. `docs/PROTOCOL.md`
+23. `docs/TIMELINES.md`
 
-## Current proposed design delta after the eighth audit
+## Current proposed design delta after the ninth correction
+
+The bullets below preserve the eighth-correction base and state the coordinated Loop 9 descendant.
+They describe proposed protocol and checker surfaces only; the next independent sweep has not yet
+determined whether diminishing returns has been reached.
 
 - `AcceptedProposalCoreV1` is now the one byte-exact signature-free authority/header/availability
   preimage under `accepted_parent_lookup_id`. Each `VerifiedProposalCredentialEntryV1` has a
@@ -187,31 +213,31 @@ Read in this order:
   and retained subsets require a full-core `ReplayEvidenceRetentionProjectionProofV1`. A
   `SameWrapperAcceptedRecordOccurrenceWitnessV1` binds the claimed consensus/assessment pair to one
   committed wrapper occurrence instead of synthesizing it from separate carriers.
-- Every authority use consumed by replay has one
-  `HistoricalAcceptedParentAuthorityUseWitnessV1` binding its purpose, policy, predicate,
-  status, exact `AcceptedParentAuthorityConsumerRefV1`, and one accepted consensus-native parent-
-  authority certificate. A parent-profile resolver fixes its position and policy from a
-  certificate-independent `ParentAuthorityCertificateConsumerContextV1`; certificate authorization,
-  exact evidence commitment with a complete
-  `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1` and exact
-  `AcceptedParentAuthorityWitnessReceiptCoverageV1`, which total-decodes each wrapper and exactly
-  accounts for every credential, consensus, assessment, and dependency component including conflict
-  material; consensus evidence, availability, and
-  attained status must pass `ConsensusNativeParentAuthorityCertificateAdmissionV1` before the child header, release
-  sign document, or activation sign document binds its final admission ID. The archive is not live
-  authority. The authenticated authority-use event commits the complete accepted-certificate bytes
-  through `AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1`; the admission ID alone
-  is insufficient. `ConsensusToReplayParentAuthorityCommitmentProofV1` reconstructs the certificate's
-  exact evidence/status from pinned raw wrapper-occurrence events in a complete archive prefix and
-  byte-equals every outer preimage and receipt ID to the receipt set already inside the accepted
-  commitment; a later synthetic wrapper cannot repair admission, and later normalized retention
-  cannot replace those certificate preimages. Its checkpoint may be created
-  later. Later evidence may change the separate replay-wide
-  projection, but cannot alter the accepted certificate or rewrite an earlier use.
+- The parent consensus state atomically inserts each accepted wrapper into an authenticated ordered
+  occurrence universe. `ConsensusNativeAcceptedRecordOccurrenceReceiptV1` binds its exact live
+  position and bounded outer bytes. The parent-profile resolver fixes the cutoff rule; required
+  certificate position plus parent consensus history derive the concrete
+  `ConsensusNativeParentAuthorityEvidenceCutoffV1`, which consensus authenticates.
+  `CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1` binds the exact inclusive history-
+  start/cutoff scope, range-derived receipt set, and authenticated lower-boundary exclusion, gap-free
+  range, and upper-boundary exclusion proof. Missing whole wrappers or conflict evidence therefore
+  cannot be hidden by a candidate-selected subset. Replay may archive byte-identical bytes later only
+  as recovery of an already positioned receipt; archive order is custody order and never live
+  authority. Archive bytes absent from the pre-admission universe cannot justify a certificate.
 - Capability ownership is acyclic: `CONSENSUS-1@base` owns live certificate issuance/admission;
   `SYNC-1@base` transports and retains bounded opaque bytes only; `PD-06` makes
   `SYNC-1@replay-authority` post-consensus; and `PD-07` makes `TESTNET-1@base` consume that replay
   phase. Replay never feeds live authority backward into consensus.
+- The checker constructs one compatible inherited-base/phase/conditional role union and powers a
+  matched cross-class cycle. It exactly guards the named live-certificate/replay assignment and hash-
+  context chain, derives current audit cardinalities from contiguous finding IDs in frozen tables,
+  scans every mutable planning authority for malformed semantic projections, proves first-addition
+  commits reach the explicit checked lineage, and requires the base-cycle control to reach the named
+  cycle mechanism. These controls passed the narrow powered self-test; they do not prove arbitrary
+  prose, semantic dependency completeness, protocol security, or implementation conformance.
+- The mutable paper is now labeled as the current proposed descendant, links the complete successor-
+  audit chronology, preserves the pinned checkpoint-0.3 paper and audit as historical, and scopes its
+  old checkpoint-obligations table only to that historical artifact.
 - `PreventiveProfileOwnedCryptographicMigrationV1` is allowed only while the exact last-safe parent
   and every active authority binding remain independently sound. An established collision, forgery,
   or equivalent failure in a live profile-owned authority role is
@@ -251,15 +277,18 @@ Read in this order:
   carrier verified before migration execution. These corrections do not weaken those boundaries.
 - The capability tree's current unlock frontier is a structured exact projection of authoritative
   `PS-NNN:NODE@phase=READY` rows. Its canonical `PlanningCheckerSummaryV1` projection is derived from
-  the parsed graph/inventories, both audit-provenance tables are derived from Git, and this handoff's
+  the parsed graph/inventories, the current audit-provenance tables are derived from Git, and this handoff's
   path-only read order is checked against the canonical planning inventory. Phase/status prose
   remains projection-only; none of these checker surfaces admits a locked node.
 
-These are specification, planning, attribute-policy, and checker changes only. No proposal-
+The eighth and ninth corrections are specification, planning, attribute-policy, and checker work
+only. No proposal-
 credential/evidence index, atomic availability dependency store, evidence archive/checkpoint,
 purpose-scoped historical replay, authority-compromise safe halt or recovery ceremony, combined launch-DAG verifier, successor
 context/closure verifier, release authority, network intake, authenticated state, proposed network
-cryptographic suite, or Layer 1 execution exists in Rust.
+cryptographic suite, or Layer 1 execution exists in Rust. The ninth frozen sweep found material gaps
+and falsely closed residuals; its correction does not itself satisfy diminishing returns. Broad
+implementation and proof tests remain gated on a later complete zero-gap sweep.
 
 ## What is implemented
 
@@ -335,6 +364,10 @@ self-verified. Neither path produces physical display evidence.
 - `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`: exact identity and EG-set cardinality in
   `Loop8ProvenanceV1`; independently reproduced protocol/replay/checker challenges, one-sweep
   correction boundary, and the same finite-lens zero-new-gap convergence rule.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`: exact identity and NG-set cardinality in
+  `Loop9ProvenanceV1`; frozen occurrence-universe/chronology, paper-provenance, combined-graph,
+  exact-schema, provenance-projection, ancestry, and powered-control findings plus the unchanged
+  finite-lens zero-new-gap convergence rule.
 
 - `docs/LAYER1_DESIGN_AUDIT.md`: canonical corrected checkpoint-0.3 reading copy, frozen at current
   blob `124e066b418a61279abf90c1b1b2c2cc0604ef2a` from the fifth-successor correction onward; Git
@@ -353,12 +386,16 @@ self-verified. Neither path produces physical display evidence.
 - `tools/check_planning_docs.py`: retained dependency/Markdown checker with powered negative
   controls, structured unconditional-base and phase-specific dependency/status manifests, and exact
   equality for every canonical node-status projection. It derives and validates the exact values in
-  `PlanningCheckerSummaryV1`, both audit-provenance projections, the path-only authority read order,
+  `PlanningCheckerSummaryV1`, the current audit-provenance projections, the path-only authority read order,
   effective frozen-file EOL policy, frozen-audit/receipt guards, historical receipt-object
   reconstruction, exact signature-free core/collision projections, exact ordered Loop 8 authority
-  schemas and variants with duplicate-assignment/purpose-collapse controls, capability ownership,
-  and repository-contained tracked link/fragment checks. It does not validate semantic dependency completeness, arbitrary prose,
-  external URLs, runtime semantics, or cryptographic security.
+  schemas and variants with duplicate-assignment/purpose-collapse controls, the complete named Loop 9
+  assignment/hash-context chain, one compatible inherited-base/phase/conditional role union,
+  frozen-table-derived audit cardinalities, semantic-shape projection guards across every mutable
+  planning authority, first-addition ancestry to the explicit checked lineage, mechanism-specific
+  cycle controls, capability ownership, and repository-contained tracked link/fragment checks. It
+  does not validate semantic dependency completeness, arbitrary prose, external URLs, runtime
+  semantics, or cryptographic security.
 
 ## Claims that are safe to make
 
@@ -406,7 +443,7 @@ The candidate labels in `docs/DESIGN_RESEARCH_DISTILLATION.md` are research note
 nodes; promote one only through an explicit later capability-tree decision with dependencies,
 artifact, gate, and non-claim.
 
-1. Finish the convergence protocol first: pin this eighth-audit correction, run another complete
+1. Finish the convergence protocol first: pin this ninth-audit correction, run another complete
    independent read-only sweep, and freeze either its new findings or a result with zero new
    material gaps and zero falsely closed material residuals. Only a frozen zero-gap result opens the
    broad Rust, Python-vector, headless, Lean, and release-path test pass requested by the user. It
@@ -463,8 +500,9 @@ git diff --check 694650f4028f5c1fb715384597326e0b0e31f0e1..ea9294ba08b5e4bd339f8
 git show --check --format=fuller ea9294ba08b5e4bd339f82894ecb761461f5af13
 ```
 
-The exact inputs and first-addition identities for the seventh and eighth successor audits are in
-`Loop7ProvenanceV1` and `Loop8ProvenanceV1`; earlier frozen audits retain their own identities. The
+The exact inputs and first-addition identities for the current successor audits are in their
+canonical `Loop7ProvenanceV1`, `Loop8ProvenanceV1`, and `Loop9ProvenanceV1` tables; earlier frozen
+audits retain their own identities. The
 stable whitespace receipts for the complete second and third corrections are:
 
 ```powershell
@@ -481,15 +519,19 @@ python -B tools/check_planning_docs.py --self-test
 git diff --cached --check
 ```
 
-The first command validates the pinned node inventory and structured phase statuses, declared
-unconditional-base/phase dependency and role graph, structured conditional edges and predicate
-entailments, Markdown shape, repository-contained tracked relative files and fragments, frozen
-audit/receipt blobs, the canonical source receipt plus Markdown agreement, its historical Git
-objects, both current audit-provenance projections, the exact core/collision manifests, and the
-derived `PlanningCheckerSummaryV1`. Powered controls exercise those paths. It does not decide
+The first command validates the pinned node inventory and structured phase statuses, the compatible
+inherited-base/phase/conditional role union, structured conditional edges and predicate entailments,
+Markdown shape, repository-contained tracked relative files and fragments, frozen audit/receipt
+blobs, the canonical source receipt plus Markdown agreement, its historical Git objects and current-
+lineage ancestry, frozen-table-derived audit-provenance projections, the exact core/collision and
+live-certificate/replay assignment manifests, semantic-shape projection rules, and the derived
+`PlanningCheckerSummaryV1`. Powered controls exercise those paths and require mechanism-specific
+cycle failures. It does not decide
 predicate truth, prove arbitrary prose or closure completeness, inspect external-link contents,
 establish future-profile satisfiability, validate runtime behavior, or prove cryptographic security.
-The second command checks the complete staged correction for whitespace errors. A later complete
-bounded audit must pin this eighth correction and find zero new material gaps and zero falsely
+The second command checks the complete staged correction for whitespace errors. The ninth correction
+has only these narrow classes of repository evidence; its predecessor audit found a nonzero material
+gap/residual set. A later complete bounded audit must pin the ninth correction and find zero new
+material gaps and zero falsely
 closed material residuals before broad tests are attributed; moving `HEAD` is never a stable
 historical receipt.
