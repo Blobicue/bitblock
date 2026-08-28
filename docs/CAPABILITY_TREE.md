@@ -49,7 +49,7 @@ candidate to choose its own authority.
 | PS-006 | REPLAY-0 | claim-scope | BOUNDED |
 | PS-007 | PROOF-0 | base | BOUNDED |
 | PS-008 | DOC-0 | base | IMPLEMENTED |
-| PS-009 | ACCOUNT-1 | base | READY |
+| PS-009 | ACCOUNT-1 | base | IMPLEMENTED |
 | PS-010 | LOCAL-BOUNDS-1 | base | LOCKED |
 | PS-011 | STORAGE-1 | base | LOCKED |
 | PS-012 | STORAGE-1 | research-journals | BOUNDED |
@@ -433,7 +433,7 @@ a checker error.
 
 ### `ACCOUNT-1` — complete action/result accounting
 
-- **Status:** `PS-009:ACCOUNT-1@base=READY`.
+- **Status:** `PS-009:ACCOUNT-1@base=IMPLEMENTED`.
 - **Depends on:** `TICK-0`, `REPLAY-0`.
 - **Motive:** ensure every included action has one visible disposition before authority, programs,
   or money depend on the reducer.
@@ -442,7 +442,10 @@ a checker error.
   events that were never accepted.
 - **Gate:** replay and live adapters produce the same ordered dispositions for the same accepted
   actions; counts and effect commitments reconcile exactly; malformed or over-limit records fail
-  closed before mutation.
+  closed before mutation. The implementation receipt is remote `main` commit
+  `6f80857d2a34b0d409afe2efa394a5c3c808da62` (tree
+  `cbeb1d0069e2e42ed8c41fa4b7911ad0df54a0f6`) and exact-head CI run `33142396938`, whose Rust,
+  Python-vector, Lean, and generated-index jobs all completed successfully.
 - **Non-claim:** a complete local action record is not durable custody, authentication, ownership,
   or consensus.
 
@@ -1695,20 +1698,19 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
-| 1 | `PS-009:ACCOUNT-1@base=READY` |
-| 2 | `PS-015:COMMIT-R1@base=READY` |
-| 3 | `PS-016:VERKLE-R1@base=READY` |
-| 4 | `PS-017:VERKLE-R1@feasibility=READY` |
-| 5 | `PS-021:REFINE-1@base=READY` |
-| 6 | `PS-022:REFINE-1@world=READY` |
-| 7 | `PS-044:LANGUAGE-R1@base=READY` |
-| 8 | `PS-051:SCALE-1@base=READY` |
-| 9 | `PS-062:COST-1@base=READY` |
-| 10 | `PS-064:CODEC-1@base=READY` |
-| 11 | `PS-066:THREAT-D0@base=READY` |
-| 12 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 13 | `PS-086:RELEASE-R1@base=READY` |
-| 14 | `PS-087:RELEASE-R1@framework=READY` |
+| 1 | `PS-015:COMMIT-R1@base=READY` |
+| 2 | `PS-016:VERKLE-R1@base=READY` |
+| 3 | `PS-017:VERKLE-R1@feasibility=READY` |
+| 4 | `PS-021:REFINE-1@base=READY` |
+| 5 | `PS-022:REFINE-1@world=READY` |
+| 6 | `PS-044:LANGUAGE-R1@base=READY` |
+| 7 | `PS-051:SCALE-1@base=READY` |
+| 8 | `PS-062:COST-1@base=READY` |
+| 9 | `PS-064:CODEC-1@base=READY` |
+| 10 | `PS-066:THREAT-D0@base=READY` |
+| 11 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 12 | `PS-086:RELEASE-R1@base=READY` |
+| 13 | `PS-087:RELEASE-R1@framework=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1734,7 +1736,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `14` |
+| `ready_frontier_count_u32` | `13` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

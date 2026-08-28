@@ -237,13 +237,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "8195e31919187ed962fbf003eb6eab88b48e6eb6f9f0676442672846c4299354"
+EXPECTED_STATUS_DIGEST = "8589f2ed468a9819ee2f243f15020182eb8d497dda3a977f09f6fc65fee87430"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "8f368d8caa0da3ba290102c2c564d85fe9ef5d457e7eb2ab7fda9b457ac99215"
+    "507a14824bd4c03781ea7a176952ff912d4f7fe2a65266cd30ad73643a7e8a2f"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7211,7 +7211,7 @@ def run_self_tests(
     expect_failure("duplicate node", duplicate)
 
     bad_status = text.replace(
-        "- **Status:** `PS-009:ACCOUNT-1@base=READY`.",
+        "- **Status:** `PS-009:ACCOUNT-1@base=IMPLEMENTED`.",
         "- **Status:** **MAGICALLY SECURE**.",
         1,
     )
@@ -7219,14 +7219,14 @@ def run_self_tests(
         raise PlanningError("self-test fixture drift: ACCOUNT-1 status")
     expect_failure("invalid status vocabulary", bad_status)
 
-    false_promotion = text.replace(
-        "- **Status:** `PS-009:ACCOUNT-1@base=READY`.",
+    false_demotion = text.replace(
         "- **Status:** `PS-009:ACCOUNT-1@base=IMPLEMENTED`.",
+        "- **Status:** `PS-009:ACCOUNT-1@base=READY`.",
         1,
     )
-    if false_promotion == text:
-        raise PlanningError("self-test fixture drift: ACCOUNT-1 false promotion")
-    expect_failure("guarded status promotion", false_promotion)
+    if false_demotion == text:
+        raise PlanningError("self-test fixture drift: ACCOUNT-1 false demotion")
+    expect_failure("guarded status demotion", false_demotion)
 
     manufactured_verkle_base_edge = text.replace(
         "- **Depends on:** `WORLD-0`, `PROOF-0`.",
@@ -7273,8 +7273,8 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 4 | `PS-017:VERKLE-R1@feasibility=READY` |",
-        "| 4 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
+        "| 3 | `PS-017:VERKLE-R1@feasibility=READY` |",
+        "| 3 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
     if frontier_locked == text:
@@ -7286,7 +7286,7 @@ def run_self_tests(
     )
 
     frontier_substitution = text.replace(
-        "| 1 | `PS-009:ACCOUNT-1@base=READY` |",
+        "| 1 | `PS-015:COMMIT-R1@base=READY` |",
         "| 1 | `PS-010:LOCAL-BOUNDS-1@base=READY` |",
         1,
     )
@@ -7299,7 +7299,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 14 | `PS-087:RELEASE-R1@framework=READY` |\n",
+        "| 13 | `PS-087:RELEASE-R1@framework=READY` |\n",
         "",
         1,
     )
@@ -7312,9 +7312,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 14 | `PS-087:RELEASE-R1@framework=READY` |",
-        "| 14 | `PS-087:RELEASE-R1@framework=READY` |\n"
-        "| 15 | `PS-009:ACCOUNT-1@base=READY` |",
+        "| 13 | `PS-087:RELEASE-R1@framework=READY` |",
+        "| 13 | `PS-087:RELEASE-R1@framework=READY` |\n"
+        "| 14 | `PS-015:COMMIT-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7326,12 +7326,12 @@ def run_self_tests(
     )
 
     frontier_reorder = text.replace(
-        "| 1 | `PS-009:ACCOUNT-1@base=READY` |",
         "| 1 | `PS-015:COMMIT-R1@base=READY` |",
+        "| 1 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     ).replace(
+        "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         "| 2 | `PS-015:COMMIT-R1@base=READY` |",
-        "| 2 | `PS-009:ACCOUNT-1@base=READY` |",
         1,
     )
     if frontier_reorder == text:
@@ -7590,7 +7590,7 @@ def run_self_tests(
         )
 
     missing_base_status = text.replace(
-        "| PS-009 | ACCOUNT-1 | base | READY |\n",
+        "| PS-009 | ACCOUNT-1 | base | IMPLEMENTED |\n",
         "",
         1,
     )
