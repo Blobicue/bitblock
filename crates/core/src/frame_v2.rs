@@ -1004,7 +1004,7 @@ mod tests {
         let pre_world = previous.map_or(tag(TagKind::World, 0x10), TickOutcome::post_world);
         let pre_history = previous.map_or(tag(TagKind::Receipt, 0x20), TickOutcome::post_history);
         let post_camera = previous.map_or(camera, TickOutcome::post_camera);
-        TickOutcome::new(
+        TickOutcome::with_edit_attempts_only(
             parent,
             tick,
             pre_world,

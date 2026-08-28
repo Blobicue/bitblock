@@ -127,8 +127,9 @@
             "note": "The canonical framebuffer domain. An independent Python reconstruction must keep agreeing with it."
         },
         {
-            "schema": "bitblock/tick-outcome/v2",
-            "vectored": true
+            "schema": "bitblock/tick-outcome/v3",
+            "vectored": true,
+            "note": "v3 adds the accepted-action ledger. ACCOUNT-1: three control actions applied outside the edit fold used to leave no trace in the tick, so a tick that consumed them hashed identically to an idle one."
         },
         {
             "schema": "bitblock/overlay-policy/crosshair/v1",

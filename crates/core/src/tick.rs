@@ -20,14 +20,198 @@ use crate::frame::{FrameInput, FrameProtocolError};
 use crate::program::{EDIT_CANONICAL_LEN, Edit, EditCodecError, Operation};
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 
-pub const TICK_OUTCOME_SCHEMA: &[u8] = b"bitblock/tick-outcome/v2";
+pub const TICK_OUTCOME_SCHEMA: &[u8] = b"bitblock/tick-outcome/v3";
 
-/// Bytes present in every v2 payload, excluding its ordered edit-attempt records.
-pub const TICK_OUTCOME_FIXED_PAYLOAD_LEN: usize = 429;
+/// Bytes present in every v3 payload, excluding its ordered edit-attempt records.
+///
+/// v3 adds the 40-byte accepted-action ledger to v2's 429.
+pub const TICK_OUTCOME_FIXED_PAYLOAD_LEN: usize = 469;
+
+/// One counter per accepted-action kind.
+pub const ACTION_LANE_COUNT: usize = 10;
+
+/// Lane ordinals. These are deliberately the interaction-tape opcodes, so a tape
+/// record and the tick outcome that consumes it count the same actions into the
+/// same slots and can be reconciled without a translation table.
+pub const LANE_MOVE_EDGE: usize = 0;
+pub const LANE_LOOK_DELTA: usize = 1;
+pub const LANE_WHEEL_LINES: usize = 2;
+pub const LANE_AIM_DELETE: usize = 3;
+pub const LANE_AIM_PLACE: usize = 4;
+pub const LANE_EXACT_EDIT: usize = 5;
+pub const LANE_FIT_WORLD: usize = 6;
+pub const LANE_TOGGLE_SIDEBAR: usize = 7;
+pub const LANE_RESIZE: usize = 8;
+pub const LANE_CLEAR_MOTION: usize = 9;
+
+/// Most accepted actions one tick may consume, matching the interaction tape's
+/// per-record bound. A tape that parses can therefore always be accounted for.
+pub const MAX_ACTIONS_PER_TICK: u32 = 65_536;
+
+/// Why one tick could not account for an accepted action.
+///
+/// Deliberately separate from [`TickProtocolError`], which carries decoder
+/// sources and so cannot be `Copy`. Callers refuse an action on this value in
+/// their hot path, before any mutation, so it stays cheap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TickActionError {
+    UnknownLane { lane: usize },
+    Overflow { limit: u32 },
+}
+
+impl fmt::Display for TickActionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::UnknownLane { lane } => {
+                write!(
+                    formatter,
+                    "accepted action counted into unknown lane {lane}"
+                )
+            }
+            Self::Overflow { limit } => write!(
+                formatter,
+                "one tick cannot account for more than {limit} accepted actions"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for TickActionError {}
+
+impl From<TickActionError> for TickProtocolError {
+    fn from(error: TickActionError) -> Self {
+        match error {
+            TickActionError::UnknownLane { lane } => Self::UnknownActionLane { lane },
+            TickActionError::Overflow { limit } => Self::TickActionOverflow { limit },
+        }
+    }
+}
+
+/// How many accepted actions of each kind one tick consumed.
+///
+/// The point of this record is that an accepted action cannot vanish. Before v3
+/// three actions -- toggling the sidebar, resizing, and clearing motion -- were
+/// applied the instant they were accepted and appeared in no tick outcome at all.
+/// Their *effects* were committed, through the sidebar flag and the viewport
+/// dimensions in [`TickInputState`], but nothing recorded that the action had been
+/// submitted, so no count could be reconciled against a tape and no replay could
+/// be shown to have consumed the same actions as the live run.
+///
+/// Counting is deliberately all this commits. Ordered per-event records would put
+/// mouse-motion granularity into a permanent payload; per-lane totals reconcile
+/// exactly against a tape record while staying a fixed 40 bytes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TickActionLedger {
+    lanes: [u32; ACTION_LANE_COUNT],
+}
+
+impl TickActionLedger {
+    pub const fn empty() -> Self {
+        Self {
+            lanes: [0; ACTION_LANE_COUNT],
+        }
+    }
+
+    /// The minimal ledger consistent with `attempts`: every edit attempted was
+    /// submitted, and nothing else was. Fixtures that exercise no control action
+    /// use this; it is not a default, it is a claim about what the tick consumed.
+    pub fn for_edit_attempts(attempts: &[TickAttempt]) -> Self {
+        let mut ledger = Self::empty();
+        for attempt in attempts {
+            let lane = match attempt {
+                TickAttempt::AimDeleteUnresolved | TickAttempt::AimDeleteExecuted(_) => {
+                    LANE_AIM_DELETE
+                }
+                TickAttempt::AimPlaceUnresolved
+                | TickAttempt::AimPlaceRejectedObserver(_)
+                | TickAttempt::AimPlaceExecuted(_) => LANE_AIM_PLACE,
+                TickAttempt::ExactRejectedObserver(_) | TickAttempt::ExactExecuted(_) => {
+                    LANE_EXACT_EDIT
+                }
+            };
+            ledger.lanes[lane] += 1;
+        }
+        ledger
+    }
+
+    /// Counts one accepted action, or fails without recording it.
+    ///
+    /// Fail-closed is the whole contract: callers must record *before* mutating,
+    /// so a tick that cannot account for an action never applies it either.
+    pub fn record(&mut self, lane: usize) -> Result<(), TickActionError> {
+        if lane >= ACTION_LANE_COUNT {
+            return Err(TickActionError::UnknownLane { lane });
+        }
+        if self.submitted() >= MAX_ACTIONS_PER_TICK {
+            return Err(TickActionError::Overflow {
+                limit: MAX_ACTIONS_PER_TICK,
+            });
+        }
+        self.lanes[lane] += 1;
+        Ok(())
+    }
+
+    pub const fn lane(&self, lane: usize) -> u32 {
+        self.lanes[lane]
+    }
+
+    /// Every accepted action this tick consumed, across all lanes.
+    pub const fn submitted(&self) -> u32 {
+        let mut total = 0;
+        let mut index = 0;
+        while index < ACTION_LANE_COUNT {
+            total += self.lanes[index];
+            index += 1;
+        }
+        total
+    }
+
+    /// Actions whose disposition is an ordered [`TickAttempt`].
+    pub const fn edit_lane_total(&self) -> u32 {
+        self.lanes[LANE_AIM_DELETE] + self.lanes[LANE_AIM_PLACE] + self.lanes[LANE_EXACT_EDIT]
+    }
+
+    /// Actions applied outside the edit fold: the lane v2 could not see.
+    pub const fn control_lane_total(&self) -> u32 {
+        self.lanes[LANE_TOGGLE_SIDEBAR] + self.lanes[LANE_RESIZE] + self.lanes[LANE_CLEAR_MOTION]
+    }
+
+    /// Actions that only steer the observer, committed through the input state.
+    pub const fn camera_lane_total(&self) -> u32 {
+        self.lanes[LANE_MOVE_EDGE]
+            + self.lanes[LANE_LOOK_DELTA]
+            + self.lanes[LANE_WHEEL_LINES]
+            + self.lanes[LANE_FIT_WORLD]
+    }
+
+    fn validate(&self, attempts: usize) -> Result<(), TickProtocolError> {
+        if self.submitted() > MAX_ACTIONS_PER_TICK {
+            return Err(TickProtocolError::TickActionOverflow {
+                limit: MAX_ACTIONS_PER_TICK,
+            });
+        }
+        // The reconciliation the gate asks for: every submitted edit has exactly
+        // one ordered disposition, and every disposition had a submission.
+        let edits = self.edit_lane_total() as usize;
+        if edits != attempts {
+            return Err(TickProtocolError::ActionAccountingMismatch {
+                submitted_edits: edits,
+                attempts,
+            });
+        }
+        Ok(())
+    }
+
+    fn encode_with(&self, sink: &mut dyn FnMut(&[u8])) {
+        for lane in self.lanes {
+            sink(&lane.to_be_bytes());
+        }
+    }
+}
 
 const INPUT_FLAG_MASK: u16 = (1 << 11) - 1;
 #[cfg(any(test, feature = "protocol-research"))]
-const PREFIX_BEFORE_ATTEMPTS_LEN: usize = 155;
+const PREFIX_BEFORE_ATTEMPTS_LEN: usize = 195;
 #[cfg(any(test, feature = "protocol-research"))]
 const SUFFIX_AFTER_ATTEMPTS_LEN: usize = 274;
 const CAMERA_LANES: usize = 10;
@@ -457,6 +641,7 @@ pub struct TickOutcome {
     pre_world: ContentTag,
     pre_history: ContentTag,
     input: TickInputState,
+    actions: TickActionLedger,
     attempts: Vec<TickAttempt>,
     post_world: ContentTag,
     post_history: ContentTag,
@@ -473,6 +658,7 @@ impl TickOutcome {
         pre_world: ContentTag,
         pre_history: ContentTag,
         input: TickInputState,
+        actions: TickActionLedger,
         attempts: impl IntoIterator<Item = TickAttempt>,
         post_world: ContentTag,
         post_history: ContentTag,
@@ -498,6 +684,7 @@ impl TickOutcome {
             attempt.validate(index)?;
         }
         canonical_payload_len(&attempts)?;
+        actions.validate(attempts.len())?;
         validate_frame_presence(input, game, composite)?;
         validate_world_frame_presence(pre_world, post_world, game)?;
         validate_history_execution(pre_history, post_history, &attempts)?;
@@ -509,6 +696,7 @@ impl TickOutcome {
             pre_world,
             pre_history,
             input,
+            actions,
             attempts,
             post_world,
             post_history,
@@ -518,6 +706,50 @@ impl TickOutcome {
         };
         outcome.tag = outcome.recompute_tag();
         Ok(outcome)
+    }
+
+    /// What this tick consumed, by lane.
+    pub const fn actions(&self) -> TickActionLedger {
+        self.actions
+    }
+
+    /// Builds an outcome whose ledger is the minimal one consistent with its
+    /// attempts: exactly the edits attempted were submitted, and no camera or
+    /// control action was.
+    ///
+    /// This is a claim, not a default. Anything exercising the control lanes --
+    /// a sidebar toggle, a resize, a motion clear -- must state its ledger to
+    /// [`TickOutcome::new`], because those are precisely the actions v2 lost.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_edit_attempts_only(
+        parent: Option<ContentTag>,
+        tick: u64,
+        pre_world: ContentTag,
+        pre_history: ContentTag,
+        input: TickInputState,
+        attempts: impl IntoIterator<Item = TickAttempt>,
+        post_world: ContentTag,
+        post_history: ContentTag,
+        post_camera: TickCameraState,
+        game: Option<TickFrameCommitment>,
+        composite: Option<TickFrameCommitment>,
+    ) -> Result<Self, TickProtocolError> {
+        let attempts: Vec<_> = attempts.into_iter().collect();
+        let actions = TickActionLedger::for_edit_attempts(&attempts);
+        Self::new(
+            parent,
+            tick,
+            pre_world,
+            pre_history,
+            input,
+            actions,
+            attempts,
+            post_world,
+            post_history,
+            post_camera,
+            game,
+            composite,
+        )
     }
 
     pub const fn tag(&self) -> ContentTag {
@@ -682,8 +914,17 @@ impl TickOutcome {
             output_width,
             output_height,
         )?;
+        let mut ledger = TickActionLedger::empty();
+        for (index, lane) in ledger.lanes.iter_mut().enumerate() {
+            let start = 147 + index * 4;
+            *lane = u32::from_be_bytes(
+                bytes[start..start + 4]
+                    .try_into()
+                    .expect("fixed action lane"),
+            );
+        }
         let attempt_count_u64 =
-            u64::from_be_bytes(bytes[147..155].try_into().expect("fixed count lane"));
+            u64::from_be_bytes(bytes[187..195].try_into().expect("fixed count lane"));
         let attempt_count = usize::try_from(attempt_count_u64)
             .map_err(|_| TickProtocolError::PayloadLengthOverflow)?;
         if attempt_count > limits.max_attempts {
@@ -775,6 +1016,7 @@ impl TickOutcome {
             pre_world,
             pre_history,
             input,
+            ledger,
             attempts,
             post_world,
             post_history,
@@ -806,6 +1048,7 @@ impl TickOutcome {
             attempt.validate(index)?;
         }
         canonical_payload_len(&self.attempts)?;
+        self.actions.validate(self.attempts.len())?;
         validate_frame_presence(self.input, self.game, self.composite)?;
         validate_world_frame_presence(self.pre_world, self.post_world, self.game)?;
         validate_history_execution(self.pre_history, self.post_history, &self.attempts)?;
@@ -925,6 +1168,7 @@ fn encode_fields(outcome: &TickOutcome, sink: &mut dyn FnMut(&[u8])) {
     for dimension in outcome.input.dimensions() {
         sink(&dimension.to_be_bytes());
     }
+    outcome.actions.encode_with(sink);
     sink(&(outcome.attempts.len() as u64).to_be_bytes());
     for attempt in outcome.attempts.iter().copied() {
         attempt.encode_with(sink);
@@ -1108,6 +1352,19 @@ fn validate_world_history_progress(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TickProtocolError {
+    /// An action was counted into a lane that does not exist.
+    UnknownActionLane {
+        lane: usize,
+    },
+    /// One tick was offered more accepted actions than it can account for.
+    TickActionOverflow {
+        limit: u32,
+    },
+    /// Submitted edits and their ordered dispositions did not reconcile.
+    ActionAccountingMismatch {
+        submitted_edits: usize,
+        attempts: usize,
+    },
     WrongKind {
         field: &'static str,
         expected: TagKind,
@@ -1239,6 +1496,23 @@ pub enum TickProtocolError {
 impl fmt::Display for TickProtocolError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownActionLane { lane } => {
+                write!(
+                    formatter,
+                    "accepted action counted into unknown lane {lane}"
+                )
+            }
+            Self::TickActionOverflow { limit } => write!(
+                formatter,
+                "one tick cannot account for more than {limit} accepted actions"
+            ),
+            Self::ActionAccountingMismatch {
+                submitted_edits,
+                attempts,
+            } => write!(
+                formatter,
+                "{submitted_edits} submitted edits do not reconcile with {attempts} ordered dispositions"
+            ),
             Self::WrongKind {
                 field,
                 expected,
@@ -1480,6 +1754,107 @@ mod tests {
         .unwrap()
     }
 
+    /// The gap v3 exists to close.
+    ///
+    /// Toggling the sidebar, resizing, and clearing motion are accepted actions
+    /// applied outside the edit fold. Under v2 a tick that consumed all three
+    /// hashed identically to a tick where nothing was submitted at all, because
+    /// nothing in the payload counted them. They must now separate.
+    #[test]
+    fn control_actions_are_visible_in_the_outcome_tag() {
+        let idle = outcome(None, 0, 0x10, 0x20, 0x10, 0x20, Vec::new());
+
+        let mut ledger = TickActionLedger::empty();
+        ledger.record(LANE_TOGGLE_SIDEBAR).unwrap();
+        ledger.record(LANE_RESIZE).unwrap();
+        ledger.record(LANE_CLEAR_MOTION).unwrap();
+        let controlled = TickOutcome::new(
+            None,
+            0,
+            tag(TagKind::World, 0x10),
+            tag(TagKind::Receipt, 0x20),
+            input(0),
+            ledger,
+            Vec::new(),
+            tag(TagKind::World, 0x10),
+            tag(TagKind::Receipt, 0x20),
+            camera(1.0),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(controlled.actions().control_lane_total(), 3);
+        assert_eq!(controlled.actions().submitted(), 3);
+        assert_eq!(idle.actions().submitted(), 0);
+        assert_ne!(
+            idle.tag(),
+            controlled.tag(),
+            "three consumed control actions must not hash as an idle tick"
+        );
+        assert_eq!(
+            TickOutcome::decode_canonical(&controlled.encode_canonical()),
+            Ok(controlled)
+        );
+    }
+
+    /// Every submitted edit has one ordered disposition, and every disposition
+    /// had a submission. A ledger that disagrees is refused at construction and
+    /// again at decode, so it cannot be reached by either route.
+    #[test]
+    fn submitted_edits_must_reconcile_with_their_dispositions() {
+        let attempts = vec![TickAttempt::AimDeleteUnresolved];
+        let mut short = TickActionLedger::empty();
+        short.record(LANE_TOGGLE_SIDEBAR).unwrap(); // a control action, not an edit
+        assert_eq!(
+            TickOutcome::new(
+                None,
+                0,
+                tag(TagKind::World, 0x10),
+                tag(TagKind::Receipt, 0x20),
+                input(0),
+                short,
+                attempts,
+                tag(TagKind::World, 0x10),
+                tag(TagKind::Receipt, 0x20),
+                camera(1.0),
+                None,
+                None,
+            ),
+            Err(TickProtocolError::ActionAccountingMismatch {
+                submitted_edits: 0,
+                attempts: 1,
+            })
+        );
+    }
+
+    /// Over-limit fails closed: the counter is refused and nothing is recorded.
+    #[test]
+    fn one_tick_cannot_account_for_more_actions_than_its_limit() {
+        let mut ledger = TickActionLedger::empty();
+        for _ in 0..MAX_ACTIONS_PER_TICK {
+            ledger.record(LANE_MOVE_EDGE).unwrap();
+        }
+        assert_eq!(ledger.submitted(), MAX_ACTIONS_PER_TICK);
+        assert_eq!(
+            ledger.record(LANE_MOVE_EDGE),
+            Err(TickActionError::Overflow {
+                limit: MAX_ACTIONS_PER_TICK
+            })
+        );
+        assert_eq!(
+            ledger.submitted(),
+            MAX_ACTIONS_PER_TICK,
+            "a refused action must not be counted"
+        );
+        assert_eq!(
+            ledger.record(ACTION_LANE_COUNT),
+            Err(TickActionError::UnknownLane {
+                lane: ACTION_LANE_COUNT
+            })
+        );
+    }
+
     fn outcome(
         parent: Option<ContentTag>,
         tick: u64,
@@ -1490,7 +1865,7 @@ mod tests {
         attempts: Vec<TickAttempt>,
     ) -> TickOutcome {
         let changed_world = pre_world != post_world;
-        TickOutcome::new(
+        TickOutcome::with_edit_attempts_only(
             parent,
             tick,
             tag(TagKind::World, pre_world),
@@ -1544,7 +1919,7 @@ mod tests {
             TickAttempt::ExactExecuted(off),
         ];
         let outcome = outcome(None, 0, 0x10, 0x20, 0x30, 0x40, attempts.clone());
-        assert_eq!(outcome.encoded_len(), 561);
+        assert_eq!(outcome.encoded_len(), 601);
         assert_eq!(outcome.attempts(), attempts);
         assert_eq!(
             outcome.executed_edits().collect::<Vec<_>>(),
@@ -1558,7 +1933,7 @@ mod tests {
     fn aim_attempts_refuse_operations_the_resolver_cannot_emit() {
         let on = Edit::new(Operation::On, Coord::new(1, 2, 3));
         let off = Edit::new(Operation::Off, Coord::new(1, 2, 3));
-        let error = TickOutcome::new(
+        let error = TickOutcome::with_edit_attempts_only(
             None,
             0,
             tag(TagKind::World, 1),
@@ -1582,7 +1957,7 @@ mod tests {
             }
         ));
         assert!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1598,7 +1973,7 @@ mod tests {
             .is_err()
         );
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1640,14 +2015,14 @@ mod tests {
         );
 
         let mut impossible_count = base.clone();
-        impossible_count[147..155].copy_from_slice(&1_u64.to_be_bytes());
+        impossible_count[187..195].copy_from_slice(&1_u64.to_be_bytes());
         assert!(matches!(
             TickOutcome::decode_canonical(&impossible_count),
             Err(TickProtocolError::AttemptCountExceedsPayload { .. })
         ));
 
         let mut unknown_code = base.clone();
-        unknown_code[147..155].copy_from_slice(&1_u64.to_be_bytes());
+        unknown_code[187..195].copy_from_slice(&1_u64.to_be_bytes());
         unknown_code.insert(PREFIX_BEFORE_ATTEMPTS_LEN, 7);
         assert_eq!(
             TickOutcome::decode_canonical(&unknown_code),
@@ -1674,7 +2049,7 @@ mod tests {
         );
 
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1695,7 +2070,7 @@ mod tests {
     fn input_render_causes_and_frame_presence_are_consistent() {
         for bits in [1 << 6, 1 << 7, 1 << 10] {
             assert_eq!(
-                TickOutcome::new(
+                TickOutcome::with_edit_attempts_only(
                     None,
                     0,
                     tag(TagKind::World, 1),
@@ -1724,7 +2099,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1741,7 +2116,7 @@ mod tests {
         );
 
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1758,7 +2133,7 @@ mod tests {
         );
 
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1775,7 +2150,7 @@ mod tests {
         );
 
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1795,7 +2170,7 @@ mod tests {
     #[test]
     fn history_advances_if_and_only_if_an_attempt_executes() {
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1815,7 +2190,7 @@ mod tests {
         );
 
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1841,7 +2216,7 @@ mod tests {
     #[test]
     fn world_change_requires_history_advance() {
         assert_eq!(
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 tag(TagKind::World, 1),
@@ -1970,7 +2345,7 @@ mod tests {
     #[test]
     fn camera_change_requires_a_game_frame_in_the_successor() {
         let first = outcome(None, 0, 7, 8, 7, 8, Vec::new());
-        let second = TickOutcome::new(
+        let second = TickOutcome::with_edit_attempts_only(
             Some(first.tag()),
             1,
             tag(TagKind::World, 7),
@@ -2030,7 +2405,7 @@ mod tests {
             overlay_input,
         );
         let make_outcome = |game_input| {
-            TickOutcome::new(
+            TickOutcome::with_edit_attempts_only(
                 None,
                 0,
                 world,
@@ -2134,7 +2509,7 @@ mod tests {
 
     #[test]
     fn canonical_wrapper_length_matches_the_streamed_tag() {
-        let outcome = TickOutcome::new(
+        let outcome = TickOutcome::with_edit_attempts_only(
             None,
             0,
             tag(TagKind::World, 0x10),
@@ -2199,7 +2574,7 @@ mod tests {
             801,
         )
         .unwrap();
-        let genesis = TickOutcome::new(
+        let genesis = TickOutcome::with_edit_attempts_only(
             None,
             0,
             sequence_tag(TagKind::World, 0x00),
@@ -2215,10 +2590,10 @@ mod tests {
         .unwrap();
         assert_vector(
             &genesis,
-            429,
-            510,
-            "ba0c903f0baa3a85b4602e768018f1fa44ff2650ac8317faa1ef6d9646a2dc12",
-            "#bb.tick-outcome.sha256.talksm7nbc2yv77tt22zkayqrmsynvmzsugxqjsmmsmnyeiwsxjq",
+            469,
+            550,
+            "1671e2c245695f10e592de025895140eca84f9936031a7fc28995ab07a3b7c7c",
+            "#bb.tick-outcome.sha256.mdrfmhsgskam6cmt4n3zncrclswc26fjfowva6e7itavrs7zx2tq",
         );
 
         let mixed_input = TickInputState::from_bits(
@@ -2245,7 +2620,7 @@ mod tests {
             1.0_f64.to_bits(),
         ])
         .unwrap();
-        let mixed = TickOutcome::new(
+        let mixed = TickOutcome::with_edit_attempts_only(
             Some(sequence_tag(TagKind::TickOutcome, 0x00)),
             0x0102_0304_0506_0708,
             sequence_tag(TagKind::World, 0x20),
@@ -2278,10 +2653,10 @@ mod tests {
         .unwrap();
         assert_vector(
             &mixed,
-            561,
-            642,
-            "7c0266cecf537f5879d45f2b0ac62eed81a5154e4e692de83da8d9116cceea62",
-            "#bb.tick-outcome.sha256.scgtf5eeuxy643ugkf3gexemwidzh5vk6nsnqtwjm3uvj7vygcda",
+            601,
+            682,
+            "5983dd2fc0cd797a9bd6fb70fdeb19ae316c587a4c1ea406f766000718ea68d8",
+            "#bb.tick-outcome.sha256.nkazbofarz6mjgss625grz4cxx62itnqhbplgcwwjyrr3657mqda",
         );
 
         let sidebar_input = TickInputState::from_bits(
@@ -2295,7 +2670,7 @@ mod tests {
             801,
         )
         .unwrap();
-        let sidebar = TickOutcome::new(
+        let sidebar = TickOutcome::with_edit_attempts_only(
             Some(sequence_tag(TagKind::TickOutcome, 0x11)),
             1,
             sequence_tag(TagKind::World, 0x31),
@@ -2311,10 +2686,10 @@ mod tests {
         .unwrap();
         assert_vector(
             &sidebar,
-            429,
-            510,
-            "7e62fda6a33dc126986032cbaba2879651c39a0b3ffe718f327eb125557747c3",
-            "#bb.tick-outcome.sha256.2uqcklamnlah4rpgvves5a2hyet345pf72oucvhycp42iykgql7a",
+            469,
+            550,
+            "6cf9f6274bd78be3420ee5b568e651288d8c8ea6c9917e5af5f9a7c2130ed0b2",
+            "#bb.tick-outcome.sha256.bzqggwzw2eygclvjcidemqtrhdpdozhioimfzrl44mbphbgoqvna",
         );
     }
 

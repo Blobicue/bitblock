@@ -410,6 +410,12 @@
     ]
    },
    {
+    "item": "for_edit_attempts",
+    "modules": [
+     "tick"
+    ]
+   },
+   {
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
@@ -434,7 +440,7 @@
     ]
    }
   ],
-  "pub_items": 566,
+  "pub_items": 583,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -458,7 +464,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29387,
+   "code_lines": 29634,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -494,7 +500,7 @@
     {
      "left": "frame:241",
      "lines": 15,
-     "right": "tick:276"
+     "right": "tick:460"
     },
     {
      "left": "physical_sensor:1562",
@@ -504,7 +510,7 @@
     {
      "left": "display:853",
      "lines": 13,
-     "right": "tick:939"
+     "right": "tick:1183"
     },
     {
      "left": "display_artifact:415",
@@ -644,7 +650,7 @@
    ]
   },
   "test": {
-   "code_lines": 18353,
+   "code_lines": 18493,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -670,7 +676,7 @@
     {
      "left": "display_store:1685",
      "lines": 19,
-     "right": "main:4078"
+     "right": "main:4137"
     },
     {
      "left": "output_topology:1469",
@@ -678,9 +684,9 @@
      "right": "presentation_output:663"
     },
     {
-     "left": "main:4120",
+     "left": "main:4179",
      "lines": 17,
-     "right": "main:5183"
+     "right": "main:5310"
     },
     {
      "left": "presentation_output:693",
@@ -690,7 +696,7 @@
     {
      "left": "display_store:1649",
      "lines": 12,
-     "right": "main:4037"
+     "right": "main:4096"
     },
     {
      "left": "history:938",
@@ -705,7 +711,7 @@
     {
      "left": "frame_v2:979",
      "lines": 10,
-     "right": "optimization:1676"
+     "right": "optimization:1680"
     },
     {
      "left": "journal:1238",
@@ -735,7 +741,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4605"
+     "right": "main:4732"
     },
     {
      "left": "history_store:1595",

@@ -1286,7 +1286,7 @@
 {"from": "module:sidebar", "kind": "declares", "to": "schema:bitblock/sidebar/raster-policy/v1"}
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/storage-record/envelope/v1"}
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/test-object/v1"}
-{"from": "module:tick", "kind": "declares", "to": "schema:bitblock/tick-outcome/v2"}
+{"from": "module:tick", "kind": "declares", "to": "schema:bitblock/tick-outcome/v3"}
 {"from": "module:windows_present", "kind": "declares", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history_store"}
@@ -1503,7 +1503,7 @@
 {"from": "tool:frame_ledger_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v2"}
 {"from": "tool:frame_ledger_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/optimization-equivalence/frame-ledger-evidence/v1"}
 {"from": "tool:frame_ledger_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/optimization-equivalence/output/v3"}
-{"from": "tool:frame_ledger_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/tick-outcome/v2"}
+{"from": "tool:frame_ledger_evidence_vectors", "kind": "vectors", "to": "schema:bitblock/tick-outcome/v3"}
 {"from": "tool:frame_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:frame_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v2"}
 {"from": "tool:headless_replay_policy_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
@@ -1586,6 +1586,6 @@
 {"from": "tool:storage_record_vectors", "kind": "vectors", "to": "schema:bitblock/edit/op-u8-i64-be/v1"}
 {"from": "tool:storage_record_vectors", "kind": "vectors", "to": "schema:bitblock/storage-record/envelope/v1"}
 {"from": "tool:tick_outcome_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
-{"from": "tool:tick_outcome_vectors", "kind": "vectors", "to": "schema:bitblock/tick-outcome/v2"}
+{"from": "tool:tick_outcome_vectors", "kind": "vectors", "to": "schema:bitblock/tick-outcome/v3"}
 {"from": "tool:windows_present_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:windows_present_vectors", "kind": "vectors", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}

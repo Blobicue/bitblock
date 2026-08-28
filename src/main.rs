@@ -64,8 +64,10 @@ use bitblock::sidebar::{
     SidebarSnapshot, composite_overlay_input,
 };
 use bitblock::tick::{
-    TickAttempt, TickCameraState, TickFrameCommitment, TickInputFlags, TickInputState, TickOutcome,
-    verify_successor,
+    LANE_AIM_DELETE, LANE_AIM_PLACE, LANE_CLEAR_MOTION, LANE_EXACT_EDIT, LANE_FIT_WORLD,
+    LANE_LOOK_DELTA, LANE_MOVE_EDGE, LANE_RESIZE, LANE_TOGGLE_SIDEBAR, LANE_WHEEL_LINES,
+    MAX_ACTIONS_PER_TICK, TickActionError, TickActionLedger, TickAttempt, TickCameraState,
+    TickFrameCommitment, TickInputFlags, TickInputState, TickOutcome, verify_successor,
 };
 #[cfg(windows)]
 use bitblock::windows_present::WindowsPixelSurface;
@@ -332,15 +334,29 @@ fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
     }
 
     let source = std::fs::read_to_string(&path)?;
-    Program::parse(&source)
-        .map(StartupMode::Observe)
-        .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{}: {error}", path.display()),
-            )
-            .into()
-        })
+    // A startup program's edits are all submitted to the first tick, so a program
+    // larger than one tick can account for is refused here rather than panicking
+    // later inside the fold.
+    let program = Program::parse(&source).map_err(|error| -> Box<dyn Error> {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{}: {error}", path.display()),
+        )
+        .into()
+    })?;
+    if program.edits().len() > MAX_ACTIONS_PER_TICK as usize {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{}: {} edits exceed the {} one tick can account for",
+                path.display(),
+                program.edits().len(),
+                MAX_ACTIONS_PER_TICK
+            ),
+        )
+        .into());
+    }
+    Ok(StartupMode::Observe(program))
 }
 
 fn read_bounded_utf8(path: &std::path::Path, maximum: usize) -> Result<String, io::Error> {
@@ -589,6 +605,8 @@ struct Inputs {
     edits: Vec<PendingEdit>,
     fit_world: bool,
     viewport_refit: bool,
+    /// Accepted actions consumed by the next fixed tick, by lane.
+    actions: TickActionLedger,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1515,6 +1533,7 @@ enum AcceptedActionApplyError {
         prior_bits: u64,
         delta_bits: u64,
     },
+    Unaccountable(TickActionError),
 }
 
 impl std::fmt::Display for AcceptedActionApplyError {
@@ -1534,11 +1553,33 @@ impl std::fmt::Display for AcceptedActionApplyError {
                 formatter,
                 "accepted {field} accumulation is nonfinite: prior={prior_bits:#018x} delta={delta_bits:#018x}"
             ),
+            Self::Unaccountable(error) => {
+                write!(formatter, "tick cannot account for the action: {error}")
+            }
         }
     }
 }
 
 impl std::error::Error for AcceptedActionApplyError {}
+
+/// The ledger lane one accepted action counts into.
+///
+/// Exhaustive on purpose: a new `AcceptedAction` variant must choose a lane here,
+/// so it cannot be added and silently escape the tick's accounting.
+const fn action_lane(action: AcceptedAction) -> usize {
+    match action {
+        AcceptedAction::MoveEdge(..) => LANE_MOVE_EDGE,
+        AcceptedAction::LookDelta(..) => LANE_LOOK_DELTA,
+        AcceptedAction::WheelLines(_) => LANE_WHEEL_LINES,
+        AcceptedAction::AimDelete => LANE_AIM_DELETE,
+        AcceptedAction::AimPlace => LANE_AIM_PLACE,
+        AcceptedAction::ExactEdit(_) => LANE_EXACT_EDIT,
+        AcceptedAction::FitWorld => LANE_FIT_WORLD,
+        AcceptedAction::ToggleSidebar => LANE_TOGGLE_SIDEBAR,
+        AcceptedAction::Resize(..) => LANE_RESIZE,
+        AcceptedAction::ClearMotion => LANE_CLEAR_MOTION,
+    }
+}
 
 fn checked_accepted_accumulation(
     field: &'static str,
@@ -1658,9 +1699,16 @@ impl App {
     fn with_program_mode(program: Program, mode: AppMode) -> Self {
         let now = Instant::now();
         let mut inputs = Inputs::default();
-        inputs
-            .edits
-            .extend(program.into_iter().map(PendingEdit::Exact));
+        // Startup-program edits reach the first tick's fold and get ordered
+        // dispositions there, so they are submissions and must be counted as
+        // such. `load_startup_mode` has already refused an over-large program.
+        for edit in program {
+            inputs
+                .actions
+                .record(LANE_EXACT_EDIT)
+                .expect("startup program size is bounded before the app is built");
+            inputs.edits.push(PendingEdit::Exact(edit));
+        }
         let world = World::new();
         let history = History::new(&world);
         Self {
@@ -1721,6 +1769,14 @@ impl App {
         &mut self,
         action: AcceptedAction,
     ) -> Result<(), AcceptedActionApplyError> {
+        // Account first, apply second. The reservation is taken on a copy, so an
+        // action this tick has no room for is refused before anything mutates,
+        // and an action the body refuses as malformed is never counted either.
+        let mut accounted = self.inputs.actions;
+        accounted
+            .record(action_lane(action))
+            .map_err(AcceptedActionApplyError::Unaccountable)?;
+
         match action {
             AcceptedAction::MoveEdge(control, pressed) => match control {
                 MoveControl::Forward => self.inputs.forward = pressed,
@@ -1764,6 +1820,7 @@ impl App {
             }
             AcceptedAction::ClearMotion => self.inputs.clear_motion(),
         }
+        self.inputs.actions = accounted;
         Ok(())
     }
 
@@ -2078,6 +2135,7 @@ impl App {
             self.needs_render |= self.dolly_observer(wheel, BLOCK_FILL_DISTANCE, max_distance);
         }
 
+        let consumed_actions = std::mem::take(&mut self.inputs.actions);
         let pending_edits = std::mem::take(&mut self.inputs.edits);
         let attempts = pending_edits.len();
         let mut outcome_attempts = Vec::with_capacity(attempts);
@@ -2229,6 +2287,7 @@ impl App {
             pre_world,
             pre_history,
             tick_input,
+            consumed_actions,
             outcome_attempts,
             post_world,
             self.history.head(),
@@ -4379,13 +4438,84 @@ mod tests {
         assert!(!app.world.is_on(spawn));
     }
 
+    /// The three actions ACCOUNT-1 was opened for.
+    ///
+    /// `ToggleSidebar`, `Resize` and `ClearMotion` apply the moment they are
+    /// accepted, which is why they used to leave no trace in the tick: their
+    /// effects reached the input state but nothing recorded that an action had
+    /// been submitted. They are counted now, and the tick commits the count.
+    #[test]
+    fn control_actions_reach_the_tick_ledger() {
+        let mut app = App::new();
+        app.apply_infallible_accepted_action(AcceptedAction::ToggleSidebar);
+        app.apply_infallible_accepted_action(AcceptedAction::Resize(640, 480));
+        app.apply_infallible_accepted_action(AcceptedAction::ClearMotion);
+        app.fixed_tick();
+
+        let actions = app.tick_outcomes.last().unwrap().actions();
+        assert_eq!(actions.lane(LANE_TOGGLE_SIDEBAR), 1);
+        assert_eq!(actions.lane(LANE_RESIZE), 1);
+        assert_eq!(actions.lane(LANE_CLEAR_MOTION), 1);
+        assert_eq!(actions.control_lane_total(), 3);
+        assert_eq!(actions.submitted(), 3);
+        assert_eq!(
+            actions.edit_lane_total(),
+            0,
+            "no edit was submitted, so the ordered dispositions stay empty"
+        );
+
+        // The next tick starts from zero: the ledger is consumed, not cumulative.
+        app.fixed_tick();
+        assert_eq!(app.tick_outcomes.last().unwrap().actions().submitted(), 0);
+    }
+
+    /// A refused action is neither applied nor counted.
+    #[test]
+    fn a_malformed_action_leaves_no_trace_in_the_ledger() {
+        let mut app = App::new();
+        app.apply_infallible_accepted_action(AcceptedAction::MoveEdge(MoveControl::Forward, true));
+        assert!(
+            app.apply_accepted_action(AcceptedAction::LookDelta(f64::NAN, 0.0))
+                .is_err()
+        );
+        app.fixed_tick();
+
+        let actions = app.tick_outcomes.last().unwrap().actions();
+        assert_eq!(actions.lane(LANE_MOVE_EDGE), 1);
+        assert_eq!(
+            actions.lane(LANE_LOOK_DELTA),
+            0,
+            "the refused look delta was never applied, so it is never counted"
+        );
+        assert_eq!(actions.submitted(), 1);
+    }
+
+    /// Startup-program edits are submissions too: they reach the first tick's
+    /// fold and get ordered dispositions there.
+    #[test]
+    fn startup_program_edits_are_counted_as_submitted() {
+        let program = Program::parse(
+            "off 0 0 0
+on 7 -8 9",
+        )
+        .unwrap();
+        let mut app = App::with_program(program);
+        app.fixed_tick();
+
+        let outcome = app.tick_outcomes.last().unwrap();
+        assert_eq!(outcome.actions().lane(LANE_EXACT_EDIT), 2);
+        assert_eq!(
+            outcome.actions().edit_lane_total() as usize,
+            outcome.attempts().len(),
+            "submitted edits reconcile with their dispositions"
+        );
+    }
+
     #[test]
     fn live_aim_inputs_map_to_named_outcome_dispositions() {
         let mut app = App::new();
-        app.inputs.edits.extend([
-            PendingEdit::Aim(AimEdit::Place),
-            PendingEdit::Aim(AimEdit::Delete),
-        ]);
+        app.apply_infallible_accepted_action(AcceptedAction::AimPlace);
+        app.apply_infallible_accepted_action(AcceptedAction::AimDelete);
         app.fixed_tick();
         assert_eq!(
             app.tick_outcomes.last().unwrap().attempts(),
@@ -4400,10 +4530,7 @@ mod tests {
 
         let mut unresolved = App::new();
         unresolved.inputs.mouse_x = std::f64::consts::PI / DEFAULT_MOUSE_SENSITIVITY;
-        unresolved
-            .inputs
-            .edits
-            .push(PendingEdit::Aim(AimEdit::Delete));
+        unresolved.apply_infallible_accepted_action(AcceptedAction::AimDelete);
         unresolved.fixed_tick();
         assert_eq!(
             unresolved.tick_outcomes.last().unwrap().attempts(),
@@ -4411,8 +4538,8 @@ mod tests {
         );
 
         let mut placed = App::new();
-        placed.inputs.wheel = -10.0;
-        placed.inputs.edits.push(PendingEdit::Aim(AimEdit::Place));
+        placed.apply_infallible_accepted_action(AcceptedAction::WheelLines(-10.0));
+        placed.apply_infallible_accepted_action(AcceptedAction::AimPlace);
         placed.fixed_tick();
         assert!(matches!(
             placed.tick_outcomes.last().unwrap().attempts(),
@@ -4624,7 +4751,7 @@ mod tests {
             output_height,
         )
         .unwrap();
-        let repeated_outcome = TickOutcome::new(
+        let repeated_outcome = TickOutcome::with_edit_attempts_only(
             Some(genesis.tag()),
             1,
             genesis.post_world(),

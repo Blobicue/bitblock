@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent stdlib vectors for Bitblock TickOutcome v2.
+"""Independent stdlib vectors for Bitblock TickOutcome v3.
 
 This file intentionally imports no Bitblock/Rust code. It reconstructs the canonical payload,
 strictly decodes it, re-encodes it, and independently applies the content-tag wrapper.
@@ -16,8 +16,35 @@ import struct
 TAG_DOMAIN = b"bitblock/content-tag/v1"
 HASH_SUITE = b"sha256"
 KIND = b"tick-outcome"
-SCHEMA = b"bitblock/tick-outcome/v2"
-FIXED_PAYLOAD_LEN = 429
+SCHEMA = b"bitblock/tick-outcome/v3"
+FIXED_PAYLOAD_LEN = 469
+
+# v3 adds ten u32 accepted-action counters between the input dimensions and the
+# attempt count. Lane order is the interaction-tape opcode order.
+ACTION_LANE_COUNT = 10
+LANE_AIM_DELETE = 3
+LANE_AIM_PLACE = 4
+LANE_EXACT_EDIT = 5
+
+
+def lanes_for_attempts(attempts) -> tuple:
+    """The minimal ledger a set of dispositions implies.
+
+    Derived from the attempt codes alone, so this file never has to be told what
+    the reconciliation should be -- it recomputes it. Codes: 0/2 are aim-delete,
+    1/3/4 aim-place, 5/6 exact.
+    """
+    lanes = [0] * ACTION_LANE_COUNT
+    for code, _ in attempts:
+        if code in (0, 2):
+            lanes[LANE_AIM_DELETE] += 1
+        elif code in (1, 3, 4):
+            lanes[LANE_AIM_PLACE] += 1
+        elif code in (5, 6):
+            lanes[LANE_EXACT_EDIT] += 1
+        else:
+            raise AssertionError("unknown attempt code %d" % code)
+    return tuple(lanes)
 HEADER_LEN = 81
 FLAG_MASK = (1 << 11) - 1
 EDIT_LEN = 25
@@ -82,6 +109,12 @@ def encode(fields: dict) -> bytes:
         payload += u64(bits)
     for dimension in fields["dimensions"]:
         payload += u32(dimension)
+    lanes = fields.get("lanes")
+    if lanes is None:
+        lanes = lanes_for_attempts(fields["attempts"])
+    assert len(lanes) == ACTION_LANE_COUNT, "a ledger has one counter per lane"
+    for lane in lanes:
+        payload += u32(lane)
     payload += u64(len(fields["attempts"]))
     for code, encoded_edit in fields["attempts"]:
         payload += bytes((code,))
@@ -140,6 +173,11 @@ def decode(payload: bytes) -> dict:
     sim_width, sim_height, output_width, output_height = dimensions
     if min(dimensions) == 0 or output_width < sim_width or output_height != sim_height:
         raise ValueError("inconsistent dimensions")
+    lanes = []
+    for _ in range(ACTION_LANE_COUNT):
+        lanes.append(struct.unpack(">I", payload[cursor : cursor + 4])[0])
+        cursor += 4
+    lanes = tuple(lanes)
     count = struct.unpack(">Q", payload[cursor : cursor + 8])[0]
     cursor += 8
     if count > len(payload) - FIXED_PAYLOAD_LEN:
@@ -169,6 +207,14 @@ def decode(payload: bytes) -> dict:
     expected = cursor + 274
     if len(payload) != expected:
         raise ValueError(f"wrong payload length {len(payload)} != {expected}")
+    submitted_edits = (
+        lanes[LANE_AIM_DELETE] + lanes[LANE_AIM_PLACE] + lanes[LANE_EXACT_EDIT]
+    )
+    if submitted_edits != len(attempts):
+        raise ValueError(
+            "%d submitted edits do not reconcile with %d dispositions"
+            % (submitted_edits, len(attempts))
+        )
     post_world = payload[cursor : cursor + 32]
     cursor += 32
     post_history = payload[cursor : cursor + 32]
@@ -229,6 +275,7 @@ def decode(payload: bytes) -> dict:
         "flags": flags,
         "motion_bits": tuple(motion_bits),
         "dimensions": tuple(dimensions),
+        "lanes": lanes,
         "attempts": tuple(attempts),
         "post_world": post_world,
         "post_history": post_history,
@@ -342,21 +389,42 @@ def sidebar_only() -> dict:
     }
 
 
+def control_lanes_only() -> dict:
+    """An idle tick whose accepted actions were exactly the three v2 could not see.
+
+    No edit was submitted, so nothing appears in the ordered dispositions, and
+    under v2 this payload was byte-identical to a tick where the user did
+    nothing at all. That indistinguishability is what v3 removes.
+    """
+    fields = genesis_idle()
+    lanes = [0] * ACTION_LANE_COUNT
+    lanes[7] = 2  # toggle sidebar, twice
+    lanes[8] = 1  # resize
+    lanes[9] = 1  # clear motion
+    fields["lanes"] = tuple(lanes)
+    return fields
+
+
 VECTORS = {
     "genesis-idle": (
         genesis_idle,
-        "ba0c903f0baa3a85b4602e768018f1fa44ff2650ac8317faa1ef6d9646a2dc12",
-        "#bb.tick-outcome.sha256.talksm7nbc2yv77tt22zkayqrmsynvmzsugxqjsmmsmnyeiwsxjq",
+        "1671e2c245695f10e592de025895140eca84f9936031a7fc28995ab07a3b7c7c",
+        "#bb.tick-outcome.sha256.mdrfmhsgskam6cmt4n3zncrclswc26fjfowva6e7itavrs7zx2tq",
     ),
     "mixed-all-seven": (
         mixed_all_variants,
-        "7c0266cecf537f5879d45f2b0ac62eed81a5154e4e692de83da8d9116cceea62",
-        "#bb.tick-outcome.sha256.scgtf5eeuxy643ugkf3gexemwidzh5vk6nsnqtwjm3uvj7vygcda",
+        "5983dd2fc0cd797a9bd6fb70fdeb19ae316c587a4c1ea406f766000718ea68d8",
+        "#bb.tick-outcome.sha256.nkazbofarz6mjgss625grz4cxx62itnqhbplgcwwjyrr3657mqda",
+    ),
+    "control-lanes-only": (
+        control_lanes_only,
+        "42968ac648afd01427128e9c9551a2bee9579a7bf107909c6c3f97e7cbb41973",
+        "#bb.tick-outcome.sha256.ckeafgihrlyc57iiyef4mjvkqrxsyfbiucrrb4zndfvp57h45xhq",
     ),
     "sidebar-only": (
         sidebar_only,
-        "7e62fda6a33dc126986032cbaba2879651c39a0b3ffe718f327eb125557747c3",
-        "#bb.tick-outcome.sha256.2uqcklamnlah4rpgvves5a2hyet345pf72oucvhycp42iykgql7a",
+        "6cf9f6274bd78be3420ee5b568e651288d8c8ea6c9917e5af5f9a7c2130ed0b2",
+        "#bb.tick-outcome.sha256.bzqggwzw2eygclvjcidemqtrhdpdozhioimfzrl44mbphbgoqvna",
     ),
 }
 
@@ -403,20 +471,20 @@ def negative_controls() -> None:
         expect_reject(f"dimension relation {index}", mutant)
 
     mutant = genesis.copy()
-    mutant[147:155] = u64(1)
+    mutant[187:195] = u64(1)
     expect_reject("attempt count exceeds payload", mutant)
 
     mutant = genesis.copy()
-    mutant[147:155] = u64(1)
-    mutant.insert(155, 7)
+    mutant[187:195] = u64(1)
+    mutant.insert(195, 7)
     expect_reject("unknown attempt code", mutant)
 
     mutant = mixed.copy()
-    mutant[158] = 0  # code 2's edit must be Off (operation 1)
+    mutant[198] = 0  # code 2's edit must be Off (operation 1)
     expect_reject("aim operation mismatch", mutant)
 
     mutant = mixed.copy()
-    mutant[236] = 1  # code 5 cannot reject Off for observer enclosure
+    mutant[276] = 1  # code 5 cannot reject Off for observer enclosure
     expect_reject("impossible exact rejection", mutant)
 
     mutant = genesis.copy()
@@ -432,11 +500,11 @@ def negative_controls() -> None:
     expect_reject("mouse motion without game frame", mutant)
 
     mutant = genesis.copy()
-    mutant[155] ^= 1
+    mutant[195] ^= 1
     expect_reject("changed world without game frame", mutant)
 
     mutant = genesis.copy()
-    mutant[187] ^= 1
+    mutant[227] ^= 1
     expect_reject("history advance without executed attempt", mutant)
 
     mutant = mixed.copy()

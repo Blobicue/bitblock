@@ -39,8 +39,8 @@ KIND = b"receipt"
 SCHEMA = b"bitblock/optimization-equivalence/frame-ledger-evidence/v1"
 
 OUTCOME_KIND = b"tick-outcome"
-OUTCOME_SCHEMA = b"bitblock/tick-outcome/v2"
-OUTCOME_FIXED_LEN = 429
+OUTCOME_SCHEMA = b"bitblock/tick-outcome/v3"
+OUTCOME_FIXED_LEN = 469
 
 RECEIPT_KIND = b"frame-receipt"
 RECEIPT_SCHEMA = b"bitblock/frame-receipt/v2"
@@ -132,7 +132,7 @@ def encode_outcome(
     composite: tuple[bytes, bytes] | None = None,
     flags: int = 0,
 ) -> bytes:
-    """One attempt-free TickOutcome v2. The fixed payload is 429 bytes."""
+    """One attempt-free TickOutcome v3. The fixed payload is 469 bytes."""
     if (parent is None) != (tick == 0):
         raise ValueError("only tick zero may omit its parent")
     payload = optional_digest(parent) + u64(tick) + pre_world + pre_history + u16(flags)
@@ -140,6 +140,8 @@ def encode_outcome(
         payload += u64(bits)
     for dimension in (VIEWPORT, VIEWPORT, OUTPUT_WIDTH, VIEWPORT):
         payload += u32(dimension)
+    for _ in range(10):  # v3 accepted-action ledger; these ticks consumed nothing
+        payload += u32(0)
     payload += u64(0)  # attempt count
     payload += post_world + post_history
     for bits in CODEC_CAMERA:

@@ -1013,7 +1013,7 @@ mod tests {
     /// a constructor is deliberate: it keeps the two languages agreeing on the same 429 bytes
     /// rather than on two independently assembled structs.
     fn evidence_outcome_payload(parent: Option<[u8; 32]>, tick: u64, frames: bool) -> Vec<u8> {
-        let mut payload = Vec::with_capacity(429);
+        let mut payload = Vec::with_capacity(469);
         match parent {
             Some(digest) => {
                 payload.push(1);
@@ -1034,6 +1034,10 @@ mod tests {
         for dimension in [801_u32, 801, 1201, 801] {
             payload.extend_from_slice(&dimension.to_be_bytes());
         }
+        // v3 accepted-action ledger: this fixture consumed no action at all.
+        for _ in 0..10 {
+            payload.extend_from_slice(&0_u32.to_be_bytes());
+        }
         payload.extend_from_slice(&0_u64.to_be_bytes()); // no attempts
         payload.extend_from_slice(&ladder(0x00)); // post-world, unchanged
         payload.extend_from_slice(&ladder(0x20)); // post-history, unchanged
@@ -1050,7 +1054,7 @@ mod tests {
                 payload.extend_from_slice(&[0; 64]);
             }
         }
-        assert_eq!(payload.len(), 429);
+        assert_eq!(payload.len(), 469);
         payload
     }
 
@@ -1096,7 +1100,7 @@ mod tests {
         let genesis = evidence_outcome(None, 0, false);
         assert_eq!(
             genesis.tag().to_string(),
-            "#bb.tick-outcome.sha256.talksm7nbc2yv77tt22zkayqrmsynvmzsugxqjsmmsmnyeiwsxjq"
+            "#bb.tick-outcome.sha256.mdrfmhsgskam6cmt4n3zncrclswc26fjfowva6e7itavrs7zx2tq"
         );
 
         let game_only = FrameLedgerV2::new_structural_genesis(FrameStream::Game, genesis.clone())
@@ -1105,42 +1109,42 @@ mod tests {
             .expect("a genesis-only composite ledger");
         assert_eq!(
             frame_ledger_evidence_len(&game_only),
-            Some(1 + 8 + 429 + 8),
+            Some(1 + 8 + 469 + 8),
             "genesis-only framing is stream || len || outcome || admission count"
         );
         assert_eq!(
             frame_ledger_evidence_tag(&game_only).unwrap().to_string(),
-            "#bb.receipt.sha256.kxipl4kkkqzhgv4g4by6bkkhonmfn6xipzesfv5rzes65pddwpeq"
+            "#bb.receipt.sha256.w3uwt44qmeut5422qisa5a6e45vgq72gfed5ektvfygh33wayswa"
         );
         assert_eq!(
             frame_ledger_evidence_tag(&composite_only)
                 .unwrap()
                 .to_string(),
-            "#bb.receipt.sha256.p3qi75kwn5ybg6xi3ilgrcwrwxbdc4pfnel5vhbxaozilzfhx5va"
+            "#bb.receipt.sha256.7q3qd7n2blha4iqcdao32r5hl3dqc45n6ewz2dlpx44meqslhria"
         );
 
         let game_one = evidence_ledger(FrameStream::Game, false);
         let composite_one = evidence_ledger(FrameStream::Composite, false);
-        assert_eq!(frame_ledger_evidence_len(&game_one), Some(1021));
+        assert_eq!(frame_ledger_evidence_len(&game_one), Some(1101));
         assert_eq!(
             frame_ledger_evidence_tag(&game_one).unwrap().to_string(),
-            "#bb.receipt.sha256.zevofrif6nugwrz6xoe2nqhrghstdtqmaicbe5h2wxtnhvmjyjya"
+            "#bb.receipt.sha256.jksaizflh3lyfdtlziiiwmbwx74sanfo3nofbqmszeajfzivu4pq"
         );
         assert_eq!(
             frame_ledger_evidence_tag(&composite_one)
                 .unwrap()
                 .to_string(),
-            "#bb.receipt.sha256.6i3jqzl764n7j3f4gxfmkn5ckvgqul2vmcsmcoanjpxdvlh7tpdq"
+            "#bb.receipt.sha256.kbhlpf35evkdkrgsrvr25eqagwinbdt2zhu5jbladcmpahdyblba"
         );
 
         // Same stream, same selected frame, one extra retained idle tick.
         let game_skipped = evidence_ledger(FrameStream::Game, true);
-        assert_eq!(frame_ledger_evidence_len(&game_skipped), Some(1458));
+        assert_eq!(frame_ledger_evidence_len(&game_skipped), Some(1578));
         assert_eq!(
             frame_ledger_evidence_tag(&game_skipped)
                 .unwrap()
                 .to_string(),
-            "#bb.receipt.sha256.rjvr35kfsyiqzfea7aacnuvytkcpmafplg25xcwut7ybtznznu2q"
+            "#bb.receipt.sha256.s7cajta3oaov5my6rxohldjzdlp2hx4y2y2f2i6ivqguub7pfrda"
         );
         assert_ne!(
             frame_ledger_evidence_tag(&game_skipped),
@@ -1418,7 +1422,7 @@ mod tests {
             PRODUCTION_HEIGHT,
         )
         .unwrap();
-        let genesis = TickOutcome::new(
+        let genesis = TickOutcome::with_edit_attempts_only(
             None,
             0,
             world_root,
@@ -1518,7 +1522,7 @@ mod tests {
                 TickFrameCommitment::new(frame_input.tag(), game_observation.tag).unwrap();
             let composite_commitment =
                 TickFrameCommitment::new(composite_input.tag(), composite_observation.tag).unwrap();
-            let outcome = TickOutcome::new(
+            let outcome = TickOutcome::with_edit_attempts_only(
                 Some(parent),
                 index as u64 + 1,
                 world_root,
@@ -1655,7 +1659,7 @@ mod tests {
         let idle_input =
             TickInputState::new(TickInputFlags::default(), 0.0, 0.0, 0.0, 2, 2, 3, 2).unwrap();
         let initial_world_tag = world_tag(&world);
-        let genesis = TickOutcome::new(
+        let genesis = TickOutcome::with_edit_attempts_only(
             None,
             0,
             initial_world_tag,
@@ -1710,7 +1714,7 @@ mod tests {
                 frame.composite_observation.tag,
             )
             .unwrap();
-            let outcome = TickOutcome::new(
+            let outcome = TickOutcome::with_edit_attempts_only(
                 Some(parent),
                 tick,
                 pre_world,
@@ -1823,7 +1827,7 @@ mod tests {
         post_history: ContentTag,
         game: Option<TickFrameCommitment>,
     ) -> TickOutcome {
-        TickOutcome::new(
+        TickOutcome::with_edit_attempts_only(
             parent,
             base.tick(),
             base.pre_world(),
@@ -2441,19 +2445,19 @@ mod tests {
         let actual_receipt = assay_optimization_equivalence(&case).unwrap();
         assert_eq!(
             actual_game_evidence.to_string(),
-            "#bb.receipt.sha256.yr4vgqk3uz4slvbekyrsfmgf2qaspq252kcy2olqfqd6yporhhkq"
+            "#bb.receipt.sha256.46s52obcil7tsnn2cqngubtvosl4cy7ytkjpzls524y2ebefd4eq"
         );
         assert_eq!(
             actual_composite_evidence.to_string(),
-            "#bb.receipt.sha256.n5y3jp4ahvhadzw7qbjxm2sxbnh7lwu4cmydyhkhvij367fshjfa"
+            "#bb.receipt.sha256.mragjur2xbgilfa66fdcrn33bklxh36s7xpem5lik466yfk3jgca"
         );
         assert_eq!(
             actual_output.to_string(),
-            "#bb.receipt.sha256.ta633j5g7y5zhrxht5qml6sejmbjcdrsvd37whc4ykn3hgwgbs5q"
+            "#bb.receipt.sha256.vbevj4vyjwjk3ume6vkxkigm7vioe6ox65c4ws6r6ly5jqwg73ga"
         );
         assert_eq!(
             actual_receipt.tag().to_string(),
-            "#bb.receipt.sha256.haywsy6jofj3k6gehasulniebg2kvzpdzoxwpys7fejucsaujmpa"
+            "#bb.receipt.sha256.qyjgyjutxxfupm6rfp33zm6wrr2i5g5z4z7vhyqqweob6krqf7ra"
         );
         let payload = [0x5a_u8; 290];
         let old_output = hash_canonical(
@@ -2528,7 +2532,7 @@ mod tests {
         let base = successors.last().unwrap().clone();
         let wrong_game =
             TickFrameCommitment::new(base.game().unwrap().input(), other_frame.tag).unwrap();
-        *successors.last_mut().unwrap() = TickOutcome::new(
+        *successors.last_mut().unwrap() = TickOutcome::with_edit_attempts_only(
             base.parent(),
             base.tick(),
             base.pre_world(),

@@ -225,7 +225,7 @@ complete in-memory chain from tick zero rather than only its current head:
 
 ```text
 kind   = tick-outcome
-schema = bitblock/tick-outcome/v2
+schema = bitblock/tick-outcome/v3
 
 TickOutcome = optional parent TickOutcome tag [33]
               || tick ordinal u64 [8]
@@ -234,6 +234,7 @@ TickOutcome = optional parent TickOutcome tag [33]
               || input flags u16 [2]
               || mouse-X, mouse-Y, wheel f64 bit lanes [24]
               || simulation/output dimensions [16]
+              || accepted-action counters, one u32 per lane [40]
               || attempt count u64 [8]
               || ordered variable attempt records
               || post-world World tag [32]
@@ -294,13 +295,36 @@ behavior from the fixed genesis context, and verifying referenced frame input
 and pixel objects.
 
 `tools/tick_outcome_vectors.py` is a Python-stdlib reconstruction with its own
-strict decoder. It independently pins three decode/re-encode known answers:
+strict decoder. It independently pins four decode/re-encode known answers:
 
 ```text
-genesis-idle      payload 429  preimage 510  #bb.tick-outcome.sha256.talksm7nbc2yv77tt22zkayqrmsynvmzsugxqjsmmsmnyeiwsxjq
-mixed-all-seven   payload 561  preimage 642  #bb.tick-outcome.sha256.scgtf5eeuxy643ugkf3gexemwidzh5vk6nsnqtwjm3uvj7vygcda
-sidebar-only      payload 429  preimage 510  #bb.tick-outcome.sha256.2uqcklamnlah4rpgvves5a2hyet345pf72oucvhycp42iykgql7a
+genesis-idle        payload 469  preimage 550  #bb.tick-outcome.sha256.mdrfmhsgskam6cmt4n3zncrclswc26fjfowva6e7itavrs7zx2tq
+mixed-all-seven     payload 601  preimage 682  #bb.tick-outcome.sha256.nkazbofarz6mjgss625grz4cxx62itnqhbplgcwwjyrr3657mqda
+control-lanes-only  payload 469  preimage 550  #bb.tick-outcome.sha256.ckeafgihrlyc57iiyef4mjvkqrxsyfbiucrrb4zndfvp57h45xhq
+sidebar-only        payload 469  preimage 550  #bb.tick-outcome.sha256.bzqggwzw2eygclvjcidemqtrhdpdozhioimfzrl44mbphbgoqvna
 ```
+
+`control-lanes-only` is the vector v3 was added for: it shares every other byte
+with `genesis-idle` and differs only in having consumed a sidebar toggle, a
+resize, and a motion clear. Under v2 the two payloads were identical.
+
+### Why the counters, and why only counters
+
+The lanes are the interaction-tape opcodes, so one tape record and the tick that
+consumes it count into the same slots and reconcile without a translation table.
+Three accepted actions -- `ToggleSidebar`, `Resize`, `ClearMotion` -- apply the
+moment they are accepted rather than inside the edit fold. Their effects were
+already committed, through the sidebar flag and the viewport dimensions, but
+nothing recorded that an action had been submitted, so no count could be checked
+against a tape and no replay could be shown to have consumed what the live run
+consumed.
+
+Counts, not ordered per-event records, are all this commits. Ordered records
+would put mouse-motion granularity into a permanent payload and make the tick tag
+depend on event coalescing; per-lane totals reconcile exactly against a tape
+record in a fixed 40 bytes. The rule the decoder enforces is that submitted edits
+equal ordered dispositions: every edit counted has one attempt record, and every
+attempt record had a submission.
 
 Rust additionally exhausts all 2,048 valid flag combinations and refusal
 branches for option padding, invalid attempt codes/counts/operations, length,
@@ -548,7 +572,7 @@ Relative to the structural-admission checkpoint, the executable grew by 51,200
 bytes; PE virtual-size deltas are `.text +42,832`, `.rdata +5,600`,
 `.pdata +792`, `.xdata +1,400`, and `.reloc +156` bytes, with every other
 section size unchanged. The retained executable contains the distinct
-`bitblock/tick-outcome/v2`, `bitblock/frame-receipt/v2`, and legacy
+`bitblock/tick-outcome/v3`, `bitblock/frame-receipt/v2`, and legacy
 `bitblock/frame-receipt/v1` schema strings. This artifact receipts the live
 producer migration; it does not widen the semantic-proof boundary below.
 
@@ -686,7 +710,7 @@ Relative to the live FrameReceipt-v2 producer checkpoint, the executable is
 2,048 bytes smaller; PE virtual-size deltas are `.text -2,128`,
 `.rdata +288`, `.pdata -24`, `.xdata -16`, and `.reloc +12` bytes, with every
 other section size unchanged. The retained executable contains
-`bitblock/tick-outcome/v2`, both `bitblock/frame-receipt/v1` and
+`bitblock/tick-outcome/v3`, both `bitblock/frame-receipt/v1` and
 `bitblock/frame-receipt/v2`, and `bitblock/display-receipt/v2`. The historical
 display-v1 code and KAT remain in the source/test artifact but have no live
 default-executable consumer and were removed by release dead-code elimination.
