@@ -18,11 +18,13 @@ The current-source statements below were checked against source/proof snapshot
 [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). A change to a named source file, root/key contract,
 or this plan invalidates the corresponding statement rather than inheriting its “checked” status.
 The later network-integration boundary is reviewed through the frozen
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md), with
-its exact provenance projected once in [`HANDOFF.md#loop9provenancev1`](HANDOFF.md#loop9provenancev1).
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md), with
+its exact provenance projected once in
+[`HANDOFF.md#loop10provenancev1`](HANDOFF.md#loop10provenancev1).
 The descendant's exact accepted-core/collision, dual-purpose successor-authority, authorized replay-
-archive, consensus-positioned occurrence-universe, historical-authority, and established-compromise
-corrections do not select or implement an authenticated-map candidate.
+archive, consensus-positioned occurrence-universe and immutable history-start equality, recursive
+consumer-context field guard, historical-authority, and established-compromise corrections do not
+select or implement an authenticated-map candidate.
 
 ## Outcome sought
 
@@ -83,7 +85,8 @@ World, active-token, episode, authorization, nonce, and asset proofs are not sub
 they use the same generic node codec. Their root wrapper type, tree-domain bytes, key codec, value
 codec, version, and commitment profile must be explicit.
 
-`COMMIT-R1` implements and compares only `WorldRootV1`. The other names reserve the required type
+`COMMIT-R1` is scoped to implementing and comparing only `WorldRootV1`; it has not started and has
+not selected or implemented either candidate. The other names reserve the required type
 and domain separations; their key widths, value schemas, and authoritative integration remain
 locked behind their owning capability nodes. `ActiveTokenRootV1` shares the 192-bit coordinate key
 but still needs independent `MintIdV1` value-codec/root vectors. `EventIdV1` width and
@@ -854,10 +857,13 @@ to the same unique parent lookup/core and governance root, while their use, poli
 status and evidence remain separate. Neither purpose may be coerced into or substituted for the
 other. The base context is neither serialized nor counted in the bundle and contains no historical
 ref or certificate-derived ID. Verification is staged: derive and verify the release core ID; resolve
-`VerifiedSuccessorReleaseAuthorityContextV1` and its accepted release-purpose certificate; sign and
-verify `AdmittedReleaseRecordV1`; finish the internal DAG and derive the bundle ID; then resolve
-`VerifiedSuccessorActivationAuthorityContextV1` and its accepted activation-purpose certificate
-before signing activation. The embedded `AdmittedReleaseRecordV1` predecessor authority reference MUST byte-equal
+`VerifiedSuccessorReleaseAuthorityContextV1` and its accepted release-purpose certificate; only then
+accept or use the release sign document, its authorization, and the derived
+`AdmittedReleaseRecordV1`; finish the internal DAG and derive the bundle ID; then resolve
+`VerifiedSuccessorActivationAuthorityContextV1` and its accepted activation-purpose certificate;
+only then accept or use the activation sign document, its ID, or its authorization. This is verifier
+dependency order, not a claim about historical signature-production time. The embedded
+`AdmittedReleaseRecordV1` predecessor authority reference MUST byte-equal
 `release_parent_authority_ref` and the reference bound inside
 `verified_release_parent_eligibility`. The activation sign document's complete predecessor
 authority reference MUST byte-equal `activation_parent_authority_ref` and the reference bound inside

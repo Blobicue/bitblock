@@ -18,11 +18,13 @@ is, in order:
 9. [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md)
 10. [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md)
 11. [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md)
+12. [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md)
 
 Each audit freezes the input it attacked; none audits its own later correction. This descendant
-incorporates the proposed corrections through the frozen Loop 9 finding set, but it has not passed a
-later zero-gap sweep and does not activate any protocol, network, cryptographic primitive, or Layer 1
-security claim. [`TRANSCRIPT_AUDIT.md`](TRANSCRIPT_AUDIT.md) records the broader source chronology.
+incorporates the paper-owned proposed corrections through the frozen Loop 10 finding set. It has not
+passed a later zero-gap sweep and does not activate any protocol, network, cryptographic
+primitive, or Layer 1 security claim. [`TRANSCRIPT_AUDIT.md`](TRANSCRIPT_AUDIT.md) records the broader
+source chronology.
 
 This paper makes the Bitblock idea explicit as a protocol design. It starts from the
 current Rust implementation and describes the additional machinery required before any
@@ -399,6 +401,46 @@ ParentAuthorityCertificateConsumerContextV1 =
         activation_authority_policy_id
     )
 
+ParentAuthorityCertificateConsumerContextCurrentChainForbiddenFieldManifestV1 =
+    ExactForbiddenSemanticFieldManifest(
+        current_consumer_historical_authority_ref,
+        current_consensus_native_parent_authority_certificate_id,
+        current_consensus_native_parent_authority_certificate_authorization_id,
+        current_consensus_native_parent_authority_certificate_admission_core_id,
+        current_consensus_native_parent_authority_certificate_admission_id,
+        current_parent_authority_certificate_consumer_context_id,
+        current_accepted_parent_authority_evidence_commitment_id,
+        current_consensus_native_parent_authority_evidence_cutoff_id,
+        current_consensus_native_accepted_record_occurrence_universe_root,
+        current_attained_parent_authority_status,
+        current_parent_authority_certificate_derived_field,
+        final_child_block_id,
+        current_release_sign_doc_id,
+        current_release_authorization,
+        current_admitted_release_record_id,
+        current_successor_activation_sign_doc_id,
+        current_activation_authorization,
+        current_activation_authorization_id
+    )
+
+EnvelopeMigrationConsumerContextPriorAuthorizationAllowedPathManifestV1 =
+    ExactAllowedTransitivePathManifest(
+        EnvelopeChildParentAuthorityConsumerContextV1
+            .child_profile_transition_context
+            .InPlaceMigrationTransitionV1
+            .activation_authorization_id
+    )
+
+VerifiedParentAuthorityCertificateConsumerContextFieldGuardV1 =
+    SemanticVerifierResult(
+        ParentAuthorityCertificateConsumerContextV1,
+        current_chain_forbidden_fields =
+            ParentAuthorityCertificateConsumerContextCurrentChainForbiddenFieldManifestV1,
+        allowed_prior_authorization_paths =
+            EnvelopeMigrationConsumerContextPriorAuthorizationAllowedPathManifestV1,
+        exact_recursive_field_disposition = pass
+    )
+
 parent_authority_certificate_consumer_context_id = EnvelopeHashV1(
     OrdinaryProfileTransitionV1(parent_profile_context),
     parent_authority_certificate_consumer_context_domain,
@@ -433,6 +475,23 @@ ConsensusNativeAcceptedRecordOccurrencePositionV1 = Canonical(
     accepted_record_occurrence_intra_consensus_order_u64,
     accepted_record_occurrence_parent_history_root,
     accepted_record_occurrence_consensus_rule_id
+)
+
+ConsensusNativeAcceptedRecordOccurrenceHistoryStartPositionV1 = Canonical(
+    chain_launch_manifest_id,
+    accepted_record_occurrence_history_start_ledger_height_u64,
+    accepted_record_occurrence_history_start_epoch_u64,
+    accepted_record_occurrence_history_start_round_or_view,
+    accepted_record_occurrence_history_start_intra_consensus_order_u64,
+    accepted_record_occurrence_history_start_parent_history_root,
+    accepted_record_occurrence_history_start_consensus_rule_id
+)
+
+ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1 = Canonical(
+    parent_profile_context,
+    accepted_record_occurrence_index_policy_id,
+    accepted_record_occurrence_history_start_rule_id,
+    ConsensusNativeAcceptedRecordOccurrenceHistoryStartPositionV1
 )
 
 ConsensusNativeAcceptedRecordOccurrenceIndexKeyV1 = Canonical(
@@ -497,6 +556,7 @@ ConsensusNativeParentAuthorityEvidenceCutoffV1 = Canonical(
     unique_accepted_proposal_core_block_id,
     ConsensusNativeParentAuthorityPositionV1,
     accepted_record_occurrence_index_policy_id,
+    ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1,
     ConsensusNativeParentAuthorityEvidenceCutoffPositionV1,
     accepted_record_occurrence_universe_entry_count_u64,
     consensus_native_accepted_record_occurrence_universe_root
@@ -520,9 +580,20 @@ ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1 = Canonical(
 ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1 = Canonical(
     accepted_parent_lookup_id,
     unique_accepted_proposal_core_block_id,
-    consensus_history_start_position_inclusive,
+    ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1,
     ConsensusNativeParentAuthorityEvidenceCutoffPositionV1
 )
+
+VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1 =
+    SemanticVerifierResult(
+        resolver_history_start =
+            ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1,
+        cutoff_history_start =
+            ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1,
+        scope_history_start =
+            ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1,
+        exact_byte_equality = true
+    )
 
 ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1 = Canonical(
     consensus_native_parent_authority_evidence_cutoff_id,
@@ -952,8 +1023,8 @@ That successor resolver consumes the exact governance authority root reached thr
 predicate, particular evidence wrapper, or the distinct activation-purpose result for that semantic
 authority. During successor verification it MUST byte-equal `release_parent_authority_ref` and
 `verified_release_parent_eligibility` in `VerifiedSuccessorPredecessorBaseContextV1`. Once
-`admitted_release_core_id` exists, the release certificate's exact pre-signing context and historical
-ref MUST byte-equal `VerifiedSuccessorReleaseAuthorityContextV1`; neither value is part of the
+`admitted_release_core_id` exists, the release certificate's exact certificate-independent consumer
+context and historical ref MUST byte-equal `VerifiedSuccessorReleaseAuthorityContextV1`; neither value is part of the
 pre-bundle base context.
 The policy ID in the core is a required byte-equal projection of that resolver, never a selector for
 it. Only after the consensus-native certificate/ref and release authorization verify is
@@ -2598,22 +2669,38 @@ only a preliminary semantic result; it is not the complete input to consumable a
 That local semantic result is not yet consumable authority.
 `ResolveConsensusNativeParentAuthorityCertificatePolicyV1` takes the verified parent profile,
 purpose, unique core, and exact `ParentAuthorityCertificateConsumerContextV1` and returns the only
-permitted evidence-normalization rule, `RequiredParentAuthorityCertificatePositionV1`, certificate
+permitted evidence-normalization rule, exact `ConsensusNativeParentAuthorityPositionV1`, certificate
 policy/codec/hash/signature scheme and credential set, consensus rule, availability rule, required
 acceptance status, accepted-record occurrence index/root and range-proof schemes, exact evidence
-cutoff rule, bounds, and equivocation/liveness disposition. The required cutoff is the last complete
-consensus state immediately preceding the certificate admission in the profile's total order. That
-order includes an intra-consensus-position ordinal, so a wrapper accepted earlier in the same height,
-round, or view is pre-cutoff and a wrapper ordered after the certificate is not. The cutoff/root is
-derived from the required certificate position and its parent history; it is never selected by the
-certificate candidate. The typed consumer context is derived only from fields available before the
-historical authority ref is inserted: it excludes every historical ref,
-certificate/authorization/admission ID, certificate-derived field, final child `block_id`, release
-sign-document ID, activation sign-document ID, and their authorizations. The certificate core carries
-its exact canonical bytes and domain-separated context ID. A consumer verifier re-derives those bytes
-from the proposal-header, release-core, or activation-sign-document prefix fields and requires byte
-equality before deriving the final consumer ID. Every similarly named carried field is a byte-equal
-assertion; a certificate candidate cannot select its resolver, context, position, cutoff, or root.
+cutoff rule, bounds, equivocation/liveness disposition, and exact
+`ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`. That history start is derived solely from
+the admitted parent profile, its occurrence-index policy, and its immutable history-start rule. Its
+inclusive position is fixed before certificate-candidate processing and cannot advance per purpose,
+core, consumer, or certificate; a future pruning or accumulator scheme would require a new admitted
+rule proving lossless equivalence to this range. The required cutoff is the last complete consensus
+state immediately preceding certificate admission in the profile's total order. That order includes
+an intra-consensus-position ordinal, so a wrapper accepted earlier in the same height, round, or view
+is pre-cutoff and a wrapper ordered after the certificate is not. The cutoff/root is derived from the
+required certificate position and its parent history; it is never selected by the certificate
+candidate.
+
+The typed consumer context is derived only from fields available before the **current** historical
+authority ref is inserted. `VerifiedParentAuthorityCertificateConsumerContextFieldGuardV1`
+recursively rejects every semantic role in
+`ParentAuthorityCertificateConsumerContextCurrentChainForbiddenFieldManifestV1`, including the
+current certificate, authorization, admission, certificate-derived fields, and final consumer IDs.
+Its only authorization-bearing exception is the exact path in
+`EnvelopeMigrationConsumerContextPriorAuthorizationAllowedPathManifestV1`: a migration envelope may
+carry the already completed `activation_authorization_id` inside its child transition context only
+after that distinct activation-purpose authorization and its accepted certificate have independently
+verified. That prior authorization is an input to the later envelope context, not the envelope
+certificate's own authorization; it grants no exception for a current-chain field at any nested or
+flattened spelling. The certificate core carries the context's exact canonical bytes and domain-
+separated ID. A consumer verifier re-derives those bytes from the proposal-header, release-core, or
+activation-sign-document prefix fields, passes the exact field guard, and requires byte equality
+before deriving the final consumer ID. Every similarly named carried field is a byte-equal assertion;
+a certificate candidate cannot select its resolver, context, position, history start, cutoff, or
+root.
 
 The parent consensus state maintains one authenticated ordered occurrence universe. Every accepted
 `AcceptedRecordOuterV1` occurrence is keyed by exact parent lookup, unique core, and
@@ -2623,21 +2710,26 @@ bounded outer bytes, so byte-identical wrappers accepted at different positions 
 receipt IDs. Wrapper acceptance and insertion of that key/receipt into the universe are one atomic
 consensus transition; a transition that cannot insert the unique key does not accept the wrapper.
 The resulting universe root and entry count are consensus-state components, not an indexer or
-certificate-builder projection. `ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1` proves, under the
-parent-profile consensus verifier, that the cutoff, occurrence-universe root, entry count, and root's
-state inclusion are authorized by the certificate position's parent history.
+certificate-builder projection. `ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1`
+proves, under the parent-profile consensus verifier, that the cutoff, exact profile-derived history
+start, occurrence-universe root, entry count, and root's state inclusion are authorized by the
+certificate position's parent history.
+`VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1` is required before range
+verification and exists only when the resolver result, cutoff field, and scope field are byte-equal.
 `ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1` then proves the complete
-ordered-map range for the exact `(lookup, core)` prefix from the profile's lower boundary through the
-inclusive cutoff. Its authenticated lower boundary, gap-free range, and upper-boundary exclusion
-witnesses must establish both inclusion of every returned receipt and non-membership of any omitted
-in-range key. An empty or over-bound range takes the resolver's predeclared reject/liveness
-disposition; it is never truncated, sampled, or replaced by a candidate assertion.
+ordered-map range for the exact `(lookup, core)` prefix from that inclusive history-start position
+through the inclusive cutoff. Its authenticated lower-boundary exclusion, gap-free range, and upper-
+boundary exclusion witnesses must establish both inclusion of every returned receipt and non-
+membership of any omitted in-range key. A later candidate-supplied start, even with an internally
+valid suffix proof under the authentic root, fails the typed equality before proof acceptance. An
+empty or over-bound range takes the resolver's predeclared reject/liveness disposition; it is never
+truncated, sampled, or replaced by a candidate assertion.
 `CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1` is the verified scoped universe result,
 not the global map itself.
 
 Only the receipt set derived from that complete range may enter
 `AcceptedParentAuthorityEvidenceCommitmentV1`, which is bound with the semantic result, exact cutoff,
-universe root, and required certificate position in
+profile-derived history start, universe root, and required certificate position in
 `AuthorizedConsensusNativeParentAuthorityCertificateV1`, then admitted only through
 `ConsensusNativeParentAuthorityCertificateAdmissionV1`. Before nested work, admission checks each
 declared outer length against the resolver's bound, total-decodes the exact
@@ -2655,7 +2747,8 @@ nonqualifying or conflict material—must be committed and evaluated by the froz
 rule; an invalid component invokes the frozen invalid-occurrence disposition and cannot disappear
 from completeness accounting. `AcceptedParentAuthorityWitnessReceiptCoverageV1` is recomputed rather
 than trusted. Missing components, an entire missing wrapper, missing receipts, unused extra receipts,
-duplicate keys/projections, a wrong cutoff/root/boundary, or any set inequality rejects. Every
+duplicate keys/projections, a wrong resolver/cutoff/scope history start, cutoff/root/boundary, or any
+set inequality rejects. Every
 `ConsensusEntailedAvailabilityV1` entry MUST map its consensus evidence and assessment to its same
 receipt through `SameWrapperAcceptedEvidenceDependencyWitnessIdV1`; detached evidence follows its
 separately typed dependency mapping. Thus the live same-wrapper fact and its position exist in the
@@ -2668,10 +2761,11 @@ acceptance status. Its domain-separated admission ID is derived only after those
 exist. A child, successor release, or activation may consume only an
 `AcceptedConsensusNativeParentAuthorityCertificateV1` whose complete admission is available and whose
 `consensus_native_parent_authority_certificate_admission_id` is bound by the consumer. For one
-`(parent core, purpose, consumer context, required consensus position)` the authorized cutoff and
-complete occurrence range yield one canonical evidence commitment; a partial local view is not a
-second valid certificate candidate. The profile MUST accept exactly one admission at that required
-position on the canonical consensus history. After acceptance, every consumer binds that exact
+`(parent core, purpose, consumer context, required consensus position)` the profile-derived history
+start, authorized cutoff, and complete occurrence range yield one canonical evidence commitment; a
+partial local view is not a second valid certificate candidate. The profile MUST accept exactly one
+admission at that required position on the canonical consensus history. After acceptance, every
+consumer binds that exact
 certificate, authorization-dependent ID, admission ID, position, cutoff ID, occurrence-universe root,
 evidence commitment, purpose, and status through
 `ConsensusNativeParentAuthorityCertificateRefV1`. Two conflicting admissions both
@@ -2713,11 +2807,28 @@ wrapper, move either wrapper across the inclusive cutoff, choose an older cutoff
 immediately preceding admission, mutate the certificate position, intra-position ordinal, parent-
 history root, universe root, global entry count, index policy, receipt-set ID, or either range
 boundary, remove one gap-free-map node, duplicate one index key, and substitute a proof from another
-lookup/core prefix. A byte-identical wrapper accepted at a different live position MUST produce a
-different receipt ID and cannot replace the committed occurrence. As a matched positive control, a
+lookup/core prefix. A dedicated mutation advances only the scope history start, recomputes an
+internally valid suffix proof under the unchanged authentic cutoff/root, and omits an earlier conflict;
+it MUST reject at `VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1`. Its matched
+controls also alter the resolver, cutoff, and scope starts singly, pairwise, and together; equality
+failures reject, while a jointly advanced start still rejects against the admitted profile's immutable
+history-start rule. The positive uses the exact resolver/cutoff/scope history start and complete range.
+A byte-identical
+wrapper accepted at a different live position MUST produce a different receipt ID and cannot replace
+the committed occurrence. As a matched positive control, a
 replay archive created after admission MAY recover the exact bytes and metadata of an already
 committed pre-cutoff receipt; it verifies only by reconstructing that same live position, receipt ID,
 cutoff, and universe-root membership. A later archive event never becomes a second live occurrence.
+
+Powered consumer-context controls recursively inject every role from
+`ParentAuthorityCertificateConsumerContextCurrentChainForbiddenFieldManifestV1` at the top level and
+under each nested context path; every case MUST reject at
+`VerifiedParentAuthorityCertificateConsumerContextFieldGuardV1` even when all carried IDs are made
+self-consistent. They also put an unverified, wrong-purpose, wrong-bundle, or current-envelope-chain
+authorization at the one allowed migration path and MUST reject. The matched positives cover every
+consumer variant, including a migration envelope whose exact prior `activation_authorization_id`
+byte-equals the independently verified activation-purpose authorization; no other authorization-
+bearing transitive path is accepted.
 
 For `OrdinaryProfileTransitionV1`, the profile context MUST resolve to one admitted `PROFILE-1`
 record whose candidate bytes, scope/genesis projections, and capability closure all verify; both
@@ -2751,13 +2862,16 @@ The successor verifier then follows one mandatory acyclic order. First it bounde
 internal closure and verifies the internal DAG only through `AdmittedReleaseCoreV1`, deriving
 `admitted_release_core_id` without a release authorization. Second it derives
 `SuccessorReleaseParentAuthorityConsumerContextV1`, verifies the independently accepted release-
-purpose certificate, and emits `VerifiedSuccessorReleaseAuthorityContextV1`; only then may it derive
-and verify `ReleaseSignDocV1`, its authorization, and `AdmittedReleaseRecordV1`. Third it completes
+purpose certificate, and emits `VerifiedSuccessorReleaseAuthorityContextV1`; only then may the
+verifier derive the expected `ReleaseSignDocV1` and ID, verify the carried authorization, and accept
+`AdmittedReleaseRecordV1`. Third it completes
 the internal DAG, verifies that exact admitted release, and derives `successor_activation_bundle_id`.
 Fourth it derives `SuccessorActivationParentAuthorityConsumerContextV1`, verifies the independently
 accepted activation-purpose certificate, and emits `VerifiedSuccessorActivationAuthorityContextV1`;
-only then may it derive the activation sign-document ID and authorization. The activation certificate
-or authorization is never an input to the bundle whose ID its context names.
+only then may the verifier derive the expected activation sign-document ID, verify the carried
+authorization, and accept or use it. This is mandatory verification and use order, not evidence of
+when either authority produced a signature. The activation certificate or authorization is never an
+input to the bundle whose ID its context names.
 
 All three contexts are typed semantic verifier results, not canonical bundle bytes: none is
 serialized into or counted by `SuccessorActivationBundleV1`, and no accepted-record wrapper or
@@ -2844,8 +2958,10 @@ purpose-tagged `predecessor_accepted_parent_authority_ref`, exact
 specification, activation height, and exact old/expected-new typed roots. That historical ref MUST
 byte-equal `historical_activation_parent_authority_use_ref` from the verified predecessor context;
 it names the exact accepted consensus-native certificate, authorization-dependent ID, evidence
-commitment, position, and activation-purpose status that qualified before these sign-document bytes
-existed. A replay checkpoint is not a live activation selector.
+commitment, position, and activation-purpose status that MUST verify before the activation document
+or authorization is accepted or used. Without a separately authenticated authorization position,
+these bytes make no claim about physical signature-production time. A replay checkpoint is not a
+live activation selector.
 `ResolveParentAuthorizedActivationAuthorityV1` requires
 `SuccessorActivationAuthorityV1`, resolves a `VerifiedEligibleAcceptedParentRefV1` from the unique
 parent core, at least one qualifying proposal credential, and a qualifying dependency-closed
@@ -3626,8 +3742,8 @@ The future network protocol must distinguish at least these roles:
 
 - **full verifying nodes** — retrieve and execute blocks and verify roots/finality but need
   not propose or vote;
-- **consensus validators/proposers** — perform the selected proposal/vote role and satisfy
-  the selected data-possession rule before signing;
+- **consensus validators/proposers** — perform the selected proposal/vote role and supply the
+  evidence required by the selected data-possession rule with the authenticated proposal or vote;
 - **archive/recovery nodes** — retain historical proposal cores, plural accepted-record ingestion
   carriers, canonical replay-evidence events, typed credential/evidence entries, same-wrapper
   occurrence witnesses, authorized archive checkpoints, complete replay views, bodies, receipts,
@@ -4212,8 +4328,10 @@ prove its parent-profile acceptance.
 `ConsensusToReplayParentAuthorityCommitmentProofV1` independently reconstructs
 the certificate's exact `AcceptedParentAuthorityEvidenceCommitmentV1` from byte-exact
 `AcceptedRecordOuterOccurrenceV1` events included in one complete authorized archive prefix. It
-requires its cutoff ID and occurrence-universe root to byte-equal the accepted certificate, and the
-archive-witness set to be exactly total over the range-derived receipt set in
+requires its cutoff ID, profile-derived history start, and occurrence-universe root to byte-equal the
+accepted certificate and re-establishes
+`VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1`; the archive-witness set must
+then be exactly total over the range-derived receipt set in
 `CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1`. Every occurrence's committed live
 position, exact outer bytes, and recomputed consensus-native receipt ID must byte-equal one receipt in
 that set. The verifier rechecks the cutoff consensus proof and authenticated range-completeness proof,
@@ -4233,16 +4351,20 @@ append-only ancestor of the shared outer replay view. The separate
 `SuccessorReleaseAuthorityConsumerV1`; and `SuccessorActivationAuthorityV1` only
 `SuccessorActivationAuthorityConsumerV1`. The child `ProposalHeader`, successor
 `ReleaseSignDocV1`, or `SuccessorActivationSignDocV1` respectively MUST carry the byte-identical
-historical ref before its block/sign-document ID and authorization are derived. The verifier derives
-the exact certificate-independent `ParentAuthorityCertificateConsumerContextV1` from the remaining
-consumer fields and byte-equals its ID to the accepted certificate. The consumer preimage and ID
-recompute from its included archive event, but that event may be archived later. For an envelope
-child, the certificate admission position MUST be a strict predecessor of the admitted child under
-the profile's exact consensus-order relation. Release and activation sign documents have no implied
-consensus position: their enforceable chronology is the serialization/signing dependency requiring
-the complete accepted certificate to verify before the sign-document ID and authorization are
-derived. A profile that later consensus-admits either document must state and check that separate
-position relation explicitly. Evidence added to a later archive view may update a named status projection, but it cannot
+historical ref in its canonical preimage. The verifier derives the exact certificate-independent
+`ParentAuthorityCertificateConsumerContextV1` from the remaining consumer fields, passes
+`VerifiedParentAuthorityCertificateConsumerContextFieldGuardV1`, and byte-equals its ID to the
+accepted certificate before accepting or using the final block/sign-document ID or authorization.
+The consumer preimage and ID recompute from its included archive event, but that event may be archived
+later. For an envelope child, the certificate admission position MUST be a strict predecessor of the
+admitted child under the profile's exact consensus-order relation. Release and activation sign
+documents have no implied consensus or authorization position. Their enforceable dependency is only
+verification/acceptance/use order: the complete accepted certificate must verify before the document,
+ID, or authorization may be accepted or used. Identical final artifacts allegedly signed before or
+after certificate admission have the same disposition; absent an authenticated authorization
+position or challenge, this protocol does not claim to recover historical signature-production time.
+A profile that consensus-admits either document must state and check that separate position relation
+explicitly. Evidence added to a later archive view may update a named status projection, but it cannot
 alter the already accepted certificate, its exact evidence commitment, or the consumer-bound
 admission ID.
 
@@ -4291,13 +4413,17 @@ subset without the full-core retention proof, and crash publication after each s
 Historical controls substitute every purpose; omit or duplicate one required purpose; change policy,
 predicate, status, consumer, certificate-independent consumer context, consumer event,
 certificate/evidence-commitment/authorization/admission/cutoff ID, required consensus position,
-occurrence-universe root, history anchor, consensus or availability policy; remove the
+profile-derived history start, occurrence-universe root, history anchor, consensus or availability
+policy; remove the
 historical ref from the child header or release/activation sign document; use an authorized but non-
 admitted certificate; use a partial-view certificate that omits a complete-range receipt; accept two
 admissions at one required position; make consensus evidence authenticate a different admission
-core; omit certificate availability; place an envelope admission after its admitted child; derive or
-sign a release/activation document before the complete accepted certificate exists; and exercise the
-profile's exact equivocation and reorganization rules. Receipt controls mutate every repeated outer
+core; omit certificate availability; place an envelope admission after its admitted child; attempt
+release/activation verification, acceptance, or use before the complete accepted certificate
+verifies; and exercise the profile's exact equivocation and reorganization rules. A matched
+release/activation timing control presents identical accepted artifacts with opposite alleged signing
+histories and MUST produce the same disposition unless a separately authenticated authorization
+position and profile-defined order relation are present. Receipt controls mutate every repeated outer
 field or live occurrence-position field, make decoding partial/noncanonical/over-bound, omit one
 receipt-component projection, omit an entire pre-cutoff benign or conflict wrapper, add an unused
 receipt or projection, duplicate a key/projection, alter any of the four typed components, map one

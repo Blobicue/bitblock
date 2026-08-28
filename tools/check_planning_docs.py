@@ -51,6 +51,12 @@ NINTH_AUDIT_INPUT_COMMIT = "e6baa331f89d8b367d97ae218ad8506c103eb82c"
 NINTH_AUDIT_INPUT_TREE = "044f210a7ae854a9416573a8f326d414da3ad4b5"
 NINTH_AUDIT_ADDITION_COMMIT = "bf62cb4848eeb3481eb413112cd33c06a63f1451"
 NINTH_AUDIT_ADDITION_TREE = "8f4c14e4926a5d5bcf77147cbfe724e55e234492"
+TENTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md"
+TENTH_AUDIT_GIT_BLOB = "eb730338c6ec00c0285cc3ee7d8245f2c1ea2ebe"
+TENTH_AUDIT_INPUT_COMMIT = "c6474e97a65fccee6c02ff07ad7a46bb516b7f9b"
+TENTH_AUDIT_INPUT_TREE = "29c72d3a26a72213e399b8846f8b6c24cdaeeed8"
+TENTH_AUDIT_ADDITION_COMMIT = "1f7ec0f2ca094414264f5172a4f07fd18a8dc3f3"
+TENTH_AUDIT_ADDITION_TREE = "462120e5e33b1e45932e3891ce7e5c43b9a35825"
 CHECKED_GIT_REF = "HEAD"
 LAYER1_DESIGN_AUDIT = ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md"
 LAYER1_DESIGN_AUDIT_GIT_BLOB = "124e066b418a61279abf90c1b1b2c2cc0604ef2a"
@@ -70,6 +76,7 @@ FROZEN_TEXT_FILES = (
     SEVENTH_AUDIT,
     EIGHTH_AUDIT,
     NINTH_AUDIT,
+    TENTH_AUDIT,
     LAYER1_DESIGN_AUDIT,
     DESIGN_RECEIPT,
 )
@@ -84,6 +91,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/LAYER1_DESIGN_AUDIT.md",
@@ -103,6 +111,7 @@ PLANNING_FILES = (
     SEVENTH_AUDIT,
     EIGHTH_AUDIT,
     NINTH_AUDIT,
+    TENTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -130,6 +139,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -143,7 +153,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "4a778b207044b86d9085ece05113a388d9852ed11273964b57e8e2b9e89a6928"
+    "4db6e56035837605738015f5d1a2dbe5b1e5ddaa0b323baabd8a80a577214803"
 )
 EXPECTED_HANDOFF_READ_ORDER = (
     "docs/HANDOFF.md",
@@ -159,6 +169,7 @@ EXPECTED_HANDOFF_READ_ORDER = (
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md",
     "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
     "docs/FUTURE_PLAN_AUDIT.md",
     "docs/SEMANTICS.md",
@@ -769,10 +780,20 @@ EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256 = {
     "AcceptedParentAuthorityUseV1": "b017ba1a930b313587e1490f9f3b78e366a1eefc6ba99eb69f0cda788775a7fd",
     "AcceptedParentAuthorityRefV1": "f5837a033dc9a840a2240481a880733749eb5433283166a46169a0d49439d90e",
     "ParentAuthorityCertificateConsumerContextV1": "04cd61c45dc7cca94ac051eb27a10e6ff9132ae66149480511795ff2fc601960",
+    "ParentAuthorityCertificateConsumerContextCurrentChainForbiddenFieldManifestV1": "16357d39c54226affc873fb085c6e7aef717617ded6d3269310e3050bd570d8e",
+    "EnvelopeMigrationConsumerContextPriorAuthorizationAllowedPathManifestV1": "9c650bb2dbf82c65e9e7a13e8454f2d8a13e430ff4d8064dc542d405b203476c",
+    "VerifiedParentAuthorityCertificateConsumerContextFieldGuardV1": "c09a4a460fbf3bdbdf12e97ef0180dd98ff651fc2801cc6178061082f59d0497",
     "parent_authority_certificate_consumer_context_id": "4b143ecd090383530c005f1cae579b30c9161bee9df2879bcefa09e866cb73cd",
+    "EnvelopeOwnerProfileContextV1(profile_transition_context)": "5e258adb3ad7f617f95a12027ad1485a08b8d481a7c69e053fca166dcf0b26a4",
+    "EnvelopeResolutionV1(profile_transition_context)": "7c1dfcc9a943043b2a9cee74455b801b14420e6b02ba7f42e0956e2e6d2d7995",
+    "EnvelopeHashV1(profile_transition_context, object_domain, payload)": "ab03013956bd120392e3213f4b835378cbba8e1eb000eb43403bd391b19aa90c",
+    "EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence)": "bd1aebdc8b2c255da19a602506516e22d061b6ed59a3407fc73916a28031f50e",
     "ConsensusNativeParentAuthorityPositionV1": "1dbb4167f75483c23958d0aedee2aecbc5ae136f3b7d7450d69ca3decea0a62a",
     "ConsensusNativeParentAuthorityEvidenceCutoffPositionV1": "3b5f50dc732f922e36e16f203d373c698bb5a268f418cc1353ad5737652effc5",
     "ConsensusNativeAcceptedRecordOccurrencePositionV1": "4f03afe01a52b1e73d269af2f42a1ccc6bfaa789f7cb26cd67166ad42792119c",
+    "ConsensusNativeAcceptedRecordOccurrenceHistoryStartPositionV1": "79b4c15104e650a65f41e52e0b88a9c1fa1668f7524ad648b6064471ad896d62",
+    "ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1": "a956412757781c0dfce09a41d375b86dca5359eade5aa07cf2d633bce09b2534",
+    "VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1": "2217aeb6969803e5e1e7ef231ef6c0e7659dad885d09a737d75fa9d60347c512",
     "ConsensusNativeAcceptedRecordOccurrenceIndexKeyV1": "022ad5bb7d9e62d6830d403a747145e5b887d9fea838f7b4bcfa42b1c5456c83",
     "ConsensusNativeAcceptedRecordOccurrenceReceiptV1": "1dcaff1b2403caae442f523b22b52b3bcb7f54ac720f5bb5b0261b6f8be67b11",
     "consensus_native_accepted_record_occurrence_receipt_id": "1fdcaf77b471f81160bb23e2c55e66a5ea75c3c77e3b7ee1fc5a558df1cd1689",
@@ -780,10 +801,10 @@ EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256 = {
     "consensus_native_accepted_record_occurrence_receipt_set_id": "9afc9d2514f13ea9b4c13a367d6baf0e8389ca457d80905dfc0ec91e9c4d32c3",
     "ConsensusNativeAcceptedRecordOccurrenceUniverseEntryV1": "137396aa74b1aa9d05ce0e72ea41ba1bdc0d468cd13a9c4e605e6c1f4d731237",
     "consensus_native_accepted_record_occurrence_universe_root": "c6b1bbf73f1fbfa18b858e3cbd9c3d1af5bb70737d8e7e09e9a611021f83cb4f",
-    "ConsensusNativeParentAuthorityEvidenceCutoffV1": "a5d419866cc8e59ae368470a077aa967c08a249e6fcde850a9e2af832a5a47ba",
+    "ConsensusNativeParentAuthorityEvidenceCutoffV1": "e10d0a72f983b142a211564aeb91ad59b4b9ee85571ec3917736a94516add009",
     "consensus_native_parent_authority_evidence_cutoff_id": "67779a0be6f4075f4f76dd234e57e78728caadc12d92b027b30feaf07dbc26e0",
     "ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1": "9ba382c376cf78b9e58d9297ca209f763363c633cbb66ae44a71622374467d57",
-    "ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1": "d71a3a9138efcad230cdd9d495f5df46da2f14b6f88488f03568bdeb22e573a7",
+    "ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1": "6a2b9ccee0082416c0e8d8b9d75e42f04b63c044809d39309c28bd79cd2bdb7c",
     "ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1": "11d0c7b75afc0249f9e69e8125fa21bea6778f34074b361cca9cf721290fefb9",
     "CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1": "883e92729dde0369f90aee2caf45d0e79a55f05118b297564fdfb156a0cd41f4",
     "AcceptedParentAuthorityReceiptComponentProjectionV1": "132315b5f1bac44aaedd26bae68a8034da6cf54f9dea094e2d7fd6c74ffc54e7",
@@ -873,6 +894,40 @@ EXPECTED_LOOP9_SPECIAL_CONTEXT_MUTATIONS = {
         ),
     ),
 }
+
+EXPECTED_LOOP10_ENVELOPE_HELPER_ASSIGNMENTS = (
+    "EnvelopeOwnerProfileContextV1(profile_transition_context)",
+    "EnvelopeResolutionV1(profile_transition_context)",
+    "EnvelopeHashV1(profile_transition_context, object_domain, payload)",
+    "EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence)",
+)
+EXPECTED_LOOP10_ENVELOPE_HELPER_DEPENDENCIES = {
+    "EnvelopeOwnerProfileContextV1(profile_transition_context)": frozenset(),
+    "EnvelopeResolutionV1(profile_transition_context)": frozenset(
+        {"EnvelopeOwnerProfileContextV1(profile_transition_context)"}
+    ),
+    "EnvelopeHashV1(profile_transition_context, object_domain, payload)": frozenset(
+        {
+            "EnvelopeOwnerProfileContextV1(profile_transition_context)",
+            "EnvelopeResolutionV1(profile_transition_context)",
+        }
+    ),
+    "EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence)": frozenset(
+        {"EnvelopeHashV1(profile_transition_context, object_domain, payload)"}
+    ),
+}
+EXPECTED_LOOP10_ABSTRACT_ENVELOPE_PRIMITIVES = frozenset(
+    {
+        "Canonical",
+        "CanonicalOrderedSequence",
+        "Domain",
+        "H",
+        "InPlaceMigrationTransitionV1",
+        "LengthFrame",
+        "OrdinaryProfileTransitionV1",
+        "ResolveAdmittedEnvelopeProfile",
+    }
+)
 
 EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS = (
     "accepted_proposal_core_version_u16_be",
@@ -1247,10 +1302,75 @@ def _split_schema_top_level(text: str, delimiter: str, label: str) -> tuple[str,
     return tuple(parts)
 
 
-def _parse_exact_schema_assignment(
-    text: str,
-    schema_name: str,
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
+_SIMPLE_TOP_LEVEL_SCHEMA_BOUNDARY = re.compile(
+    r"^(?:[A-Za-z_][A-Za-z0-9_]*(?:\([^\r\n)]*\))?[ \t]*=(?!>)|"
+    r"#{1,6}[ \t]+|```)",
+    flags=re.MULTILINE,
+)
+_LINE_START = re.compile(r"^", flags=re.MULTILINE)
+_LINE_IDENTIFIER = re.compile(
+    r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)",
+    flags=re.MULTILINE,
+)
+
+
+def _balanced_parenthesis_end(text: str, start: int) -> int | None:
+    if start >= len(text) or text[start] != "(":
+        return None
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index in range(start, len(text)):
+        character = text[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {'"', "'"}:
+            quote = character
+            continue
+        if character == "(":
+            depth += 1
+            continue
+        if character != ")":
+            continue
+        depth -= 1
+        if depth < 0:
+            return None
+        if depth == 0:
+            return index + 1
+    return None
+
+
+def _is_parenthesized_top_level_schema_boundary(text: str, start: int) -> bool:
+    """Recognize a complete tuple-LHS ``=``/``->`` statement, not a stray ``(`` tail."""
+
+    cursor = _balanced_parenthesis_end(text, start)
+    if cursor is None:
+        return False
+    while cursor < len(text) and text[cursor].isspace():
+        cursor += 1
+    return (
+        (text.startswith("=", cursor) and not text.startswith("=>", cursor))
+        or text.startswith("->", cursor)
+    )
+
+
+def _next_top_level_schema_boundary(text: str, search_start: int) -> int:
+    for line_start in _LINE_START.finditer(text, search_start):
+        start = line_start.start()
+        if _SIMPLE_TOP_LEVEL_SCHEMA_BOUNDARY.match(text, start) is not None:
+            return start
+        if _is_parenthesized_top_level_schema_boundary(text, start):
+            return start
+    return len(text)
+
+
+def _schema_assignment_bounds(text: str, schema_name: str) -> tuple[int, int]:
     assignment_pattern = re.compile(
         rf"^[ \t]*{re.escape(schema_name)}[ \t]*=",
         flags=re.MULTILINE,
@@ -1262,9 +1382,41 @@ def _parse_exact_schema_assignment(
             f"got {len(assignments)}"
         )
     start = assignments[0].start()
-    suffix = text[start:]
-    boundary = re.search(r"\n[ \t]*\n", suffix)
-    block = suffix[: boundary.start()] if boundary is not None else suffix
+    return start, _next_top_level_schema_boundary(text, assignments[0].end())
+
+
+def _compact_schema_whitespace(text: str, label: str) -> str:
+    """Remove layout whitespace while preserving every quoted literal character."""
+
+    compact: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for character in text:
+        if quote is not None:
+            compact.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {'"', "'"}:
+            quote = character
+            compact.append(character)
+        elif not character.isspace():
+            compact.append(character)
+    if quote is not None:
+        raise PlanningError(f"{label}: unterminated quoted literal")
+    return "".join(compact)
+
+
+def _parse_exact_schema_assignment(
+    text: str,
+    schema_name: str,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    start, end = _schema_assignment_bounds(text, schema_name)
+    block = text[start:end]
     if "=" not in block:
         raise PlanningError(f"LAYER1_DESIGN_PAPER.md: {schema_name} assignment has no RHS")
     rhs = block.split("=", 1)[1].strip()
@@ -1275,8 +1427,28 @@ def _parse_exact_schema_assignment(
         if bare_type is not None:
             parsed.append(("BareTypeRef", (bare_type.group(0),)))
             continue
+        match_expression = re.fullmatch(
+            r"match\s+([A-Za-z_][A-Za-z0-9_.]*)\s*\{(.*)\}",
+            alternative,
+            flags=re.DOTALL,
+        )
+        if match_expression is not None:
+            match_subject, match_body = match_expression.groups()
+            parsed.append(
+                (
+                    "MatchExpression",
+                    (
+                        match_subject,
+                        _compact_schema_whitespace(
+                            match_body,
+                            f"{schema_name}.MatchExpression",
+                        ),
+                    ),
+                )
+            )
+            continue
         call = re.fullmatch(
-            r"([A-Za-z_][A-Za-z0-9_.]*(?:\[[A-Za-z_][A-Za-z0-9_.]*\])?)"
+            r"([A-Za-z_][A-Za-z0-9_.]*(?:\[[^\[\]]+\])?)"
             r"\s*\((.*)\)",
             alternative,
             flags=re.DOTALL,
@@ -1287,6 +1459,10 @@ def _parse_exact_schema_assignment(
                 f"{alternative.strip()}"
             )
         variant_name, body = call.groups()
+        variant_name = _compact_schema_whitespace(
+            variant_name,
+            f"{schema_name}.variant",
+        )
         arguments = (
             _split_schema_top_level(body, ",", f"{schema_name}.{variant_name}")
             if body.strip()
@@ -1295,7 +1471,13 @@ def _parse_exact_schema_assignment(
         parsed.append(
             (
                 variant_name,
-                tuple(re.sub(r"\s+", "", argument) for argument in arguments),
+                tuple(
+                    _compact_schema_whitespace(
+                        argument,
+                        f"{schema_name}.{variant_name}",
+                    )
+                    for argument in arguments
+                ),
             )
         )
     return tuple(parsed)
@@ -1355,6 +1537,126 @@ def check_loop9_exact_assignments(
                 "disagree (including Loop 9 domain/context): "
                 f"expected_sha256={expected}, got_sha256={digest}, got={actual}"
             )
+
+
+def _top_level_schema_assignment_bases(text: str) -> frozenset[str]:
+    bases: set[str] = set()
+    for match in _LINE_IDENTIFIER.finditer(text):
+        cursor = match.end()
+        while cursor < len(text) and text[cursor] in " \t":
+            cursor += 1
+        if cursor < len(text) and text[cursor] == "(":
+            parenthesis_end = _balanced_parenthesis_end(text, cursor)
+            if parenthesis_end is None:
+                continue
+            cursor = parenthesis_end
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if text.startswith("=", cursor) and not text.startswith("=>", cursor):
+            bases.add(match.group(1))
+    return frozenset(bases)
+
+
+def _parsed_schema_call_symbols(
+    parsed: tuple[tuple[str, tuple[str, ...]], ...],
+) -> frozenset[str]:
+    chunks: list[str] = []
+    symbols: set[str] = set()
+    for variant_name, arguments in parsed:
+        if variant_name not in {"BareTypeRef", "MatchExpression"}:
+            chunks.append(variant_name)
+            outer_call = re.match(r"([A-Za-z_][A-Za-z0-9_]*)", variant_name)
+            if outer_call is not None:
+                symbols.add(outer_call.group(1))
+        chunks.extend(arguments)
+    symbols.update(
+        match.group(1)
+        for chunk in chunks
+        for match in re.finditer(
+            r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)\s*(?=[\[(])",
+            chunk,
+        )
+    )
+    return frozenset(symbols)
+
+
+def _check_loop10_envelope_helper_transitive_closure(text: str) -> None:
+    expected_helpers = frozenset(EXPECTED_LOOP10_ENVELOPE_HELPER_ASSIGNMENTS)
+    if set(EXPECTED_LOOP10_ENVELOPE_HELPER_DEPENDENCIES) != set(expected_helpers):
+        raise PlanningError("Loop 10 envelope helper dependency manifest is incomplete")
+    missing_exact_helpers = sorted(
+        expected_helpers - EXPECTED_LOOP9_EXACT_ASSIGNMENT_SHA256.keys()
+    )
+    if missing_exact_helpers:
+        raise PlanningError(
+            "Loop 10 envelope helpers are outside the exact assignment manifest: "
+            f"{missing_exact_helpers}"
+        )
+
+    helper_by_base = {
+        helper.split("(", 1)[0]: helper
+        for helper in EXPECTED_LOOP10_ENVELOPE_HELPER_ASSIGNMENTS
+    }
+    if len(helper_by_base) != len(EXPECTED_LOOP10_ENVELOPE_HELPER_ASSIGNMENTS):
+        raise PlanningError("Loop 10 envelope helper base names are ambiguous")
+    defined_bases = _top_level_schema_assignment_bases(text)
+    actual_dependencies: dict[str, frozenset[str]] = {}
+    for helper in EXPECTED_LOOP10_ENVELOPE_HELPER_ASSIGNMENTS:
+        parsed = _parse_exact_schema_assignment(text, helper)
+        symbols = _parsed_schema_call_symbols(parsed)
+        helper_dependencies = frozenset(
+            helper_by_base[symbol] for symbol in symbols if symbol in helper_by_base
+        )
+        undeclared_defined_helpers = sorted(
+            symbol
+            for symbol in symbols
+            if symbol in defined_bases and symbol not in helper_by_base
+        )
+        if undeclared_defined_helpers:
+            raise PlanningError(
+                f"{helper}: defined helper calls escape the Loop 10 exact transitive "
+                f"closure: {undeclared_defined_helpers}"
+            )
+        undeclared_abstract_primitives = sorted(
+            symbol
+            for symbol in symbols
+            if symbol not in defined_bases
+            and symbol not in helper_by_base
+            and symbol not in EXPECTED_LOOP10_ABSTRACT_ENVELOPE_PRIMITIVES
+        )
+        if undeclared_abstract_primitives:
+            raise PlanningError(
+                f"{helper}: undeclared abstract envelope primitives: "
+                f"{undeclared_abstract_primitives}"
+            )
+        expected_dependencies = EXPECTED_LOOP10_ENVELOPE_HELPER_DEPENDENCIES[helper]
+        if helper_dependencies != expected_dependencies:
+            raise PlanningError(
+                f"{helper}: transitive helper dependencies disagree: "
+                f"expected={sorted(expected_dependencies)}, "
+                f"got={sorted(helper_dependencies)}"
+            )
+        actual_dependencies[helper] = helper_dependencies
+
+    root = "EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence)"
+    reachable: set[str] = set()
+    stack = [root]
+    while stack:
+        helper = stack.pop()
+        if helper in reachable:
+            continue
+        reachable.add(helper)
+        stack.extend(actual_dependencies[helper])
+    if reachable != set(expected_helpers):
+        raise PlanningError(
+            "Loop 10 ordered-envelope helper transitive closure is incomplete: "
+            f"expected={sorted(expected_helpers)}, got={sorted(reachable)}"
+        )
+
+
+def check_loop10_envelope_helper_closure(text: str) -> None:
+    check_loop9_exact_assignments(text, EXPECTED_LOOP10_ENVELOPE_HELPER_ASSIGNMENTS)
+    _check_loop10_envelope_helper_transitive_closure(text)
 
 
 def _parse_named_two_column_table(
@@ -2357,6 +2659,7 @@ def check_audit_provenance_projection(
         "Loop7ProvenanceV1": (SEVENTH_AUDIT, "LG", "Loop 7 audit"),
         "Loop8ProvenanceV1": (EIGHTH_AUDIT, "EG", "Loop 8 audit"),
         "Loop9ProvenanceV1": (NINTH_AUDIT, "NG", "Loop 9 audit"),
+        "Loop10ProvenanceV1": (TENTH_AUDIT, "TG", "Loop 10 audit"),
     }
     if schema_name not in audit_count_sources:
         raise PlanningError(f"unknown audit provenance schema {schema_name}")
@@ -2398,6 +2701,7 @@ def check_audit_provenance_projection(
 
 
 _COUNT_WORD_BY_VALUE = {
+    0: "zero",
     1: "one",
     2: "two",
     3: "three",
@@ -2424,8 +2728,163 @@ _COUNT_WORD_BY_VALUE = {
 
 
 _ANY_COUNT_TOKEN = "(?:[0-9]+|" + "|".join(
-    re.escape(word) for word in _COUNT_WORD_BY_VALUE.values()
-) + ")"
+    re.escape(word)
+    for word in sorted(_COUNT_WORD_BY_VALUE.values(), key=len, reverse=True)
+) + r"|no|none(?:[\s_-]+of(?:[\s_-]+the)?)?)"
+
+_AUDIT_ACTIVITY_NOUN = r"(?:audits?|reviews?|sweeps?|pass(?:es)?|(?:re-?)?audits?)"
+_RE_AUDIT_NOUN = r"(?:re-?audits?)"
+_STRONG_SUCCESSOR_QUALIFIER = (
+    r"(?:successor|separate|later|next|subsequent|another)"
+)
+_DISTINCT_SUCCESSOR_SUBJECT = (
+    rf"(?:(?:{_STRONG_SUCCESSOR_QUALIFIER}\s+)+{_AUDIT_ACTIVITY_NOUN}"
+    rf"|(?:(?:independent|fresh)\s+)*{_RE_AUDIT_NOUN})"
+)
+_AUDIT_RESULT_VERB = (
+    r"(?:has|have|had|found|contains?|records?|recorded|reports?|reported|"
+    r"shows?|showed|yields?|yielded|produces?|produced|returns?|returned|"
+    r"identifies?|identified|exposes?|exposed|"
+    r"(?:is|are|was|were)\s+(?:claimed|reported)\s+to\s+have)"
+)
+_INDIRECT_CLAIM_TOKEN = re.compile(
+    r"\b(?:that|which|who|whose|whereas|although|but|because|while|since|as|"
+    r"if|unless|though|despite)\b",
+    re.IGNORECASE,
+)
+_DIRECT_SUCCESSOR_PAYLOAD_SUFFIX = re.compile(
+    r"\s*(?:(?:after|following)\s+(?:the\s+)?"
+    r"(?:correction|corrections|review|audit)"
+    r"|in\s+(?:the\s+)?audit\s+(?:records?|reports?|files?))?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _payload_is_single_direct_finding_claim(
+    payload: str,
+    finding_claim_pattern: re.Pattern[str],
+) -> bool:
+    if _INDIRECT_CLAIM_TOKEN.search(payload) is not None:
+        return False
+    finding_claims = tuple(finding_claim_pattern.finditer(payload))
+    if len(finding_claims) != 1:
+        return False
+    first_non_whitespace = len(payload) - len(payload.lstrip())
+    if finding_claims[0].start() != first_non_whitespace:
+        return False
+    if _DIRECT_SUCCESSOR_PAYLOAD_SUFFIX.fullmatch(
+        payload[finding_claims[0].end() :]
+    ) is None:
+        return False
+    payload_counts = tuple(
+        re.finditer(
+            rf"(?<![A-Za-z0-9])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9])",
+            payload,
+            re.IGNORECASE,
+        )
+    )
+    payload_finding_heads = tuple(
+        re.finditer(
+            r"(?<![A-Za-z0-9])(?:findings?|gaps?)(?![A-Za-z0-9])",
+            payload,
+            re.IGNORECASE,
+        )
+    )
+    if len(payload_counts) != 1 or len(payload_finding_heads) != 1:
+        return False
+    secondary_result = re.search(
+        rf"\b{_AUDIT_RESULT_VERB}\b",
+        payload,
+        re.IGNORECASE,
+    )
+    if (
+        secondary_result is not None
+        and secondary_result.start() < finding_claims[0].start()
+    ):
+        return False
+    nested_audit_result = re.search(
+        rf"\b(?:the\s+)?{_AUDIT_ACTIVITY_NOUN}\s+{_AUDIT_RESULT_VERB}\b",
+        payload,
+        re.IGNORECASE,
+    )
+    return (
+        nested_audit_result is None
+        or nested_audit_result.start() >= finding_claims[0].start()
+    )
+
+
+def _is_explicit_distinct_successor_finding_claim(
+    clause: str,
+    marker_pattern: str,
+    finding_claim_pattern: re.Pattern[str],
+) -> bool:
+    marker = (
+        rf"(?:{marker_pattern})(?:['’]s)?"
+        r"(?:\s+(?:audit|sweep|review|pass|results?|finding\s+set|"
+        r"duplicate|corrections?)){0,2}"
+    )
+    determiner = r"(?:(?:a|an|the)\s+)?"
+    direct_subject_patterns = (
+        re.compile(
+            rf"^\s*{determiner}{_DISTINCT_SUCCESSOR_SUBJECT}\s+"
+            rf"(?:after|following|for|of|about|by)\s+{determiner}{marker}\s+"
+            rf"{_AUDIT_RESULT_VERB}\b(?P<claim_payload>[^;.!?]*)\s*$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*{determiner}{_AUDIT_ACTIVITY_NOUN}\s+"
+            rf"(?:after|following)\s+{determiner}{marker}\s+"
+            rf"{_AUDIT_RESULT_VERB}\b(?P<claim_payload>[^;.!?]*)\s*$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*{determiner}{_DISTINCT_SUCCESSOR_SUBJECT}\s+"
+            rf"{_AUDIT_RESULT_VERB}\b(?P<claim_payload>[^;.!?]*?)\s+"
+            rf"(?:after|following)\s+{determiner}{marker}\s*$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*(?:after|following)\s+(?:"
+            rf"correcting\s+{determiner}{marker}"
+            rf"|{determiner}{marker}\s+corrections?"
+            rf")\s*,\s*{determiner}{_DISTINCT_SUCCESSOR_SUBJECT}\s+"
+            rf"{_AUDIT_RESULT_VERB}\b(?P<claim_payload>[^;.!?]*)\s*$",
+            re.IGNORECASE,
+        ),
+    )
+    marker_token = re.compile(marker_pattern, re.IGNORECASE)
+    if len(tuple(marker_token.finditer(clause))) != 1:
+        return False
+    for subject_pattern in direct_subject_patterns:
+        match = subject_pattern.fullmatch(clause)
+        if match is None:
+            continue
+        payload = match.group("claim_payload")
+        return _payload_is_single_direct_finding_claim(
+            payload,
+            finding_claim_pattern,
+        )
+    return False
+
+
+def _is_explicit_markerless_successor_finding_claim(
+    clause: str,
+    finding_claim_pattern: re.Pattern[str],
+) -> bool:
+    determiner = r"(?:(?:a|an|the)\s+)?"
+    subject_pattern = re.compile(
+        rf"^\s*{determiner}{_DISTINCT_SUCCESSOR_SUBJECT}\s+"
+        rf"{_AUDIT_RESULT_VERB}\b(?P<claim_payload>[^;.!?]*)\s*$",
+        re.IGNORECASE,
+    )
+    match = subject_pattern.fullmatch(clause)
+    if match is None:
+        return False
+    payload = match.group("claim_payload")
+    return _payload_is_single_direct_finding_claim(
+        payload,
+        finding_claim_pattern,
+    )
 
 
 def _summary_prose_count_patterns(
@@ -2496,9 +2955,11 @@ def _summary_prose_count_patterns(
         (
             "total_declared_edge_count_u32",
             re.compile(
-                rf"\b{count}\s+"
+                rf"(?:\b{count}\s+"
                 r"(?:(?:total\s+)?declared(?:\s+base-plus-phase-plus-conditional)?|combined)"
-                r"\s+edges?\b",
+                r"\s+edges?\b|"
+                r"\b(?:combined|declared|dependency)\s+graph\s+"
+                rf"(?:has|contains)\s+\b{count}\b(?:\s+edges?)?)",
                 re.IGNORECASE,
             ),
         ),
@@ -2631,7 +3092,7 @@ def check_no_duplicate_exact_projections(
             (
                 "design_research_distillation_audit_loop7.md",
                 "loop 7",
-                "seventh",
+                "seventh audit",
                 "loop7provenancev1",
             ),
             len(
@@ -2651,7 +3112,7 @@ def check_no_duplicate_exact_projections(
             (
                 "design_research_distillation_audit_loop8.md",
                 "loop 8",
-                "eighth",
+                "eighth audit",
                 "loop8provenancev1",
             ),
             len(
@@ -2671,7 +3132,7 @@ def check_no_duplicate_exact_projections(
             (
                 "design_research_distillation_audit_loop9.md",
                 "loop 9",
-                "ninth",
+                "ninth audit",
                 "loop9provenancev1",
             ),
             len(
@@ -2685,6 +3146,26 @@ def check_no_duplicate_exact_projections(
                 NINTH_AUDIT_ADDITION_COMMIT,
                 NINTH_AUDIT_ADDITION_TREE,
                 NINTH_AUDIT_GIT_BLOB,
+            ),
+        ),
+        "Loop10ProvenanceV1": (
+            (
+                "design_research_distillation_audit_loop10.md",
+                "loop 10",
+                "tenth audit",
+                "loop10provenancev1",
+            ),
+            len(
+                _parse_frozen_audit_finding_ids(
+                    TENTH_AUDIT.read_bytes(), prefix="TG", label="Loop 10 audit"
+                )
+            ),
+            (
+                TENTH_AUDIT_INPUT_COMMIT,
+                TENTH_AUDIT_INPUT_TREE,
+                TENTH_AUDIT_ADDITION_COMMIT,
+                TENTH_AUDIT_ADDITION_TREE,
+                TENTH_AUDIT_GIT_BLOB,
             ),
         ),
     }
@@ -2711,34 +3192,132 @@ def check_no_duplicate_exact_projections(
                 )
 
     for path, text in texts.items():
-        for paragraph in re.split(r"\n\s*\n", text):
+        for raw_paragraph in re.split(r"\n\s*\n", text):
+            paragraph = re.sub(r"[ \t\r\n]+", " ", raw_paragraph).strip()
             lowered = paragraph.lower()
             for schema_name, (markers, _expected_count, _object_ids) in audit_markers.items():
                 if not any(marker in lowered for marker in markers):
                     continue
-                marker_pattern = "(?:" + "|".join(map(re.escape, markers)) + ")"
-                count_and_finding = (
-                    rf"(?:\b{_ANY_COUNT_TOKEN}\b[^.\n]{{0,60}}"
-                    rf"\b(?:material\s+)?(?:findings?|gaps?)\b|"
-                    rf"\b(?:material\s+)?(?:findings?|gaps?)\b[^.\n]{{0,60}}"
-                    rf"\b{_ANY_COUNT_TOKEN}\b)"
+                marker_pattern = (
+                    r"(?<![A-Za-z0-9_])(?:"
+                    + "|".join(map(re.escape, markers))
+                    + r")(?![A-Za-z0-9_])"
                 )
+                marker_token = re.compile(marker_pattern, re.IGNORECASE)
+                count_pattern = re.compile(
+                    rf"(?<![A-Za-z0-9])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9])",
+                    re.IGNORECASE,
+                )
+                finding_noun = r"(?:material[\s_-]+)?(?:findings?|gaps?)"
+                finding_label = rf"{finding_noun}(?:\s+(?:count|total))?"
                 finding_count_field = (
                     r"(?:material[ _-]+)?(?:finding|gap)[ _-]+count"
                     r"(?:[ _-]+u32)?"
                 )
-                finding_count = re.compile(
-                    rf"(?:{marker_pattern}[^.\n]{{0,100}}{count_and_finding}|"
-                    rf"{count_and_finding}[^.\n]{{0,100}}{marker_pattern}|"
-                    rf"{marker_pattern}[^.\n]{{0,100}}"
-                    rf"\b{finding_count_field}\b"
-                    rf"[^.\n]{{0,40}}(?:is|=|:)\s*\b{_ANY_COUNT_TOKEN}\b|"
-                    rf"\b{finding_count_field}\b"
-                    rf"[^.\n]{{0,40}}(?:for|of)\s+{marker_pattern}"
-                    rf"[^.\n]{{0,40}}(?:is|=|:)\s*\b{_ANY_COUNT_TOKEN}\b)",
+                count_finding_barrier = (
+                    r"(?:and|or|but|with|without|from|for|in|of|by|after|before|"
+                    r"because|while|whereas|that|which|who|whose|"
+                    r"has|have|had|is|are|was|were|found|contains?|records?|"
+                    r"reports?|shows?|showed|yields?|yielded|produces?|produced|"
+                    r"returns?|returned|identifies?|identified|exposes?|exposed|"
+                    r"audits?|reviews?|reviewers?|sweeps?|pass(?:es)?|(?:re-?)?audits?|"
+                    r"entries?|items?|members?|rows?|nodes?|schemas?|parameters?|fields?|"
+                    r"files?|commits?|trees?|proofs?|tests?)"
+                )
+                count_then_finding = (
+                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})"
+                    rf"(?:[\s_-]+(?!(?:findings?|gaps?)(?![A-Za-z0-9_]))"
+                    rf"(?!(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_]))"
+                    rf"(?!(?:{count_finding_barrier})(?![A-Za-z0-9]))"
+                    rf"[A-Za-z][A-Za-z0-9_-]*)*[\s_-]+"
+                    rf"(?:findings?|gaps?)(?![A-Za-z0-9_])"
+                )
+                finding_then_count = (
+                    rf"(?<![A-Za-z0-9_]){finding_label}\s*[\])]?\s*"
+                    rf"(?:is|are|was|were|=|:)\s*"
+                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
+                )
+                field_then_count = (
+                    rf"(?<![A-Za-z0-9_]){finding_count_field}(?![A-Za-z0-9_])\s*"
+                    rf"(?:is|are|was|were|=|:)\s*"
+                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
+                )
+                marker_suffix = (
+                    rf"{marker_pattern}(?:['’]s)?"
+                    r"(?:\s+(?:audit|sweep|review|pass|results?|finding\s+set|"
+                    r"duplicate|corrections?)){0,2}"
+                )
+                reverse_marker_count = (
+                    rf"(?<![A-Za-z0-9_])(?:{finding_label}|{finding_count_field})\s+"
+                    rf"(?:for|in|of)\s+{marker_suffix}\s*"
+                    rf"(?:is|are|was|were|=|:)\s*"
+                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
+                )
+                finding_claim_pattern = re.compile(
+                    rf"(?:{count_then_finding}|{finding_then_count}|"
+                    rf"{field_then_count}|{reverse_marker_count})",
                     re.IGNORECASE,
                 )
-                if finding_count.search(paragraph):
+                direct_successor_modifier = (
+                    r"(?:new|newly|discovered|material|open|unresolved|remaining|"
+                    r"residual|additional|further|finite|exact|distinct|unique|"
+                    r"reported|recorded|falsely|closed|false-closure|false-closed|"
+                    r"(?:P|L|v)[0-9]+)"
+                )
+                direct_successor_count_then_finding = (
+                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})"
+                    rf"(?:[\s_-]+{direct_successor_modifier})*[\s_-]+"
+                    rf"(?:findings?|gaps?)(?![A-Za-z0-9_])"
+                )
+                direct_successor_finding_claim_pattern = re.compile(
+                    rf"(?:{direct_successor_count_then_finding}|"
+                    rf"{finding_then_count}|{field_then_count})",
+                    re.IGNORECASE,
+                )
+                unsupported_claim = None
+                for raw_sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+                    sentence = re.sub(r"[.!?]+\s*$", "", raw_sentence).strip()
+                    sentence_has_marker = marker_token.search(sentence) is not None
+                    inherits_marker = False
+                    for clause in sentence.split(";"):
+                        marker_matches = tuple(marker_token.finditer(clause))
+                        claim_match = finding_claim_pattern.search(clause)
+                        external_count_exists = any(
+                            not any(
+                                count_match.start() < marker_match.end()
+                                and marker_match.start() < count_match.end()
+                                for marker_match in marker_matches
+                            )
+                            for count_match in count_pattern.finditer(clause)
+                        )
+                        if marker_matches:
+                            inherits_marker = True
+                        if claim_match is None:
+                            continue
+                        if marker_matches and not external_count_exists:
+                            continue
+                        if marker_matches:
+                            supported = _is_explicit_distinct_successor_finding_claim(
+                                clause,
+                                marker_pattern,
+                                direct_successor_finding_claim_pattern,
+                            )
+                        elif sentence_has_marker:
+                            supported = (
+                                inherits_marker
+                                and _is_explicit_markerless_successor_finding_claim(
+                                    clause,
+                                    direct_successor_finding_claim_pattern,
+                                )
+                            )
+                        else:
+                            continue
+                        if not supported:
+                            unsupported_claim = clause
+                            break
+                    if unsupported_claim is not None:
+                        break
+                if unsupported_claim is not None:
                     raise PlanningError(
                         f"{path}: exact finding count for {schema_name} must live only in its "
                         "canonical HANDOFF projection"
@@ -2792,13 +3371,15 @@ def check_no_duplicate_exact_projections(
                     )
 
     for path, text in texts.items():
-        for field, pattern in _summary_prose_count_patterns():
-            match = pattern.search(text)
-            if match is not None:
-                raise PlanningError(
-                    f"{path}: exact planning count must project only through "
-                    f"PlanningCheckerSummaryV1: field={field}, text={match.group(0)}"
-                )
+        for raw_paragraph in re.split(r"\n\s*\n", text):
+            paragraph = re.sub(r"[ \t\r\n]+", " ", raw_paragraph).strip()
+            for field, pattern in _summary_prose_count_patterns():
+                match = pattern.search(paragraph)
+                if match is not None:
+                    raise PlanningError(
+                        f"{path}: exact planning count must project only through "
+                        f"PlanningCheckerSummaryV1: field={field}, text={match.group(0)}"
+                    )
 
 
 def git_effective_eol_policy(paths: tuple[Path, ...]) -> dict[str, dict[str, str]]:
@@ -3064,6 +3645,16 @@ def check_frozen_ninth_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_tenth_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != TENTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md changed after its frozen "
+            f"first addition: expected Git blob {TENTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
 def _parse_frozen_audit_finding_ids(
     data: bytes,
     *,
@@ -3080,8 +3671,13 @@ def _parse_frozen_audit_finding_ids(
         index
         for index, line in enumerate(lines)
         if line == "| ID | Priority | Gap at `e6baa331` | Concrete loss mechanism | One-sweep correction |"
-        or line.startswith("| ID | Priority | Gap at `")
-        and line.endswith("| Concrete loss mechanism | One-sweep correction |")
+        or (
+            line.startswith("| ID | Priority | Gap at `")
+            and (
+                line.endswith("| Concrete loss mechanism | One-sweep correction |")
+                or line.endswith("| Concrete loss mechanism | Candidate correction |")
+            )
+        )
     ]
     if len(headers) != 1:
         raise PlanningError(
@@ -3171,6 +3767,66 @@ def _require_audit_addition_reachable(
         )
 
 
+def _git_commit_parents(commit: str) -> tuple[str, ...]:
+    try:
+        result = subprocess.run(
+            ["git", "show", "-s", "--format=%P", commit],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", "").strip()
+        raise PlanningError(
+            f"cannot resolve Git parents for {commit}: {detail or error}"
+        ) from error
+    parents = tuple(result.stdout.strip().split())
+    if not parents or any(re.fullmatch(r"[0-9a-f]{40}", parent) is None for parent in parents):
+        raise PlanningError(
+            f"Git parent list for {commit} is empty or malformed: {parents}"
+        )
+    if len(set(parents)) != len(parents):
+        raise PlanningError(f"Git parent list for {commit} contains duplicates: {parents}")
+    return parents
+
+
+def _git_tree_path_exists(
+    parent: str,
+    relative_path: str,
+    *,
+    run_command: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> bool:
+    try:
+        result = run_command(
+            ["git", "ls-tree", "-z", "--name-only", parent, "--", relative_path],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raw_detail = getattr(error, "stderr", b"")
+        detail = (
+            raw_detail.decode("utf-8", errors="replace").strip()
+            if isinstance(raw_detail, bytes)
+            else str(raw_detail).strip()
+        )
+        raise PlanningError(
+            f"cannot inspect Git parent tree {parent}:{relative_path}: {detail or error}"
+        ) from error
+    if result.stdout == b"":
+        return False
+    expected = relative_path.encode("utf-8") + b"\0"
+    if result.stdout != expected:
+        raise PlanningError(
+            f"git ls-tree returned malformed path evidence for {parent}:{relative_path}: "
+            f"{result.stdout!r}"
+        )
+    return True
+
+
 def _check_audit_addition_identity(
     *,
     label: str,
@@ -3183,6 +3839,8 @@ def _check_audit_addition_identity(
     finding_prefix: str,
     checked_ref: str,
     ancestor_probe: Callable[[str, str], bool],
+    parent_resolver: Callable[[str], tuple[str, ...]],
+    parent_path_probe: Callable[[str, str], bool],
 ) -> dict[str, str]:
     resolved_input = _git_rev_parse(f"{input_commit}^{{commit}}")
     if resolved_input != input_commit:
@@ -3199,10 +3857,17 @@ def _check_audit_addition_identity(
         raise PlanningError(
             f"{label} addition commit mismatch: expected {addition_commit}, got {commit}"
         )
-    parent = _git_rev_parse(f"{addition_commit}^")
-    if parent != input_commit:
+    parents = parent_resolver(addition_commit)
+    if (
+        not parents
+        or any(re.fullmatch(r"[0-9a-f]{40}", parent) is None for parent in parents)
+        or len(set(parents)) != len(parents)
+    ):
+        raise PlanningError(f"{label} exact parent set is empty or malformed: {parents}")
+    if input_commit not in parents:
         raise PlanningError(
-            f"{label} addition parent mismatch: expected {input_commit}, got {parent}"
+            f"{label} addition parent mismatch: audited input {input_commit} is not in "
+            f"the exact parent set {parents}"
         )
     tree = _git_rev_parse(f"{addition_commit}^{{tree}}")
     if tree != addition_tree:
@@ -3215,15 +3880,11 @@ def _check_audit_addition_identity(
         raise PlanningError(
             f"{label} addition blob mismatch: expected {addition_blob}, got {blob}"
         )
-    parent_probe = subprocess.run(
-        ["git", "cat-file", "-e", f"{addition_commit}^:{relative_path}"],
-        cwd=ROOT,
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    if parent_probe.returncode == 0:
-        raise PlanningError(f"{label} existed before its declared first-addition commit")
+    for parent in parents:
+        if parent_path_probe(parent, relative_path):
+            raise PlanningError(
+                f"{label} existed on parent {parent} before its declared first-addition commit"
+            )
     _require_audit_addition_reachable(
         label=label,
         addition_commit=addition_commit,
@@ -3249,6 +3910,8 @@ def check_seventh_audit_addition_identity(
     *,
     checked_ref: str = CHECKED_GIT_REF,
     ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+    parent_resolver: Callable[[str], tuple[str, ...]] = _git_commit_parents,
+    parent_path_probe: Callable[[str, str], bool] = _git_tree_path_exists,
 ) -> dict[str, str]:
     return _check_audit_addition_identity(
         label="Loop 7 audit",
@@ -3261,6 +3924,8 @@ def check_seventh_audit_addition_identity(
         finding_prefix="LG",
         checked_ref=checked_ref,
         ancestor_probe=ancestor_probe,
+        parent_resolver=parent_resolver,
+        parent_path_probe=parent_path_probe,
     )
 
 
@@ -3268,6 +3933,8 @@ def check_eighth_audit_addition_identity(
     *,
     checked_ref: str = CHECKED_GIT_REF,
     ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+    parent_resolver: Callable[[str], tuple[str, ...]] = _git_commit_parents,
+    parent_path_probe: Callable[[str, str], bool] = _git_tree_path_exists,
 ) -> dict[str, str]:
     return _check_audit_addition_identity(
         label="Loop 8 audit",
@@ -3280,6 +3947,8 @@ def check_eighth_audit_addition_identity(
         finding_prefix="EG",
         checked_ref=checked_ref,
         ancestor_probe=ancestor_probe,
+        parent_resolver=parent_resolver,
+        parent_path_probe=parent_path_probe,
     )
 
 
@@ -3287,6 +3956,8 @@ def check_ninth_audit_addition_identity(
     *,
     checked_ref: str = CHECKED_GIT_REF,
     ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+    parent_resolver: Callable[[str], tuple[str, ...]] = _git_commit_parents,
+    parent_path_probe: Callable[[str, str], bool] = _git_tree_path_exists,
 ) -> dict[str, str]:
     return _check_audit_addition_identity(
         label="Loop 9 audit",
@@ -3299,6 +3970,31 @@ def check_ninth_audit_addition_identity(
         finding_prefix="NG",
         checked_ref=checked_ref,
         ancestor_probe=ancestor_probe,
+        parent_resolver=parent_resolver,
+        parent_path_probe=parent_path_probe,
+    )
+
+
+def check_tenth_audit_addition_identity(
+    *,
+    checked_ref: str = CHECKED_GIT_REF,
+    ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+    parent_resolver: Callable[[str], tuple[str, ...]] = _git_commit_parents,
+    parent_path_probe: Callable[[str, str], bool] = _git_tree_path_exists,
+) -> dict[str, str]:
+    return _check_audit_addition_identity(
+        label="Loop 10 audit",
+        path=TENTH_AUDIT,
+        input_commit=TENTH_AUDIT_INPUT_COMMIT,
+        input_tree=TENTH_AUDIT_INPUT_TREE,
+        addition_commit=TENTH_AUDIT_ADDITION_COMMIT,
+        addition_tree=TENTH_AUDIT_ADDITION_TREE,
+        addition_blob=TENTH_AUDIT_GIT_BLOB,
+        finding_prefix="TG",
+        checked_ref=checked_ref,
+        ancestor_probe=ancestor_probe,
+        parent_resolver=parent_resolver,
+        parent_path_probe=parent_path_probe,
     )
 
 
@@ -3601,6 +4297,14 @@ def expect_frozen_eighth_audit_failure(label: str, data: bytes) -> None:
 def expect_frozen_ninth_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_ninth_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_tenth_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_tenth_audit(data)
     except PlanningError:
         return
     raise PlanningError(f"negative control did not fail: {label}")
@@ -4006,6 +4710,7 @@ def run_self_tests(
     seventh_audit_bytes: bytes,
     eighth_audit_bytes: bytes,
     ninth_audit_bytes: bytes,
+    tenth_audit_bytes: bytes,
     layer1_design_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
@@ -4017,6 +4722,7 @@ def run_self_tests(
     loop7_provenance: dict[str, str],
     loop8_provenance: dict[str, str],
     loop9_provenance: dict[str, str],
+    loop10_provenance: dict[str, str],
     projection_texts: dict[str, str],
 ) -> None:
     def mutate_manifest_fragment(
@@ -4123,6 +4829,15 @@ def run_self_tests(
                     )
                 rendered_variants.append(arguments[0])
                 continue
+            if variant_name == "MatchExpression":
+                if len(arguments) != 2:
+                    raise PlanningError(
+                        f"self-test fixture drift: {schema_name} malformed match expression"
+                    )
+                rendered_variants.append(
+                    f"match {arguments[0]} {{{arguments[1]}}}"
+                )
+                continue
             rendered_arguments = ",\n        ".join(arguments)
             rendered_variants.append(
                 f"{variant_name}(\n        {rendered_arguments}\n    )"
@@ -4137,23 +4852,34 @@ def run_self_tests(
         variants: tuple[tuple[str, tuple[str, ...]], ...],
         label: str,
     ) -> str:
-        assignment_pattern = re.compile(
-            rf"^[ \t]*{re.escape(schema_name)}[ \t]*=",
-            flags=re.MULTILINE,
-        )
-        assignments = list(assignment_pattern.finditer(source))
-        if len(assignments) != 1:
-            raise PlanningError(
-                f"self-test fixture drift: {label} assignment count {len(assignments)}"
-            )
-        start = assignments[0].start()
-        boundary = re.search(r"\n[ \t]*\n", source[start:])
-        end = start + boundary.start() if boundary is not None else len(source)
+        try:
+            start, end = _schema_assignment_bounds(source, schema_name)
+        except PlanningError as error:
+            raise PlanningError(f"self-test fixture drift: {label}: {error}") from error
         replacement = render_loop8_schema_assignment(schema_name, variants)
+        if end < len(source):
+            replacement += "\n\n"
         mutated = source[:start] + replacement + source[end:]
         if mutated == source:
             raise PlanningError(f"self-test fixture drift: {label} unchanged assignment")
         return mutated
+
+    def replace_exact_assignment_fragment(
+        source: str,
+        schema_name: str,
+        original: str,
+        replacement: str,
+        label: str,
+    ) -> str:
+        start, end = _schema_assignment_bounds(source, schema_name)
+        assignment = source[start:end]
+        if assignment.count(original) != 1:
+            raise PlanningError(
+                f"self-test fixture drift: {label} fragment count "
+                f"{assignment.count(original)}"
+            )
+        mutated_assignment = assignment.replace(original, replacement, 1)
+        return source[:start] + mutated_assignment + source[end:]
 
     reduced_inventory = tuple(path for path in PLANNING_FILES if path != EIGHTH_AUDIT)
     if len(reduced_inventory) != len(PLANNING_FILES) - 1:
@@ -4187,11 +4913,16 @@ def run_self_tests(
         "frozen ninth audit mutation",
         ninth_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_tenth_audit_failure(
+        "frozen tenth audit mutation",
+        tenth_audit_bytes + b"\nnegative-control",
+    )
 
     for audit_label, audit_bytes, prefix, omitted_id in (
         ("Loop 7 audit", seventh_audit_bytes, "LG", "LG-04"),
         ("Loop 8 audit", eighth_audit_bytes, "EG", "EG-03"),
         ("Loop 9 audit", ninth_audit_bytes, "NG", "NG-05"),
+        ("Loop 10 audit", tenth_audit_bytes, "TG", "TG-06"),
     ):
         rows = audit_bytes.splitlines(keepends=True)
         omitted = [row for row in rows if not row.startswith(f"| {omitted_id} |".encode())]
@@ -4260,6 +4991,124 @@ def run_self_tests(
     else:
         raise PlanningError(
             "negative control did not fail: real Git reverse-lineage control"
+        )
+
+    operational_commands: list[tuple[str, ...]] = []
+
+    def simulated_git_operational_error(
+        command: list[str],
+        **_kwargs: object,
+    ) -> subprocess.CompletedProcess[bytes]:
+        operational_commands.append(tuple(command))
+        raise subprocess.CalledProcessError(
+            129,
+            command,
+            stderr=b"fatal: simulated object database failure",
+        )
+
+    def operational_error_parent_path_probe(parent: str, relative_path: str) -> bool:
+        return _git_tree_path_exists(
+            parent,
+            relative_path,
+            run_command=simulated_git_operational_error,
+        )
+
+    try:
+        check_ninth_audit_addition_identity(
+            parent_path_probe=operational_error_parent_path_probe,
+        )
+    except PlanningError as error:
+        expected_operational_mechanism = "cannot inspect Git parent tree"
+        if (
+            expected_operational_mechanism not in str(error)
+            or "simulated object database failure" not in str(error)
+        ):
+            raise PlanningError(
+                "negative control failed by the wrong mechanism: Git operational "
+                f"first-addition probe: {error}"
+            ) from error
+    else:
+        raise PlanningError(
+            "negative control did not fail: Git operational first-addition probe"
+        )
+    expected_operational_command = (
+        "git",
+        "ls-tree",
+        "-z",
+        "--name-only",
+        NINTH_AUDIT_INPUT_COMMIT,
+        "--",
+        repository_relative_path(NINTH_AUDIT),
+    )
+    if operational_commands != [expected_operational_command]:
+        raise PlanningError(
+            "self-test fixture drift: operational parent-path command "
+            f"expected={[expected_operational_command]}, got={operational_commands}"
+        )
+
+    simulated_second_parent = "f" * 40
+    observed_merge_parent_paths: list[tuple[str, str]] = []
+
+    def simulated_merge_parents(commit: str) -> tuple[str, ...]:
+        if commit != NINTH_AUDIT_ADDITION_COMMIT:
+            raise PlanningError(
+                "self-test fixture drift: merge parent resolver commit "
+                f"expected={NINTH_AUDIT_ADDITION_COMMIT}, got={commit}"
+            )
+        return NINTH_AUDIT_INPUT_COMMIT, simulated_second_parent
+
+    def second_parent_contains_audit(parent: str, relative_path: str) -> bool:
+        observed_merge_parent_paths.append((parent, relative_path))
+        return parent == simulated_second_parent
+
+    try:
+        check_ninth_audit_addition_identity(
+            ancestor_probe=lambda _addition, _checked_ref: True,
+            parent_resolver=simulated_merge_parents,
+            parent_path_probe=second_parent_contains_audit,
+        )
+    except PlanningError as error:
+        expected_merge_mechanism = (
+            f"existed on parent {simulated_second_parent} before its declared "
+            "first-addition commit"
+        )
+        if expected_merge_mechanism not in str(error):
+            raise PlanningError(
+                "negative control failed by the wrong mechanism: second-parent "
+                f"first-addition collision: {error}"
+            ) from error
+    else:
+        raise PlanningError(
+            "negative control did not fail: second-parent first-addition collision"
+        )
+    expected_merge_parent_paths = [
+        (NINTH_AUDIT_INPUT_COMMIT, repository_relative_path(NINTH_AUDIT)),
+        (simulated_second_parent, repository_relative_path(NINTH_AUDIT)),
+    ]
+    if observed_merge_parent_paths != expected_merge_parent_paths:
+        raise PlanningError(
+            "self-test fixture drift: merge topology did not inspect every parent: "
+            f"expected={expected_merge_parent_paths}, got={observed_merge_parent_paths}"
+        )
+
+    observed_absent_parent_paths: list[tuple[str, str]] = []
+
+    def every_merge_parent_absent(parent: str, relative_path: str) -> bool:
+        observed_absent_parent_paths.append((parent, relative_path))
+        return False
+
+    multi_parent_provenance = check_ninth_audit_addition_identity(
+        ancestor_probe=lambda _addition, _checked_ref: True,
+        parent_resolver=simulated_merge_parents,
+        parent_path_probe=every_merge_parent_absent,
+    )
+    if observed_absent_parent_paths != expected_merge_parent_paths:
+        raise PlanningError(
+            "self-test fixture drift: all-parent absence control did not inspect every parent"
+        )
+    if multi_parent_provenance["material_finding_count_u32"] != "9":
+        raise PlanningError(
+            "self-test fixture drift: all-parent absence control changed frozen provenance"
         )
 
     exact_invariant_sources = (
@@ -4774,6 +5623,36 @@ def run_self_tests(
                     expected_message=loop9_exact_failure_message,
                 )
                 continue
+            if variant_name == "MatchExpression":
+                if len(arguments) != 2 or "=>" not in arguments[1]:
+                    raise PlanningError(
+                        f"self-test fixture drift: {schema_name} malformed Loop 10 match expression"
+                    )
+                mutated_variants = list(expected_variants)
+                mutated_variants[variant_index] = (
+                    "MatchExpression",
+                    (
+                        arguments[0],
+                        arguments[1].replace(
+                            "=>",
+                            "=>UnexpectedLoop10NegativeControlV1+",
+                            1,
+                        ),
+                    ),
+                )
+                mutated_paper = replace_loop8_schema_assignment(
+                    baseline_assignment,
+                    schema_name,
+                    tuple(mutated_variants),
+                    f"{schema_name} mutate Loop 10 match expression",
+                )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name} Loop 10 match-expression mutation",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+                continue
 
             for omitted_argument_index, omitted_argument in enumerate(arguments):
                 remaining_arguments = (
@@ -4944,6 +5823,238 @@ def run_self_tests(
                 expected_message=loop9_exact_failure_message,
             )
 
+        assignment_start, assignment_end = _schema_assignment_bounds(
+            layer1_design_paper_text,
+            schema_name,
+        )
+        source_assignment = layer1_design_paper_text[assignment_start:assignment_end]
+        quoted_domains = tuple(
+            re.finditer(r'Domain\("([^"\r\n]*)"\)', source_assignment)
+        )
+        for domain_index, domain_match in enumerate(quoted_domains, 1):
+            for whitespace_label, whitespace in (
+                ("space", " "),
+                ("tab", "\t"),
+                ("newline", "\n"),
+            ):
+                insertion = domain_match.end(1)
+                mutated_assignment = (
+                    source_assignment[:insertion]
+                    + whitespace
+                    + source_assignment[insertion:]
+                )
+                baseline_parsed = _parse_exact_schema_assignment(
+                    source_assignment,
+                    schema_name,
+                )
+                mutated_parsed = _parse_exact_schema_assignment(
+                    mutated_assignment,
+                    schema_name,
+                )
+                if mutated_parsed == baseline_parsed:
+                    raise PlanningError(
+                        "negative control reached whitespace-erasing parser equivalence: "
+                        f"{schema_name} quoted domain {domain_index} {whitespace_label}"
+                    )
+                expect_loop9_exact_assignment_failure(
+                    f"{schema_name} quoted domain {domain_index} embedded {whitespace_label}",
+                    mutated_assignment,
+                    schema_name,
+                    expected_message=loop9_exact_failure_message,
+                )
+
+    post_blank_tail_controls = (
+        (
+            "post-blank variant continuation",
+            "AcceptedParentAuthorityUseV1",
+            "\n\n  | UnauthenticatedParentAuthorityV1",
+            loop9_exact_failure_message,
+        ),
+        (
+            "post-blank parenthesized bare-variant continuation",
+            "AcceptedParentAuthorityUseV1",
+            "\n\n(unexpected_post_blank_field)",
+            loop9_exact_failure_message,
+        ),
+        (
+            "post-blank orphan field",
+            "ConsensusNativeAcceptedRecordOccurrenceReceiptV1",
+            "\n\n    unexpected_post_blank_field",
+            "has malformed variant",
+        ),
+        (
+            "post-blank hash tail",
+            "consensus_native_accepted_record_occurrence_receipt_id",
+            '\n\n || Domain("bitblock/unbound-post-blank-tail/v1")',
+            "empty schema component",
+        ),
+    )
+    for label, schema_name, tail, expected_message in post_blank_tail_controls:
+        baseline_assignment = render_loop8_schema_assignment(
+            schema_name,
+            _parse_exact_schema_assignment(layer1_design_paper_text, schema_name),
+        )
+        expect_loop9_exact_assignment_failure(
+            label,
+            baseline_assignment + tail,
+            schema_name,
+            expected_message=expected_message,
+        )
+
+    envelope_helper_mutations = (
+        (
+            "EnvelopeOwnerProfileContextV1(profile_transition_context)",
+            ") => old",
+            ") => new",
+            "envelope owner old/new polarity",
+        ),
+        (
+            "EnvelopeResolutionV1(profile_transition_context)",
+            "ResolveAdmittedEnvelopeProfile",
+            "ResolveUnadmittedEnvelopeProfile",
+            "envelope profile resolver",
+        ),
+        (
+            "EnvelopeHashV1(profile_transition_context, object_domain, payload)",
+            "Domain(object_domain)",
+            'Domain("bitblock/collapsed-envelope-domain/v1")',
+            "envelope object-domain collapse",
+        ),
+        (
+            "EnvelopeHashV1(profile_transition_context, object_domain, payload)",
+            "EnvelopeOwnerProfileContextV1(profile_transition_context)",
+            "profile_transition_context",
+            "envelope profile-context framing",
+        ),
+        (
+            "EnvelopeHashV1(profile_transition_context, object_domain, payload)",
+            "LengthFrame(Canonical[\n"
+            "            EnvelopeResolutionV1(profile_transition_context).canonical_codec_id\n"
+            "        ](payload))",
+            "Canonical[\n"
+            "            EnvelopeResolutionV1(profile_transition_context).canonical_codec_id\n"
+            "        ](payload)",
+            "envelope payload length framing",
+        ),
+        (
+            "EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence)",
+            "CanonicalOrderedSequence(sequence)",
+            "UnorderedSequence(sequence)",
+            "ordered envelope sequence commitment",
+        ),
+    )
+    for schema_name, original, replacement, label in envelope_helper_mutations:
+        mutated_paper = replace_exact_assignment_fragment(
+            layer1_design_paper_text,
+            schema_name,
+            original,
+            replacement,
+            label,
+        )
+        expect_loop9_exact_assignment_failure(
+            label,
+            mutated_paper,
+            schema_name,
+            expected_message=loop9_exact_failure_message,
+        )
+
+    escaped_helper = replace_exact_assignment_fragment(
+        layer1_design_paper_text,
+        "EnvelopeHashV1(profile_transition_context, object_domain, payload)",
+        "Domain(object_domain)",
+        "CollapsedEnvelopeDomainV1(object_domain)",
+        "defined helper outside transitive closure",
+    )
+    escaped_helper += (
+        "\n\nCollapsedEnvelopeDomainV1(object_domain) = Domain(object_domain)\n"
+    )
+    try:
+        _check_loop10_envelope_helper_transitive_closure(escaped_helper)
+    except PlanningError as error:
+        if "escape the Loop 10 exact transitive closure" not in str(error):
+            raise PlanningError(
+                "negative control failed by the wrong mechanism: defined helper outside "
+                f"transitive closure: {error}"
+            ) from error
+    else:
+        raise PlanningError(
+            "negative control did not fail: defined helper outside transitive closure"
+        )
+
+    undeclared_primitive = replace_exact_assignment_fragment(
+        layer1_design_paper_text,
+        "EnvelopeCommitOrderedV1(profile_transition_context, sequence_domain, sequence)",
+        "CanonicalOrderedSequence(sequence)",
+        "UndeclaredOrderedSequence(sequence)",
+        "undeclared abstract envelope primitive",
+    )
+    try:
+        _check_loop10_envelope_helper_transitive_closure(undeclared_primitive)
+    except PlanningError as error:
+        if "undeclared abstract envelope primitives" not in str(error):
+            raise PlanningError(
+                "negative control failed by the wrong mechanism: undeclared abstract "
+                f"envelope primitive: {error}"
+            ) from error
+    else:
+        raise PlanningError(
+            "negative control did not fail: undeclared abstract envelope primitive"
+        )
+
+    shadowed_abstract_primitive_declarations = (
+        (
+            "space indentation",
+            '  Domain(object_domain) = Domain("bitblock/collapsed-envelope-domain/v1")',
+        ),
+        (
+            "tab indentation",
+            '\tDomain(object_domain) = Domain("bitblock/collapsed-envelope-domain/v1")',
+        ),
+        (
+            "space before parameter list",
+            '  Domain (object_domain) = Domain("bitblock/collapsed-envelope-domain/v1")',
+        ),
+        (
+            "multiline parameter list",
+            '  Domain(\n object_domain\n) = Domain("bitblock/collapsed-envelope-domain/v1")',
+        ),
+        (
+            "newline before equals",
+            '  Domain(object_domain)\n = Domain("bitblock/collapsed-envelope-domain/v1")',
+        ),
+    )
+    for layout_label, declaration in shadowed_abstract_primitive_declarations:
+        shadowed_abstract_primitive = layer1_design_paper_text + f"\n\n{declaration}\n"
+        try:
+            _check_loop10_envelope_helper_transitive_closure(
+                shadowed_abstract_primitive
+            )
+        except PlanningError as error:
+            if "defined helper calls escape the Loop 10 exact transitive closure" not in str(
+                error
+            ):
+                raise PlanningError(
+                    "negative control failed by the wrong mechanism: indented abstract "
+                    f"primitive shadow ({layout_label}): {error}"
+                ) from error
+        else:
+            raise PlanningError(
+                "negative control did not fail: indented abstract primitive shadow "
+                f"({layout_label})"
+            )
+
+    match_arm_layout_equivalent = replace_exact_assignment_fragment(
+        layer1_design_paper_text,
+        "EnvelopeOwnerProfileContextV1(profile_transition_context)",
+        "        OrdinaryProfileTransitionV1(active) => active,",
+        "OrdinaryProfileTransitionV1(active) => active,",
+        "column-zero match-arm layout equivalence",
+    )
+    check_loop9_exact_assignments(
+        match_arm_layout_equivalent,
+        ("EnvelopeOwnerProfileContextV1(profile_transition_context)",),
+    )
+
     predecessor_schema = "VerifiedSuccessorPredecessorBaseContextV1"
     predecessor_variants = EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS[predecessor_schema]
     predecessor_variant_name, predecessor_arguments = predecessor_variants[0]
@@ -5006,14 +6117,18 @@ def run_self_tests(
 
     compact_projection_texts = {path: "" for path in projection_texts}
     compact_projection_texts["docs/HANDOFF.md"] = "\n\n".join(
-        "\n".join(
+        "\n\n".join(
             (
                 f"### {schema_name}",
-                PROVENANCE_TABLE_HEADER,
-                PROVENANCE_TABLE_SEPARATOR,
-                *(
-                    f"| `{field}` | `{provenance[field]}` |"
-                    for field in PROVENANCE_FIELD_ORDER
+                "\n".join(
+                    (
+                        PROVENANCE_TABLE_HEADER,
+                        PROVENANCE_TABLE_SEPARATOR,
+                        *(
+                            f"| `{field}` | `{provenance[field]}` |"
+                            for field in PROVENANCE_FIELD_ORDER
+                        ),
+                    )
                 ),
             )
         )
@@ -5021,6 +6136,7 @@ def run_self_tests(
             ("Loop7ProvenanceV1", loop7_provenance),
             ("Loop8ProvenanceV1", loop8_provenance),
             ("Loop9ProvenanceV1", loop9_provenance),
+            ("Loop10ProvenanceV1", loop10_provenance),
         )
     )
     compact_projection_texts["docs/CAPABILITY_TREE.md"] = "\n".join(
@@ -5033,6 +6149,7 @@ def run_self_tests(
         ("Loop7ProvenanceV1", loop7_provenance),
         ("Loop8ProvenanceV1", loop8_provenance),
         ("Loop9ProvenanceV1", loop9_provenance),
+        ("Loop10ProvenanceV1", loop10_provenance),
     ):
         for field, value in provenance.items():
             mutated_value = (
@@ -5101,6 +6218,7 @@ def run_self_tests(
         ("Loop7ProvenanceV1", loop7_provenance),
         ("Loop8ProvenanceV1", loop8_provenance),
         ("Loop9ProvenanceV1", loop9_provenance),
+        ("Loop10ProvenanceV1", loop10_provenance),
     ):
         for field in PROVENANCE_FIELD_ORDER[:-1]:
             object_id = provenance[field]
@@ -5375,6 +6493,491 @@ def run_self_tests(
             expected_message="abbreviated Git object claim for Loop9ProvenanceV1",
         )
 
+        semantic_projection_controls = (
+            (
+                "wrapped forward Git object",
+                "Loop 8\naddition commit `ffffffffffffffffffffffffffffffffffffffff`.",
+                "non-canonical Git object claim for Loop8ProvenanceV1",
+            ),
+            (
+                "wrapped reverse Git object",
+                "Addition commit `ffffffffffffffffffffffffffffffffffffffff` belongs to\nLoop 8.",
+                "non-canonical Git object claim for Loop8ProvenanceV1",
+            ),
+            (
+                "wrapped planning count",
+                "The capability\nnode count is 999.",
+                "field=capability_node_count_u32",
+            ),
+            (
+                "zero planning count",
+                "There are zero capability nodes.",
+                "field=capability_node_count_u32",
+            ),
+            (
+                "no planning count",
+                "The combined graph has no edges.",
+                "field=total_declared_edge_count_u32",
+            ),
+            (
+                "none planning count",
+                "Capability nodes: none.",
+                "field=capability_node_count_u32",
+            ),
+            (
+                "no audit finding count",
+                "Loop 9 found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "Loop 7 filename marker finding count",
+                "design_research_distillation_audit_loop7.md found no material gaps.",
+                "exact finding count for Loop7ProvenanceV1",
+            ),
+            (
+                "Loop 8 filename marker finding count",
+                "design_research_distillation_audit_loop8.md found no material gaps.",
+                "exact finding count for Loop8ProvenanceV1",
+            ),
+            (
+                "Loop 9 filename marker finding count",
+                "design_research_distillation_audit_loop9.md found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "Loop 10 filename marker finding count",
+                "design_research_distillation_audit_loop10.md found no material gaps.",
+                "exact finding count for Loop10ProvenanceV1",
+            ),
+            (
+                "marker-first none audit finding count",
+                "Loop 9 material findings: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "marker-first zero audit finding count",
+                "Loop 9 findings: zero.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "noun-first none audit finding count",
+                "Material findings for Loop 9: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "colon no audit finding count",
+                "Loop 9: no findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "show-verb no audit finding count",
+                "Loop 9 shows no findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "intervening-total none audit finding count",
+                "Loop 9 material findings total: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "dash no audit finding count",
+                "Loop 9 — no findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "with-none audit finding count",
+                "Loop 9 with none of the material findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "dash noun-first none audit finding count",
+                "Loop 9 — material findings: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "parenthesized noun-first none audit finding count",
+                "Loop 9 (material findings): none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "colon noun-first none audit finding count",
+                "Loop 9: material findings: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "comma noun-first none audit finding count",
+                "Loop 9, material findings: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "semicolon noun-first none audit finding count",
+                "Loop 9; material findings: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "bracketed noun-first none audit finding count",
+                "Loop 9 [material findings]: none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "dash-parenthesized noun-first none audit finding count",
+                "Loop 9 — (material findings): none.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "subordinate actual audit subject count",
+                "After Loop 9 found no material gaps, its correction began.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "audit-of actual subject count",
+                "The audit of Loop 9 found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "review-of actual subject count",
+                "The review of Loop 9 found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "audit-for actual subject count",
+                "The audit for Loop 9 reported zero material findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "review-about actual subject count",
+                "The review about Loop 9 shows no findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "adverb between actual audit marker and result",
+                "Loop 9 actually found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "parenthetical between actual review and result",
+                "The Loop 9 review, after correction, found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "parenthetical after audit-of actual subject",
+                "The audit of Loop 9, after correction, found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "adverb after review-about actual subject",
+                "The review about Loop 9 conclusively showed no findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor noun inside contrastive aside does not own result",
+                "Loop 9, unlike a separate successor sweep, found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "independent audit is not intrinsically a successor",
+                "The independent audit of Loop 9 found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor phrase is object of an earlier verb",
+                "We discussed a separate successor sweep after Loop 9 found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor appositive does not replace actual subject",
+                "Loop 9, a separate successor audit, found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "compound subject retains actual audit",
+                "Both Loop 9 and a separate successor sweep found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "actual claim before successor conjunct",
+                "Loop 9 found no material gaps, but a separate successor sweep found no new material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "corrected exact cardinality in active voice",
+                "Loop 9's correction closed all nine material findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "corrected exact cardinality in passive voice",
+                "All nine material findings from Loop 9 were corrected.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "result noun owns zero finding claim",
+                "The result of Loop 9 was no material findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "unbounded filler before actual result verb",
+                "Loop 9 " + ("carefully " * 12) + "found no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "unbounded filler before finding phrase",
+                "Loop 9 found " + ("after independent review " * 4) + "no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "P1 modifier inside actual finding phrase",
+                "Loop 9 found no P1 material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "L1 modifier inside actual finding phrase",
+                "Loop 9 found no L1 material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "version modifier inside actual finding phrase",
+                "Loop 9 found no v2 material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "reported modifier inside actual finding phrase",
+                "Loop 9 found no reported gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "recorded modifier inside actual finding phrase",
+                "Loop 9 found no recorded gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "underscore-separated actual finding phrase",
+                "Loop 9: no_gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "underscore-separated modified actual finding phrase",
+                "Loop 9: no_new_gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "underscore-separated compound actual finding phrase",
+                "Loop 9: none_of_the_gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "hyphen-separated compound actual finding phrase",
+                "Loop 9: none-of-the-gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "actual claim precedes semicolon successor",
+                "Loop 9 found no material gaps; a successor sweep found no new material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "finding claim precedes semicolon marker identity",
+                "The audit found no material gaps; that audit was Loop 9.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload contains because-attributed frozen result",
+                "The successor sweep after Loop 9 found no gaps because the predecessor result was zero findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload contains while-attributed frozen result",
+                "The successor sweep after Loop 9 found no gaps while the prior audit had zero findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload contains second conjoined result",
+                "The successor sweep after Loop 9 found no gaps and the predecessor had zero findings.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload delegates sole claim to predecessor",
+                "The successor review after Loop 9 found the predecessor had no material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload delegates reverse claim to predecessor",
+                "The successor review after Loop 9 found the predecessor's material gaps were zero.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload carries overlapping projections",
+                "The successor sweep after Loop 9 found no findings count is zero.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "predecessor is not a direct successor modifier",
+                "The successor review after Loop 9 found no predecessor gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "successor payload delegates through embedded passive",
+                "The successor sweep after Loop 9 found no gaps were reported by the predecessor.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+            (
+                "compound count word in actual audit claim",
+                "Loop 9 found twenty-one material gaps.",
+                "exact finding count for Loop9ProvenanceV1",
+            ),
+        )
+        for fixture_label, fixture_text, expected_message in semantic_projection_controls:
+            semantic_projection = dict(compact_projection_texts)
+            semantic_projection[path] += f"\n\n{fixture_text}\n"
+            expect_duplicate_projection_failure(
+                f"{fixture_label} in {path}",
+                semantic_projection,
+                planning_summary,
+                expected_message=expected_message,
+            )
+
+        for fixture_label, fixture_text in (
+            (
+                "separate successor sweep convergence",
+                "After correcting Loop 10, a separate successor sweep found no new material gaps.",
+            ),
+            (
+                "successor review convergence before correction marker",
+                "The successor review recorded no newly discovered gaps after the Loop 10 corrections.",
+            ),
+            (
+                "successor sweep subject before marker",
+                "The separate successor sweep after Loop 10 found no new material gaps.",
+            ),
+            (
+                "successor review for marker",
+                "The successor review for Loop 10 found no new material gaps after correction.",
+            ),
+            (
+                "successor sweep after determiner marker",
+                "The successor sweep after the Loop 10 audit found no new material gaps.",
+            ),
+            (
+                "successor review for determiner marker",
+                "The successor review for the Loop 10 audit found no new material gaps.",
+            ),
+            (
+                "successor review of determiner marker",
+                "The successor review of the Loop 10 audit found no new material gaps.",
+            ),
+            (
+                "plural successor reviews of marker",
+                "The successor reviews of Loop 10 found no new material gaps.",
+            ),
+            (
+                "generic audits after marker",
+                "The audits after Loop 10 found no new material gaps.",
+            ),
+            (
+                "singular successor pass of marker",
+                "The successor pass of Loop 10 found no new material gaps.",
+            ),
+            (
+                "independent re-audit of marker",
+                "The independent re-audit of Loop 10 found no new material gaps.",
+            ),
+            (
+                "bare re-audit of marker",
+                "The re-audit of Loop 10 found no new material gaps.",
+            ),
+            (
+                "generic review after marker",
+                "The review after Loop 10 found no new material gaps.",
+            ),
+            (
+                "successor review following marker",
+                "The successor review following Loop 10 found no new material gaps.",
+            ),
+            (
+                "plural successor audits use passive result",
+                "The successor audits of Loop 10 are reported to have no new material gaps.",
+            ),
+            (
+                "plural generic audits after marker use passive result",
+                "The audits after Loop 10 were claimed to have no new material gaps.",
+            ),
+            (
+                "unrelated reviewer count is not a finding count",
+                "The Loop 9 audit had two reviewers and unresolved material gaps.",
+            ),
+            (
+                "underscore-separated reviewer count is not a finding count",
+                "The Loop 9 audit had two_reviewers_and_unresolved_material_gaps.",
+            ),
+            (
+                "underscore-separated with-clause count is not a finding count",
+                "The Loop 9 audit had two_reviewers_with_unresolved_material_gaps.",
+            ),
+            (
+                "longer loop number is not the Loop 9 marker",
+                "Loop 90 found no material gaps.",
+            ),
+            (
+                "audit records noun follows successor result",
+                "The successor audit of Loop 10 found no gaps in audit records.",
+            ),
+            (
+                "audit reports noun follows successor result",
+                "The successor audit of Loop 10 found no gaps in audit reports.",
+            ),
+            (
+                "compound count word remains one successor count",
+                "The successor audit after Loop 10 found twenty-one material gaps.",
+            ),
+            (
+                "declared alphanumeric successor modifier",
+                "The successor audit after Loop 10 found no P1 material gaps.",
+            ),
+            (
+                "declared reported successor modifier",
+                "The successor audit after Loop 10 found no reported gaps.",
+            ),
+            (
+                "declared recorded successor modifier",
+                "The successor audit after Loop 10 found no recorded gaps.",
+            ),
+            (
+                "underscore-separated successor finding phrase",
+                "The successor audit after Loop 10 found no_new_gaps.",
+            ),
+            (
+                "underscore-separated compound successor finding phrase",
+                "The successor audit after Loop 10 found none_of_the_gaps.",
+            ),
+            (
+                "hyphen-separated compound successor finding phrase",
+                "The successor audit after Loop 10 found none-of-the-gaps.",
+            ),
+            (
+                "marker corrections introduce successor subject",
+                "After the Loop 10 corrections, a separate successor sweep found no new material gaps.",
+            ),
+            (
+                "reported marker clause then successor clause",
+                "Loop 10 reported its correction; a successor sweep found no new material gaps.",
+            ),
+            (
+                "corrected marker clause then successor clause",
+                "Loop 10 was corrected; a successor sweep found no new material gaps.",
+            ),
+        ):
+            truthful_convergence = dict(compact_projection_texts)
+            truthful_convergence[path] += f"\n\n{fixture_text}\n"
+            try:
+                check_no_duplicate_exact_projections(
+                    truthful_convergence,
+                    planning_summary,
+                )
+            except PlanningError as error:
+                raise PlanningError(
+                    "positive control rejected truthful successor convergence prose: "
+                    f"{fixture_label} in {path}: {error}"
+                ) from error
+
         for fixture_label, fixture_text in (
             (
                 "forward canonical finding-count field",
@@ -5457,7 +7060,7 @@ def run_self_tests(
     check_no_duplicate_exact_projections(benign_protocol_counts, planning_summary)
 
     handoff_omission = re.sub(
-        r"^23\. `docs/TIMELINES\.md`(?:\n|$)",
+        r"^24\. `docs/TIMELINES\.md`(?:\n|$)",
         "",
         handoff_text,
         count=1,
@@ -5473,8 +7076,8 @@ def run_self_tests(
     )
 
     handoff_insertion = re.sub(
-        r"^(23\. `docs/TIMELINES\.md`)$",
-        r"\1\n24. `Cargo.toml`",
+        r"^(24\. `docs/TIMELINES\.md`)$",
+        r"\1\n25. `Cargo.toml`",
         handoff_text,
         count=1,
         flags=re.MULTILINE,
@@ -5489,8 +7092,8 @@ def run_self_tests(
     )
 
     handoff_duplicate = handoff_text.replace(
-        "23. `docs/TIMELINES.md`",
-        "23. `docs/PROTOCOL.md`",
+        "24. `docs/TIMELINES.md`",
+        "24. `docs/PROTOCOL.md`",
         1,
     )
     if handoff_duplicate == handoff_text:
@@ -5535,8 +7138,8 @@ def run_self_tests(
     )
 
     handoff_description = handoff_text.replace(
-        "23. `docs/TIMELINES.md`",
-        "23. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
+        "24. `docs/TIMELINES.md`",
+        "24. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
         1,
     )
     if handoff_description == handoff_text:
@@ -5549,8 +7152,8 @@ def run_self_tests(
     )
 
     handoff_outside = handoff_text.replace(
-        "23. `docs/TIMELINES.md`",
-        "23. `../outside-read-order-negative-control.md`",
+        "24. `docs/TIMELINES.md`",
+        "24. `../outside-read-order-negative-control.md`",
         1,
     )
     if handoff_outside == handoff_text:
@@ -5563,8 +7166,8 @@ def run_self_tests(
     )
 
     handoff_untracked = handoff_text.replace(
-        "23. `docs/TIMELINES.md`",
-        "23. `docs/untracked-read-order-negative-control.md`",
+        "24. `docs/TIMELINES.md`",
+        "24. `docs/untracked-read-order-negative-control.md`",
         1,
     )
     if handoff_untracked == handoff_text:
@@ -6779,9 +8382,13 @@ def main() -> int:
     ninth_audit_bytes = NINTH_AUDIT.read_bytes()
     check_frozen_ninth_audit(ninth_audit_bytes)
     loop9_provenance = check_ninth_audit_addition_identity()
+    tenth_audit_bytes = TENTH_AUDIT.read_bytes()
+    check_frozen_tenth_audit(tenth_audit_bytes)
+    loop10_provenance = check_tenth_audit_addition_identity()
     check_audit_provenance_projection(handoff_text, "Loop7ProvenanceV1", loop7_provenance)
     check_audit_provenance_projection(handoff_text, "Loop8ProvenanceV1", loop8_provenance)
     check_audit_provenance_projection(handoff_text, "Loop9ProvenanceV1", loop9_provenance)
+    check_audit_provenance_projection(handoff_text, "Loop10ProvenanceV1", loop10_provenance)
     layer1_design_audit_bytes = LAYER1_DESIGN_AUDIT.read_bytes()
     check_frozen_layer1_design_audit(layer1_design_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
@@ -6799,6 +8406,7 @@ def main() -> int:
     check_loop8_paper_fragments(layer1_design_paper_text)
     check_loop8_exact_schemas(layer1_design_paper_text)
     check_loop9_exact_assignments(layer1_design_paper_text)
+    check_loop10_envelope_helper_closure(layer1_design_paper_text)
     check_accepted_parent_exact_invariants(layer1_design_paper_text, "LAYER1_DESIGN_PAPER.md")
     frozen_paths = frozenset(path.resolve() for path in FROZEN_TEXT_FILES)
     projection_texts = {
@@ -6828,6 +8436,7 @@ def main() -> int:
             seventh_audit_bytes,
             eighth_audit_bytes,
             ninth_audit_bytes,
+            tenth_audit_bytes,
             layer1_design_audit_bytes,
             design_receipt_bytes,
             design_text,
@@ -6839,6 +8448,7 @@ def main() -> int:
             loop7_provenance,
             loop8_provenance,
             loop9_provenance,
+            loop10_provenance,
             projection_texts,
         )
 

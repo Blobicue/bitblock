@@ -625,7 +625,7 @@ a checker error.
   named profile-owned and protocol-identity compromise boundaries.
 - **Gate:** dependency-graph cycle check plus cross-domain, self-reference, field-omission,
   duplicate-field, alternate-body, wrong-parent, and wrong-version mutation corpus. Every
-  authority-relevant byte reaches exactly the intended identifier before it can be signed. Two
+  authority-relevant byte reaches exactly the intended identifier authenticated by its signature. Two
   valid proposal signatures and split evidence wrappers for one unsigned core normalize without
   extra weight or parent multiplication; same-wrapper availability dependencies insert atomically;
   a genuine distinct-unsigned-core collision rejects and is classified only through the exact
@@ -1626,9 +1626,12 @@ is invalid input, not a third collision row.
   and evidence. After the release core ID exists,
   `VerifiedSuccessorReleaseAuthorityContextV1` binds its certificate-independent
   `ParentAuthorityCertificateConsumerContextV1` variant and
-  accepted release-purpose admission before the release is signed. Only after that admitted release
-  completes the bundle and yields its ID may `VerifiedSuccessorActivationAuthorityContextV1` bind the
-  distinct activation-purpose context/admission before activation is signed. The successor release
+  accepted release-purpose admission. That certificate must verify before the release sign document,
+  its ID, or its authorization is accepted or used; this does not claim historical signature-
+  production time. Only after that admitted release completes the bundle and yields its ID may
+  `VerifiedSuccessorActivationAuthorityContextV1` bind the distinct activation-purpose context and
+  admission. That certificate must likewise verify before the activation sign document, its ID, or
+  its authorization is accepted or used. The successor release
   sign document and activation sign document each carry the exact purpose-specific
   `HistoricalAcceptedParentAuthorityUseRefV1`, including the resolver-selected consensus position,
   exact evidence commitment with its complete
@@ -1713,14 +1716,17 @@ This is the sole exact numeric projection of the retained planning checker. Ever
 from its canonical parsed source; prose elsewhere links here instead of repeating these numbers.
 
 The frozen ninth audit found that the audited checker could accept a cross-class cycle because it
-checked phase and conditional role graphs separately. The coordinated correction now checks one
-compatible inherited-base/phase/conditional role union and powers an exact cross-class cycle. It
-also guards the complete named live-certificate/replay assignment chain and hash contexts, derives
-current audit cardinalities from the frozen finding tables, scans every mutable planning authority
-for malformed semantic projections, requires first-addition commits to reach the explicit checked
-lineage, and makes the base-cycle control fail on the named cycle mechanism. The real compatible
-graph at the audited input and corrected descendant is acyclic. These are checker controls, not a
-capability promotion or protocol-security proof.
+checked phase and conditional role graphs separately. Its correction checks one compatible
+inherited-base/phase/conditional role union and powers an exact cross-class cycle. The frozen tenth
+audit then found quoted-literal erasure, a blank-line assignment escape, unguarded transitive envelope
+helpers, wrapped/negated semantic projections, and operational/merge first-addition failure. The
+coordinated correction preserves quoted bytes, parses through the next top-level assignment boundary,
+exact-guards the declared envelope-helper closure, normalizes intra-paragraph semantic claims and
+explicit zero/no/none forms, fails closed on Git inspection errors, checks every addition parent for
+prior path presence, and still requires ancestry to the explicit checked lineage. Audit cardinality
+is derived from frozen finding tables. The real compatible graph at the audited inputs and corrected
+descendant is acyclic. These are checker controls, not a capability promotion or protocol-security
+proof.
 
 | Summary field | Canonical decimal value |
 | --- | ---: |
@@ -1734,9 +1740,9 @@ capability promotion or protocol-security proof.
 | `conditional_edge_count_u32` | `44` |
 | `total_declared_edge_count_u32` | `363` |
 | `predicate_entailment_count_u32` | `10` |
-| `planning_markdown_count_u32` | `23` |
-| `frozen_text_artifact_count_u32` | `13` |
-| `frozen_markdown_audit_count_u32` | `12` |
+| `planning_markdown_count_u32` | `24` |
+| `frozen_text_artifact_count_u32` | `14` |
+| `frozen_markdown_audit_count_u32` | `13` |
 | `frozen_json_receipt_count_u32` | `1` |
 
 `LEDGER-1`, a token/ownership system, networking, and autonomous rules should not be combined in

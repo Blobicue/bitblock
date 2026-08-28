@@ -48,6 +48,19 @@ documentation/checker correction
 with exact input and first-addition provenance projected once in
 [`HANDOFF.md#loop9provenancev1`](HANDOFF.md#loop9provenancev1); this derivative note projects only
 the resulting design semantics
+**Ninth correction:** exact input identity projected once in
+[`HANDOFF.md#loop10provenancev1`](HANDOFF.md#loop10provenancev1)
+**Tenth successor audit:**
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md),
+frozen with exact input and first-addition provenance projected once in
+[`HANDOFF.md#loop10provenancev1`](HANDOFF.md#loop10provenancev1); its nonzero finding set keeps broad
+tests gated. The user's earlier stop at Loop 10 was later lifted, so the coordinated correction and
+successor audit loop resume without claiming that convergence has been reached.
+**Tenth correction:** the current coordinated descendant binds the paper's history-start,
+verification-order, and consumer-context corrections; closes the checker parser, helper-closure,
+semantic-projection, and first-addition mechanisms; and repairs mutable chronology, convergence,
+research-state, and review-provenance wording. It remains proposed-protocol, documentation,
+checkout-policy, and checker work only.
 
 This document replaces repeated conversational explanation with a compact map of the useful ideas
 in `C:\Users\Owen\Downloads\design.txt`. The downloaded source remains untouched. It is a mixed
@@ -467,10 +480,13 @@ launch/genesis, old profile/root, and governance source. It then carries distinc
 `activation_parent_authority_status` fields for `SuccessorActivationAuthorityV1`. Both results
 resolve to the same unique core and governance root, but preserve their own purpose, policy,
 predicate, status, and evidence. After the release core ID exists,
-`VerifiedSuccessorReleaseAuthorityContextV1` binds the accepted release-purpose certificate before
-the admitted release is signed. After that release completes the internal DAG and yields the bundle
-ID, `VerifiedSuccessorActivationAuthorityContextV1` binds the accepted activation-purpose
-certificate before activation is signed. The embedded admitted release must
+`VerifiedSuccessorReleaseAuthorityContextV1` binds the accepted release-purpose certificate, which
+must verify before the admitted release sign document, its ID, or authorization is accepted or used.
+After that release completes the internal DAG and yields the bundle ID,
+`VerifiedSuccessorActivationAuthorityContextV1` binds the accepted activation-purpose certificate,
+which must verify before the activation sign document, its ID, or authorization is accepted or used.
+Neither dependency claims historical signature-production time without a separately authenticated
+authorization position or challenge. The embedded admitted release must
 carry a predecessor authority reference byte-equal to `release_parent_authority_ref` and the
 reference bound inside `verified_release_parent_eligibility`; the activation sign document's
 complete predecessor authority reference must similarly equal `activation_parent_authority_ref` and

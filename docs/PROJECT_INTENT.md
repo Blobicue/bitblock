@@ -228,6 +228,12 @@ written down.
 - [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md) owns the finite audit and correction map for the
   capability/authenticated-state planning checkpoint at its pinned input.
 - [`LAYER1_DESIGN_PAPER.md`](LAYER1_DESIGN_PAPER.md) owns the proposed replicated protocol.
-- [`LAYER1_DESIGN_AUDIT.md`](LAYER1_DESIGN_AUDIT.md) owns the pinned audit of that paper.
+- [`LAYER1_DESIGN_AUDIT.md`](LAYER1_DESIGN_AUDIT.md) owns the corrected reading copy of the pinned
+  checkpoint-0.3 audit only; it is historical evidence, not review of the current paper descendant.
+- The frozen [`DESIGN_RESEARCH_DISTILLATION_AUDIT.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT.md)
+  successor chain through
+  [`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md)
+  owns the review chronology for later paper and planning descendants. Exact current provenance is
+  projected once in [`HANDOFF.md`](HANDOFF.md).
 - [`PROTOCOL.md`](PROTOCOL.md) owns implemented canonical-byte and research-carrier contracts.
 - [`HANDOFF.md`](HANDOFF.md) owns the short operational state for the next agent.

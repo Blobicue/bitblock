@@ -39,8 +39,9 @@ and
 The current successor records are
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md),
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md),
 and
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md)
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md)
 with exact provenance projected in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
@@ -167,9 +168,43 @@ authority for malformed semantic projections, proves each first-addition commit 
 checked lineage, and requires cycle controls to fail on the named cycle mechanism. These remain
 planning controls, not implementation security properties or capability promotions.
 
+The latest frozen successor sweep exposed further material gaps or falsely closed residuals within
+its declared finite lenses. The protocol-side findings concern an unbound occurrence-history lower boundary,
+historical signing chronology that current artifacts cannot prove, a consumer-context exclusion
+contradiction. The checker-side findings concern quoted
+domain bytes, post-blank assignment tails, helper assignments, wrapped or negated semantic
+projections, and first-addition operational/merge failure. The cross-document findings concern
+`COMMIT-R1` implementation wording, the zero-only convergence gate, stale chronology, and historical
+checkpoint-review ownership. Their coordinated correction remains proposed protocol,
+documentation, checkout-policy, and checker work, not implementation or security evidence.
+
+The user's earlier Loop 10 stop was later lifted so correction and successor sweeps can resume; this
+does not establish convergence.
+
+The paper correction makes the admitted parent profile, occurrence-index policy, and immutable start
+rule resolve one inclusive `ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`. The exact object
+is carried by both cutoff and scope, and
+`VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1` must pass before range
+verification, so an internally valid later-start suffix cannot hide an earlier conflict. Release and
+activation artifacts now claim only certificate-before-verification/acceptance/use order; identical
+artifacts with opposite alleged signing histories remain indistinguishable without a separately
+authenticated authorization position. The recursive consumer-context guard excludes every current
+certificate/consumer-chain role while allowing exactly the already independently verified prior
+migration `activation_authorization_id` path. These are proposed verifier contracts, not runtime
+behavior.
+
+The checker correction preserves quoted domain bytes while removing layout whitespace, parses each
+guarded assignment through its next top-level boundary rather than stopping at a blank line, and
+rejects orphan post-blank variants, fields, or hash tails. The four generic envelope helpers are now
+exact-guarded as one declared transitive dependency closure. Semantic projection checks normalize
+intra-paragraph wrapping and recognize numeric or word counts plus explicit `zero`, `no`, and `none`
+claims in forward and reverse forms. First-addition proof fails closed on Git operational errors,
+checks every parent for prior path presence, and separately requires the addition commit to be an
+ancestor of the explicit checked lineage. These controls guard the named finite mechanisms only.
+
 None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
 cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
-deferred. The ninth sweep found material gaps and falsely closed residuals, so it did not satisfy
+deferred. The tenth sweep found material gaps and falsely closed residuals, so it did not satisfy
 the declared diminishing-returns boundary. Its only executed repository checks were the narrow
 planning-checker self-test and whitespace check; a later complete successor sweep must freeze zero
 new material gaps and zero falsely closed material residuals within its declared finite lenses
