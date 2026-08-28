@@ -60,6 +60,22 @@ now refuses to run: observing that folder again would commit noise about a
 directory nobody develops in. The original folder is left untouched as a
 historical artifact, exactly as this document always said it would be.
 
+The timeline-1 checkout carries four later commits of its own -- the "outside
+witness" series, which gave seven core schemas independent Python vectors. They
+are not merged, and not because they were rejected: that checkout shares no
+commit with `main`, so there is nothing to merge along. Grafting an unrooted
+history to import work `main` already has would buy nothing.
+
+`main` covers all seven, and 51 more: 58 of 58 protocol objects have
+independent vectors. Every witness suite has a same-named counterpart here
+except `composite_input_vectors.py`, which is this tree's
+`composite_frame_input_vectors.py` under its earlier name. The two use
+different fixtures and so derive different tags, and each asserts its own tag
+in its own Rust -- they do not disagree, they describe different inputs.
+
+The line is superseded, and superseded is recorded, not deleted. The folder
+stays exactly where it is.
+
 What the mirror was, in the past tense.
 
 `mirror/timeline-1` recorded the observed states of the original
