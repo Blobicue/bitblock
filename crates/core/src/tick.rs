@@ -184,7 +184,7 @@ impl TickActionLedger {
             + self.lanes[LANE_FIT_WORLD]
     }
 
-    fn validate(&self, attempts: usize) -> Result<(), TickProtocolError> {
+    fn validate(&self, attempts: &[TickAttempt]) -> Result<(), TickProtocolError> {
         if self.submitted() > MAX_ACTIONS_PER_TICK {
             return Err(TickProtocolError::TickActionOverflow {
                 limit: MAX_ACTIONS_PER_TICK,
@@ -192,12 +192,21 @@ impl TickActionLedger {
         }
         // The reconciliation the gate asks for: every submitted edit has exactly
         // one ordered disposition, and every disposition had a submission.
-        let edits = self.edit_lane_total() as usize;
-        if edits != attempts {
-            return Err(TickProtocolError::ActionAccountingMismatch {
-                submitted_edits: edits,
-                attempts,
-            });
+        //
+        // Compared lane by lane, not by total. Attempts carry their kind, so a
+        // ledger claiming two aim-deletes against one aim-delete and one
+        // aim-place has a correct sum and a false split; checking only the sum
+        // would admit it. A guard that can be checked and is not is the same
+        // shape as a guard that agrees with its own premise.
+        let expected = Self::for_edit_attempts(attempts);
+        for lane in [LANE_AIM_DELETE, LANE_AIM_PLACE, LANE_EXACT_EDIT] {
+            if self.lanes[lane] != expected.lanes[lane] {
+                return Err(TickProtocolError::ActionAccountingMismatch {
+                    lane,
+                    submitted: self.lanes[lane],
+                    dispositions: expected.lanes[lane],
+                });
+            }
         }
         Ok(())
     }
@@ -684,7 +693,7 @@ impl TickOutcome {
             attempt.validate(index)?;
         }
         canonical_payload_len(&attempts)?;
-        actions.validate(attempts.len())?;
+        actions.validate(&attempts)?;
         validate_frame_presence(input, game, composite)?;
         validate_world_frame_presence(pre_world, post_world, game)?;
         validate_history_execution(pre_history, post_history, &attempts)?;
@@ -1048,7 +1057,7 @@ impl TickOutcome {
             attempt.validate(index)?;
         }
         canonical_payload_len(&self.attempts)?;
-        self.actions.validate(self.attempts.len())?;
+        self.actions.validate(&self.attempts)?;
         validate_frame_presence(self.input, self.game, self.composite)?;
         validate_world_frame_presence(self.pre_world, self.post_world, self.game)?;
         validate_history_execution(self.pre_history, self.post_history, &self.attempts)?;
@@ -1362,8 +1371,9 @@ pub enum TickProtocolError {
     },
     /// Submitted edits and their ordered dispositions did not reconcile.
     ActionAccountingMismatch {
-        submitted_edits: usize,
-        attempts: usize,
+        lane: usize,
+        submitted: u32,
+        dispositions: u32,
     },
     WrongKind {
         field: &'static str,
@@ -1507,11 +1517,12 @@ impl fmt::Display for TickProtocolError {
                 "one tick cannot account for more than {limit} accepted actions"
             ),
             Self::ActionAccountingMismatch {
-                submitted_edits,
-                attempts,
+                lane,
+                submitted,
+                dispositions,
             } => write!(
                 formatter,
-                "{submitted_edits} submitted edits do not reconcile with {attempts} ordered dispositions"
+                "lane {lane} counted {submitted} submitted edits against {dispositions} ordered dispositions"
             ),
             Self::WrongKind {
                 field,
@@ -1822,10 +1833,62 @@ mod tests {
                 None,
             ),
             Err(TickProtocolError::ActionAccountingMismatch {
-                submitted_edits: 0,
-                attempts: 1,
+                lane: LANE_AIM_DELETE,
+                submitted: 0,
+                dispositions: 1,
             })
         );
+    }
+
+    /// A correct total is not a correct account.
+    ///
+    /// One aim-delete and one aim-place, against a ledger claiming two
+    /// aim-deletes: the sums agree and the split is a lie. Checking only
+    /// `edit_lane_total()` would admit this, which is why the guard is per-lane.
+    #[test]
+    fn a_matching_total_cannot_cover_a_wrong_split() {
+        let on = Edit::new(Operation::On, Coord::new(1, 2, 3));
+        let off = Edit::new(Operation::Off, Coord::new(1, 2, 3));
+        let attempts = vec![
+            TickAttempt::AimDeleteExecuted(off),
+            TickAttempt::AimPlaceExecuted(on),
+        ];
+
+        let mut lying = TickActionLedger::empty();
+        lying.record(LANE_AIM_DELETE).unwrap();
+        lying.record(LANE_AIM_DELETE).unwrap();
+        assert_eq!(
+            lying.edit_lane_total() as usize,
+            attempts.len(),
+            "the total matches, which is the whole point of this control"
+        );
+
+        assert_eq!(
+            TickOutcome::new(
+                None,
+                0,
+                tag(TagKind::World, 0x10),
+                tag(TagKind::Receipt, 0x20),
+                input(0),
+                lying,
+                attempts.clone(),
+                tag(TagKind::World, 0x30),
+                tag(TagKind::Receipt, 0x40),
+                camera(1.0),
+                Some(frame(0xe0)),
+                Some(frame(0xf0)),
+            ),
+            Err(TickProtocolError::ActionAccountingMismatch {
+                lane: LANE_AIM_DELETE,
+                submitted: 2,
+                dispositions: 1,
+            })
+        );
+
+        // The honest ledger for the same dispositions is admitted.
+        let honest = TickActionLedger::for_edit_attempts(&attempts);
+        assert_eq!(honest.lane(LANE_AIM_DELETE), 1);
+        assert_eq!(honest.lane(LANE_AIM_PLACE), 1);
     }
 
     /// Over-limit fails closed: the counter is refused and nothing is recorded.

@@ -1824,9 +1824,17 @@ impl App {
         Ok(())
     }
 
+    /// Applies an action whose only failure modes are refusals this caller has
+    /// already ruled out.
+    ///
+    /// Finite aggregation cannot fail for a non-analog action. Accounting can,
+    /// once a tick has been offered `MAX_ACTIONS_PER_TICK` actions -- 65,536
+    /// between two ticks, which no hand reaches and no adapter here produces.
+    /// Panicking is the fail-closed answer if it ever does: refusing to apply
+    /// an action nothing can account for is the point of the limit.
     fn apply_infallible_accepted_action(&mut self, action: AcceptedAction) {
         self.apply_accepted_action(action)
-            .expect("a non-analog accepted action cannot fail finite aggregation");
+            .expect("a non-analog action fails only when one tick is over its action limit");
     }
 
     fn capture_mouse(&mut self, capture: bool) {
@@ -4467,6 +4475,47 @@ mod tests {
         // The next tick starts from zero: the ledger is consumed, not cumulative.
         app.fixed_tick();
         assert_eq!(app.tick_outcomes.last().unwrap().actions().submitted(), 0);
+    }
+
+    /// The replay half of the gate: the same accepted actions, arriving from a
+    /// tape rather than from winit, must produce the same account.
+    ///
+    /// The expectation is derived from the tape record itself rather than
+    /// written down, so this compares two independent routes to the same
+    /// numbers instead of comparing the ledger with a copy of itself.
+    #[test]
+    fn a_replayed_tape_accounts_for_its_control_actions() {
+        let tape = InteractionTape::parse(
+            "tick
+sidebar
+resize 640 480
+clear-motion
+",
+        )
+        .unwrap();
+        let record = &tape.records()[0];
+
+        let mut app = App::for_headless_simulation();
+        for &action in record.actions() {
+            app.apply_accepted_action(action).unwrap();
+        }
+        app.fixed_tick();
+
+        let mut expected = TickActionLedger::empty();
+        for &action in record.actions() {
+            expected.record(action_lane(action)).unwrap();
+        }
+
+        let actual = app.tick_outcomes.last().unwrap().actions();
+        for lane in 0..bitblock::tick::ACTION_LANE_COUNT {
+            assert_eq!(
+                actual.lane(lane),
+                expected.lane(lane),
+                "replayed lane {lane} diverged from the tape record"
+            );
+        }
+        assert_eq!(actual.control_lane_total(), 3);
+        assert_eq!(actual.submitted() as usize, record.actions().len());
     }
 
     /// A refused action is neither applied nor counted.

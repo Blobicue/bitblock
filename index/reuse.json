@@ -410,12 +410,6 @@
     ]
    },
    {
-    "item": "for_edit_attempts",
-    "modules": [
-     "tick"
-    ]
-   },
-   {
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
@@ -464,7 +458,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29634,
+   "code_lines": 29639,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -500,7 +494,7 @@
     {
      "left": "frame:241",
      "lines": 15,
-     "right": "tick:460"
+     "right": "tick:469"
     },
     {
      "left": "physical_sensor:1562",
@@ -510,7 +504,7 @@
     {
      "left": "display:853",
      "lines": 13,
-     "right": "tick:1183"
+     "right": "tick:1192"
     },
     {
      "left": "display_artifact:415",
@@ -650,7 +644,7 @@
    ]
   },
   "test": {
-   "code_lines": 18493,
+   "code_lines": 18566,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -676,7 +670,7 @@
     {
      "left": "display_store:1685",
      "lines": 19,
-     "right": "main:4137"
+     "right": "main:4145"
     },
     {
      "left": "output_topology:1469",
@@ -684,9 +678,9 @@
      "right": "presentation_output:663"
     },
     {
-     "left": "main:4179",
+     "left": "main:4187",
      "lines": 17,
-     "right": "main:5310"
+     "right": "main:5359"
     },
     {
      "left": "presentation_output:693",
@@ -696,7 +690,7 @@
     {
      "left": "display_store:1649",
      "lines": 12,
-     "right": "main:4096"
+     "right": "main:4104"
     },
     {
      "left": "history:938",
@@ -741,7 +735,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4732"
+     "right": "main:4781"
     },
     {
      "left": "history_store:1595",

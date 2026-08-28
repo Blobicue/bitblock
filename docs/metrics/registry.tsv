@@ -712,7 +712,7 @@
 #bb.metric.batch.multi-edit-coordinate-vector	#bb.metric-definition.sha256.dk5x2eyzdfhzvqvemgpcomz43f2ulltiygdvpxfvzqbznztrmrjq	system	Multi-edit coordinate vector
 #bb.metric.batch.final-state-equivalent-edit-count	#bb.metric-definition.sha256.i43vmhe37dnj4n6gvm7miq22pnrirh3vmy4bfnbhunwpu5fzxgqa	system	Final-state-equivalent edit count
 #bb.metric.batch.final-state-dominated-edit-count	#bb.metric-definition.sha256.5zugvs6j7ldd5v3nmyoaxdriwpeddtml4hhyepqcjm3iwhht6lma	system	Final-state-dominated edit count
-#bb.metric.batch.batch-canonical-bytes	#bb.metric-definition.sha256.27wy6dnkokfrxlwf6kdj3akvsdb6rqqu24yybwjksrlklelvsiea	system	Batch canonical bytes
+#bb.metric.batch.batch-canonical-bytes	#bb.metric-definition.sha256.lcho7hxcej7d6pg6ijhyxsphckxyfxlal4vtxrdqjcttck2dztwa	system	Batch canonical bytes
 #bb.metric.batch.edit-reversal-event	#bb.metric-definition.sha256.hjmusg4tqjtrdjcioxflouvzrmsqcc3eyhrssaip7s4jnpwole4q	system	Edit reversal event
 #bb.metric.batch.batch-cardinality-invariant	#bb.metric-definition.sha256.nbpqmqxwb4czgqwacvj77huuydcasw5squujmo7c3ij6tzsm5txq	system	Batch cardinality invariant
 #bb.metric.batch.application-boundary-outcome	#bb.metric-definition.sha256.7lqz4a734dhw55dgg67x3z2v4gqrikihqrwu5xwddqj6bf2mq7wq	system	Application-boundary outcome

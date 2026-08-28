@@ -207,14 +207,16 @@ def decode(payload: bytes) -> dict:
     expected = cursor + 274
     if len(payload) != expected:
         raise ValueError(f"wrong payload length {len(payload)} != {expected}")
-    submitted_edits = (
-        lanes[LANE_AIM_DELETE] + lanes[LANE_AIM_PLACE] + lanes[LANE_EXACT_EDIT]
-    )
-    if submitted_edits != len(attempts):
-        raise ValueError(
-            "%d submitted edits do not reconcile with %d dispositions"
-            % (submitted_edits, len(attempts))
-        )
+    # Lane by lane, not by total: attempts carry their kind, so a ledger with a
+    # correct sum and a wrong split (two aim-deletes against one aim-delete and
+    # one aim-place) must still be refused.
+    expected_lanes = lanes_for_attempts(attempts)
+    for lane in (LANE_AIM_DELETE, LANE_AIM_PLACE, LANE_EXACT_EDIT):
+        if lanes[lane] != expected_lanes[lane]:
+            raise ValueError(
+                "lane %d counted %d submitted edits against %d dispositions"
+                % (lane, lanes[lane], expected_lanes[lane])
+            )
     post_world = payload[cursor : cursor + 32]
     cursor += 32
     post_history = payload[cursor : cursor + 32]
@@ -429,10 +431,20 @@ VECTORS = {
 }
 
 
+REJECTED: list[str] = []
+
+
 def expect_reject(name: str, payload: bytes) -> None:
+    """One mutation the strict decoder must refuse.
+
+    Counted as it runs rather than tallied by hand, so adding a control moves
+    the reported number. That count used to be a literal in the summary line and
+    would have stayed 34 while a 35th control was added right beside it.
+    """
     try:
         decode(payload)
     except (IndexError, struct.error, ValueError):
+        REJECTED.append(name)
         return
     raise SystemExit(f"negative control accepted: {name}")
 
@@ -566,6 +578,18 @@ def negative_controls() -> None:
     mutant[-129] = 1
     expect_reject("nonzero absent frame padding", mutant)
 
+    # Correct total, wrong split: mixed has one aim-delete-executed and one
+    # aim-place-executed among its seven; move one count across and the sum is
+    # unchanged. A total-only check would accept this.
+    mutant = bytearray(mixed)
+    mutant[147 + LANE_AIM_DELETE * 4 : 151 + LANE_AIM_DELETE * 4] = u32(
+        struct.unpack(">I", bytes(mutant[147 + LANE_AIM_DELETE * 4 : 151 + LANE_AIM_DELETE * 4]))[0] + 1
+    )
+    mutant[147 + LANE_AIM_PLACE * 4 : 151 + LANE_AIM_PLACE * 4] = u32(
+        struct.unpack(">I", bytes(mutant[147 + LANE_AIM_PLACE * 4 : 151 + LANE_AIM_PLACE * 4]))[0] - 1
+    )
+    expect_reject("edit lane split with a correct total", mutant)
+
     expect_reject("truncated payload", genesis[:-1])
     expect_reject("overlong payload", genesis + b"\x00")
 
@@ -589,7 +613,7 @@ def main() -> None:
         if actual_tag != expected_tag:
             raise SystemExit(f"{name}: tag mismatch: {actual_tag}")
     negative_controls()
-    print("negative-controls\t34\trejected")
+    print("negative-controls	%d	rejected" % len(REJECTED))
 
 
 if __name__ == "__main__":

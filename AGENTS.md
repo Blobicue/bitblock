@@ -186,7 +186,7 @@ byte fails both from opposite directions.
 | nothing, but `--force` | 1.7s | 0.7s |
 
 After a source edit the cost is the Rust toolchain, not the checks: a rebuild is
-5.2s and clippy another 3.2s, against 0.5s to run all 397 tests. Clippy is given
+5.2s and clippy another 3.2s, against 0.5s to run all 413 tests. Clippy is given
 its own `CARGO_TARGET_DIR` and started alongside the build rather than after it,
 because sharing one directory makes the two cargo invocations queue on the same
 lock -- 7.1s against 4.7s when they genuinely overlap, for ~158MB inside an

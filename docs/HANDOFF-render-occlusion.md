@@ -50,7 +50,7 @@ python tools/bbverify.py full      # per commit
 python tools/bbmutate.py render    # does the suite still notice a byte moving?
 ```
 
-`bbverify full` runs 397 tests including every literal content tag, the 24
+`bbverify full` runs 413 tests including every literal content tag, the 34
 independent Python vector suites that rebuild the same payloads without
 importing any Rust, `cargo fmt`, clippy with `-D warnings`, the metric registry,
 and the index gates. Green means no canonical byte moved.
