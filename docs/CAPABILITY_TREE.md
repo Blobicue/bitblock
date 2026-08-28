@@ -135,6 +135,7 @@ candidate to choose its own authority.
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
+| PS-095 | SYNC-1 | replay-authority | LOCKED |
 
 ## Structured phase-dependency manifest
 
@@ -158,6 +159,8 @@ selection belongs only to the CE manifest and MUST NOT be duplicated here.
 | PD-03 | REFINE-1 | vm | VM-1 | base |
 | PD-04 | RELEASE-R1 | candidate | RELEASE-R1 | framework |
 | PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |
+| PD-06 | SYNC-1 | replay-authority | CONSENSUS-1 | base |
+| PD-07 | TESTNET-1 | base | SYNC-1 | replay-authority |
 
 “Ready” is not “recommended regardless of context.” Bitblock still works in one visible semantic
 checkpoint at a time. Research that does not alter live authority can run beside that checkpoint,
@@ -303,9 +306,8 @@ The view shows dependency, not elapsed time. `COMMIT-R1`, `VERKLE-R1`, `REFINE-1
 evidence without changing live authority. `PROGRAM-CONSENSUS` does not require the asset branch,
 and the asset branch does not require visual programming.
 
-The current inventory is **72 capability nodes**: six foundation rows and 66 detailed nodes. The
-retained base checker derives this count from the document; the conditional rows below are edges,
-not extra capabilities.
+The canonical inventory decomposition is projected in `PlanningCheckerSummaryV1`. The retained base
+checker derives it from this document; the conditional rows below are edges, not extra capabilities.
 
 ## Structured conditional-instance edge manifest
 
@@ -626,14 +628,54 @@ a checker error.
   authority-relevant byte reaches exactly the intended identifier before it can be signed. Two
   valid proposal signatures and split evidence wrappers for one unsigned core normalize without
   extra weight or parent multiplication; same-wrapper availability dependencies insert atomically;
-  a genuine distinct-unsigned-core collision rejects and is classified from its reconstructed lookup
-  preimages: one byte-identical lookup payload with different valid core content reaches
-  `ProfileOwnedAuthorityBindingCompromiseV1`, while different lookup payloads under one
-  `ProfileIdHashV1` output reach `ProtocolIdentityHashCompromiseV1`. Either class safe-halts and
-  never selects one core or treats the event as an ordinary in-place successor.
+  a genuine distinct-unsigned-core collision rejects and is classified only through the exact
+  `AcceptedParentCollisionDispositionV1` projection below. Either class safe-halts and never selects
+  one core or treats the event as an ordinary in-place successor.
 - **Non-claim:** identifiers and genesis bytes do not establish trusted distribution, valid keys,
   honest execution, consensus, availability, a fair initial allocation, or the cryptographic
   soundness of `ProfileIdHashV1`.
+
+## Exact accepted-parent invariant projections
+
+These narrow manifests are byte-for-byte checker projections of the normative paper schemas. They
+do not make arbitrary prose machine-readable and do not prove the cryptographic assumptions.
+
+```text
+AcceptedProposalCoreFieldManifestV1 = ExactOrderedFieldManifest(
+    1 => accepted_proposal_core_version_u16_be,
+    2 => accepted_parent_lookup_id,
+    3 => authority_ref_kind_u8,
+    4 => canonical_authority_ref_length_u32_be,
+    5 => canonical_proposal_header_length_u64_be,
+    6 => canonical_availability_payload_length_u64_be,
+    7 => canonical_authority_ref_bytes,
+    8 => canonical_proposal_header_bytes,
+    9 => canonical_availability_payload_bytes
+)
+
+AcceptedProposalCoreV1 = FixedPreProfileCanonicalV1(FieldsExactly(AcceptedProposalCoreFieldManifestV1))
+
+AcceptedProposalCoreExcludedFieldManifestV1 = ExactForbiddenFieldManifest(
+    canonical_proposer_signature_length_u64_be,
+    canonical_proposer_signature_bytes,
+    typed_proposal_credential_id,
+    proposal_credential_id,
+    canonical_consensus_evidence_bytes,
+    consensus_evidence_id,
+    canonical_availability_assessment_bytes,
+    availability_assessment_id
+)
+
+AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(
+    row_1 = (ByteDistinctAcceptedParentLookupPayloadPreimagesSameProfileIdHashV1OutputV1, ProtocolIdentityHashCompromiseV1),
+    row_2 = (ByteEqualAcceptedParentLookupPayloadAndBlockIdDistinctValidAcceptedProposalCoresV1, ProfileOwnedAuthorityBindingCompromiseV1)
+)
+```
+
+The first collision row requires byte-distinct reconstructed lookup-payload preimages under one
+`ProfileIdHashV1` output. The second requires a byte-equal lookup payload, including `block_id`, but
+distinct otherwise-valid signature-free cores. A core that does not reconstruct its claimed lookup
+is invalid input, not a third collision row.
 
 ### `IDENTITY-1` — actor identity and authorization
 
@@ -731,16 +773,34 @@ a checker error.
 
 ### `SYNC-1` — peer synchronization, availability, and recovery
 
-- **Status:** `PS-034:SYNC-1@base=LOCKED`.
+- **Status:** `PS-034:SYNC-1@base=LOCKED`, `PS-095:SYNC-1@replay-authority=LOCKED`.
 - **Depends on:** `SEQUENCER-1`, `STORAGE-1`, and the applicable `BOUNDS-1` limits.
 - **Motive:** make required bodies, witnesses, and accepted state recoverable from more than one
   process.
-- **Artifact:** role-separated full verifier, archive, light client, and non-authority RPC paths;
-  peer discovery; bounded parsing/backpressure; block/body/witness retrieval; checkpoint/genesis
-  bootstrap; pruning and recovery policy.
-- **Gate:** multi-peer eclipse, partial-data, corrupt-snapshot, slow-peer, restart, pruning, and
-  fresh-node recovery tests under declared retention assumptions.
-- **Non-claim:** data retrieval does not prove correct execution, canonical ordering, or finality.
+- **Artifact:** the base phase supplies role-separated full verifier, archive, light client, and non-
+  authority RPC paths; peer discovery; bounded parsing/backpressure; block/body/witness retrieval;
+  checkpoint/genesis bootstrap; pruning and recovery policy. It transports and retains opaque bounded
+  authority-certificate and occurrence bytes but does not admit or interpret a consensus-native
+  certificate. After `CONSENSUS-1@base`, the separate replay-authority phase additionally carries ordered
+  `ReplayEvidenceEventV1` values, an authorized `ReplayEvidenceArchiveCheckpointV1`, inclusion and
+  prefix-completeness proofs, one replay-wide `ReplayEvidenceViewV1`, occurrence-bound same-wrapper
+  witnesses, proof-free `NormalizedAcceptedAuthorityEntryCoreV1` values with recomputed entry IDs
+  and sorted `(lookup_id, entry_id)` view root, full-core retention proofs,
+  consumer-bound `HistoricalAcceptedParentAuthorityUseWitnessSetV1` values with exact accepted
+  consensus-native certificate admissions, pinned raw wrapper-occurrence reconstruction,
+  certificate-to-replay commitment proofs, and append-consistency proofs, and a separate later
+  `ReplayParentAuthorityStatusProjectionSetV1`.
+- **Gate:** the base phase passes multi-peer eclipse, partial-data, corrupt-snapshot, slow-peer,
+  restart, pruning, and fresh-node recovery tests under declared retention assumptions without using
+  replayed authority as live consensus input. The replay-authority phase independently reconstructs
+  the already accepted certificate protocol owned by `CONSENSUS-1`; its controls reject an omitted
+  pre-cutoff conflict, post-cutoff insertion, event reorder/duplication, mixed root/policy/view,
+  circular or substituted normalized-entry commitments, retained-subset masquerade, synthetic cross-
+  wrapper pair, missing purpose/consumer, non-admitted or late certificate, certificate-to-replay
+  evidence mismatch, and every partial checkpoint-publication prefix. A replay checkpoint created
+  after the consumer is a required positive control because archive order is not live authority.
+- **Non-claim:** data retrieval does not prove correct execution, canonical ordering, finality, or
+  certificate admission. Replay reconstruction audits accepted authority and never selects it live.
 
 ## Asset and economic branch
 
@@ -1005,13 +1065,20 @@ a checker error.
 - **Motive:** replace sequencer trust with an explicit replicated ordering and state-root rule.
 - **Artifact:** implementation and evidence for the selected quantitative adversary/network model;
   proposal/vote/certificate domains; fork-choice or deterministic-finality rule; exact consumption of
-  committed validator-schedule transitions; data-before-vote; confirmation/finality status;
-  safe-halt and recovery rules; and a parent-ordered unique-core replay input whose bounded normalized
-  credential/evidence snapshot or retained eligibility witness is evaluated at one explicit cutoff.
+  committed validator-schedule transitions; data-before-vote; confirmation/finality status; and safe-
+  halt and recovery rules. This node also owns live
+  `AcceptedConsensusNativeParentAuthorityCertificateV1` issuance/admission: certificate-independent
+  consumer contexts, component-total accepted-wrapper receipt commitments, authorization,
+  availability, exact consensus position/history, exactly one accepted admission per
+  `(parent core, purpose, required position)`, and consumer dependency/ordering rules. It consumes
+  live accepted records directly; no replay checkpoint or normalized archive view selects admission.
 - **Gate:** formal/model safety argument appropriate to the profile plus a deterministic reference
   harness over adversarial proposal, vote, partition, missing-data, set-change, long-range,
-  split-wrapper, arrival-permutation, duplicate, and post-acceptance status-upgrade traces. Every
-  replay produces one core and one cutoff status per height. Independent multi-process, restart, and
+  split-wrapper, arrival-permutation, duplicate, and post-acceptance status-upgrade traces. Certificate
+  controls total-decode every committed wrapper, require exact component coverage including conflict
+  material, reject duplicate/forked admissions, and distinguish envelope consensus-order chronology
+  from release/activation signing dependency. Independent historical reconstruction belongs to
+  `SYNC-1@replay-authority`; independent multi-process, restart, and
   operational fault evidence belongs to `TESTNET-1`; sampled/model liveness evidence stays bounded
   to its assumptions.
 - **Non-claim:** consensus evidence does not imply correct execution or available bodies unless
@@ -1387,9 +1454,12 @@ a checker error.
   profile and new candidate, and powered version/downgrade/history mutants fail. Preventive
   role-by-role suite controls may activate only a fully admitted successor while all old bindings
   remain sound. Collision/forgery, ambiguous-last-safe-parent, failed-role-authorized,
-  post-compromise-precommit, and no-precommit controls reach safe halt; only an independently anchored
-  recovery envelope precommitted before compromise may resume in place, otherwise restart requires a
-  separately trusted new genesis. `ProtocolIdentityHashCompromiseV1` remains terminal.
+  hypothetical-precommit, post-compromise-precommit, and no-precommit controls all reach exact
+  `CurrentEstablishedAuthorityCompromiseDispositionV1 =
+  SafeHaltAndSeparatelyTrustedNewGenesisV1`. The reserved
+  `PrecommittedIndependentRecoveryEnvelopeV1` is uninhabited in the current profile; a positive
+  recovery vector is future-conditional on first defining and activating the complete
+  `FutureIndependentRecoveryExtensionV1`. `ProtocolIdentityHashCompromiseV1` remains terminal.
 - **Non-claim:** a framework does not prove any concrete migration or authorize an upgrade. Neither
   an in-place successor nor a recovery object selected through a failed live authority binding can
   repair that binding; no independent recovery envelope is currently specified.
@@ -1544,30 +1614,56 @@ a checker error.
 - **Status:** `PS-092:SUCCESSOR-ACTIVATION-1@base=LOCKED`, `PS-093:SUCCESSOR-ACTIVATION-1@activation=LOCKED`.
 - **Depends on:** `CHAIN-LAUNCH-1`, `PROFILE-SCOPE-D0`, `PROFILE-D1`, `TRANSITION-SPEC-1`,
   `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `UPGRADE-1`, `RELEASE-1`, `SYNC-1`, `EXECUTOR-1`,
-  `EXECUTION-ROOT-1`, `GOVERNANCE-1`, `CRYPTO-1`, `CODEC-1`, `BOUNDS-1`.
+  `EXECUTION-ROOT-1`, `CONSENSUS-1`, `GOVERNANCE-1`, `CRYPTO-1`, `CODEC-1`, `BOUNDS-1`.
 - **Motive:** let a fresh verifier validate an in-place old-to-new profile transition without an
   ambient artifact registry or a profile label standing in for the closure that label denotes.
 - **Artifact:** `SUCCESSOR-ACTIVATION-1@old-profile-id->new-profile-id`, a bounded canonical
-  `SuccessorActivationBundleV1` and fixed `successor_activation_bundle_id`, verified relative to one
-  pre-resolved semantic `VerifiedSuccessorPredecessorContextV1` that is neither serialized nor
-  counted. The internal-only bundle carries canonical bytes for the target scope and registry,
+  `SuccessorActivationBundleV1` and fixed `successor_activation_bundle_id`, verified through three
+  acyclic semantic stages that are neither serialized nor counted. A pre-bundle
+  `VerifiedSuccessorPredecessorBaseContextV1` carries distinct `verified_release_parent_eligibility` and
+  `verified_activation_parent_eligibility` results. They must byte-equal one shared predecessor
+  lookup/core and governance source while retaining separate purpose, policy, predicate, status,
+  and evidence. After the release core ID exists,
+  `VerifiedSuccessorReleaseAuthorityContextV1` binds its certificate-independent
+  `ParentAuthorityCertificateConsumerContextV1` variant and
+  accepted release-purpose admission before the release is signed. Only after that admitted release
+  completes the bundle and yields its ID may `VerifiedSuccessorActivationAuthorityContextV1` bind the
+  distinct activation-purpose context/admission before activation is signed. The successor release
+  sign document and activation sign document each carry the exact purpose-specific
+  `HistoricalAcceptedParentAuthorityUseRefV1`, including the resolver-selected consensus position,
+  exact evidence commitment with its complete
+  `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1` and exact
+  `AcceptedParentAuthorityWitnessReceiptCoverageV1`, including every decoded conflict component,
+  certificate/authorization/admission IDs,
+  and status, before their IDs and authorizations are derived. The
+  internal-only bundle carries canonical bytes for the target scope and registry,
   candidate profile, resolved transition specification, exact target `ProfileAdmissionManifestV1`,
   admitted release, every implementation artifact transitively consumed by admission, and the
   concrete `UPGRADE-1` evidence. The migration context and detached activation authorization bind
   both the bundle ID and exact target admission ID. The old profile's envelope availability payload
   carries the complete bundle before migration execution or activation.
 - **Gate:** two independent implementations preflight and bounded-decode the old-envelope carrier,
-  verify its availability commitment, resolve the exact predecessor context, recompute every typed
-  internal ID and the bundle ID, and walk one complete new-scope/registry -> candidate ->
-  specification -> admission/release -> migration closure. If `S` is the supplementary internal
+  verify its availability commitment, resolve the predecessor base context, walk the internal DAG
+  through the release core, verify the release-purpose certificate and signed admitted release,
+  complete every typed internal ID and the bundle ID, then verify the activation-purpose certificate
+  and authorization. Any attempt to pre-resolve a certificate from the release-core or bundle ID it
+  helps authorize rejects. The complete new-scope/registry -> candidate -> specification ->
+  admission/release -> migration closure remains internal. If `S` is the supplementary internal
   sequence and `D` the internal dependency nodes, it checks `7 + |S| = |D|`, internal-only edge and
   byte totals, individual lengths, exclusions, and prefix-first preflight independently of launch's
   external-root grammar. Prior accepted core/evidence/credential, launch/genesis, old-profile/state,
   framing/counter, dependency-node, and predecessor-context bytes are not counted or duplicated;
-  every external projection byte-equals the unique predecessor context. The verifier then checks
-  old/new role polarity and activation authorization under the already admitted governance/crypto
+  every external projection byte-equals the unique predecessor base context. The verifier checks the
+  admitted release against the later release-authority context and the activation sign document
+  against the post-bundle activation-authority context, including their distinct signed certificate-
+  admission refs. The
+  parent-profile resolver fixes certificate, consensus, availability, position, status,
+  equivocation, and liveness rules; replay checkpoints cannot substitute. Purpose coercion,
+  swapping, non-admission, late admission, or one-purpose-only evidence rejects.
+  It then checks old/new role polarity and activation authorization under the already admitted governance/crypto
   policy and executes only after closure acceptance. Count/length/edge, external-ID injection,
-  context/purpose mismatch, different-evidence-same-parent, duplicate-prior-bytes, ambient-map,
+  context/purpose mismatch, substitution of a non-accepted evidence-subset certificate candidate,
+  competing accepted admissions at one required position, duplicate-prior-bytes, ambient-map,
   authorization, and availability mutants reject before migration state changes.
 - **Non-claim:** a complete successor bundle does not authorize itself, prove the migration correct,
   make its artifacts durably available after activation, or establish consensus safety.
@@ -1610,6 +1706,28 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 12 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 13 | `PS-086:RELEASE-R1@base=READY` |
 | 14 | `PS-087:RELEASE-R1@framework=READY` |
+
+## `PlanningCheckerSummaryV1`
+
+This is the sole exact numeric projection of the retained planning checker. Every value is derived
+from its canonical parsed source; prose elsewhere links here instead of repeating these numbers.
+
+| Summary field | Canonical decimal value |
+| --- | ---: |
+| `capability_node_count_u32` | `72` |
+| `foundation_node_count_u32` | `6` |
+| `detailed_node_count_u32` | `66` |
+| `phase_status_count_u32` | `95` |
+| `ready_frontier_count_u32` | `14` |
+| `base_dependency_edge_count_u32` | `312` |
+| `phase_dependency_edge_count_u32` | `7` |
+| `conditional_edge_count_u32` | `44` |
+| `total_declared_edge_count_u32` | `363` |
+| `predicate_entailment_count_u32` | `10` |
+| `planning_markdown_count_u32` | `22` |
+| `frozen_text_artifact_count_u32` | `12` |
+| `frozen_markdown_audit_count_u32` | `11` |
+| `frozen_json_receipt_count_u32` | `1` |
 
 `LEDGER-1`, a token/ownership system, networking, and autonomous rules should not be combined in
 one change. The strongest next trunk sequence is:
@@ -1674,13 +1792,12 @@ When a checkpoint changes a node:
 7. update [`HANDOFF.md`](HANDOFF.md) and any changed current semantics in
    [`SEMANTICS.md`](SEMANTICS.md).
 
-Run `python -B tools/check_planning_docs.py --self-test` after every tree edit. It checks all
-foundation and detailed nodes, required fields, undefined dependencies, the exact 94-row
-phase-status manifest and its complete ordered READY-frontier projection, the five-row
-phase-dependency manifest, the unconditional conservative DAG, the exact 44 context-bearing
-conditional-instance rows, the direct predicate-entailment manifest and its context-local acyclic
-closure, the compatible role-edge union, the exact 21-document handoff order and displayed counts,
-the eleven-artifact frozen inventory/EOL policy, links/fences/tables in the planning set, and powered
+Run `python -B tools/check_planning_docs.py --self-test` after every tree edit. Its exact graph,
+status, READY-frontier, inventory, and frozen-artifact counts are derived and checked against
+`PlanningCheckerSummaryV1`; prose does not independently restate them. It also checks the
+unconditional conservative DAG, context-bearing conditional-instance rows, direct predicate-
+entailment manifest and context-local acyclic closure, compatible role-edge union, exact path-only
+handoff order, frozen inventory/EOL policy, links/fences/tables in the planning set, and powered
 in-memory mutations for those surfaces. Its controls must reject a phase-status promotion/demotion,
 duplicate or omitted phase tuple, locked/substituted/omitted/duplicated/reordered frontier entry,
 phase-edge mutation, a missing CE-35–CE-42 Verkle prerequisite, a launch row evaluated as target, a

@@ -41,10 +41,14 @@ frozen
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md),
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md),
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
 and
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md)
-successor records.
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md).
+
+The current successor records are
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md),
+and
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md)
+with exact provenance projected in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 The proposed authenticated-state checkpoint—including a candidate 192-bit canonical coordinate-key
 encoding and the still-open comparison between a constrained binary Merkle Patricia trie and a
@@ -98,18 +102,19 @@ capability-dependency/status, and corrected-audit-provenance gaps before correct
 `9b8c08b10c611dd62ac8dbd7b4e46d1b0a02bf90` is frozen at commit
 `80b58e0a40408e03f16e2d0c739c177e05c22903` in
 [`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md),
-whose first-addition Git blob is `5374b160424b78bd516ffc598e9bbd3b29392227`. It records four
-accepted-parent evidence-multiplicity, protocol-identity-hash failure, external-genesis-root, and
-phase-status-projection gaps before correction `62afdd24a8525704f5949584859bd7cbad300d4d`.
-A seventh complete sweep of that correction and Git tree
-`ee346fb3aa9bc54591f851dcb482fd92be9da84a` is frozen at first-addition commit
-`78d5494f930c7412c2d60162b44c0b72050f9f22`, whose Git tree is
-`07aa851e422a5da9453d4409f91b62ad9442a7d5`, in
-[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md),
-whose first-addition Git blob is `dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2`. It records eight
-proposal-credential, live-authority-compromise, availability-dependency, replay, launch-DAG,
-successor-equation, unlock-frontier, and handoff-projection gaps before this coordinated descendant
-correction.
+whose first-addition Git blob is `5374b160424b78bd516ffc598e9bbd3b29392227`. Its frozen RG set
+covers accepted-parent evidence multiplicity, protocol-identity-hash failure,
+external-genesis-root, and phase-status-projection issues before the coordinated RG correction
+that became the next audited input.
+
+A seventh complete sweep of that correction is frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md).
+The machine-checked `Loop7ProvenanceV1` projection in
+[`docs/HANDOFF.md`](docs/HANDOFF.md) is the sole current display of its exact input, first-addition
+commit/tree/blob, and LG-set cardinality. It records proposal-credential,
+live-authority-compromise, availability-dependency, replay, launch-DAG, successor-equation,
+unlock-frontier, and handoff-projection issues before the coordinated descendant correction.
+
 The descendant proposal makes the indexed accepted core signature-free, separates the bounded
 no-double-weight `AcceptedProposalCredentialSetV1` from accepted evidence, pairs consensus-entailed
 availability through `SameWrapperConsensusDependencyWitnessV1`, and replays one parent-ordered
@@ -121,9 +126,38 @@ authority-binding compromise. Launch now uses the actual combined scope/registry
 DAG with one counted outer genesis artifact at a nonzero checked rank, while successor activation
 uses exact internal-only seven-plus-supplementary equations relative to an already verified semantic
 predecessor context. These are proposed byte and verifier contracts, not implemented behavior.
+
+An eighth complete sweep of that correction is frozen in
+[`docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md).
+The machine-checked `Loop8ProvenanceV1` projection in
+[`docs/HANDOFF.md`](docs/HANDOFF.md) is the sole current display of its exact input,
+first-addition commit/tree/blob, and EG-set cardinality. It records purpose-split successor
+authority, replay-archive commitment, historical replay authority, unavailable recovery,
+exact-invariant guard, and provenance/count-projection issues before the coordinated
+descendant correction.
+
+That descendant now derives each normalized-authority entry ID from one proof-free canonical core
+and derives the view root from sorted unique `(lookup_id, entry_id)` pairs; retained projections
+cannot substitute an uncommitted subset. Live consumers bind an exact consensus-native parent-
+authority certificate only after its certificate-independent consumer context, evidence commitment,
+exact component-total witness-to-accepted-wrapper receipt coverage (including conflicting evidence),
+authorization, consensus admission, availability,
+position, and status verify; the replay archive never selects live authority. Replay later
+authenticates the full accepted-certificate bytes in the authority-use event and byte-matches pinned
+raw wrapper occurrences and their receipt IDs to that already accepted commitment, even when its
+archive checkpoint is produced after the consumer. A later synthetic wrapper cannot repair an
+earlier admission. Later evidence can
+change a named status projection, but cannot alter the already accepted certificate. These remain
+proposed schemas and controls.
+
+Planning now assigns live certificate issuance/admission to `CONSENSUS-1@base`. `SYNC-1@base`
+only transports and retains bounded bytes; its separate post-consensus
+`SYNC-1@replay-authority` phase reconstructs historical use for `TESTNET-1` and never feeds live
+authority backward into consensus.
+
 None of these audits or corrections activates a runtime capability or constitutes Rust, Lean,
 cryptographic, consensus, or Layer 1 evidence. Broad implementation tests are intentionally
-deferred until a complete Loop 8 sweep records zero new material design gaps and no falsely closed
+deferred until a later complete successor sweep records zero new material design gaps and no falsely closed
 material residual within its declared
 finite lenses.
 

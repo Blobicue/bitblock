@@ -76,6 +76,18 @@ in its own Rust -- they do not disagree, they describe different inputs.
 The line is superseded, and superseded is recorded, not deleted. The folder
 stays exactly where it is.
 
+The key-profile line shared most of its history with the planning line and is
+in `main` by that route, plus one cherry-picked commit, `d721e70`, adding
+`tools/key_profile_vectors.py`. Nothing of it is outstanding.
+
+A note for whoever adds the next frozen audit. `check_planning_docs.py` hashes
+those documents as they sit in the working tree, not as they sit in git, so a
+frozen document's `text eol=lf` line in `.gitattributes` must land in the same
+commit as the document. Arriving one commit later, a Windows checkout writes
+CRLF, the freeze records those bytes, and the gate then fails against its own
+correct blob. That happened here to the loop-8 audit and is the same
+line-ending class as the LadderLang `verify.ps1` report.
+
 What the mirror was, in the past tense.
 
 `mirror/timeline-1` recorded the observed states of the original

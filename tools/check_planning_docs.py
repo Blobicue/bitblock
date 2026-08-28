@@ -34,8 +34,18 @@ SIXTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md"
 SIXTH_AUDIT_GIT_BLOB = "5374b160424b78bd516ffc598e9bbd3b29392227"
 SEVENTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md"
 SEVENTH_AUDIT_GIT_BLOB = "dfff19eddc3ab2d4d36f8b7f4e38c296c26f10c2"
+SEVENTH_AUDIT_INPUT_COMMIT = "62afdd24a8525704f5949584859bd7cbad300d4d"
+SEVENTH_AUDIT_INPUT_TREE = "ee346fb3aa9bc54591f851dcb482fd92be9da84a"
 SEVENTH_AUDIT_ADDITION_COMMIT = "78d5494f930c7412c2d60162b44c0b72050f9f22"
 SEVENTH_AUDIT_ADDITION_TREE = "07aa851e422a5da9453d4409f91b62ad9442a7d5"
+SEVENTH_AUDIT_FINDING_COUNT = 8
+EIGHTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md"
+EIGHTH_AUDIT_GIT_BLOB = "b247d7585a9e4be06558b0076511fa1064252049"
+EIGHTH_AUDIT_INPUT_COMMIT = "e3650eb5d4ea390ac0023cb67325bae3c5351c60"
+EIGHTH_AUDIT_INPUT_TREE = "91378e4fe123a96298d73905ea2b1b3974137791"
+EIGHTH_AUDIT_ADDITION_COMMIT = "b9d441097c6c4dce013a3dad71cefb7ec2d5f0bf"
+EIGHTH_AUDIT_ADDITION_TREE = "916f7c22304d969d809f2f01f5032602a1a81b3b"
+EIGHTH_AUDIT_FINDING_COUNT = 6
 LAYER1_DESIGN_AUDIT = ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md"
 LAYER1_DESIGN_AUDIT_GIT_BLOB = "124e066b418a61279abf90c1b1b2c2cc0604ef2a"
 DESIGN_RECEIPT = ROOT / "docs" / "design-source-receipt-v1.json"
@@ -52,6 +62,7 @@ FROZEN_TEXT_FILES = (
     FIFTH_AUDIT,
     SIXTH_AUDIT,
     SEVENTH_AUDIT,
+    EIGHTH_AUDIT,
     LAYER1_DESIGN_AUDIT,
     DESIGN_RECEIPT,
 )
@@ -64,6 +75,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/LAYER1_DESIGN_AUDIT.md",
@@ -81,6 +93,7 @@ PLANNING_FILES = (
     FIFTH_AUDIT,
     SIXTH_AUDIT,
     SEVENTH_AUDIT,
+    EIGHTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -106,6 +119,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -119,7 +133,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "f9493a09c31ac9f51926f92b91c65411522545f108a46d3066e3e6b07772e4b3"
+    "ccb2af07c2d8a1203af8f4968ed6e61c1bcb8eb7ac8fc6b4b75ca98551ddc1ec"
 )
 EXPECTED_HANDOFF_READ_ORDER = (
     "docs/HANDOFF.md",
@@ -133,6 +147,7 @@ EXPECTED_HANDOFF_READ_ORDER = (
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
     "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
     "docs/FUTURE_PLAN_AUDIT.md",
     "docs/SEMANTICS.md",
@@ -172,7 +187,7 @@ READY_FRONTIER_ROW = re.compile(
     r"([a-z0-9]+(?:-[a-z0-9]+)*)="
     r"(IMPLEMENTED|BOUNDED|READY|LOCKED|OPEN-DECISION|NOT-STARTED)` \|$"
 )
-HANDOFF_READ_ORDER_ROW = re.compile(r"^([0-9]+)\. `([^`]+)`(?:\s+.*)?$")
+HANDOFF_READ_ORDER_ROW = re.compile(r"^([0-9]+)\. `([^`]+)`$")
 PHASE_DEPENDENCY_ROW = re.compile(
     rf"^\| (PD-[0-9]{{2}}) \| ({PHASE_NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \| "
     rf"({PHASE_NODE_ID}) \| ([a-z0-9]+(?:-[a-z0-9]+)*) \|$"
@@ -202,15 +217,15 @@ EXPECTED_NODE_IDS = frozenset(
 )
 EXPECTED_STATUS_DIGEST = "8195e31919187ed962fbf003eb6eab88b48e6eb6f9f0676442672846c4299354"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
-    "609e30bdad0010c89760faebe603a5b81c0ebe41e927a4b8827bb1429850e93e"
+    "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
-EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 95))
+EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "1e61f3dc86a408a80c54d6792a7f4f2a60194a63d673cb9c1d6231ed66bcb6cf"
+    "8f368d8caa0da3ba290102c2c564d85fe9ef5d457e7eb2ab7fda9b457ac99215"
 )
-EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 6))
+EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
-    "0014820774d778fd3c970549bd4c4cbd3cdaa357ee7585b662452c3509544d21"
+    "20fb7a3fa1de1a30a5a1034f73bd204b7d522e971a4bb978a5e1ed0277e3ce3f"
 )
 EXPECTED_CONDITIONAL_IDS = frozenset(f"CE-{number:02d}" for number in range(1, 45))
 EXPECTED_CONDITIONAL_DIGEST = "eb15bafe8fac45ac591c468f0e98abb11489702abfa552a502919e9a35f9eb13"
@@ -251,6 +266,7 @@ EXPECTED_SUCCESSOR_ACTIVATION_DEPENDENCIES = frozenset(
         "SYNC-1",
         "EXECUTOR-1",
         "EXECUTION-ROOT-1",
+        "CONSENSUS-1",
         "GOVERNANCE-1",
         "CRYPTO-1",
         "CODEC-1",
@@ -286,9 +302,30 @@ EXPECTED_SUCCESSOR_ACTIVATION_ARTIFACT_FRAGMENTS = (
     "exact target `ProfileAdmissionManifestV1`",
     "concrete `UPGRADE-1` evidence",
     "carries the complete bundle before migration execution or activation",
-    "`VerifiedSuccessorPredecessorContextV1`",
+    "`VerifiedSuccessorPredecessorBaseContextV1`",
+    "`VerifiedSuccessorReleaseAuthorityContextV1`",
+    "`VerifiedSuccessorActivationAuthorityContextV1`",
+    "`ParentAuthorityCertificateConsumerContextV1`",
+    "`ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1`",
+    "`AcceptedParentAuthorityWitnessReceiptCoverageV1`",
     "internal-only bundle",
-    "that is neither serialized nor",
+    "that are neither serialized nor",
+)
+EXPECTED_CONSENSUS_AUTHORITY_ARTIFACT_FRAGMENTS = (
+    "owns live `AcceptedConsensusNativeParentAuthorityCertificateV1` issuance/admission",
+    "exactly one accepted admission per `(parent core, purpose, required position)`",
+    "consumes live accepted records directly; no replay checkpoint or normalized archive view selects admission",
+)
+EXPECTED_SYNC_AUTHORITY_ARTIFACT_FRAGMENTS = (
+    "base phase supplies role-separated full verifier, archive, light client, and non- authority RPC paths",
+    "transports and retains opaque bounded authority-certificate and occurrence bytes but does not admit or interpret a consensus-native certificate",
+    "After `CONSENSUS-1@base`, the separate replay-authority phase additionally carries ordered `ReplayEvidenceEventV1` values",
+    "consumer-bound `HistoricalAcceptedParentAuthorityUseWitnessSetV1` values with exact accepted consensus-native certificate admissions",
+)
+EXPECTED_SYNC_AUTHORITY_GATE_FRAGMENTS = (
+    "base phase passes multi-peer eclipse, partial-data, corrupt-snapshot, slow-peer, restart, pruning, and fresh-node recovery tests under declared retention assumptions without using replayed authority as live consensus input",
+    "replay-authority phase independently reconstructs the already accepted certificate protocol owned by `CONSENSUS-1`",
+    "A replay checkpoint created after the consumer is a required positive control because archive order is not live authority",
 )
 EXPECTED_TESTNET_LAUNCH_ARTIFACT_FRAGMENTS = (
     "exact authorized `CHAIN-LAUNCH-1` package and closure bundle",
@@ -340,7 +377,7 @@ EXPECTED_LOOP6_PAPER_FRAGMENTS = {
     "RG-02": (
         "This creates three explicitly different conditions. `PreventiveProfileOwnedCryptographicMigrationV1`",
         "`ProtocolIdentityHashCompromiseV1` is therefore terminal safe halt",
-        "The protocol-identity control supplies colliding or",
+        "A demonstrated collision, practical second-preimage break",
         "safe-halts and requires a new genesis under a",
     ),
     "RG-03": (
@@ -360,7 +397,7 @@ EXPECTED_LOOP7_PAPER_FRAGMENTS = {
     "LG-02": (
         "This creates three explicitly different conditions. `PreventiveProfileOwnedCryptographicMigrationV1`",
         "`ProfileOwnedAuthorityBindingCompromiseV1` is instead an established collision",
-        "PrecommittedIndependentRecoveryEnvelopeV1",
+        "PrecommittedIndependentRecoveryEnvelopeV1 = ReservedFutureUninhabitedTypeV1",
     ),
     "LG-03": (
         "VerifiedConsensusEntailedAvailabilityDeltaV1 = Canonical(",
@@ -381,12 +418,409 @@ EXPECTED_LOOP7_PAPER_FRAGMENTS = {
         "external_to_internal_dependency_edge_count_u32 = Length(GenesisInternalRefs(X))",
     ),
     "LG-06": (
-        "VerifiedSuccessorPredecessorContextV1 = SemanticVerifierResult(",
+        "VerifiedSuccessorPredecessorBaseContextV1 = SemanticVerifierResult(",
+        "VerifiedSuccessorReleaseAuthorityContextV1 = SemanticVerifierResult(",
+        "VerifiedSuccessorActivationAuthorityContextV1 = SemanticVerifierResult(",
         "SuccessorActivationInternalDependencyRefV1 =",
         "SuccessorActivationInternalDependencyNodeV1 = Canonical(",
         "internal_artifact_count_u32                       = 7 + Length(S_s) = Length(D_s)",
     ),
 }
+EXPECTED_LOOP8_PAPER_FRAGMENTS = {
+    "EG-02": (
+        "ReplayEvidenceViewV1",
+        "ReplayEvidenceArchiveCheckpointV1",
+        "ReplayEvidenceEventInclusionProofV1",
+        "ReplayEvidencePrefixCompletenessProofV1",
+        "SameWrapperAcceptedRecordOccurrenceWitnessV1",
+        "NormalizedAcceptedAuthorityEntryCoreV1 = Canonical(",
+        "normalized_authority_entry_id = ReplayEvidenceArchiveHashV1(",
+        "normalized_authority_view_root = ReplayEvidenceArchiveHashV1(",
+        "ReplayEvidenceCheckpointConsistencyProofV1 = Canonical(",
+    ),
+    "EG-03": (
+        "ReplayParentAuthorityStatusProjectionV1",
+        "it never selects live authority",
+    ),
+    "EG-04": (
+        "CurrentEstablishedAuthorityCompromiseDispositionV1 =",
+        "PrecommittedIndependentRecoveryEnvelopeV1 = ReservedFutureUninhabitedTypeV1",
+    ),
+    "EG-05": (
+        "AcceptedProposalCoreFieldManifestV1 = ExactOrderedFieldManifest(",
+        "AcceptedProposalCoreExcludedFieldManifestV1 = ExactForbiddenFieldManifest(",
+        "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+    ),
+}
+
+EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS = {
+    "VerifiedSuccessorPredecessorBaseContextV1": (
+        (
+            "SemanticVerifierResult",
+            (
+                "shared_predecessor_accepted_parent_lookup_id",
+                "shared_predecessor_core_block_id",
+                "release_parent_authority_ref=AcceptedParentAuthorityRefV1(SuccessorReleaseAuthorityV1)",
+                "verified_release_parent_eligibility=VerifiedEligibleAcceptedParentRefV1(SuccessorReleaseAuthorityV1)",
+                "release_parent_authority_status",
+                "activation_parent_authority_ref=AcceptedParentAuthorityRefV1(SuccessorActivationAuthorityV1)",
+                "verified_activation_parent_eligibility=VerifiedEligibleAcceptedParentRefV1(SuccessorActivationAuthorityV1)",
+                "activation_parent_authority_status",
+                "predecessor_admitted_profile_id",
+                "old_active_profile_context",
+                "genesis_id",
+                "chain_launch_manifest_id",
+                "predecessor_governance_authority_root",
+                "activation_old_execution_root_ref",
+            ),
+        ),
+    ),
+    "ParentAuthorityCertificateConsumerContextV1": (
+        (
+            "EnvelopeChildParentAuthorityConsumerContextV1",
+            (
+                "chain_launch_manifest_id",
+                "child_profile_transition_context",
+                "child_world_id",
+                "child_height",
+                "child_epoch",
+                "child_round_or_view",
+                "child_parent_block_id",
+                "child_consensus_policy_id",
+            ),
+        ),
+        (
+            "SuccessorReleaseParentAuthorityConsumerContextV1",
+            (
+                "admitted_release_core_id",
+                "release_authority_context_ref",
+                "release_authority_policy_id",
+            ),
+        ),
+        (
+            "SuccessorActivationParentAuthorityConsumerContextV1",
+            (
+                "chain_launch_manifest_id",
+                "predecessor_accepted_parent_authority_ref",
+                "old_active_profile_context",
+                "new_admitted_profile_context",
+                "successor_profile_admission_manifest_id",
+                "migration_spec_id",
+                "successor_activation_bundle_id",
+                "activation_height",
+                "activation_authority_policy_id",
+            ),
+        ),
+    ),
+    "ConsensusNativeAcceptedRecordOccurrenceReceiptV1": (
+        (
+            "Canonical",
+            (
+                "accepted_record_occurrence_receipt_schema_version",
+                "accepted_parent_lookup_id",
+                "unique_accepted_proposal_core_block_id",
+                "canonical_accepted_record_outer_length_u64",
+                "canonical_accepted_record_outer_bytes",
+                "typed_proposal_credential_id",
+                "ConsensusEvidenceIdV1",
+                "AvailabilityAssessmentIdV1",
+            ),
+        ),
+    ),
+    "AcceptedParentAuthorityReceiptComponentProjectionV1": (
+        (
+            "Canonical",
+            (
+                "consensus_native_accepted_record_occurrence_receipt_id",
+                "proposal_credential_component=ProposalCredentialCommittedWitnessIdV1(TypedProposalCredentialIdV1)",
+                "consensus_evidence_component=AcceptedEvidenceCommittedWitnessIdV1(ConsensusEvidenceIdV1)",
+                "availability_assessment_component=AcceptedEvidenceCommittedWitnessIdV1(AvailabilityAssessmentIdV1)",
+                "availability_dependency_component=EvidenceDependencyCommittedWitnessIdV1(AcceptedEvidenceDependencyWitnessIdV1)",
+            ),
+        ),
+    ),
+    "AcceptedParentAuthorityWitnessReceiptCoverageV1": (
+        (
+            "Canonical",
+            (
+                "CanonicalSortedUniqueByConsensusNativeAcceptedRecordOccurrenceReceiptId([AcceptedParentAuthorityReceiptComponentProjectionV1...])",
+            ),
+        ),
+    ),
+    "AcceptedParentAuthorityEvidenceCommitmentV1": (
+        (
+            "Canonical",
+            (
+                "canonical_qualifying_proposal_credential_witness_set",
+                "canonical_receipt_component_total_dependency_closed_evidence_set",
+                "canonical_dependency_closure_witness_manifest",
+                "ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1",
+                "AcceptedParentAuthorityWitnessReceiptCoverageV1",
+            ),
+        ),
+    ),
+    "ConsensusNativeParentAuthorityCertificateAdmissionCoreV1": (
+        (
+            "Canonical",
+            (
+                "consensus_native_parent_authority_certificate_id",
+                "consensus_native_parent_authority_certificate_authorization_id",
+                "parent_authority_certificate_consumer_context_id",
+                "accepted_parent_authority_evidence_commitment_id",
+                "ConsensusNativeParentAuthorityPositionV1",
+                "certificate_consensus_policy_id",
+                "certificate_availability_policy_id",
+                "required_certificate_acceptance_status",
+            ),
+        ),
+    ),
+    "ConsensusNativeParentAuthorityCertificateAdmissionV1": (
+        (
+            "Canonical",
+            (
+                "AuthorizedConsensusNativeParentAuthorityCertificateV1",
+                "ConsensusNativeParentAuthorityCertificateAdmissionCoreV1",
+                "consensus_native_parent_authority_certificate_admission_core_id",
+                "canonical_certificate_consensus_evidence_length_u64",
+                "canonical_certificate_consensus_evidence_bytes",
+                "certificate_consensus_evidence_id",
+                "canonical_certificate_availability_assessment_length_u64",
+                "canonical_certificate_availability_assessment_bytes",
+                "certificate_availability_assessment_id",
+                "attained_certificate_acceptance_status",
+            ),
+        ),
+    ),
+    "consensus_native_parent_authority_certificate_admission_id": (
+        (
+            "EnvelopeHashV1",
+            (
+                "OrdinaryProfileTransitionV1(parent_profile_context)",
+                "parent_authority_certificate_admission_domain",
+                "ConsensusNativeParentAuthorityCertificateAdmissionV1",
+            ),
+        ),
+    ),
+    "AcceptedConsensusNativeParentAuthorityCertificateV1": (
+        (
+            "Canonical",
+            (
+                "ConsensusNativeParentAuthorityCertificateAdmissionV1",
+                "consensus_native_parent_authority_certificate_admission_id",
+            ),
+        ),
+    ),
+    "ConsensusNativeParentAuthorityCertificateRefV1": (
+        (
+            "Canonical",
+            (
+                "consensus_native_parent_authority_certificate_id",
+                "consensus_native_parent_authority_certificate_authorization_id",
+                "consensus_native_parent_authority_certificate_admission_id",
+                "parent_authority_certificate_consumer_context_id",
+                "accepted_parent_authority_evidence_commitment_id",
+                "ConsensusNativeParentAuthorityPositionV1",
+            ),
+        ),
+    ),
+    "HistoricalAcceptedParentAuthorityUseRefV1": (
+        (
+            "Canonical",
+            (
+                "AcceptedParentAuthorityRefV1",
+                "unique_accepted_proposal_core_block_id",
+                "ConsensusNativeParentAuthorityCertificateRefV1",
+                "attained_parent_authority_status",
+            ),
+        ),
+    ),
+    "AcceptedParentAuthorityConsumerRefV1": (
+        (
+            "EnvelopeChildAuthorityConsumerV1",
+            (
+                "child_accepted_parent_lookup_id",
+                "child_block_id",
+            ),
+        ),
+        (
+            "SuccessorReleaseAuthorityConsumerV1",
+            ("release_sign_doc_id",),
+        ),
+        (
+            "SuccessorActivationAuthorityConsumerV1",
+            ("successor_activation_sign_doc_id",),
+        ),
+    ),
+    "AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1": (
+        (
+            "Canonical",
+            (
+                "accepted_parent_authority_certificate_occurrence_schema_version",
+                "consensus_native_parent_authority_certificate_id",
+                "consensus_native_parent_authority_certificate_authorization_id",
+                "consensus_native_parent_authority_certificate_admission_id",
+                "accepted_parent_authority_evidence_commitment_id",
+                "canonical_accepted_parent_authority_certificate_length_u64",
+                "canonical_accepted_parent_authority_certificate_bytes",
+            ),
+        ),
+    ),
+    "ReplayEvidenceEventV1": (
+        (
+            "AcceptedRecordOuterOccurrenceEventV1",
+            (
+                "AcceptedRecordOuterOccurrenceV1",
+                "accepted_record_outer_occurrence_id",
+            ),
+        ),
+        (
+            "AcceptedParentAuthorityUseOccurrenceEventV1",
+            (
+                "AcceptedParentAuthorityUseV1",
+                "AcceptedParentAuthorityConsumerRefV1",
+                "HistoricalAcceptedParentAuthorityUseRefV1",
+                "AcceptedConsensusNativeParentAuthorityCertificateOccurrenceV1",
+                "accepted_parent_authority_certificate_occurrence_id",
+                "canonical_authority_consumer_preimage_length_u64",
+                "canonical_authority_consumer_preimage_bytes",
+            ),
+        ),
+    ),
+    "CertificateEvidenceArchiveOccurrenceWitnessV1": (
+        (
+            "Canonical",
+            (
+                "CertificateEvidenceReplayCheckpointRefV1",
+                "replay_evidence_event_id",
+                "accepted_record_outer_occurrence_id",
+                "accepted_parent_lookup_id",
+                "unique_accepted_proposal_core_block_id",
+                "consensus_native_accepted_record_occurrence_receipt_id",
+                "typed_proposal_credential_id",
+                "ConsensusEvidenceIdV1",
+                "AvailabilityAssessmentIdV1",
+                "ReplayEvidenceEventInclusionProofV1",
+            ),
+        ),
+    ),
+    "CertificateEvidenceArchiveOccurrenceWitnessSetV1": (
+        (
+            "CanonicalSortedUniqueByAcceptedRecordOuterOccurrenceId",
+            ("[CertificateEvidenceArchiveOccurrenceWitnessV1...]",),
+        ),
+    ),
+    "ConsensusToReplayParentAuthorityCommitmentProofV1": (
+        (
+            "Canonical",
+            (
+                "consensus_native_parent_authority_certificate_admission_id",
+                "accepted_parent_authority_evidence_commitment_id",
+                "CertificateEvidenceReplayCheckpointRefV1",
+                "AcceptedParentAuthorityRefV1",
+                "CertificateEvidenceArchiveOccurrenceWitnessSetV1",
+                "canonical_certificate_commitment_to_occurrence_reconstruction_map",
+                "canonical_certificate_dependency_closure_recomputation_trace",
+                "recomputed_certificate_parent_authority_status",
+            ),
+        ),
+    ),
+    "HistoricalAcceptedParentAuthorityUseWitnessV1": (
+        (
+            "Canonical",
+            (
+                "HistoricalAcceptedParentAuthorityUseRefV1",
+                "AcceptedParentAuthorityConsumerRefV1",
+                "AcceptedConsensusNativeParentAuthorityCertificateV1",
+                "accepted_parent_authority_certificate_occurrence_id",
+                "replay_evidence_view_id",
+                "certificate_evidence_replay_checkpoint=ReplayEvidenceArchiveCheckpointV1",
+                "ReplayEvidenceCheckpointConsistencyProofV1",
+                "ConsensusToReplayParentAuthorityCommitmentProofV1",
+                "authority_consumer_event_ordinal_u64",
+                "certificate_evidence_prefix_completeness_proof=ReplayEvidencePrefixCompletenessProofV1",
+                "authority_consumer_event_inclusion_proof=ReplayEvidenceEventInclusionProofV1",
+                "canonical_authority_consumer_preimage_length_u64",
+                "canonical_authority_consumer_preimage_bytes",
+                "canonical_qualifying_proposal_credential_preimages",
+                "canonical_dependency_closed_evidence_preimages",
+            ),
+        ),
+    ),
+}
+
+EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS = (
+    "accepted_proposal_core_version_u16_be",
+    "accepted_parent_lookup_id",
+    "authority_ref_kind_u8",
+    "canonical_authority_ref_length_u32_be",
+    "canonical_proposal_header_length_u64_be",
+    "canonical_availability_payload_length_u64_be",
+    "canonical_authority_ref_bytes",
+    "canonical_proposal_header_bytes",
+    "canonical_availability_payload_bytes",
+)
+EXPECTED_ACCEPTED_PROPOSAL_CORE_EXCLUDED_FIELDS = (
+    "canonical_proposer_signature_length_u64_be",
+    "canonical_proposer_signature_bytes",
+    "typed_proposal_credential_id",
+    "proposal_credential_id",
+    "canonical_consensus_evidence_bytes",
+    "consensus_evidence_id",
+    "canonical_availability_assessment_bytes",
+    "availability_assessment_id",
+)
+EXPECTED_ACCEPTED_PARENT_COLLISION_ROWS = (
+    (
+        "row_1",
+        "ByteDistinctAcceptedParentLookupPayloadPreimagesSameProfileIdHashV1OutputV1",
+        "ProtocolIdentityHashCompromiseV1",
+    ),
+    (
+        "row_2",
+        "ByteEqualAcceptedParentLookupPayloadAndBlockIdDistinctValidAcceptedProposalCoresV1",
+        "ProfileOwnedAuthorityBindingCompromiseV1",
+    ),
+)
+EXACT_ACCEPTED_PARENT_SCHEMA_NAMES = (
+    "AcceptedProposalCoreFieldManifestV1",
+    "AcceptedProposalCoreV1",
+    "AcceptedProposalCoreExcludedFieldManifestV1",
+    "AcceptedParentCollisionDispositionV1",
+)
+EXACT_ACCEPTED_PROPOSAL_CORE_DECLARATION = (
+    "AcceptedProposalCoreV1 = FixedPreProfileCanonicalV1("
+    "FieldsExactly(AcceptedProposalCoreFieldManifestV1))"
+)
+PROVENANCE_TABLE_HEADER = "| Provenance field | Canonical value |"
+PROVENANCE_TABLE_SEPARATOR = "| --- | --- |"
+PROVENANCE_TABLE_ROW = re.compile(r"^\| `([a-z0-9_]+)` \| `([^`]+)` \|$")
+SUMMARY_TABLE_HEADER = "| Summary field | Canonical decimal value |"
+SUMMARY_TABLE_SEPARATOR = "| --- | ---: |"
+SUMMARY_TABLE_ROW = re.compile(r"^\| `([a-z0-9_]+)` \| `([0-9]+)` \|$")
+PROVENANCE_FIELD_ORDER = (
+    "audited_input_commit",
+    "audited_input_tree",
+    "addition_commit",
+    "addition_tree",
+    "audit_git_blob",
+    "material_finding_count_u32",
+)
+PLANNING_SUMMARY_FIELD_ORDER = (
+    "capability_node_count_u32",
+    "foundation_node_count_u32",
+    "detailed_node_count_u32",
+    "phase_status_count_u32",
+    "ready_frontier_count_u32",
+    "base_dependency_edge_count_u32",
+    "phase_dependency_edge_count_u32",
+    "conditional_edge_count_u32",
+    "total_declared_edge_count_u32",
+    "predicate_entailment_count_u32",
+    "planning_markdown_count_u32",
+    "frozen_text_artifact_count_u32",
+    "frozen_markdown_audit_count_u32",
+    "frozen_json_receipt_count_u32",
+)
 
 
 class PlanningError(ValueError):
@@ -540,6 +974,283 @@ def _field_blocks(lines: list[str], start: int, end: int, node_id: str) -> dict[
     return joined
 
 
+def _unique_manifest_lines(text: str, header: str, label: str) -> tuple[str, ...]:
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if line.strip() == header]
+    if len(starts) != 1:
+        raise PlanningError(f"{label}: expected exactly one {header}, got {len(starts)}")
+    start = starts[0]
+    depth = header.count("(") - header.count(")")
+    end: int | None = None
+    for index in range(start + 1, len(lines)):
+        depth += lines[index].count("(") - lines[index].count(")")
+        if depth == 0:
+            end = index
+            break
+        if depth < 0:
+            raise PlanningError(f"{label}: {header} closes past its opening parenthesis")
+    if end is None:
+        raise PlanningError(f"{label}: {header} has no exact closing parenthesis")
+    return tuple(line.strip() for line in lines[start + 1 : end] if line.strip())
+
+
+def _require_unique_schema_assignment(text: str, schema_name: str, label: str) -> None:
+    assignments = re.findall(
+        rf"(?m)^[ \t]*{re.escape(schema_name)}[ \t]*=",
+        text,
+    )
+    if len(assignments) != 1:
+        raise PlanningError(
+            f"{label}: {schema_name} must have exactly one schema assignment, "
+            f"got {len(assignments)}"
+        )
+
+
+def check_accepted_parent_exact_invariants(text: str, label: str) -> None:
+    for schema_name in EXACT_ACCEPTED_PARENT_SCHEMA_NAMES:
+        _require_unique_schema_assignment(text, schema_name, label)
+
+    field_lines = _unique_manifest_lines(
+        text,
+        "AcceptedProposalCoreFieldManifestV1 = ExactOrderedFieldManifest(",
+        label,
+    )
+    fields: list[str] = []
+    ordinals: list[int] = []
+    for line in field_lines:
+        match = re.fullmatch(r"([0-9]+)\s*=>\s*([a-z0-9_]+),?", line)
+        if match is None:
+            raise PlanningError(f"{label}: malformed accepted-core field row: {line}")
+        ordinal, field_name = match.groups()
+        ordinals.append(int(ordinal))
+        fields.append(field_name)
+    expected_ordinals = list(range(1, len(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS) + 1))
+    if ordinals != expected_ordinals or tuple(fields) != EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS:
+        raise PlanningError(
+            f"{label}: AcceptedProposalCoreV1 exact ordered fields disagree: "
+            f"expected={list(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS)}, got={fields}"
+        )
+
+    core_declarations = re.findall(
+        r"AcceptedProposalCoreV1\s*=\s*FixedPreProfileCanonicalV1\(\s*"
+        r"FieldsExactly\(AcceptedProposalCoreFieldManifestV1\)\s*\)",
+        text,
+    )
+    if len(core_declarations) != 1:
+        raise PlanningError(
+            f"{label}: AcceptedProposalCoreV1 must be declared exactly once through "
+            "FieldsExactly(AcceptedProposalCoreFieldManifestV1)"
+        )
+
+    excluded_lines = _unique_manifest_lines(
+        text,
+        "AcceptedProposalCoreExcludedFieldManifestV1 = ExactForbiddenFieldManifest(",
+        label,
+    )
+    exclusions: list[str] = []
+    for line in excluded_lines:
+        match = re.fullmatch(r"([a-z0-9_]+),?", line)
+        if match is None:
+            raise PlanningError(f"{label}: malformed accepted-core exclusion row: {line}")
+        exclusions.append(match.group(1))
+    if tuple(exclusions) != EXPECTED_ACCEPTED_PROPOSAL_CORE_EXCLUDED_FIELDS:
+        raise PlanningError(
+            f"{label}: AcceptedProposalCoreV1 exact exclusions disagree: "
+            f"expected={list(EXPECTED_ACCEPTED_PROPOSAL_CORE_EXCLUDED_FIELDS)}, got={exclusions}"
+        )
+    overlap = sorted(set(fields) & set(exclusions))
+    if overlap:
+        raise PlanningError(f"{label}: accepted-core fields also appear as exclusions: {overlap}")
+
+    collision_lines = _unique_manifest_lines(
+        text,
+        "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+        label,
+    )
+    collision_body = " ".join(collision_lines)
+    collision_pattern = re.compile(
+        r"(row_[0-9]+)\s*=\s*\(\s*"
+        r"([A-Za-z0-9]+)\s*,\s*([A-Za-z0-9]+)\s*\)\s*,?"
+    )
+    collision_rows = [match.groups() for match in collision_pattern.finditer(collision_body)]
+    residual = collision_pattern.sub("", collision_body).strip()
+    if residual:
+        raise PlanningError(f"{label}: malformed collision-disposition content: {residual}")
+    if tuple(collision_rows) != EXPECTED_ACCEPTED_PARENT_COLLISION_ROWS:
+        raise PlanningError(
+            f"{label}: AcceptedParentCollisionDispositionV1 disagrees: "
+            f"expected={list(EXPECTED_ACCEPTED_PARENT_COLLISION_ROWS)}, got={collision_rows}"
+        )
+
+
+def _split_schema_top_level(text: str, delimiter: str, label: str) -> tuple[str, ...]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(text):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {'"', "'"}:
+            quote = character
+        elif character in "([{" :
+            depth += 1
+        elif character in ")]}" :
+            depth -= 1
+            if depth < 0:
+                raise PlanningError(f"{label}: schema expression closes past its opener")
+        elif character == delimiter and depth == 0:
+            part = text[start:index].strip()
+            if not part:
+                raise PlanningError(f"{label}: empty schema component")
+            parts.append(part)
+            start = index + 1
+    if quote is not None or depth != 0:
+        raise PlanningError(f"{label}: unbalanced schema expression")
+    final = text[start:].strip()
+    if not final:
+        raise PlanningError(f"{label}: empty final schema component")
+    parts.append(final)
+    return tuple(parts)
+
+
+def _parse_exact_schema_assignment(
+    text: str,
+    schema_name: str,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    assignment_pattern = re.compile(
+        rf"^[ \t]*{re.escape(schema_name)}[ \t]*=",
+        flags=re.MULTILINE,
+    )
+    assignments = list(assignment_pattern.finditer(text))
+    if len(assignments) != 1:
+        raise PlanningError(
+            f"LAYER1_DESIGN_PAPER.md: {schema_name} must have exactly one assignment, "
+            f"got {len(assignments)}"
+        )
+    start = assignments[0].start()
+    suffix = text[start:]
+    boundary = re.search(r"\n[ \t]*\n", suffix)
+    block = suffix[: boundary.start()] if boundary is not None else suffix
+    if "=" not in block:
+        raise PlanningError(f"LAYER1_DESIGN_PAPER.md: {schema_name} assignment has no RHS")
+    rhs = block.split("=", 1)[1].strip()
+    alternatives = _split_schema_top_level(rhs, "|", schema_name)
+    parsed: list[tuple[str, tuple[str, ...]]] = []
+    for alternative in alternatives:
+        call = re.fullmatch(
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)",
+            alternative,
+            flags=re.DOTALL,
+        )
+        if call is None:
+            raise PlanningError(
+                f"LAYER1_DESIGN_PAPER.md: {schema_name} has malformed variant: "
+                f"{alternative.strip()}"
+            )
+        variant_name, body = call.groups()
+        arguments = (
+            _split_schema_top_level(body, ",", f"{schema_name}.{variant_name}")
+            if body.strip()
+            else ()
+        )
+        parsed.append(
+            (
+                variant_name,
+                tuple(re.sub(r"\s+", "", argument) for argument in arguments),
+            )
+        )
+    return tuple(parsed)
+
+
+def check_loop8_exact_schemas(
+    text: str,
+    schema_names: tuple[str, ...] | None = None,
+) -> None:
+    selected = (
+        tuple(EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS)
+        if schema_names is None
+        else schema_names
+    )
+    unknown = sorted(set(selected) - EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS.keys())
+    if unknown:
+        raise PlanningError(f"unknown Loop 8 exact schemas requested: {unknown}")
+    for schema_name in selected:
+        expected = EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS[schema_name]
+        actual = _parse_exact_schema_assignment(text, schema_name)
+        if actual != expected:
+            raise PlanningError(
+                f"LAYER1_DESIGN_PAPER.md: {schema_name} exact ordered variants/fields "
+                f"disagree: expected={expected}, got={actual}"
+            )
+
+
+def _parse_named_two_column_table(
+    text: str,
+    heading: str,
+    header: str,
+    separator: str,
+    row_pattern: re.Pattern[str],
+    label: str,
+) -> tuple[tuple[str, str], ...]:
+    lines = text.splitlines()
+    headings = [index for index, line in enumerate(lines) if line == heading]
+    if len(headings) != 1:
+        raise PlanningError(f"{label}: expected exactly one {heading} heading")
+    start = headings[0]
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].startswith("#")
+        ),
+        len(lines),
+    )
+    headers = [index for index in range(start + 1, end) if lines[index] == header]
+    if len(headers) != 1:
+        raise PlanningError(f"{label}: expected exactly one canonical table header")
+    table = headers[0]
+    if table + 1 >= end or lines[table + 1] != separator:
+        raise PlanningError(f"{label}: table separator is not canonical")
+    rows: list[tuple[str, str]] = []
+    index = table + 2
+    while index < end and lines[index].startswith("|"):
+        match = row_pattern.fullmatch(lines[index])
+        if match is None:
+            raise PlanningError(f"{label}: malformed projection row: {lines[index]}")
+        rows.append(match.groups())
+        index += 1
+    if not rows:
+        raise PlanningError(f"{label}: projection table is empty")
+    if any(line.startswith("|") for line in lines[index:end]):
+        raise PlanningError(f"{label}: contains a second or non-contiguous table")
+    fields = [field for field, _value in rows]
+    duplicates = sorted(field for field in set(fields) if fields.count(field) > 1)
+    if duplicates:
+        raise PlanningError(f"{label}: duplicate projection fields: {duplicates}")
+    return tuple(rows)
+
+
+def _without_heading_section(text: str, heading: str) -> str:
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if line == heading]
+    if len(starts) != 1:
+        raise PlanningError(f"expected exactly one {heading} heading while removing projection")
+    start = starts[0]
+    end = next(
+        (index for index in range(start + 1, len(lines)) if lines[index].startswith("#")),
+        len(lines),
+    )
+    return "\n".join(lines[:start] + lines[end:])
+
+
 def parse_capability(text: str) -> dict[str, Node]:
     lines = text.splitlines()
     nodes: dict[str, Node] = {}
@@ -663,6 +1374,24 @@ def parse_capability(text: str) -> dict[str, Node]:
         if required_fragment not in successor_artifact:
             raise PlanningError(
                 f"SUCCESSOR-ACTIVATION-1 artifact omits {required_fragment}"
+            )
+    consensus_artifact = detail_fields["CONSENSUS-1"]["Artifact"]
+    for required_fragment in EXPECTED_CONSENSUS_AUTHORITY_ARTIFACT_FRAGMENTS:
+        if required_fragment not in consensus_artifact:
+            raise PlanningError(
+                f"CONSENSUS-1 authority-ownership artifact omits {required_fragment}"
+            )
+    sync_artifact = detail_fields["SYNC-1"]["Artifact"]
+    for required_fragment in EXPECTED_SYNC_AUTHORITY_ARTIFACT_FRAGMENTS:
+        if required_fragment not in sync_artifact:
+            raise PlanningError(
+                f"SYNC-1 authority-ownership artifact omits {required_fragment}"
+            )
+    sync_gate = detail_fields["SYNC-1"]["Gate"]
+    for required_fragment in EXPECTED_SYNC_AUTHORITY_GATE_FRAGMENTS:
+        if required_fragment not in sync_gate:
+            raise PlanningError(
+                f"SYNC-1 authority-ownership gate omits {required_fragment}"
             )
     for required_fragment in EXPECTED_TESTNET_SUCCESSOR_ARTIFACT_FRAGMENTS:
         if required_fragment not in testnet_artifact:
@@ -1264,31 +1993,6 @@ def check_planning_inventory(paths: tuple[Path, ...]) -> None:
         )
 
 
-_COUNT_WORDS = {
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "six": 6,
-    "seven": 7,
-    "eight": 8,
-    "nine": 9,
-    "ten": 10,
-    "eleven": 11,
-    "twelve": 12,
-}
-
-
-def _displayed_count(token: str, label: str) -> int:
-    if token.isdecimal():
-        return int(token)
-    value = _COUNT_WORDS.get(token.lower())
-    if value is None:
-        raise PlanningError(f"HANDOFF {label} uses an unknown count token: {token}")
-    return value
-
-
 def check_handoff_read_order_and_counts(
     text: str,
     tracked_paths: frozenset[Path],
@@ -1352,48 +2056,331 @@ def check_handoff_read_order_and_counts(
         )
     if frozenset(normalized) != EXPECTED_PLANNING_PATHS:
         raise PlanningError("HANDOFF read-order set disagrees with the planning inventory")
-
-    planning_count_matches = re.findall(
-        r"exact ([A-Za-z0-9-]+)-document authority inventory",
-        text,
-    )
-    if not planning_count_matches:
-        raise PlanningError("HANDOFF does not display its planning-document count")
-    for token in planning_count_matches:
-        planning_count = _displayed_count(token, "planning-document count")
-        if planning_count != len(PLANNING_FILES):
-            raise PlanningError(
-                "HANDOFF planning-document count is stale: "
-                f"expected={len(PLANNING_FILES)}, got={planning_count}"
-            )
-
-    frozen_count_matches = re.findall(
-        r"effective LF checkout policy for all\s+([A-Za-z0-9-]+) frozen text artifacts:\s+"
-        r"([A-Za-z0-9-]+) Markdown audits and one JSON source receipt",
-        text,
-    )
-    byte_frozen_count_matches = re.findall(
-        r"all\s+([A-Za-z0-9-]+) byte-frozen artifacts—([A-Za-z0-9-]+) Markdown audits\s+"
-        r"and one JSON source receipt",
-        text,
-    )
-    all_frozen_count_matches = frozen_count_matches + byte_frozen_count_matches
-    if not all_frozen_count_matches:
-        raise PlanningError("HANDOFF does not display its frozen-artifact counts")
-    expected_markdown_count = sum(path.suffix.lower() == ".md" for path in FROZEN_TEXT_FILES)
-    expected_json_count = sum(path.suffix.lower() == ".json" for path in FROZEN_TEXT_FILES)
-    if expected_json_count != 1:
-        raise PlanningError("internal frozen-artifact inventory no longer has exactly one JSON file")
-    for frozen_token, markdown_token in all_frozen_count_matches:
-        frozen_count = _displayed_count(frozen_token, "frozen-artifact count")
-        markdown_count = _displayed_count(markdown_token, "frozen Markdown count")
-        if frozen_count != len(FROZEN_TEXT_FILES) or markdown_count != expected_markdown_count:
-            raise PlanningError(
-                "HANDOFF frozen-artifact counts are stale: "
-                f"expected={len(FROZEN_TEXT_FILES)}/{expected_markdown_count}/1, "
-                f"got={frozen_count}/{markdown_count}/1"
-            )
     return tuple(normalized)
+
+
+def derive_planning_checker_summary(
+    capability_text: str,
+    nodes: dict[str, Node],
+    phase_statuses: tuple[PhaseStatus, ...],
+    ready_frontier: tuple[PhaseStatus, ...],
+    phase_dependencies: tuple[PhaseDependency, ...],
+    conditional_edges: tuple[ConditionalEdge, ...],
+    predicate_entailments: tuple[PredicateEntailment, ...],
+) -> dict[str, int]:
+    foundation_count = sum(
+        FOUNDATION_ROW.match(line) is not None for line in capability_text.splitlines()
+    )
+    detailed_count = sum(
+        DETAIL_HEADING.match(line) is not None for line in capability_text.splitlines()
+    )
+    base_edge_count = sum(len(node.dependencies) for node in nodes.values())
+    frozen_markdown_count = sum(path.suffix.lower() == ".md" for path in FROZEN_TEXT_FILES)
+    frozen_json_count = sum(path.suffix.lower() == ".json" for path in FROZEN_TEXT_FILES)
+    return {
+        "capability_node_count_u32": len(nodes),
+        "foundation_node_count_u32": foundation_count,
+        "detailed_node_count_u32": detailed_count,
+        "phase_status_count_u32": len(phase_statuses),
+        "ready_frontier_count_u32": len(ready_frontier),
+        "base_dependency_edge_count_u32": base_edge_count,
+        "phase_dependency_edge_count_u32": len(phase_dependencies),
+        "conditional_edge_count_u32": len(conditional_edges),
+        "total_declared_edge_count_u32": (
+            base_edge_count + len(phase_dependencies) + len(conditional_edges)
+        ),
+        "predicate_entailment_count_u32": len(predicate_entailments),
+        "planning_markdown_count_u32": len(PLANNING_FILES),
+        "frozen_text_artifact_count_u32": len(FROZEN_TEXT_FILES),
+        "frozen_markdown_audit_count_u32": frozen_markdown_count,
+        "frozen_json_receipt_count_u32": frozen_json_count,
+    }
+
+
+def check_planning_checker_summary_projection(
+    capability_text: str,
+    expected: dict[str, int],
+) -> tuple[tuple[str, str], ...]:
+    rows = _parse_named_two_column_table(
+        capability_text,
+        "## `PlanningCheckerSummaryV1`",
+        SUMMARY_TABLE_HEADER,
+        SUMMARY_TABLE_SEPARATOR,
+        SUMMARY_TABLE_ROW,
+        "PlanningCheckerSummaryV1",
+    )
+    fields = tuple(field for field, _value in rows)
+    if fields != PLANNING_SUMMARY_FIELD_ORDER:
+        raise PlanningError(
+            "PlanningCheckerSummaryV1 field order disagrees: "
+            f"expected={list(PLANNING_SUMMARY_FIELD_ORDER)}, got={list(fields)}"
+        )
+    projected = {field: int(value) for field, value in rows}
+    if projected != expected:
+        raise PlanningError(
+            "PlanningCheckerSummaryV1 values disagree with parsed authority: "
+            f"expected={expected}, got={projected}"
+        )
+    return rows
+
+
+def check_audit_provenance_projection(
+    handoff_text: str,
+    schema_name: str,
+    expected: dict[str, str],
+) -> tuple[tuple[str, str], ...]:
+    rows = _parse_named_two_column_table(
+        handoff_text,
+        f"### {schema_name}",
+        PROVENANCE_TABLE_HEADER,
+        PROVENANCE_TABLE_SEPARATOR,
+        PROVENANCE_TABLE_ROW,
+        schema_name,
+    )
+    fields = tuple(field for field, _value in rows)
+    if fields != PROVENANCE_FIELD_ORDER:
+        raise PlanningError(
+            f"{schema_name} field order disagrees: "
+            f"expected={list(PROVENANCE_FIELD_ORDER)}, got={list(fields)}"
+        )
+    projected = dict(rows)
+    if projected != expected:
+        raise PlanningError(
+            f"{schema_name} values disagree with Git/frozen authority: "
+            f"expected={expected}, got={projected}"
+        )
+    return rows
+
+
+_COUNT_WORD_BY_VALUE = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+    11: "eleven",
+    12: "twelve",
+    13: "thirteen",
+    14: "fourteen",
+    15: "fifteen",
+    16: "sixteen",
+    17: "seventeen",
+    18: "eighteen",
+    19: "nineteen",
+    20: "twenty",
+    21: "twenty-one",
+    22: "twenty-two",
+}
+
+
+def _exact_count_token(value: int) -> str:
+    variants = [re.escape(str(value))]
+    if value in _COUNT_WORD_BY_VALUE:
+        variants.append(re.escape(_COUNT_WORD_BY_VALUE[value]))
+    return "(?:" + "|".join(variants) + ")"
+
+
+def _summary_prose_count_patterns(
+    planning_summary: dict[str, int],
+) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    count = lambda field: _exact_count_token(planning_summary[field])
+    return (
+        (
+            "capability_node_count_u32",
+            re.compile(
+                rf"\b{count('capability_node_count_u32')}\s+capability\s+nodes?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "foundation_node_count_u32",
+            re.compile(
+                rf"\b{count('foundation_node_count_u32')}\s+foundation\s+(?:nodes?|rows?)\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "detailed_node_count_u32",
+            re.compile(
+                rf"\b{count('detailed_node_count_u32')}\s+detailed\s+nodes?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "phase_status_count_u32",
+            re.compile(
+                rf"\b{count('phase_status_count_u32')}(?:-row|\s+structured)?\s+"
+                r"phase-status(?:\s+(?:rows?|tuples?))?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "ready_frontier_count_u32",
+            re.compile(
+                rf"\b{count('ready_frontier_count_u32')}\s+(?:ordered\s+)?"
+                r"READY(?:[- ]frontier)?\s+(?:rows?|tuples?)\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "base_dependency_edge_count_u32",
+            re.compile(
+                rf"\b{count('base_dependency_edge_count_u32')}\s+(?:unconditional\s+)?"
+                r"base(?:[- ]dependency)?\s+edges?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "phase_dependency_edge_count_u32",
+            re.compile(
+                rf"\b{count('phase_dependency_edge_count_u32')}\s+phase"
+                r"(?:[- ]dependency\s+edges?|\s+dependencies)\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "conditional_edge_count_u32",
+            re.compile(
+                rf"\b{count('conditional_edge_count_u32')}\s+(?:context-bearing\s+)?"
+                r"conditional(?:-instance|\s+instance)?\s+edges?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "total_declared_edge_count_u32",
+            re.compile(
+                rf"\b{count('total_declared_edge_count_u32')}\s+"
+                r"(?:(?:total\s+)?declared(?:\s+base-plus-phase-plus-conditional)?|combined)"
+                r"\s+edges?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "predicate_entailment_count_u32",
+            re.compile(
+                rf"\b{count('predicate_entailment_count_u32')}\s+predicate\s+entailments?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "planning_markdown_count_u32",
+            re.compile(
+                rf"\b{count('planning_markdown_count_u32')}"
+                r"(?:(?:-document|\s+documents?)\s+(?:planning\s+)?(?:authority\s+)?inventory"
+                r"|\s+planning\s+Markdown\s+(?:files?|documents?))\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "frozen_text_artifact_count_u32",
+            re.compile(
+                rf"\b{count('frozen_text_artifact_count_u32')}\s+(?:byte-)?"
+                r"frozen(?:\s+text)?\s+artifacts?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "frozen_markdown_audit_count_u32",
+            re.compile(
+                rf"\b{count('frozen_markdown_audit_count_u32')}\s+"
+                r"(?:frozen\s+)?Markdown\s+audits?\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "frozen_json_receipt_count_u32",
+            re.compile(
+                rf"\b{count('frozen_json_receipt_count_u32')}\s+"
+                r"(?:frozen\s+)?JSON\s+source\s+receipts?\b",
+                re.IGNORECASE,
+            ),
+        ),
+    )
+
+
+def check_no_duplicate_exact_projections(
+    texts: dict[str, str],
+    planning_summary: dict[str, int],
+) -> None:
+    audit_markers = {
+        "Loop7ProvenanceV1": (
+            ("design_research_distillation_audit_loop7.md", "loop 7", "seventh"),
+            SEVENTH_AUDIT_FINDING_COUNT,
+            (
+                SEVENTH_AUDIT_INPUT_COMMIT,
+                SEVENTH_AUDIT_INPUT_TREE,
+                SEVENTH_AUDIT_ADDITION_COMMIT,
+                SEVENTH_AUDIT_ADDITION_TREE,
+                SEVENTH_AUDIT_GIT_BLOB,
+            ),
+        ),
+        "Loop8ProvenanceV1": (
+            ("design_research_distillation_audit_loop8.md", "loop 8", "eighth"),
+            EIGHTH_AUDIT_FINDING_COUNT,
+            (
+                EIGHTH_AUDIT_INPUT_COMMIT,
+                EIGHTH_AUDIT_INPUT_TREE,
+                EIGHTH_AUDIT_ADDITION_COMMIT,
+                EIGHTH_AUDIT_ADDITION_TREE,
+                EIGHTH_AUDIT_GIT_BLOB,
+            ),
+        ),
+    }
+    for schema_name, (_markers, _expected_count, object_ids) in audit_markers.items():
+        for object_id in object_ids:
+            object_token = re.compile(
+                rf"(?<![0-9a-f])(?:{re.escape(object_id)}|{re.escape(object_id[:7])})"
+                r"(?![0-9a-f])",
+                re.IGNORECASE,
+            )
+            occurrences = [
+                (path, match.group(0))
+                for path, text in texts.items()
+                for match in object_token.finditer(text)
+            ]
+            if len(occurrences) != 1:
+                raise PlanningError(
+                    f"exact Git object for {schema_name} must occur exactly once in its "
+                    "canonical HANDOFF table cell; "
+                    f"object={object_id}, occurrences={occurrences}"
+                )
+
+    count_words = {6: "six", 8: "eight"}
+    for path, text in texts.items():
+        for paragraph in re.split(r"\n\s*\n", text):
+            lowered = paragraph.lower()
+            for schema_name, (markers, expected_count, object_ids) in audit_markers.items():
+                if not any(marker in lowered for marker in markers):
+                    continue
+                expected_count_token = (
+                    rf"(?:{expected_count}|{count_words[expected_count]})"
+                )
+                finding_count = re.compile(
+                    rf"(?:\b{expected_count_token}\b[^.\n]{{0,60}}"
+                    rf"\b(?:material\s+)?(?:findings?|gaps?)\b|"
+                    rf"\b(?:material\s+)?(?:findings?|gaps?)\b[^.\n]{{0,60}}"
+                    rf"\b{expected_count_token}\b)",
+                    re.IGNORECASE,
+                )
+                if finding_count.search(paragraph):
+                    raise PlanningError(
+                        f"{path}: exact finding count for {schema_name} must live only in its "
+                        "canonical HANDOFF projection"
+                    )
+
+    for path, text in texts.items():
+        for field, pattern in _summary_prose_count_patterns(planning_summary):
+            match = pattern.search(text)
+            if match is not None:
+                raise PlanningError(
+                    f"{path}: exact planning count must project only through "
+                    f"PlanningCheckerSummaryV1: field={field}, text={match.group(0)}"
+                )
 
 
 def git_effective_eol_policy(paths: tuple[Path, ...]) -> dict[str, dict[str, str]]:
@@ -1639,6 +2626,16 @@ def check_frozen_seventh_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_eighth_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != EIGHTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md changed after its frozen first "
+            f"addition: expected Git blob {EIGHTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
 def _git_rev_parse(revision: str) -> str:
     try:
         result = subprocess.run(
@@ -1657,37 +2654,91 @@ def _git_rev_parse(revision: str) -> str:
     return result.stdout.strip()
 
 
-def check_seventh_audit_addition_identity() -> None:
-    commit = _git_rev_parse(f"{SEVENTH_AUDIT_ADDITION_COMMIT}^{{commit}}")
-    if commit != SEVENTH_AUDIT_ADDITION_COMMIT:
+def _check_audit_addition_identity(
+    *,
+    label: str,
+    path: Path,
+    input_commit: str,
+    input_tree: str,
+    addition_commit: str,
+    addition_tree: str,
+    addition_blob: str,
+    finding_count: int,
+) -> dict[str, str]:
+    resolved_input = _git_rev_parse(f"{input_commit}^{{commit}}")
+    if resolved_input != input_commit:
         raise PlanningError(
-            "Loop 7 audit addition commit mismatch: "
-            f"expected {SEVENTH_AUDIT_ADDITION_COMMIT}, got {commit}"
+            f"{label} audited input commit mismatch: expected {input_commit}, got {resolved_input}"
         )
-    tree = _git_rev_parse(f"{SEVENTH_AUDIT_ADDITION_COMMIT}^{{tree}}")
-    if tree != SEVENTH_AUDIT_ADDITION_TREE:
+    resolved_input_tree = _git_rev_parse(f"{input_commit}^{{tree}}")
+    if resolved_input_tree != input_tree:
         raise PlanningError(
-            "Loop 7 audit addition tree mismatch: "
-            f"expected {SEVENTH_AUDIT_ADDITION_TREE}, got {tree}"
+            f"{label} audited input tree mismatch: expected {input_tree}, got {resolved_input_tree}"
         )
-    path = repository_relative_path(SEVENTH_AUDIT)
-    blob = _git_rev_parse(f"{SEVENTH_AUDIT_ADDITION_COMMIT}:{path}")
-    if blob != SEVENTH_AUDIT_GIT_BLOB:
+    commit = _git_rev_parse(f"{addition_commit}^{{commit}}")
+    if commit != addition_commit:
         raise PlanningError(
-            "Loop 7 audit addition blob mismatch: "
-            f"expected {SEVENTH_AUDIT_GIT_BLOB}, got {blob}"
+            f"{label} addition commit mismatch: expected {addition_commit}, got {commit}"
+        )
+    parent = _git_rev_parse(f"{addition_commit}^")
+    if parent != input_commit:
+        raise PlanningError(
+            f"{label} addition parent mismatch: expected {input_commit}, got {parent}"
+        )
+    tree = _git_rev_parse(f"{addition_commit}^{{tree}}")
+    if tree != addition_tree:
+        raise PlanningError(
+            f"{label} addition tree mismatch: expected {addition_tree}, got {tree}"
+        )
+    relative_path = repository_relative_path(path)
+    blob = _git_rev_parse(f"{addition_commit}:{relative_path}")
+    if blob != addition_blob:
+        raise PlanningError(
+            f"{label} addition blob mismatch: expected {addition_blob}, got {blob}"
         )
     parent_probe = subprocess.run(
-        ["git", "cat-file", "-e", f"{SEVENTH_AUDIT_ADDITION_COMMIT}^:{path}"],
+        ["git", "cat-file", "-e", f"{addition_commit}^:{relative_path}"],
         cwd=ROOT,
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
     if parent_probe.returncode == 0:
-        raise PlanningError(
-            "Loop 7 audit existed before its declared first-addition commit"
-        )
+        raise PlanningError(f"{label} existed before its declared first-addition commit")
+    return {
+        "audited_input_commit": input_commit,
+        "audited_input_tree": input_tree,
+        "addition_commit": addition_commit,
+        "addition_tree": addition_tree,
+        "audit_git_blob": addition_blob,
+        "material_finding_count_u32": str(finding_count),
+    }
+
+
+def check_seventh_audit_addition_identity() -> dict[str, str]:
+    return _check_audit_addition_identity(
+        label="Loop 7 audit",
+        path=SEVENTH_AUDIT,
+        input_commit=SEVENTH_AUDIT_INPUT_COMMIT,
+        input_tree=SEVENTH_AUDIT_INPUT_TREE,
+        addition_commit=SEVENTH_AUDIT_ADDITION_COMMIT,
+        addition_tree=SEVENTH_AUDIT_ADDITION_TREE,
+        addition_blob=SEVENTH_AUDIT_GIT_BLOB,
+        finding_count=SEVENTH_AUDIT_FINDING_COUNT,
+    )
+
+
+def check_eighth_audit_addition_identity() -> dict[str, str]:
+    return _check_audit_addition_identity(
+        label="Loop 8 audit",
+        path=EIGHTH_AUDIT,
+        input_commit=EIGHTH_AUDIT_INPUT_COMMIT,
+        input_tree=EIGHTH_AUDIT_INPUT_TREE,
+        addition_commit=EIGHTH_AUDIT_ADDITION_COMMIT,
+        addition_tree=EIGHTH_AUDIT_ADDITION_TREE,
+        addition_blob=EIGHTH_AUDIT_GIT_BLOB,
+        finding_count=EIGHTH_AUDIT_FINDING_COUNT,
+    )
 
 
 def check_frozen_layer1_design_audit(data: bytes) -> None:
@@ -1726,6 +2777,16 @@ def check_loop7_paper_fragments(text: str) -> None:
             if text.count(fragment) != 1:
                 raise PlanningError(
                     f"LAYER1_DESIGN_PAPER.md must contain exactly one {finding_id} protocol "
+                    f"fragment: {fragment}"
+                )
+
+
+def check_loop8_paper_fragments(text: str) -> None:
+    for finding_id, fragments in EXPECTED_LOOP8_PAPER_FRAGMENTS.items():
+        for fragment in fragments:
+            if text.count(fragment) < 1:
+                raise PlanningError(
+                    f"LAYER1_DESIGN_PAPER.md must contain at least one {finding_id} protocol "
                     f"fragment: {fragment}"
                 )
 
@@ -1967,6 +3028,14 @@ def expect_frozen_seventh_audit_failure(label: str, data: bytes) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_frozen_eighth_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_eighth_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_frozen_layer1_design_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_layer1_design_audit(data)
@@ -2095,6 +3164,93 @@ def expect_loop7_paper_fragment_failure(label: str, text: str) -> None:
     raise PlanningError(f"negative control did not fail: {label}")
 
 
+def expect_loop8_paper_fragment_failure(label: str, text: str) -> None:
+    try:
+        check_loop8_paper_fragments(text)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_loop8_exact_schema_failure(
+    label: str,
+    text: str,
+    schema_name: str,
+    *,
+    expected_message: str,
+) -> None:
+    try:
+        check_loop8_exact_schemas(text, (schema_name,))
+    except PlanningError as error:
+        if expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_exact_invariant_failure(
+    label: str,
+    text: str,
+    source_label: str,
+    *,
+    expected_message: str | None = None,
+) -> None:
+    try:
+        check_accepted_parent_exact_invariants(text, source_label)
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_summary_projection_failure(
+    label: str,
+    text: str,
+    expected: dict[str, int],
+) -> None:
+    try:
+        check_planning_checker_summary_projection(text, expected)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_provenance_projection_failure(
+    label: str,
+    handoff_text: str,
+    schema_name: str,
+    expected: dict[str, str],
+) -> None:
+    try:
+        check_audit_provenance_projection(handoff_text, schema_name, expected)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_duplicate_projection_failure(
+    label: str,
+    texts: dict[str, str],
+    planning_summary: dict[str, int],
+    *,
+    expected_message: str | None = None,
+) -> None:
+    try:
+        check_no_duplicate_exact_projections(texts, planning_summary)
+    except PlanningError as error:
+        if expected_message is not None and expected_message not in str(error):
+            raise PlanningError(
+                f"negative control failed by the wrong mechanism: {label}: {error}"
+            ) from error
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
 def expect_ready_frontier_failure(
     label: str,
     text: str,
@@ -2211,6 +3367,7 @@ def run_self_tests(
     fifth_audit_bytes: bytes,
     sixth_audit_bytes: bytes,
     seventh_audit_bytes: bytes,
+    eighth_audit_bytes: bytes,
     layer1_design_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
@@ -2218,8 +3375,141 @@ def run_self_tests(
     design_receipt: dict[str, object],
     tracked_paths: frozenset[Path],
     frozen_eol_policy: dict[str, dict[str, str]],
+    planning_summary: dict[str, int],
+    loop7_provenance: dict[str, str],
+    loop8_provenance: dict[str, str],
+    projection_texts: dict[str, str],
 ) -> None:
-    reduced_inventory = tuple(path for path in PLANNING_FILES if path != SEVENTH_AUDIT)
+    def mutate_manifest_fragment(
+        source: str,
+        header: str,
+        old: str,
+        new: str,
+        label: str,
+    ) -> str:
+        lines = source.splitlines(keepends=True)
+        starts = [index for index, line in enumerate(lines) if line.strip() == header]
+        if len(starts) != 1:
+            raise PlanningError(f"self-test fixture drift: {label} manifest header")
+        start = starts[0]
+        depth = header.count("(") - header.count(")")
+        end: int | None = None
+        for index in range(start + 1, len(lines)):
+            depth += lines[index].count("(") - lines[index].count(")")
+            if depth == 0:
+                end = index
+                break
+        if end is None:
+            raise PlanningError(f"self-test fixture drift: {label} manifest close")
+        block = "".join(lines[start : end + 1])
+        if block.count(old) != 1:
+            raise PlanningError(
+                f"self-test fixture drift: {label} manifest fragment count {block.count(old)}"
+            )
+        mutated_block = block.replace(old, new, 1)
+        return "".join(lines[:start]) + mutated_block + "".join(lines[end + 1 :])
+
+    def replace_manifest_rows(
+        source: str,
+        header: str,
+        rendered_rows: tuple[str, ...],
+        label: str,
+    ) -> str:
+        lines = source.splitlines(keepends=True)
+        starts = [index for index, line in enumerate(lines) if line.strip() == header]
+        if len(starts) != 1:
+            raise PlanningError(f"self-test fixture drift: {label} manifest header")
+        start = starts[0]
+        depth = header.count("(") - header.count(")")
+        end: int | None = None
+        for index in range(start + 1, len(lines)):
+            depth += lines[index].count("(") - lines[index].count(")")
+            if depth == 0:
+                end = index
+                break
+        if end is None:
+            raise PlanningError(f"self-test fixture drift: {label} manifest close")
+        newline = "\r\n" if lines[start].endswith("\r\n") else "\n"
+        indent_match = re.match(r"[ \t]*", lines[start + 1])
+        indent = indent_match.group(0) if indent_match is not None else "    "
+        replacement = [f"{indent}{row}{newline}" for row in rendered_rows]
+        mutated = "".join(lines[: start + 1] + replacement + lines[end:])
+        if mutated == source:
+            raise PlanningError(f"self-test fixture drift: {label} unchanged manifest")
+        return mutated
+
+    def replace_core_field_manifest(
+        source: str,
+        fields: tuple[str, ...],
+        label: str,
+    ) -> str:
+        rows = tuple(
+            f"{index} => {field}{',' if index < len(fields) else ''}"
+            for index, field in enumerate(fields, 1)
+        )
+        return replace_manifest_rows(
+            source,
+            "AcceptedProposalCoreFieldManifestV1 = ExactOrderedFieldManifest(",
+            rows,
+            label,
+        )
+
+    def replace_collision_manifest(
+        source: str,
+        rows: tuple[tuple[str, str, str], ...],
+        label: str,
+    ) -> str:
+        rendered = tuple(
+            f"{row_name} = ({collision_class}, {disposition})"
+            f"{',' if index < len(rows) else ''}"
+            for index, (row_name, collision_class, disposition) in enumerate(rows, 1)
+        )
+        return replace_manifest_rows(
+            source,
+            "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+            rendered,
+            label,
+        )
+
+    def render_loop8_schema_assignment(
+        schema_name: str,
+        variants: tuple[tuple[str, tuple[str, ...]], ...],
+    ) -> str:
+        rendered_variants = []
+        for variant_name, arguments in variants:
+            rendered_arguments = ",\n        ".join(arguments)
+            rendered_variants.append(
+                f"{variant_name}(\n        {rendered_arguments}\n    )"
+                if arguments
+                else f"{variant_name}()"
+            )
+        return f"{schema_name} =\n    " + "\n  | ".join(rendered_variants)
+
+    def replace_loop8_schema_assignment(
+        source: str,
+        schema_name: str,
+        variants: tuple[tuple[str, tuple[str, ...]], ...],
+        label: str,
+    ) -> str:
+        assignment_pattern = re.compile(
+            rf"^[ \t]*{re.escape(schema_name)}[ \t]*=",
+            flags=re.MULTILINE,
+        )
+        assignments = list(assignment_pattern.finditer(source))
+        if len(assignments) != 1:
+            raise PlanningError(
+                f"self-test fixture drift: {label} assignment count {len(assignments)}"
+            )
+        start = assignments[0].start()
+        boundary = re.search(r"\n[ \t]*\n", source[start:])
+        end = start + boundary.start() if boundary is not None else len(source)
+        replacement = render_loop8_schema_assignment(schema_name, variants)
+        mutated = source[:start] + replacement + source[end:]
+        if mutated == source:
+            raise PlanningError(f"self-test fixture drift: {label} unchanged assignment")
+        return mutated
+
+    reduced_inventory = tuple(path for path in PLANNING_FILES if path != EIGHTH_AUDIT)
     if len(reduced_inventory) != len(PLANNING_FILES) - 1:
         raise PlanningError("self-test fixture drift: planning authority inventory")
     expect_planning_inventory_failure(
@@ -2230,7 +3520,7 @@ def run_self_tests(
     wrong_eol_policy = {
         path: dict(attributes) for path, attributes in frozen_eol_policy.items()
     }
-    eol_probe_path = repository_relative_path(SEVENTH_AUDIT)
+    eol_probe_path = repository_relative_path(EIGHTH_AUDIT)
     wrong_eol_policy[eol_probe_path]["eol"] = "crlf"
     expect_frozen_text_eol_policy_failure(
         "fresh-checkout EOL policy changed from LF",
@@ -2243,8 +3533,641 @@ def run_self_tests(
         missing_eol_policy,
     )
 
+    expect_frozen_eighth_audit_failure(
+        "frozen eighth audit mutation",
+        eighth_audit_bytes + b"\nnegative-control",
+    )
+
+    exact_invariant_sources = (
+        ("LAYER1_DESIGN_PAPER.md", layer1_design_paper_text),
+        ("CAPABILITY_TREE.md", text),
+    )
+    first_collision_class = (
+        "ByteDistinctAcceptedParentLookupPayloadPreimagesSameProfileIdHashV1OutputV1"
+    )
+    second_collision_class = (
+        "ByteEqualAcceptedParentLookupPayloadAndBlockIdDistinctValidAcceptedProposalCoresV1"
+    )
+    for source_label, source_text in exact_invariant_sources:
+        for omitted_index, omitted_field in enumerate(
+            EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS
+        ):
+            remaining_fields = (
+                EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS[:omitted_index]
+                + EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS[omitted_index + 1 :]
+            )
+            missing_field = replace_core_field_manifest(
+                source_text,
+                remaining_fields,
+                f"{source_label} omit core field {omitted_field}",
+            )
+            expect_exact_invariant_failure(
+                f"{source_label} accepted-core field omission {omitted_field}",
+                missing_field,
+                source_label,
+                expected_message="exact ordered fields disagree",
+            )
+
+        for insertion_index in range(
+            len(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS) + 1
+        ):
+            added_field = f"negative_control_extra_core_field_{insertion_index + 1}"
+            expanded_fields = list(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS)
+            expanded_fields.insert(insertion_index, added_field)
+            added_core_field = replace_core_field_manifest(
+                source_text,
+                tuple(expanded_fields),
+                f"{source_label} add core field at position {insertion_index + 1}",
+            )
+            expect_exact_invariant_failure(
+                f"{source_label} accepted-core field addition at position "
+                f"{insertion_index + 1}",
+                added_core_field,
+                source_label,
+                expected_message="exact ordered fields disagree",
+            )
+
+        for left_index in range(len(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS)):
+            for right_index in range(
+                left_index + 1,
+                len(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS),
+            ):
+                reordered_field_list = list(EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS)
+                reordered_field_list[left_index], reordered_field_list[right_index] = (
+                    reordered_field_list[right_index],
+                    reordered_field_list[left_index],
+                )
+                reordered_fields = replace_core_field_manifest(
+                    source_text,
+                    tuple(reordered_field_list),
+                    f"{source_label} swap core fields {left_index + 1}/{right_index + 1}",
+                )
+                expect_exact_invariant_failure(
+                    f"{source_label} accepted-core field reorder "
+                    f"{left_index + 1}/{right_index + 1}",
+                    reordered_fields,
+                    source_label,
+                    expected_message="exact ordered fields disagree",
+                )
+
+        for excluded_field in EXPECTED_ACCEPTED_PROPOSAL_CORE_EXCLUDED_FIELDS:
+            forbidden_in_core = replace_core_field_manifest(
+                source_text,
+                EXPECTED_ACCEPTED_PROPOSAL_CORE_FIELDS + (excluded_field,),
+                f"{source_label} insert excluded field {excluded_field}",
+            )
+            expect_exact_invariant_failure(
+                f"{source_label} excluded field inserted into accepted core: "
+                f"{excluded_field}",
+                forbidden_in_core,
+                source_label,
+                expected_message="exact ordered fields disagree",
+            )
+
+        for schema_name in EXACT_ACCEPTED_PARENT_SCHEMA_NAMES:
+            duplicate_assignment = (
+                source_text
+                + f"\n{schema_name} = ConflictingNegativeControlSchemaV1()\n"
+            )
+            expect_exact_invariant_failure(
+                f"{source_label} duplicate schema assignment {schema_name}",
+                duplicate_assignment,
+                source_label,
+                expected_message=f"{schema_name} must have exactly one schema assignment",
+            )
+
+        signature_in_declaration = source_text.replace(
+            "FieldsExactly(AcceptedProposalCoreFieldManifestV1)",
+            "FieldsExactly(AcceptedProposalCoreFieldManifestV1), "
+            "canonical_proposer_signature_bytes",
+            1,
+        )
+        if signature_in_declaration == source_text:
+            raise PlanningError(
+                f"self-test fixture drift: {source_label} direct signature insertion"
+            )
+        expect_exact_invariant_failure(
+            f"{source_label} proposer signature restored in accepted-core declaration",
+            signature_in_declaration,
+            source_label,
+        )
+
+        omitted_collision_class = mutate_manifest_fragment(
+            source_text,
+            "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+            first_collision_class,
+            "OmittedAcceptedParentCollisionClassV1",
+            f"{source_label} collision omission",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} collision class omission",
+            omitted_collision_class,
+            source_label,
+        )
+
+        merged_collision_classes = mutate_manifest_fragment(
+            source_text,
+            "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+            second_collision_class,
+            first_collision_class,
+            f"{source_label} collision merge",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} collision classes merged",
+            merged_collision_classes,
+            source_label,
+        )
+
+        swapped_first_disposition = mutate_manifest_fragment(
+            source_text,
+            "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+            "ProtocolIdentityHashCompromiseV1",
+            "ProfileOwnedAuthorityBindingCompromiseV1",
+            f"{source_label} first collision disposition swap",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} first collision disposition swapped",
+            swapped_first_disposition,
+            source_label,
+        )
+
+        swapped_second_disposition = mutate_manifest_fragment(
+            source_text,
+            "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap(",
+            "ProfileOwnedAuthorityBindingCompromiseV1",
+            "ProtocolIdentityHashCompromiseV1",
+            f"{source_label} second collision disposition swap",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} second collision disposition swapped",
+            swapped_second_disposition,
+            source_label,
+        )
+
+        collision_header = "AcceptedParentCollisionDispositionV1 = CanonicalTwoRowMap("
+        temporary_disposition = "TemporaryCollisionDispositionV1"
+        double_swapped = mutate_manifest_fragment(
+            source_text,
+            collision_header,
+            "ProtocolIdentityHashCompromiseV1",
+            temporary_disposition,
+            f"{source_label} collision double-swap stage one",
+        )
+        double_swapped = mutate_manifest_fragment(
+            double_swapped,
+            collision_header,
+            "ProfileOwnedAuthorityBindingCompromiseV1",
+            "ProtocolIdentityHashCompromiseV1",
+            f"{source_label} collision double-swap stage two",
+        )
+        double_swapped = mutate_manifest_fragment(
+            double_swapped,
+            collision_header,
+            temporary_disposition,
+            "ProfileOwnedAuthorityBindingCompromiseV1",
+            f"{source_label} collision double-swap stage three",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} both collision dispositions swapped",
+            double_swapped,
+            source_label,
+        )
+
+        physical_row_reorder = replace_collision_manifest(
+            source_text,
+            tuple(reversed(EXPECTED_ACCEPTED_PARENT_COLLISION_ROWS)),
+            f"{source_label} physical collision-row reorder",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} physical collision-row reorder",
+            physical_row_reorder,
+            source_label,
+            expected_message="AcceptedParentCollisionDispositionV1 disagrees",
+        )
+
+        first_collision_row, second_collision_row = EXPECTED_ACCEPTED_PARENT_COLLISION_ROWS
+        label_only_row_reorder = replace_collision_manifest(
+            source_text,
+            (
+                (second_collision_row[0], first_collision_row[1], first_collision_row[2]),
+                (first_collision_row[0], second_collision_row[1], second_collision_row[2]),
+            ),
+            f"{source_label} collision-row label reorder",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} collision-row label reorder",
+            label_only_row_reorder,
+            source_label,
+            expected_message="AcceptedParentCollisionDispositionV1 disagrees",
+        )
+
+        payload_only_row_reorder = replace_collision_manifest(
+            source_text,
+            (
+                (first_collision_row[0], second_collision_row[1], second_collision_row[2]),
+                (second_collision_row[0], first_collision_row[1], first_collision_row[2]),
+            ),
+            f"{source_label} collision-row payload reorder",
+        )
+        expect_exact_invariant_failure(
+            f"{source_label} collision-row payload reorder",
+            payload_only_row_reorder,
+            source_label,
+            expected_message="AcceptedParentCollisionDispositionV1 disagrees",
+        )
+
+    for finding_id, fragments in EXPECTED_LOOP8_PAPER_FRAGMENTS.items():
+        for index, fragment in enumerate(fragments, 1):
+            mutated_paper = layer1_design_paper_text.replace(
+                fragment,
+                f"mutated-{finding_id.lower()}-paper-fragment-{index}",
+            )
+            if mutated_paper == layer1_design_paper_text:
+                raise PlanningError(
+                    f"self-test fixture drift: {finding_id} paper fragment {index}"
+                )
+            expect_loop8_paper_fragment_failure(
+                f"{finding_id} paper fragment mutation {index}",
+                mutated_paper,
+            )
+
+    exact_schema_failure_message = "exact ordered variants/fields disagree"
+    for schema_name, expected_variants in EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS.items():
+        duplicate_assignment = (
+            layer1_design_paper_text
+            + f"\n\n{schema_name} = ContradictoryLoop8NegativeControlV1()\n"
+        )
+        expect_loop8_exact_schema_failure(
+            f"{schema_name} duplicate contradictory assignment",
+            duplicate_assignment,
+            schema_name,
+            expected_message="must have exactly one assignment",
+        )
+
+        if len(expected_variants) > 1:
+            for omitted_variant_index, (variant_name, _arguments) in enumerate(
+                expected_variants
+            ):
+                omitted_variant = (
+                    expected_variants[:omitted_variant_index]
+                    + expected_variants[omitted_variant_index + 1 :]
+                )
+                mutated_paper = replace_loop8_schema_assignment(
+                    layer1_design_paper_text,
+                    schema_name,
+                    omitted_variant,
+                    f"{schema_name} omit variant {variant_name}",
+                )
+                expect_loop8_exact_schema_failure(
+                    f"{schema_name} variant omission {variant_name}",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=exact_schema_failure_message,
+                )
+
+            for left_variant in range(len(expected_variants)):
+                for right_variant in range(left_variant + 1, len(expected_variants)):
+                    reordered_variant_list = list(expected_variants)
+                    reordered_variant_list[left_variant], reordered_variant_list[right_variant] = (
+                        reordered_variant_list[right_variant],
+                        reordered_variant_list[left_variant],
+                    )
+                    mutated_paper = replace_loop8_schema_assignment(
+                        layer1_design_paper_text,
+                        schema_name,
+                        tuple(reordered_variant_list),
+                        f"{schema_name} reorder variants {left_variant + 1}/{right_variant + 1}",
+                    )
+                    expect_loop8_exact_schema_failure(
+                        f"{schema_name} variant reorder "
+                        f"{left_variant + 1}/{right_variant + 1}",
+                        mutated_paper,
+                        schema_name,
+                        expected_message=exact_schema_failure_message,
+                    )
+
+        for variant_insertion_index in range(len(expected_variants) + 1):
+            added_variant_list = list(expected_variants)
+            added_variant_list.insert(
+                variant_insertion_index,
+                (
+                    "UnexpectedLoop8NegativeControlVariantV1",
+                    ("unexpected_loop8_negative_control_field",),
+                ),
+            )
+            mutated_paper = replace_loop8_schema_assignment(
+                layer1_design_paper_text,
+                schema_name,
+                tuple(added_variant_list),
+                f"{schema_name} add variant at {variant_insertion_index + 1}",
+            )
+            expect_loop8_exact_schema_failure(
+                f"{schema_name} variant addition at {variant_insertion_index + 1}",
+                mutated_paper,
+                schema_name,
+                expected_message=exact_schema_failure_message,
+            )
+
+        for variant_index, (variant_name, arguments) in enumerate(expected_variants):
+            for omitted_argument_index, omitted_argument in enumerate(arguments):
+                remaining_arguments = (
+                    arguments[:omitted_argument_index]
+                    + arguments[omitted_argument_index + 1 :]
+                )
+                mutated_variants = list(expected_variants)
+                mutated_variants[variant_index] = (variant_name, remaining_arguments)
+                mutated_paper = replace_loop8_schema_assignment(
+                    layer1_design_paper_text,
+                    schema_name,
+                    tuple(mutated_variants),
+                    f"{schema_name}.{variant_name} omit {omitted_argument}",
+                )
+                expect_loop8_exact_schema_failure(
+                    f"{schema_name}.{variant_name} field omission {omitted_argument}",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=exact_schema_failure_message,
+                )
+
+            for argument_insertion_index in range(len(arguments) + 1):
+                added_arguments = list(arguments)
+                added_arguments.insert(
+                    argument_insertion_index,
+                    f"unexpected_loop8_field_{variant_index + 1}_{argument_insertion_index + 1}",
+                )
+                mutated_variants = list(expected_variants)
+                mutated_variants[variant_index] = (variant_name, tuple(added_arguments))
+                mutated_paper = replace_loop8_schema_assignment(
+                    layer1_design_paper_text,
+                    schema_name,
+                    tuple(mutated_variants),
+                    f"{schema_name}.{variant_name} add field at "
+                    f"{argument_insertion_index + 1}",
+                )
+                expect_loop8_exact_schema_failure(
+                    f"{schema_name}.{variant_name} field addition at "
+                    f"{argument_insertion_index + 1}",
+                    mutated_paper,
+                    schema_name,
+                    expected_message=exact_schema_failure_message,
+                )
+
+            for left_argument in range(len(arguments)):
+                for right_argument in range(left_argument + 1, len(arguments)):
+                    reordered_arguments = list(arguments)
+                    reordered_arguments[left_argument], reordered_arguments[right_argument] = (
+                        reordered_arguments[right_argument],
+                        reordered_arguments[left_argument],
+                    )
+                    mutated_variants = list(expected_variants)
+                    mutated_variants[variant_index] = (
+                        variant_name,
+                        tuple(reordered_arguments),
+                    )
+                    mutated_paper = replace_loop8_schema_assignment(
+                        layer1_design_paper_text,
+                        schema_name,
+                        tuple(mutated_variants),
+                        f"{schema_name}.{variant_name} reorder fields "
+                        f"{left_argument + 1}/{right_argument + 1}",
+                    )
+                    expect_loop8_exact_schema_failure(
+                        f"{schema_name}.{variant_name} field reorder "
+                        f"{left_argument + 1}/{right_argument + 1}",
+                        mutated_paper,
+                        schema_name,
+                        expected_message=exact_schema_failure_message,
+                    )
+
+    predecessor_schema = "VerifiedSuccessorPredecessorBaseContextV1"
+    predecessor_variants = EXPECTED_LOOP8_EXACT_SCHEMA_VARIANTS[predecessor_schema]
+    predecessor_variant_name, predecessor_arguments = predecessor_variants[0]
+    collapsed_release_arguments = tuple(
+        (
+            "verified_release_parent_eligibility="
+            "VerifiedEligibleAcceptedParentRefV1(SuccessorActivationAuthorityV1)"
+            if argument.startswith("verified_release_parent_eligibility=")
+            else argument
+        )
+        for argument in predecessor_arguments
+    )
+    collapsed_release_variant = (
+        (predecessor_variant_name, collapsed_release_arguments),
+    )
+    collapsed_release_paper = replace_loop8_schema_assignment(
+        layer1_design_paper_text,
+        predecessor_schema,
+        collapsed_release_variant,
+        "release eligibility collapsed to activation purpose",
+    )
+    expect_loop8_exact_schema_failure(
+        "release eligibility collapsed to activation purpose",
+        collapsed_release_paper,
+        predecessor_schema,
+        expected_message=exact_schema_failure_message,
+    )
+
+    for field, value in planning_summary.items():
+        canonical_row = f"| `{field}` | `{value}` |"
+        mutated_row = f"| `{field}` | `{value + 1}` |"
+        mutated_summary = text.replace(canonical_row, mutated_row, 1)
+        if mutated_summary == text:
+            raise PlanningError(f"self-test fixture drift: summary field {field}")
+        expect_summary_projection_failure(
+            f"PlanningCheckerSummaryV1 wrong {field}",
+            mutated_summary,
+            planning_summary,
+        )
+
+    first_summary_field, second_summary_field = PLANNING_SUMMARY_FIELD_ORDER[:2]
+    first_summary_row = (
+        f"| `{first_summary_field}` | `{planning_summary[first_summary_field]}` |"
+    )
+    second_summary_row = (
+        f"| `{second_summary_field}` | `{planning_summary[second_summary_field]}` |"
+    )
+    reordered_summary = text.replace(
+        first_summary_row + "\n" + second_summary_row,
+        second_summary_row + "\n" + first_summary_row,
+        1,
+    )
+    if reordered_summary == text:
+        raise PlanningError("self-test fixture drift: summary row reorder")
+    expect_summary_projection_failure(
+        "PlanningCheckerSummaryV1 row reorder",
+        reordered_summary,
+        planning_summary,
+    )
+
+    for schema_name, provenance in (
+        ("Loop7ProvenanceV1", loop7_provenance),
+        ("Loop8ProvenanceV1", loop8_provenance),
+    ):
+        for field, value in provenance.items():
+            mutated_value = (
+                str(int(value) + 1)
+                if field == "material_finding_count_u32"
+                else "0" * len(value)
+            )
+            canonical_row = f"| `{field}` | `{value}` |"
+            mutated_row = f"| `{field}` | `{mutated_value}` |"
+            mutated_handoff = handoff_text.replace(canonical_row, mutated_row, 1)
+            if mutated_handoff == handoff_text:
+                raise PlanningError(
+                    f"self-test fixture drift: {schema_name} provenance field {field}"
+                )
+            expect_provenance_projection_failure(
+                f"{schema_name} wrong {field}",
+                mutated_handoff,
+                schema_name,
+                provenance,
+            )
+
+        first_field, second_field = PROVENANCE_FIELD_ORDER[:2]
+        first_row = f"| `{first_field}` | `{provenance[first_field]}` |"
+        second_row = f"| `{second_field}` | `{provenance[second_field]}` |"
+        reordered_handoff = handoff_text.replace(
+            first_row + "\n" + second_row,
+            second_row + "\n" + first_row,
+            1,
+        )
+        if reordered_handoff == handoff_text:
+            raise PlanningError(f"self-test fixture drift: {schema_name} row reorder")
+        expect_provenance_projection_failure(
+            f"{schema_name} row reorder",
+            reordered_handoff,
+            schema_name,
+            provenance,
+        )
+
+    for schema_name, provenance in (
+        ("Loop7ProvenanceV1", loop7_provenance),
+        ("Loop8ProvenanceV1", loop8_provenance),
+    ):
+        for field in PROVENANCE_FIELD_ORDER[:-1]:
+            object_id = provenance[field]
+            for token_kind, token in (("full", object_id), ("short", object_id[:7])):
+                duplicate_object = dict(projection_texts)
+                duplicate_object["README.md"] += (
+                    f"\n\nPinned exact object `{token}` without an audit label.\n"
+                )
+                expect_duplicate_projection_failure(
+                    f"duplicate {schema_name} {token_kind} Git object {field}",
+                    duplicate_object,
+                    planning_summary,
+                    expected_message=(
+                        f"exact Git object for {schema_name} must occur exactly once"
+                    ),
+                )
+
+    loop8_last_row = (
+        "| `material_finding_count_u32` | `"
+        + loop8_provenance["material_finding_count_u32"]
+        + "` |"
+    )
+    trailing_provenance_handoff = handoff_text.replace(
+        loop8_last_row,
+        loop8_last_row
+        + "\n\nTrailing exact object `"
+        + loop8_provenance["addition_commit"]
+        + "` remains inside this canonical provenance section.",
+        1,
+    )
+    if trailing_provenance_handoff == handoff_text:
+        raise PlanningError("self-test fixture drift: trailing provenance-section prose")
+    trailing_provenance = dict(projection_texts)
+    trailing_provenance["docs/HANDOFF.md"] = trailing_provenance_handoff
+    expect_duplicate_projection_failure(
+        "duplicate exact object in trailing canonical provenance-section prose",
+        trailing_provenance,
+        planning_summary,
+        expected_message="exact Git object for Loop8ProvenanceV1 must occur exactly once",
+    )
+
+    duplicate_loop8_finding_count = dict(projection_texts)
+    duplicate_loop8_finding_count["docs/TRANSCRIPT_AUDIT.md"] += (
+        "\n\nLoop 8 duplicate has "
+        + loop8_provenance["material_finding_count_u32"]
+        + " material findings.\n"
+    )
+    expect_duplicate_projection_failure(
+        "duplicate Loop 8 exact finding count",
+        duplicate_loop8_finding_count,
+        planning_summary,
+        expected_message="exact finding count for Loop8ProvenanceV1",
+    )
+
+    summary_duplicate_phrases = {
+        "capability_node_count_u32": (
+            f"{planning_summary['capability_node_count_u32']} capability nodes"
+        ),
+        "foundation_node_count_u32": (
+            f"{planning_summary['foundation_node_count_u32']} foundation nodes"
+        ),
+        "detailed_node_count_u32": (
+            f"{planning_summary['detailed_node_count_u32']} detailed nodes"
+        ),
+        "phase_status_count_u32": (
+            f"{planning_summary['phase_status_count_u32']} phase-status rows"
+        ),
+        "ready_frontier_count_u32": (
+            f"{planning_summary['ready_frontier_count_u32']} ordered READY frontier rows"
+        ),
+        "base_dependency_edge_count_u32": (
+            f"{planning_summary['base_dependency_edge_count_u32']} base dependency edges"
+        ),
+        "phase_dependency_edge_count_u32": (
+            f"{planning_summary['phase_dependency_edge_count_u32']} phase dependencies"
+        ),
+        "conditional_edge_count_u32": (
+            f"{planning_summary['conditional_edge_count_u32']} conditional edges"
+        ),
+        "total_declared_edge_count_u32": (
+            f"{planning_summary['total_declared_edge_count_u32']} combined edges"
+        ),
+        "predicate_entailment_count_u32": (
+            f"{planning_summary['predicate_entailment_count_u32']} predicate entailments"
+        ),
+        "planning_markdown_count_u32": (
+            f"{planning_summary['planning_markdown_count_u32']}-document planning authority "
+            "inventory"
+        ),
+        "frozen_text_artifact_count_u32": (
+            f"{planning_summary['frozen_text_artifact_count_u32']} frozen text artifacts"
+        ),
+        "frozen_markdown_audit_count_u32": (
+            f"{planning_summary['frozen_markdown_audit_count_u32']} frozen Markdown audits"
+        ),
+        "frozen_json_receipt_count_u32": (
+            f"{planning_summary['frozen_json_receipt_count_u32']} frozen JSON source receipt"
+        ),
+    }
+    if set(summary_duplicate_phrases) != set(PLANNING_SUMMARY_FIELD_ORDER):
+        raise PlanningError("self-test fixture drift: planning-summary duplicate phrases")
+    for path in projection_texts:
+        for field in PLANNING_SUMMARY_FIELD_ORDER:
+            duplicate_summary_count = dict(projection_texts)
+            duplicate_summary_count[path] += (
+                f"\n\nDuplicate projection: {summary_duplicate_phrases[field]}.\n"
+            )
+            expect_duplicate_projection_failure(
+                f"duplicate {field} in {path}",
+                duplicate_summary_count,
+                planning_summary,
+                expected_message=f"field={field}",
+            )
+
+    benign_protocol_counts = dict(projection_texts)
+    benign_protocol_counts["docs/LAYER1_DESIGN_PAPER.md"] += (
+        "\n\nA protocol example may mention 72 validators, 94 signature slots, 311 messages, "
+        "5 authority witnesses, 44 proof limbs, 360 bytes, 10 predicates, 14 candidates, "
+        "22 codecs, 12 commitments, 11 keys, and 1 genesis object without projecting any "
+        "planning count.\n"
+    )
+    check_no_duplicate_exact_projections(benign_protocol_counts, planning_summary)
+
     handoff_omission = re.sub(
-        r"^21\. `docs/TIMELINES\.md`.*(?:\n|$)",
+        r"^22\. `docs/TIMELINES\.md`(?:\n|$)",
         "",
         handoff_text,
         count=1,
@@ -2260,8 +4183,8 @@ def run_self_tests(
     )
 
     handoff_insertion = re.sub(
-        r"^(21\. `docs/TIMELINES\.md`.*)$",
-        r"\1\n22. `Cargo.toml` (tracked non-planning negative control)",
+        r"^(22\. `docs/TIMELINES\.md`)$",
+        r"\1\n23. `Cargo.toml`",
         handoff_text,
         count=1,
         flags=re.MULTILINE,
@@ -2276,8 +4199,8 @@ def run_self_tests(
     )
 
     handoff_duplicate = handoff_text.replace(
-        "21. `docs/TIMELINES.md`",
-        "21. `docs/PROTOCOL.md`",
+        "22. `docs/TIMELINES.md`",
+        "22. `docs/PROTOCOL.md`",
         1,
     )
     if handoff_duplicate == handoff_text:
@@ -2321,37 +4244,23 @@ def run_self_tests(
         expected_message="disagrees with the exact canonical planning order",
     )
 
-    handoff_wrong_count = handoff_text.replace(
-        "exact 21-document authority inventory",
-        "exact 20-document authority inventory",
+    handoff_description = handoff_text.replace(
+        "22. `docs/TIMELINES.md`",
+        "22. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
         1,
     )
-    if handoff_wrong_count == handoff_text:
-        raise PlanningError("self-test fixture drift: HANDOFF planning count")
+    if handoff_description == handoff_text:
+        raise PlanningError("self-test fixture drift: HANDOFF path-only row")
     expect_handoff_failure(
-        "HANDOFF wrong planning count",
-        handoff_wrong_count,
+        "HANDOFF read-order trailing description",
+        handoff_description,
         tracked_paths,
-        expected_message="planning-document count is stale",
-    )
-
-    handoff_wrong_frozen_count = handoff_text.replace(
-        "eleven frozen text artifacts: ten Markdown audits and one JSON source receipt",
-        "ten frozen text artifacts: nine Markdown audits and one JSON source receipt",
-        1,
-    )
-    if handoff_wrong_frozen_count == handoff_text:
-        raise PlanningError("self-test fixture drift: HANDOFF frozen count")
-    expect_handoff_failure(
-        "HANDOFF wrong frozen-artifact count",
-        handoff_wrong_frozen_count,
-        tracked_paths,
-        expected_message="frozen-artifact counts are stale",
+        expected_message="is not canonical",
     )
 
     handoff_outside = handoff_text.replace(
-        "21. `docs/TIMELINES.md`",
-        "21. `../outside-read-order-negative-control.md`",
+        "22. `docs/TIMELINES.md`",
+        "22. `../outside-read-order-negative-control.md`",
         1,
     )
     if handoff_outside == handoff_text:
@@ -2364,8 +4273,8 @@ def run_self_tests(
     )
 
     handoff_untracked = handoff_text.replace(
-        "21. `docs/TIMELINES.md`",
-        "21. `docs/untracked-read-order-negative-control.md`",
+        "22. `docs/TIMELINES.md`",
+        "22. `docs/untracked-read-order-negative-control.md`",
         1,
     )
     if handoff_untracked == handoff_text:
@@ -2625,6 +4534,72 @@ def run_self_tests(
             expected_message=f"TESTNET-1 artifact omits {fragment}",
         )
 
+    authority_ownership_mutations = (
+        (
+            "CONSENSUS-1",
+            "`AcceptedConsensusNativeParentAuthorityCertificateV1`",
+            "`OmittedLiveParentAuthorityCertificateV1`",
+            "CONSENSUS-1 authority-ownership artifact omits",
+        ),
+        (
+            "CONSENSUS-1",
+            "exactly one accepted admission per",
+            "an unspecified number of admissions per",
+            "CONSENSUS-1 authority-ownership artifact omits",
+        ),
+        (
+            "CONSENSUS-1",
+            "no replay checkpoint or normalized archive view selects admission",
+            "a replay checkpoint may select admission",
+            "CONSENSUS-1 authority-ownership artifact omits",
+        ),
+        (
+            "SYNC-1",
+            "opaque bounded",
+            "authority-interpreted",
+            "SYNC-1 authority-ownership artifact omits",
+        ),
+        (
+            "SYNC-1",
+            "After `CONSENSUS-1@base`",
+            "Before `CONSENSUS-1@base`",
+            "SYNC-1 authority-ownership artifact omits",
+        ),
+        (
+            "SYNC-1",
+            "replayed authority as live consensus input",
+            "replayed authority only as live consensus input",
+            "SYNC-1 authority-ownership gate omits",
+        ),
+        (
+            "SYNC-1",
+            "already accepted certificate protocol owned by `CONSENSUS-1`",
+            "certificate protocol selected by replay",
+            "SYNC-1 authority-ownership gate omits",
+        ),
+        (
+            "SYNC-1",
+            "archive order is not live authority",
+            "archive order is live authority",
+            "SYNC-1 authority-ownership gate omits",
+        ),
+    )
+    for index, (node_id, fragment, replacement, expected_message) in enumerate(
+        authority_ownership_mutations,
+        1,
+    ):
+        mutated_ownership = replace_detail_section_fragment(
+            text,
+            node_id,
+            fragment,
+            replacement,
+        )
+        expect_failure(
+            f"authority ownership split mutation {index}",
+            mutated_ownership,
+            expected_message=expected_message,
+        )
+
     nodes = parse_capability(text)
     phase_statuses = parse_phase_statuses(text, nodes)
     parse_phase_dependencies(text, nodes, phase_statuses)
@@ -2799,7 +4774,7 @@ def run_self_tests(
     duplicate_phase_dependency = text.replace(
         "| PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |",
         "| PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |\n"
-        "| PD-06 | RELEASE-R1 | candidate | PROFILE-D1 | base |",
+        "| PD-96 | RELEASE-R1 | candidate | PROFILE-D1 | base |",
         1,
     )
     expect_phase_dependency_failure(
@@ -2813,7 +4788,7 @@ def run_self_tests(
     undefined_phase_endpoint = text.replace(
         "| PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |",
         "| PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |\n"
-        "| PD-06 | REFINE-1 | world | ACCOUNT-1 | missing-phase |",
+        "| PD-96 | REFINE-1 | world | ACCOUNT-1 | missing-phase |",
         1,
     )
     expect_phase_dependency_failure(
@@ -2827,7 +4802,7 @@ def run_self_tests(
     phase_cycle = text.replace(
         "| PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |",
         "| PD-05 | RELEASE-R1 | candidate | PROFILE-D1 | base |\n"
-        "| PD-06 | RELEASE-R1 | framework | RELEASE-R1 | candidate |",
+        "| PD-96 | RELEASE-R1 | framework | RELEASE-R1 | candidate |",
         1,
     )
     expect_phase_dependency_failure(
@@ -3346,7 +5321,7 @@ def main() -> int:
     capability_text = CAPABILITY.read_text(encoding="utf-8")
     nodes = parse_capability(capability_text)
     phase_statuses = parse_phase_statuses(capability_text, nodes)
-    parse_ready_frontier(capability_text, phase_statuses)
+    ready_frontier = parse_ready_frontier(capability_text, phase_statuses)
     phase_dependencies = parse_phase_dependencies(
         capability_text,
         nodes,
@@ -3354,6 +5329,17 @@ def main() -> int:
     )
     conditional_edges = parse_conditional_edges(capability_text, nodes)
     predicate_entailments = parse_predicate_entailments(capability_text, conditional_edges)
+    planning_summary = derive_planning_checker_summary(
+        capability_text,
+        nodes,
+        phase_statuses,
+        ready_frontier,
+        phase_dependencies,
+        conditional_edges,
+        predicate_entailments,
+    )
+    check_planning_checker_summary_projection(capability_text, planning_summary)
+    check_accepted_parent_exact_invariants(capability_text, "CAPABILITY_TREE.md")
     tracked_paths = git_tracked_or_staged_paths()
     handoff_text = (ROOT / "docs" / "HANDOFF.md").read_text(encoding="utf-8")
     check_handoff_read_order_and_counts(handoff_text, tracked_paths)
@@ -3375,7 +5361,12 @@ def main() -> int:
     check_frozen_sixth_audit(sixth_audit_bytes)
     seventh_audit_bytes = SEVENTH_AUDIT.read_bytes()
     check_frozen_seventh_audit(seventh_audit_bytes)
-    check_seventh_audit_addition_identity()
+    loop7_provenance = check_seventh_audit_addition_identity()
+    eighth_audit_bytes = EIGHTH_AUDIT.read_bytes()
+    check_frozen_eighth_audit(eighth_audit_bytes)
+    loop8_provenance = check_eighth_audit_addition_identity()
+    check_audit_provenance_projection(handoff_text, "Loop7ProvenanceV1", loop7_provenance)
+    check_audit_provenance_projection(handoff_text, "Loop8ProvenanceV1", loop8_provenance)
     layer1_design_audit_bytes = LAYER1_DESIGN_AUDIT.read_bytes()
     check_frozen_layer1_design_audit(layer1_design_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
@@ -3390,6 +5381,23 @@ def main() -> int:
     check_loop5_paper_fragments(layer1_design_paper_text)
     check_loop6_paper_fragments(layer1_design_paper_text)
     check_loop7_paper_fragments(layer1_design_paper_text)
+    check_loop8_paper_fragments(layer1_design_paper_text)
+    check_loop8_exact_schemas(layer1_design_paper_text)
+    check_accepted_parent_exact_invariants(layer1_design_paper_text, "LAYER1_DESIGN_PAPER.md")
+    projection_texts = {
+        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
+        "docs/HANDOFF.md": handoff_text,
+        "docs/TRANSCRIPT_AUDIT.md": (ROOT / "docs" / "TRANSCRIPT_AUDIT.md").read_text(
+            encoding="utf-8"
+        ),
+        "docs/CAPABILITY_TREE.md": capability_text,
+        "docs/DESIGN_RESEARCH_DISTILLATION.md": design_text,
+        "docs/AUTHENTICATED_STATE_PLAN.md": (
+            ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md"
+        ).read_text(encoding="utf-8"),
+        "docs/LAYER1_DESIGN_PAPER.md": layer1_design_paper_text,
+    }
+    check_no_duplicate_exact_projections(projection_texts, planning_summary)
     for path in PLANNING_FILES:
         check_markdown(
             path,
@@ -3409,6 +5417,7 @@ def main() -> int:
             fifth_audit_bytes,
             sixth_audit_bytes,
             seventh_audit_bytes,
+            eighth_audit_bytes,
             layer1_design_audit_bytes,
             design_receipt_bytes,
             design_text,
@@ -3416,6 +5425,10 @@ def main() -> int:
             design_receipt,
             tracked_paths,
             frozen_eol_policy,
+            planning_summary,
+            loop7_provenance,
+            loop8_provenance,
+            projection_texts,
         )
 
     base_edge_count = sum(len(node.dependencies) for node in nodes.values())
