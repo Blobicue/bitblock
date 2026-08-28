@@ -63,11 +63,14 @@ use bitblock::sidebar::{
     CompositeFrameInput, DisplayStatus, FrameCompositor, SIDEBAR_WIDTH, SidebarRasterFacts,
     SidebarSnapshot, composite_overlay_input,
 };
+#[cfg(test)]
 use bitblock::tick::{
-    LANE_AIM_DELETE, LANE_AIM_PLACE, LANE_CLEAR_MOTION, LANE_EXACT_EDIT, LANE_FIT_WORLD,
-    LANE_LOOK_DELTA, LANE_MOVE_EDGE, LANE_RESIZE, LANE_TOGGLE_SIDEBAR, LANE_WHEEL_LINES,
-    MAX_ACTIONS_PER_TICK, TickActionError, TickActionLedger, TickAttempt, TickCameraState,
-    TickFrameCommitment, TickInputFlags, TickInputState, TickOutcome, verify_successor,
+    LANE_CLEAR_MOTION, LANE_LOOK_DELTA, LANE_MOVE_EDGE, LANE_RESIZE, LANE_TOGGLE_SIDEBAR,
+};
+use bitblock::tick::{
+    LANE_EXACT_EDIT, MAX_ACTIONS_PER_TICK, TickActionError, TickActionLedger, TickAttempt,
+    TickCameraState, TickFrameCommitment, TickInputFlags, TickInputState, TickOutcome,
+    verify_successor,
 };
 #[cfg(windows)]
 use bitblock::windows_present::WindowsPixelSurface;
@@ -1564,21 +1567,11 @@ impl std::error::Error for AcceptedActionApplyError {}
 
 /// The ledger lane one accepted action counts into.
 ///
-/// Exhaustive on purpose: a new `AcceptedAction` variant must choose a lane here,
-/// so it cannot be added and silently escape the tick's accounting.
+/// The interaction-tape opcode is the lane ordinal. `canonical_code` is already
+/// exhaustive over `AcceptedAction`, so there is no second variant-to-lane table
+/// that can drift from the canonical accepted-input codec.
 const fn action_lane(action: AcceptedAction) -> usize {
-    match action {
-        AcceptedAction::MoveEdge(..) => LANE_MOVE_EDGE,
-        AcceptedAction::LookDelta(..) => LANE_LOOK_DELTA,
-        AcceptedAction::WheelLines(_) => LANE_WHEEL_LINES,
-        AcceptedAction::AimDelete => LANE_AIM_DELETE,
-        AcceptedAction::AimPlace => LANE_AIM_PLACE,
-        AcceptedAction::ExactEdit(_) => LANE_EXACT_EDIT,
-        AcceptedAction::FitWorld => LANE_FIT_WORLD,
-        AcceptedAction::ToggleSidebar => LANE_TOGGLE_SIDEBAR,
-        AcceptedAction::Resize(..) => LANE_RESIZE,
-        AcceptedAction::ClearMotion => LANE_CLEAR_MOTION,
-    }
+    action.canonical_code() as usize
 }
 
 fn checked_accepted_accumulation(
@@ -4480,9 +4473,9 @@ mod tests {
     /// The replay half of the gate: the same accepted actions, arriving from a
     /// tape rather than from winit, must produce the same account.
     ///
-    /// The expectation is derived from the tape record itself rather than
-    /// written down, so this compares two independent routes to the same
-    /// numbers instead of comparing the ledger with a copy of itself.
+    /// The expectation is derived from the tape record's canonical opcodes.
+    /// Opcode identity is pinned independently by the interaction-tape vectors;
+    /// the runtime deliberately uses that same codec authority as its lane.
     #[test]
     fn a_replayed_tape_accounts_for_its_control_actions() {
         let tape = InteractionTape::parse(

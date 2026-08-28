@@ -146,6 +146,18 @@
     ]
    },
    {
+    "item": "LANE_FIT_WORLD",
+    "modules": [
+     "tick"
+    ]
+   },
+   {
+    "item": "LANE_WHEEL_LINES",
+    "modules": [
+     "tick"
+    ]
+   },
+   {
     "item": "LOCAL_REPLAY_BUILD_SCHEMA",
     "modules": [
      "replay_evidence"
@@ -458,7 +470,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29639,
+   "code_lines": 29631,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -644,7 +656,7 @@
    ]
   },
   "test": {
-   "code_lines": 18566,
+   "code_lines": 18618,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -670,7 +682,7 @@
     {
      "left": "display_store:1685",
      "lines": 19,
-     "right": "main:4145"
+     "right": "main:4138"
     },
     {
      "left": "output_topology:1469",
@@ -678,9 +690,9 @@
      "right": "presentation_output:663"
     },
     {
-     "left": "main:4187",
+     "left": "main:4180",
      "lines": 17,
-     "right": "main:5359"
+     "right": "main:5352"
     },
     {
      "left": "presentation_output:693",
@@ -690,7 +702,7 @@
     {
      "left": "display_store:1649",
      "lines": 12,
-     "right": "main:4104"
+     "right": "main:4097"
     },
     {
      "left": "history:938",
@@ -735,7 +747,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4781"
+     "right": "main:4774"
     },
     {
      "left": "history_store:1595",

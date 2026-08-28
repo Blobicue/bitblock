@@ -1006,11 +1006,11 @@ mod tests {
         digest
     }
 
-    /// One attempt-free canonical `TickOutcome` v2 payload, spelled field by field.
+    /// One attempt-free canonical `TickOutcome` v3 payload, spelled field by field.
     ///
     /// This mirrors `tools/frame_ledger_evidence_vectors.py` exactly and then hands the bytes to
     /// the production strict decoder. Building the fixture through the codec rather than through
-    /// a constructor is deliberate: it keeps the two languages agreeing on the same 429 bytes
+    /// a constructor is deliberate: it keeps the two languages agreeing on the same 469 bytes
     /// rather than on two independently assembled structs.
     fn evidence_outcome_payload(parent: Option<[u8; 32]>, tick: u64, frames: bool) -> Vec<u8> {
         let mut payload = Vec::with_capacity(469);

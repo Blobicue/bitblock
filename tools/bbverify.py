@@ -128,7 +128,9 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # 400 -> 402 / 411 -> 413: the swapped-lane control, which pins that the
 # reconciliation is per-lane and not per-total, and the replayed-tape test
 # that accounts for control actions arriving from a tape.
-EXPECTED_TESTS = {"quick": 402, "full": 413}
+# 402 -> 403 / 413 -> 414: one hostile-decoder control that distinguishes a
+# mathematical over-limit total from debug overflow and release wrapping.
+EXPECTED_TESTS = {"quick": 403, "full": 414}
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s

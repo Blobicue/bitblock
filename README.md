@@ -348,7 +348,7 @@ wired into the default observer executable and does not establish external
 custody, rollback resistance, ownership, or consensus.
 
 Every completed fixed tick, including an idle tick, is also appended to one
-in-memory content-addressed `TickOutcome` v2 chain. Each outcome's parent tag, exact accumulated
+in-memory content-addressed `TickOutcome` v3 chain. Each outcome's parent tag, exact accumulated
 controls, ordered unresolved/rejected/executed edit dispositions, pre/post
 world and coordinate-history tags, post-camera bits, and optional game/sidebar
 frame commitments form one contiguous local fold history. Window resize no

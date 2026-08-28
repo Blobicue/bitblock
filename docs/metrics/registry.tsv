@@ -693,13 +693,13 @@
 #bb.metric.batch.pending-edit-capacity	#bb.metric-definition.sha256.kj2ej3zts54bw6u2w7ibp4y5yoo4w75tnauqgddov4pwd4rr63ia	system	Pending edit capacity
 #bb.metric.batch.queue-drain-count	#bb.metric-definition.sha256.ywrpkilgwbqlbkkpeoe5rfcpot2qp5gerxdhfamw64g5v73dkm3a	system	Queue drain count
 #bb.metric.batch.queue-residue	#bb.metric-definition.sha256.gmfsunok4rxwvjp2a7ugjprg445f7442qwbgtdxwnvorfzzyonsq	system	Queue residue
-#bb.metric.batch.intent-source-vector	#bb.metric-definition.sha256.pq7zi73ahkai7p7op4tb3poa3m5uiym2fdnfmlzgqtcjttwr37ba	system	Intent source vector
+#bb.metric.batch.intent-source-vector	#bb.metric-definition.sha256.mtyd62rtrahv7a65j3taopmohlo4pda5dufhlvrnzahj7oyfciaa	system	Intent source vector
 #bb.metric.batch.queue-dwell-ticks	#bb.metric-definition.sha256.otrs2e37l53fmuknygyqqvbf25v7h5hhryxh2sxcrswes4zuriaa	system	Queue dwell ticks
 #bb.metric.batch.queue-dwell-host-duration	#bb.metric-definition.sha256.rjczjfo32idnjqyvi63c54gelw4l3dawiplmeiergogznmrf76qa	system	Queue dwell host duration
 #bb.metric.batch.attempt-count	#bb.metric-definition.sha256.5s5wcls7mstezaduqdaop6nqeszjr2g37pe2maebqyknbwbruldq	system	Attempt count
 #bb.metric.batch.resolved-edit-count	#bb.metric-definition.sha256.zw7e42vga5f2zivtzv2htkzvvpgmqnaiasgekhgusihmapxgbk6a	system	Resolved edit count
 #bb.metric.batch.miss-count	#bb.metric-definition.sha256.2xa2bmtrunx3msu6bmqqttj5fa5zfd3z6ktnyva2rdfnfzofchya	system	Miss count
-#bb.metric.batch.miss-reason-vector	#bb.metric-definition.sha256.jbrzm6tf5fvqgn3qserkj7a3blln5b2emqma4gyfwanjwiagznwa	system	Miss reason vector
+#bb.metric.batch.miss-reason-vector	#bb.metric-definition.sha256.jbazcojy7cr5odphoagfb6k4rutsghrlsrr665jkdlneqg7cb3eq	system	Miss reason vector
 #bb.metric.batch.resolved-operation-vector	#bb.metric-definition.sha256.yfpofankx5c7d63mwwttb5jx6ihob3bxkxy72t5ujzxid7avcjgq	system	Resolved operation vector
 #bb.metric.batch.state-changing-edit-count	#bb.metric-definition.sha256.bh6l3uwordwsmbyjut6ahhfiebip3jth2jxjmcazlc644fc6ctva	system	State-changing edit count
 #bb.metric.batch.state-no-op-vector	#bb.metric-definition.sha256.dhlto75nvl4vkde47uxx2cgmg7eaqwyq3xy2tlie7qp42malzktq	system	State-no-op vector
@@ -715,7 +715,7 @@
 #bb.metric.batch.batch-canonical-bytes	#bb.metric-definition.sha256.lcho7hxcej7d6pg6ijhyxsphckxyfxlal4vtxrdqjcttck2dztwa	system	Batch canonical bytes
 #bb.metric.batch.edit-reversal-event	#bb.metric-definition.sha256.hjmusg4tqjtrdjcioxflouvzrmsqcc3eyhrssaip7s4jnpwole4q	system	Edit reversal event
 #bb.metric.batch.batch-cardinality-invariant	#bb.metric-definition.sha256.nbpqmqxwb4czgqwacvj77huuydcasw5squujmo7c3ij6tzsm5txq	system	Batch cardinality invariant
-#bb.metric.batch.application-boundary-outcome	#bb.metric-definition.sha256.7lqz4a734dhw55dgg67x3z2v4gqrikihqrwu5xwddqj6bf2mq7wq	system	Application-boundary outcome
+#bb.metric.batch.application-boundary-outcome	#bb.metric-definition.sha256.p65vzkgsxoepow2neo5mfgcmgk5fuspblog4wqkumsyw4nizoohq	system	Application-boundary outcome
 #bb.metric.batch.intent-resolution-occurrence-relation	#bb.metric-definition.sha256.4dyilp7ylbvvfmwn7bdiqf5unf6eqomjuhosvrcfinrwftewocbq	system	Intent-resolution occurrence relation
 #bb.metric.replay.retained-batch-count	#bb.metric-definition.sha256.u5lmbwhh36z75cvqsyveotfdcvi6tnkfdfk6ogw7j2aezddicgja	system	Retained batch count
 #bb.metric.replay.retained-edit-count	#bb.metric-definition.sha256.3db2c4mv6jjt7xmyu6idxu5i4u7lhhqhjw2zlczb6ut2lqdihrsq	system	Retained edit count
@@ -784,14 +784,14 @@
 #bb.metric.proof.declaration-dependency-relation	#bb.metric-definition.sha256.sxunwwsisqxsfa5xdur5cbpkvwavre5rqeoxfvja6dnqmiftw5cq	system	Declaration dependency relation
 #bb.metric.hash.canonical-encoding-version	#bb.metric-definition.sha256.ykhjevyp423wvwohyv7omxf63uebslqq7xou4wo5gv2llu7dntia	system	Canonical encoding version
 #bb.metric.hash.algorithm-identity	#bb.metric-definition.sha256.jvd5t3b4u5qv5pi7h3twttztksqakht6dxlgzn3dezrhogt5xojq	system	Algorithm identity
-#bb.metric.hash.domain-separation-identity	#bb.metric-definition.sha256.4lv3fi6naepsomnyezxqqeoeormhdce6chc7eb4u5tarteldmz2q	system	Domain-separation identity
+#bb.metric.hash.domain-separation-identity	#bb.metric-definition.sha256.f6dk4s3ak5of4liiombdarryyt5vppnukrwrou4fhjerykq7bnxa	system	Domain-separation identity
 #bb.metric.hash.canonical-world-encoding-bytes	#bb.metric-definition.sha256.eeplo5vye5hr27tdyvurbqobxpiggg6hmpfmup7bujrrh2xajexa	system	Canonical world encoding bytes
 #bb.metric.hash.per-chunk-content-digest	#bb.metric-definition.sha256.dvcbhp2p4evq6p3hc5swvxa3ovsvaay5jwubwstpcr3y6eifflea	system	Per-chunk content digest
 #bb.metric.hash.canonical-world-state-root	#bb.metric-definition.sha256.2wqnpxvk7usvvnwjhj4gm47zggllqguklkcexkt4sgpiwgbmhmca	system	Canonical world-state root
 #bb.metric.hash.chunk-tree-root	#bb.metric-definition.sha256.5m2qy7eacdnev7xhl5k4amv6iw44gfqmro3az7v6jydt33jjzwpa	system	Chunk-tree root
 #bb.metric.hash.edit-digest	#bb.metric-definition.sha256.r4hfqrdwngnglrms35ec5dcticufc47ip2fpc4etolst7uxyaghq	system	Edit digest
 #bb.metric.hash.program-digest	#bb.metric-definition.sha256.chjekxwstqbo5tgepnzhwakxfpk4be5chlsbsi4zt2e5nhsiouzq	system	Program digest
-#bb.metric.hash.tick-batch-digest	#bb.metric-definition.sha256.g2omn3nsdwqz73phvatscoulp6w2kzk655rgkc5vnydce74zu3za	system	Tick-batch digest
+#bb.metric.hash.tick-batch-digest	#bb.metric-definition.sha256.k7t3ciwzrnz5xllqojobqfjxf6tqdou2fz3pfnmdqyjycggdohxa	system	Tick-batch digest
 #bb.metric.hash.prestate-root	#bb.metric-definition.sha256.i6cozc2oljn6nxxi6i47onhmdvnbwmgaokblaattevtxf4c3vrdq	system	Prestate root
 #bb.metric.hash.poststate-root	#bb.metric-definition.sha256.x57yfgicq7ggxjor53rsfhb2qvv5wvsap66ljhypg6mblm5lhjtq	system	Poststate root
 #bb.metric.hash.no-op-root-stability	#bb.metric-definition.sha256.pvlm7iva4pfzytqvtgr5c72vvzp6fw3kwpxilfsdohs5eodtk7zq	system	No-op root stability

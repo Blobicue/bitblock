@@ -22,6 +22,7 @@ FIXED_PAYLOAD_LEN = 469
 # v3 adds ten u32 accepted-action counters between the input dimensions and the
 # attempt count. Lane order is the interaction-tape opcode order.
 ACTION_LANE_COUNT = 10
+MAX_ACTIONS_PER_TICK = 65_536
 LANE_AIM_DELETE = 3
 LANE_AIM_PLACE = 4
 LANE_EXACT_EDIT = 5
@@ -178,6 +179,18 @@ def decode(payload: bytes) -> dict:
         lanes.append(struct.unpack(">I", payload[cursor : cursor + 4])[0])
         cursor += 4
     lanes = tuple(lanes)
+    for lane, count in enumerate(lanes):
+        if count > MAX_ACTIONS_PER_TICK:
+            raise ValueError(
+                f"action lane {lane} exceeds per-tick limit "
+                f"{MAX_ACTIONS_PER_TICK}: {count}"
+            )
+    action_total = sum(lanes)
+    if action_total > MAX_ACTIONS_PER_TICK:
+        raise ValueError(
+            f"action total exceeds per-tick limit "
+            f"{MAX_ACTIONS_PER_TICK}: {action_total}"
+        )
     count = struct.unpack(">Q", payload[cursor : cursor + 8])[0]
     cursor += 8
     if count > len(payload) - FIXED_PAYLOAD_LEN:
@@ -392,10 +405,11 @@ def sidebar_only() -> dict:
 
 
 def control_lanes_only() -> dict:
-    """An idle tick whose accepted actions were exactly the three v2 could not see.
+    """An idle tick with four control occurrences across the three kinds v2 could not see.
 
     No edit was submitted, so nothing appears in the ordered dispositions, and
-    under v2 this payload was byte-identical to a tick where the user did
+    The sidebar toggle occurs twice, with one resize and one motion clear. Under
+    v2 this payload was byte-identical to a tick where the user did
     nothing at all. That indistinguishability is what v3 removes.
     """
     fields = genesis_idle()
@@ -434,7 +448,7 @@ VECTORS = {
 REJECTED: list[str] = []
 
 
-def expect_reject(name: str, payload: bytes) -> None:
+def expect_reject(name: str, payload: bytes, expected_error: str | None = None) -> None:
     """One mutation the strict decoder must refuse.
 
     Counted as it runs rather than tallied by hand, so adding a control moves
@@ -443,7 +457,11 @@ def expect_reject(name: str, payload: bytes) -> None:
     """
     try:
         decode(payload)
-    except (IndexError, struct.error, ValueError):
+    except (IndexError, struct.error, ValueError) as error:
+        if expected_error is not None and expected_error not in str(error):
+            raise SystemExit(
+                f"negative control failed by the wrong mechanism: {name}: {error}"
+            ) from error
         REJECTED.append(name)
         return
     raise SystemExit(f"negative control accepted: {name}")
@@ -481,6 +499,34 @@ def negative_controls() -> None:
         mutant = genesis.copy()
         mutant[131 + index * 4 : 135 + index * 4] = u32(value)
         expect_reject(f"dimension relation {index}", mutant)
+
+    for lane in range(ACTION_LANE_COUNT):
+        mutant = genesis.copy()
+        start = 147 + lane * 4
+        mutant[start : start + 4] = u32(MAX_ACTIONS_PER_TICK + 1)
+        expect_reject(
+            f"action lane {lane} exceeds per-tick limit",
+            mutant,
+            f"action lane {lane} exceeds per-tick limit",
+        )
+
+    mutant = genesis.copy()
+    mutant[147:151] = u32(MAX_ACTIONS_PER_TICK)
+    mutant[151:155] = u32(1)
+    expect_reject(
+        "action total exceeds per-tick limit",
+        mutant,
+        "action total exceeds per-tick limit",
+    )
+
+    mutant = genesis.copy()
+    mutant[147:151] = u32(0xFFFF_FFFF)
+    mutant[151:155] = u32(1)
+    expect_reject(
+        "action total cannot wrap through u32",
+        mutant,
+        "action lane 0 exceeds per-tick limit",
+    )
 
     mutant = genesis.copy()
     mutant[187:195] = u64(1)

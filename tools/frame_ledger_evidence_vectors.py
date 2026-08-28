@@ -2,7 +2,7 @@
 """Independent stdlib vectors for the optimization-equivalence frame-ledger evidence tag.
 
 This file intentionally imports no Bitblock/Rust code. It reconstructs the canonical payload --
-including the nested TickOutcome v2 and FrameReceiptV2 bytes it frames -- and independently
+including the nested TickOutcome v3 and FrameReceiptV2 bytes it frames -- and independently
 applies the content-tag wrapper.
 
 `bitblock/optimization-equivalence/frame-ledger-evidence/v1` is what an optimization-equivalence
@@ -95,7 +95,7 @@ def render(kind: bytes, digest: bytes) -> str:
     return f"#bb.{kind.decode('ascii')}.sha256.{encoded}"
 
 
-# --- nested TickOutcome v2 ---------------------------------------------------------------
+# --- nested TickOutcome v3 ---------------------------------------------------------------
 
 CODEC_CAMERA = (
     f64_bits(0.0),

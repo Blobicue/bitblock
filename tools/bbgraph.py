@@ -19,7 +19,7 @@ against the tree that produced it.
     selftest            Run tools/bbselftest.json; non-zero exit on mismatch.
 
     python tools/bbgraph.py ask "canonical framebuffer bytes"
-    python tools/bbgraph.py schema bitblock/tick-outcome/v2
+    python tools/bbgraph.py schema bitblock/tick-outcome/v3
     python tools/bbgraph.py node frame
 
 How `ask` ranks, in three rules.

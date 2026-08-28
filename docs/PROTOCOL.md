@@ -218,7 +218,7 @@ snapshot. The current world tag is safe because it is finalized before render.
 
 ## Tick-outcome sidecar checkpoint
 
-`src/tick.rs` freezes the live additive `TickOutcome` v2 proof object. Every
+`src/tick.rs` freezes the live additive `TickOutcome` v3 proof object. Every
 completed `App::fixed_tick`, including an idle tick, now produces exactly one
 structurally verified sidecar. The later live-receipt migration retains the
 complete in-memory chain from tick zero rather than only its current head:
@@ -244,7 +244,7 @@ TickOutcome = optional parent TickOutcome tag [33]
               || optional composite FrameInput/Frame pair [65]
 ```
 
-The fixed payload is 429 bytes. An unresolved aimed edit adds one byte; an
+The fixed payload is 469 bytes. An unresolved aimed edit adds one byte; an
 edit-bearing attempt adds one disposition byte plus the existing canonical
 25-byte `Edit`. The complete closed disposition alphabet is:
 
@@ -305,24 +305,25 @@ sidebar-only        payload 469  preimage 550  #bb.tick-outcome.sha256.bzqggwzw2
 ```
 
 `control-lanes-only` is the vector v3 was added for: it shares every other byte
-with `genesis-idle` and differs only in having consumed a sidebar toggle, a
-resize, and a motion clear. Under v2 the two payloads were identical.
+with `genesis-idle` and differs only in four accepted occurrences across three
+control-action kinds -- two sidebar toggles, one resize, and one motion clear.
+Under v2 the two payloads were identical.
 
 ### Why the counters, and why only counters
 
 The lanes are the interaction-tape opcodes, so one tape record and the tick that
 consumes it count into the same slots and reconcile without a translation table.
-Three accepted actions -- `ToggleSidebar`, `Resize`, `ClearMotion` -- apply the
+Three accepted-action kinds -- `ToggleSidebar`, `Resize`, `ClearMotion` -- apply the
 moment they are accepted rather than inside the edit fold. Their effects were
 already committed, through the sidebar flag and the viewport dimensions, but
 nothing recorded that an action had been submitted, so no count could be checked
 against a tape and no replay could be shown to have consumed what the live run
 consumed.
 
-Counts, not ordered per-event records, are all this commits. Ordered records
-would put mouse-motion granularity into a permanent payload and make the tick tag
-depend on event coalescing; per-lane totals reconcile exactly against a tape
-record in a fixed 40 bytes. The rule the decoder enforces is that submitted edits
+Counts, not ordered per-event records, are all this commits. The counts still
+reflect event coalescing because one accepted event increments one lane; they do
+not retain event values or order, and remain a fixed 40 bytes. Per-lane totals
+reconcile exactly against a tape record. The rule the decoder enforces is that submitted edits
 equal ordered dispositions: every edit counted has one attempt record, and every
 attempt record had a submission.
 
@@ -330,7 +331,7 @@ Rust additionally exhausts all 2,048 valid flag combinations and refusal
 branches for option padding, invalid attempt codes/counts/operations, length,
 non-finite or unreachable context-free camera ranges, dimensions, frame
 presence, local decode limits, and chain discontinuity. The Python decoder runs
-34 malformed-payload controls across the same field families. Its default local
+47 malformed-payload controls across the same field families. Its default local
 resource policy refuses payloads over 16 MiB or one million attempts before
 allocation; this is a bounded-verifier refusal, not a verdict that larger bytes
 are noncanonical. Successful decode uses fallible attempt reservation and a
@@ -572,7 +573,7 @@ Relative to the structural-admission checkpoint, the executable grew by 51,200
 bytes; PE virtual-size deltas are `.text +42,832`, `.rdata +5,600`,
 `.pdata +792`, `.xdata +1,400`, and `.reloc +156` bytes, with every other
 section size unchanged. The retained executable contains the distinct
-`bitblock/tick-outcome/v3`, `bitblock/frame-receipt/v2`, and legacy
+`bitblock/tick-outcome/v2`, `bitblock/frame-receipt/v2`, and legacy
 `bitblock/frame-receipt/v1` schema strings. This artifact receipts the live
 producer migration; it does not widen the semantic-proof boundary below.
 
@@ -710,7 +711,7 @@ Relative to the live FrameReceipt-v2 producer checkpoint, the executable is
 2,048 bytes smaller; PE virtual-size deltas are `.text -2,128`,
 `.rdata +288`, `.pdata -24`, `.xdata -16`, and `.reloc +12` bytes, with every
 other section size unchanged. The retained executable contains
-`bitblock/tick-outcome/v3`, both `bitblock/frame-receipt/v1` and
+`bitblock/tick-outcome/v2`, both `bitblock/frame-receipt/v1` and
 `bitblock/frame-receipt/v2`, and `bitblock/display-receipt/v2`. The historical
 display-v1 code and KAT remain in the source/test artifact but have no live
 default-executable consumer and were removed by release dead-code elimination.
@@ -2249,7 +2250,7 @@ as `Unknown`; it may not promote counter movement into displayed/dropped fate.
   required.
 - Rust implementation refinement against the Lean world model.
 - Independent semantic replay/refinement and a versioned genesis-context
-  verifier for the live parent-chained TickOutcome v2 sidecar. Production and
+  verifier for the live parent-chained TickOutcome v3 sidecar. Production and
   structural links are active, but their current tests share Rust transition
   code.
 - Shared/durable outcome storage and safe pruning. The live app retains every

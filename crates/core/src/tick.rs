@@ -7,7 +7,7 @@
 //! forming a dependency cycle.
 //!
 //! The tag proves byte identity under SHA-256. Full validity additionally requires resolving the
-//! parent, replaying the declared `bitblock/tick-outcome/v2` transition, checking the fixed genesis
+//! parent, replaying the declared `bitblock/tick-outcome/v3` transition, checking the fixed genesis
 //! camera for tick zero, and independently verifying referenced frame objects.
 
 use std::f64::consts::PI;
@@ -142,7 +142,7 @@ impl TickActionLedger {
         if lane >= ACTION_LANE_COUNT {
             return Err(TickActionError::UnknownLane { lane });
         }
-        if self.submitted() >= MAX_ACTIONS_PER_TICK {
+        if self.submitted() >= u64::from(MAX_ACTIONS_PER_TICK) {
             return Err(TickActionError::Overflow {
                 limit: MAX_ACTIONS_PER_TICK,
             });
@@ -156,11 +156,11 @@ impl TickActionLedger {
     }
 
     /// Every accepted action this tick consumed, across all lanes.
-    pub const fn submitted(&self) -> u32 {
-        let mut total = 0;
+    pub const fn submitted(&self) -> u64 {
+        let mut total = 0_u64;
         let mut index = 0;
         while index < ACTION_LANE_COUNT {
-            total += self.lanes[index];
+            total += self.lanes[index] as u64;
             index += 1;
         }
         total
@@ -171,7 +171,7 @@ impl TickActionLedger {
         self.lanes[LANE_AIM_DELETE] + self.lanes[LANE_AIM_PLACE] + self.lanes[LANE_EXACT_EDIT]
     }
 
-    /// Actions applied outside the edit fold: the lane v2 could not see.
+    /// Actions applied outside the edit fold: the lanes v2 could not see.
     pub const fn control_lane_total(&self) -> u32 {
         self.lanes[LANE_TOGGLE_SIDEBAR] + self.lanes[LANE_RESIZE] + self.lanes[LANE_CLEAR_MOTION]
     }
@@ -185,7 +185,7 @@ impl TickActionLedger {
     }
 
     fn validate(&self, attempts: &[TickAttempt]) -> Result<(), TickProtocolError> {
-        if self.submitted() > MAX_ACTIONS_PER_TICK {
+        if self.submitted() > u64::from(MAX_ACTIONS_PER_TICK) {
             return Err(TickProtocolError::TickActionOverflow {
                 limit: MAX_ACTIONS_PER_TICK,
             });
@@ -821,7 +821,7 @@ impl TickOutcome {
 
     /// Verifies the game-frame input digest relative to supplied renderer and overlay policies.
     ///
-    /// Those policy tags are contextual rather than serialized in TickOutcome v2, so the generic
+    /// Those policy tags are contextual rather than serialized in TickOutcome v3, so the generic
     /// byte codec deliberately does not choose them. The live application supplies the exact
     /// policies used for its renderer invocation before publishing the new outcome head.
     pub fn verify_game_input_binding(
@@ -1898,7 +1898,7 @@ mod tests {
         for _ in 0..MAX_ACTIONS_PER_TICK {
             ledger.record(LANE_MOVE_EDGE).unwrap();
         }
-        assert_eq!(ledger.submitted(), MAX_ACTIONS_PER_TICK);
+        assert_eq!(ledger.submitted(), u64::from(MAX_ACTIONS_PER_TICK));
         assert_eq!(
             ledger.record(LANE_MOVE_EDGE),
             Err(TickActionError::Overflow {
@@ -1907,7 +1907,7 @@ mod tests {
         );
         assert_eq!(
             ledger.submitted(),
-            MAX_ACTIONS_PER_TICK,
+            u64::from(MAX_ACTIONS_PER_TICK),
             "a refused action must not be counted"
         );
         assert_eq!(
@@ -2098,6 +2098,32 @@ mod tests {
             TickOutcome::decode_canonical(&trailing),
             Err(TickProtocolError::WrongPayloadLength { .. })
         ));
+    }
+
+    #[test]
+    fn decoded_action_totals_above_the_tick_limit_fail_closed() {
+        let base = outcome(None, 0, 1, 2, 1, 2, Vec::new()).encode_canonical();
+
+        let mut single_over_limit = base.clone();
+        single_over_limit[147..151].copy_from_slice(&(MAX_ACTIONS_PER_TICK + 1).to_be_bytes());
+        assert_eq!(
+            TickOutcome::decode_canonical(&single_over_limit),
+            Err(TickProtocolError::TickActionOverflow {
+                limit: MAX_ACTIONS_PER_TICK,
+            })
+        );
+
+        // A mathematical total of 2^32 must not panic in debug or wrap to zero
+        // in release before the protocol limit is checked.
+        let mut wrapping_total = base;
+        wrapping_total[147..151].copy_from_slice(&u32::MAX.to_be_bytes());
+        wrapping_total[151..155].copy_from_slice(&1_u32.to_be_bytes());
+        assert_eq!(
+            TickOutcome::decode_canonical(&wrapping_total),
+            Err(TickProtocolError::TickActionOverflow {
+                limit: MAX_ACTIONS_PER_TICK,
+            })
+        );
     }
 
     #[test]
@@ -2657,6 +2683,42 @@ mod tests {
             550,
             "1671e2c245695f10e592de025895140eca84f9936031a7fc28995ab07a3b7c7c",
             "#bb.tick-outcome.sha256.mdrfmhsgskam6cmt4n3zncrclswc26fjfowva6e7itavrs7zx2tq",
+        );
+
+        // Python independently constructs the same otherwise-idle outcome with
+        // four accepted control occurrences across three kinds: toggle twice,
+        // resize once, and clear-motion once. The unequal 2/1/1 split detects a
+        // control-lane permutation involving ToggleSidebar.
+        let mut control_actions = TickActionLedger::empty();
+        for lane in [
+            LANE_TOGGLE_SIDEBAR,
+            LANE_TOGGLE_SIDEBAR,
+            LANE_RESIZE,
+            LANE_CLEAR_MOTION,
+        ] {
+            control_actions.record(lane).unwrap();
+        }
+        let control_lanes_only = TickOutcome::new(
+            None,
+            0,
+            sequence_tag(TagKind::World, 0x00),
+            sequence_tag(TagKind::Receipt, 0x20),
+            genesis_input,
+            control_actions,
+            [],
+            sequence_tag(TagKind::World, 0x00),
+            sequence_tag(TagKind::Receipt, 0x20),
+            codec_camera,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_vector(
+            &control_lanes_only,
+            469,
+            550,
+            "42968ac648afd01427128e9c9551a2bee9579a7bf107909c6c3f97e7cbb41973",
+            "#bb.tick-outcome.sha256.ckeafgihrlyc57iiyef4mjvkqrxsyfbiucrrb4zndfvp57h45xhq",
         );
 
         let mixed_input = TickInputState::from_bits(
