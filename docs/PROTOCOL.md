@@ -341,8 +341,19 @@ matters more than the table does.
 
 `world_tag` is a pure function of the occupied set. But the *admitted* set is not
 pure: `resolve_aim_edit` and `edit_would_enclose_observer` both consult the
-camera, and after a `FitWorld` the camera carries the viewport. A captured assay
-demonstrates both routes from one identical accepted-action sequence:
+camera, and after a `FitWorld` the camera carries the viewport.
+
+State the defect carefully, because the obvious phrasing overstates it. `Resize`
+is a canonical accepted action -- interaction-tape opcode 8, with width and
+height serialized into the tape -- so a tape carrying `resize 1280 960` replays
+identically on any machine. **Replay is deterministic.** What the protocol does
+is admit environmental configuration into the canonical action stream: in live
+play a `Resize` originates from an OS `WindowEvent::Resized`, and its payload
+then reaches world state. Two sessions differing only in window size are two
+different tapes, and they reach different worlds.
+
+A captured assay demonstrates both routes, from two action sequences differing
+only in their `Resize` payload:
 
 - **Admission forks.** The same aim resolves to the same coordinate
   `on 0 0 -80001` at every viewport, and is then *executed* at 1280x960 and
@@ -360,6 +371,11 @@ So **both** chains are viewport-dependent, by different routes. The tick chain
 hashes the viewport directly; the world chain inherits it through admission.
 Neither is currently a resolution-independent commitment, and an implementation
 cannot become one by choosing which chain to trust.
+
+For a local simulator that is defensible: the window is part of the machine and
+the tape records what happened on it. For anything that must agree across
+machines it is not, because a node's display configuration becomes an input to
+world state.
 
 Nothing here is fixed by writing it down. Removing the dependence needs the
 observer-policy boundary moved: aim resolution and enclosure admission are
