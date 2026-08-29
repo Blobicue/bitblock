@@ -33,15 +33,20 @@ coordinate and not a hidden default block; it is off.
 The tick is the simulation clock and the semantic commit boundary.
 
 1. Platform input is normalized into accepted actions.
-2. The accepted actions for one contiguous tick ordinal are applied in their exact order.
-3. The fixed tick reducer updates camera and world state, applies edit rules, and commits the
-   resulting world/history identities.
-4. A tick outcome exposes the post-world, post-history, and camera state plus optional
-   frame-input/frame-output commitments when that fold dirtied a render surface.
+2. The accepted actions for one contiguous tick update aggregate local controls in action order.
+   The fixed reducer consumes those lanes in its declared order.
+3. Each pending edit is then resolved or refused by observer-local policy into one named
+   disposition. Only an executed disposition's exact edit crosses into the coordinate reducer;
+   that reducer receives no camera or viewport value and commits the resulting world/history
+   identities.
+4. A tick outcome retains the broader interaction result: controls, all edit dispositions,
+   post-world, post-history, camera state, and optional frame commitments.
 
 Empty ticks are real idle ticks. Wall-clock scheduling chooses when a tick is attempted; it is
 not a hidden input to the reducer. The same accepted action tape therefore has one deterministic
-simulation meaning when replayed with the same build and protocol limits.
+simulation meaning when replayed with the same build and protocol limits. Determinism is a
+same-complete-tape claim: `resize 640 480` and `resize 1280 960` are different canonical inputs,
+even when every later action is textually identical.
 
 Rendering is a projection of the committed tick state. It does not create a second simulation
 clock. The current target is a fixed 60 Hz loop. A dirty tick derives a CPU-produced XRGB buffer;
@@ -63,10 +68,10 @@ tick. `on` and `off` are idempotent. `toggle` is an involution except at bedrock
 `off` and `toggle` are permanent no-ops. Source no-ops remain represented in the program so an
 attempt is not silently erased.
 
-An edit that would place a block in the observer's cell is recorded as an attempted action but
-is omitted from the executable batch. The richer tick-outcome sidecar preserves that refusal and
-its disposition. This makes invalid overlap observable without allowing an impossible world
-state.
+`admit_pending_edit` classifies an edit that misses or would enclose the observer as an unresolved
+or rejected `TickAttempt`. Only `TickAttempt::executed_edit()` enters
+`TickTransaction::apply_edit`; refusals remain observable without entering the executable batch
+or coordinate history.
 
 The edit language is not yet a self-executing programming language. Blocks currently provide
 memory and ticks provide execution order; block-to-block transformation rules are a later
@@ -151,9 +156,10 @@ Proof-of-Stake, consensus, currency, or Layer 1 status.
 2. **The tick is the authority for state change.** Input collection, simulation, and frame
    derivation can have different implementation layers, but the semantic transition is one
    ordered fixed-tick fold. This is what makes replay and headless scenario generation possible.
-3. **“Accepted action” is a real boundary.** A replay can be exact after normalization while still
-   saying nothing about whether Windows delivered the original mouse/keyboard event. That
-   distinction prevents a simulator receipt from being mistaken for a screen observation.
+3. **Accepted input and admitted world input are distinct boundaries.** An `InteractionTape`
+   begins after OS acceptance. Camera-local resolution then produces a disposition, and only an
+   executed exact edit enters coordinate history. This prevents a deterministic local interaction
+   receipt from being mistaken for a viewport-free world input.
 4. **Sparse storage gives practical infinity, not infinite performance.** Lazy chunks remove a
    preallocated world bound. They do not remove the cost of storing touched bits, traversing
    visible bits, or representing camera precision. Hierarchical indexing and chunk-relative

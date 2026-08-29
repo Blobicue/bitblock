@@ -2142,45 +2142,11 @@ impl App {
         let mut outcome_attempts = Vec::with_capacity(attempts);
         let mut transaction = self.history.begin_tick(self.tick);
         for pending in pending_edits {
-            match pending {
-                PendingEdit::Aim(AimEdit::Delete) => {
-                    let Some(edit) = resolve_aim_edit(&self.world, &self.camera, AimEdit::Delete)
-                    else {
-                        outcome_attempts.push(TickAttempt::AimDeleteUnresolved);
-                        continue;
-                    };
-                    assert!(
-                        !edit_would_enclose_observer(&self.world, &self.camera, edit),
-                        "an aimed Off edit cannot enclose the observer"
-                    );
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
-                    outcome_attempts.push(TickAttempt::AimDeleteExecuted(edit));
-                }
-                PendingEdit::Aim(AimEdit::Place) => {
-                    let Some(edit) = resolve_aim_edit(&self.world, &self.camera, AimEdit::Place)
-                    else {
-                        outcome_attempts.push(TickAttempt::AimPlaceUnresolved);
-                        continue;
-                    };
-                    if edit_would_enclose_observer(&self.world, &self.camera, edit) {
-                        outcome_attempts.push(TickAttempt::AimPlaceRejectedObserver(edit));
-                        continue;
-                    }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
-                    outcome_attempts.push(TickAttempt::AimPlaceExecuted(edit));
-                }
-                PendingEdit::Exact(edit) => {
-                    if edit_would_enclose_observer(&self.world, &self.camera, edit) {
-                        outcome_attempts.push(TickAttempt::ExactRejectedObserver(edit));
-                        continue;
-                    }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
-                    outcome_attempts.push(TickAttempt::ExactExecuted(edit));
-                }
+            let attempt = admit_pending_edit(&self.world, &self.camera, pending);
+            if let Some(edit) = attempt.executed_edit() {
+                self.needs_render |= transaction.apply_edit(&self.history, &mut self.world, edit);
             }
+            outcome_attempts.push(attempt);
         }
 
         let batch = TickBatch::new(self.tick, attempts, transaction.edits().iter().copied());
@@ -3943,6 +3909,43 @@ fn resolve_aim_edit(world: &World, camera: &Camera, edit: AimEdit) -> Option<Wor
     }
 }
 
+/// Resolves observer-local policy to one disposition before the world reducer sees it.
+///
+/// Camera and viewport state stop at this boundary. Only [`TickAttempt::executed_edit`]
+/// may cross into [`bitblock::history::TickTransaction::apply_edit`], whose input is one
+/// exact integer-coordinate edit.
+fn admit_pending_edit(world: &World, camera: &Camera, pending: PendingEdit) -> TickAttempt {
+    match pending {
+        PendingEdit::Aim(AimEdit::Delete) => {
+            let Some(edit) = resolve_aim_edit(world, camera, AimEdit::Delete) else {
+                return TickAttempt::AimDeleteUnresolved;
+            };
+            assert!(
+                !edit_would_enclose_observer(world, camera, edit),
+                "an aimed Off edit cannot enclose the observer"
+            );
+            TickAttempt::AimDeleteExecuted(edit)
+        }
+        PendingEdit::Aim(AimEdit::Place) => {
+            let Some(edit) = resolve_aim_edit(world, camera, AimEdit::Place) else {
+                return TickAttempt::AimPlaceUnresolved;
+            };
+            if edit_would_enclose_observer(world, camera, edit) {
+                TickAttempt::AimPlaceRejectedObserver(edit)
+            } else {
+                TickAttempt::AimPlaceExecuted(edit)
+            }
+        }
+        PendingEdit::Exact(edit) => {
+            if edit_would_enclose_observer(world, camera, edit) {
+                TickAttempt::ExactRejectedObserver(edit)
+            } else {
+                TickAttempt::ExactExecuted(edit)
+            }
+        }
+    }
+}
+
 fn collision_limited_delta(world: &World, start: Vec3, requested: Vec3) -> Vec3 {
     let distance = requested.length();
     if distance == 0.0 {
@@ -4314,6 +4317,146 @@ mod tests {
         assert_eq!(
             bitblock::history::world_tag(&history_replay),
             bitblock::history::world_tag(&app.world)
+        );
+    }
+
+    fn exact_world_run(
+        simulation_width: u32,
+        simulation_height: u32,
+        edits: [WorldEdit; 3],
+    ) -> App {
+        let mut app = App::for_headless_simulation();
+        app.apply_infallible_accepted_action(AcceptedAction::Resize(
+            simulation_width + SIDEBAR_WIDTH,
+            simulation_height,
+        ));
+        for edit in edits {
+            app.apply_infallible_accepted_action(AcceptedAction::ExactEdit(edit));
+        }
+        app.fixed_tick();
+        app
+    }
+
+    #[test]
+    fn same_admitted_exact_edits_preserve_world_history_across_resize_contexts() {
+        let edits = [
+            WorldEdit::new(Operation::On, Coord::new(7, -8, 9)),
+            WorldEdit::new(Operation::On, Coord::new(-4, 5, 6)),
+            WorldEdit::new(Operation::Toggle, Coord::new(2, 3, -11)),
+        ];
+        let small = exact_world_run(640, 480, edits);
+        let large = exact_world_run(1280, 960, edits);
+
+        assert_ne!(
+            small.tick_outcomes[0].input().dimensions(),
+            large.tick_outcomes[0].input().dimensions(),
+            "the two interaction contexts must actually use different Resize payloads"
+        );
+        for app in [&small, &large] {
+            assert_eq!(
+                app.tick_outcomes[0].attempts(),
+                edits.map(TickAttempt::ExactExecuted)
+            );
+            let batch = app.last_tick_batch.as_ref().unwrap();
+            assert_eq!(batch.tick(), 0);
+            assert_eq!(batch.resolved_edits(), edits);
+        }
+
+        assert_eq!(small.history.receipts(), large.history.receipts());
+        assert_eq!(small.history.current_world(), large.history.current_world());
+        assert_eq!(small.history.head(), large.history.head());
+    }
+
+    #[test]
+    fn moving_one_executed_on_edit_changes_this_world_and_history() {
+        let baseline_edits = [
+            WorldEdit::new(Operation::On, Coord::new(7, -8, 9)),
+            WorldEdit::new(Operation::On, Coord::new(-4, 5, 6)),
+            WorldEdit::new(Operation::Toggle, Coord::new(2, 3, -11)),
+        ];
+        let moved_edits = [
+            WorldEdit::new(Operation::On, Coord::new(7, -8, 10)),
+            baseline_edits[1],
+            baseline_edits[2],
+        ];
+        let baseline = exact_world_run(801, 801, baseline_edits);
+        let moved = exact_world_run(801, 801, moved_edits);
+
+        for (app, edits) in [(&baseline, baseline_edits), (&moved, moved_edits)] {
+            assert_eq!(
+                app.tick_outcomes[0].attempts(),
+                edits.map(TickAttempt::ExactExecuted)
+            );
+            assert_eq!(
+                app.last_tick_batch.as_ref().unwrap().resolved_edits(),
+                edits
+            );
+        }
+        assert_ne!(
+            baseline.history.current_world(),
+            moved.history.current_world(),
+            "moving this admitted On edit must change the resulting world tag"
+        );
+        assert_ne!(
+            baseline.history.head(),
+            moved.history.head(),
+            "moving this admitted On edit must change the history receipt tag"
+        );
+    }
+
+    const VIEWPORT_CHARACTERIZATION_DEEP_MARK: WorldEdit =
+        WorldEdit::new(Operation::On, Coord::new(0, 0, -80_000));
+
+    fn resized_aim_right_run(simulation_width: u32, simulation_height: u32) -> App {
+        let mut app = App::for_headless_simulation();
+        app.apply_infallible_accepted_action(AcceptedAction::Resize(
+            simulation_width + SIDEBAR_WIDTH,
+            simulation_height,
+        ));
+        app.apply_infallible_accepted_action(AcceptedAction::ExactEdit(
+            VIEWPORT_CHARACTERIZATION_DEEP_MARK,
+        ));
+        app.fixed_tick();
+
+        app.apply_infallible_accepted_action(AcceptedAction::FitWorld);
+        app.fixed_tick();
+
+        app.apply_infallible_accepted_action(AcceptedAction::MoveEdge(MoveControl::Right, true));
+        app.apply_infallible_accepted_action(AcceptedAction::AimPlace);
+        app.fixed_tick();
+        app
+    }
+
+    #[test]
+    fn different_resize_inputs_can_change_local_aim_resolution() {
+        let small = resized_aim_right_run(640, 480);
+        let large = resized_aim_right_run(1280, 960);
+        let small_edit = WorldEdit::new(Operation::On, Coord::new(505, 0, -40_000));
+        let large_edit = WorldEdit::new(Operation::On, Coord::new(510, 0, -40_000));
+
+        assert_eq!(
+            small.tick_outcomes[0].input().dimensions(),
+            [640, 480, 640 + SIDEBAR_WIDTH, 480]
+        );
+        assert_eq!(
+            large.tick_outcomes[0].input().dimensions(),
+            [1280, 960, 1280 + SIDEBAR_WIDTH, 960]
+        );
+        assert_eq!(
+            small.tick_outcomes[2].attempts(),
+            [TickAttempt::AimPlaceExecuted(small_edit)]
+        );
+        assert_eq!(
+            large.tick_outcomes[2].attempts(),
+            [TickAttempt::AimPlaceExecuted(large_edit)]
+        );
+        assert_eq!(
+            small.last_tick_batch.as_ref().unwrap().resolved_edits(),
+            [small_edit]
+        );
+        assert_eq!(
+            large.last_tick_batch.as_ref().unwrap().resolved_edits(),
+            [large_edit]
         );
     }
 

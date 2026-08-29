@@ -368,12 +368,6 @@
     ]
    },
    {
-    "item": "TickTransaction",
-    "modules": [
-     "history"
-    ]
-   },
-   {
     "item": "UnavailableTopologyFacts",
     "modules": [
      "output_topology"
@@ -470,7 +464,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29631,
+   "code_lines": 29628,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -656,7 +650,7 @@
    ]
   },
   "test": {
-   "code_lines": 18618,
+   "code_lines": 18746,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -682,7 +676,7 @@
     {
      "left": "display_store:1685",
      "lines": 19,
-     "right": "main:4138"
+     "right": "main:4141"
     },
     {
      "left": "output_topology:1469",
@@ -690,9 +684,9 @@
      "right": "presentation_output:663"
     },
     {
-     "left": "main:4180",
+     "left": "main:4183",
      "lines": 17,
-     "right": "main:5352"
+     "right": "main:5495"
     },
     {
      "left": "presentation_output:693",
@@ -702,7 +696,7 @@
     {
      "left": "display_store:1649",
      "lines": 12,
-     "right": "main:4097"
+     "right": "main:4100"
     },
     {
      "left": "history:938",
@@ -747,7 +741,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4774"
+     "right": "main:4917"
     },
     {
      "left": "history_store:1595",

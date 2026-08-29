@@ -130,7 +130,10 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # that accounts for control actions arriving from a tape.
 # 402 -> 403 / 413 -> 414: one hostile-decoder control that distinguishes a
 # mathematical over-limit total from debug overflow and release wrapping.
-EXPECTED_TESTS = {"quick": 403, "full": 414}
+# 403 -> 406 / 414 -> 417: three production-path gates for the exact-edit world
+# seam -- equal admitted streams across Resize contexts, one moved coordinate,
+# and separately characterized viewport-dependent local aim resolution.
+EXPECTED_TESTS = {"quick": 406, "full": 417}
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s

@@ -229,10 +229,11 @@ canonical spelling. No-op instructions remain in the program even when they do
 not change the world, so an attempted edit is not silently erased from history.
 Both `off 0 0 0` and `toggle 0 0 0` are permanent no-ops.
 
-An instruction that would create a block around the observer is counted as an
-attempt but omitted from the executable tick batch, so replay cannot reproduce
-an invalid observer/world overlap. The richer tick-outcome sidecar preserves
-the rejected instruction and its named disposition without executing it.
+`admit_pending_edit` owns camera-dependent aim resolution and observer-overlap
+admission. It produces one named `TickAttempt`; `fixed_tick` passes only
+`TickAttempt::executed_edit()` into `TickTransaction::apply_edit`. Unresolved and
+rejected attempts remain visible in `TickOutcome` but never enter the executable
+`TickBatch` or coordinate history.
 
 This is deliberately an **edit language**, not yet a self-executing programming
 language. Blocks are memory and ticks are the execution clock; transformation
@@ -338,6 +339,11 @@ batch in memory. That batch can be replayed without the camera or renderer and
 is the shared semantic surface for mouse input, text input, Rust tests, and
 formal proofs. Receipt-bearing ticks also enter an unsigned in-memory SHA-256
 chain with exact mint, burn, protected-no-op, and idempotent-no-op provenance.
+This is a conditional viewport-free world seam, not a claim that raw interactions
+are viewport-free. Two tapes with different canonical `Resize` payloads may
+resolve or admit different edits. Given the same pre-world, receipt parent and
+local tick, and ordered executed exact edits, the coordinate world and history
+agree across viewport contexts.
 Empty ticks do not grow this coordinate history. Durable append storage remains
 separate from the live app: the opt-in research journal can persist generic
 canonical storage records, and its typed coordinate-history layer now admits a

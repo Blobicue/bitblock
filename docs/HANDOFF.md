@@ -279,12 +279,13 @@ The current product surface is deliberately small: a free observer in a sparse b
 world. `(0, 0, 0)` is permanent bedrock; the observer starts at `(0, 0, -1)`; all other absent
 coordinates are off. There are no entities, gravity, terrain, inventory, or autonomous block rules.
 
-The fixed 60 Hz reducer consumes aggregate live-input flags/floats plus ordered edit attempts,
-updates camera/world state, commits resolved exact edits to coordinate history, appends an
-aggregate tick outcome, and derives a new frame only when the surface is dirty. Resize,
-sidebar-toggle, and clear-motion actions mutate local application state before `fixed_tick`.
-The window presentation step is separate. Empty ticks still produce outcome history and may
-reuse the last raster.
+The fixed 60 Hz reducer consumes aggregate live-input flags/floats plus ordered edit attempts and
+updates local camera state. Each pending edit passes through `admit_pending_edit`; only
+`TickAttempt::executed_edit()` enters the camera-free `TickTransaction::apply_edit` path. The fold
+then commits coordinate history, appends an aggregate tick outcome, and derives a frame only when
+the surface is dirty. Resize, sidebar-toggle, and clear-motion still mutate local application
+state before `fixed_tick`; presentation remains separate. Empty ticks still produce outcome
+history and may reuse the last raster.
 
 The observer has movement, look, logarithmic wheel dolly, placement, deletion, fit, crosshair, and
 an F3-style metrics sidebar. Point sweeps prevent movement through occupied voxels; an edit that
@@ -295,8 +296,10 @@ but is not the default startup path.
 Supplied `InteractionTape` values are bounded replay inputs: they store contiguous tick records,
 preserve action order and floating-point bit patterns, enforce canonical payload limits, and
 receive a `#bb.intent.sha256...` tag. They are not evidence that the live application records
-every accepted action. `TickOutcome` aggregates non-edit controls, while coordinate history omits
-aim misses, observer-overlap rejections, camera-only actions, and idle ticks.
+every accepted action. `Resize` is a canonical action, so sessions with different window
+dimensions produce different tapes; replay of either complete tape remains deterministic.
+`TickOutcome` aggregates non-edit controls, while coordinate history retains only executed exact
+edits and omits aim misses, observer-overlap rejections, camera/control actions, and idle ticks.
 `tools/simulate_sequence.py` converts JSON scenarios into tapes; the headless Rust path reports
 per-tick outcome/world/history/camera/frame commitments. Ordinary stdout is not a canonical run
 receipt, and the opt-in `LocalReplayEvidence` carrier is feature-gated, in-memory, and locally
@@ -380,6 +383,9 @@ self-verified. Neither path produces physical display evidence.
   sweep/edit guards.
 - A replay of the same accepted tape under the same build and protocol limits has deterministic
   simulation semantics.
+- Given the same coordinate prestate, receipt parent and local tick, and ordered admitted exact
+  edits, coordinate reduction is independent of viewport context. Different resize-bearing tapes
+  may still admit different streams.
 - A content tag identifies canonical bytes under a named schema.
 - The Lean/LadderLang artifacts establish only their declared abstract or finite scopes.
 
