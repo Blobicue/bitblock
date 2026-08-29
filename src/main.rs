@@ -4370,6 +4370,555 @@ mod tests {
         assert_eq!(app.tick, 2);
     }
 
+    /// Test-only projection of one canonical tick chain, captured at one viewport.
+    ///
+    /// Holding the whole outcome keeps the comparison exhaustive: every field
+    /// `encode_fields` sinks into the tick payload is available to
+    /// `differing_fields_at`, so a failure names which hashed input diverged rather
+    /// than only reporting that the chain did.
+    #[derive(Clone, Debug)]
+    struct AuthoritySplitRun {
+        client_width: u32,
+        client_height: u32,
+        outcomes: Vec<TickOutcome>,
+    }
+
+    impl AuthoritySplitRun {
+        fn viewport(&self) -> String {
+            let [simulation_width, simulation_height, _, _] = self.outcomes[0].input().dimensions();
+            format!(
+                "client {}x{} (simulation {simulation_width}x{simulation_height})",
+                self.client_width, self.client_height
+            )
+        }
+
+        fn describe_frame(frame: Option<TickFrameCommitment>) -> String {
+            match frame {
+                Some(frame) => format!("{} + {}", frame.input(), frame.frame()),
+                None => "none".to_owned(),
+            }
+        }
+
+        fn describe_tick(&self, tick: usize) -> String {
+            let outcome = &self.outcomes[tick];
+            format!(
+                "  {}\n    tag         {}\n    parent      {}\n    post_world  {}\n    dimensions  {:?}\n    actions     {:?}\n    post_camera {:?}\n    game        {}\n    composite   {}\n",
+                self.viewport(),
+                outcome.tag(),
+                outcome
+                    .parent()
+                    .map_or_else(|| "none".to_owned(), |parent| parent.to_string()),
+                outcome.post_world(),
+                outcome.input().dimensions(),
+                outcome.actions(),
+                outcome.post_camera().bits(),
+                Self::describe_frame(outcome.game()),
+                Self::describe_frame(outcome.composite()),
+            )
+        }
+
+        /// Names every hashed tick-outcome field that differs between two runs at one
+        /// tick, in the order `encode_fields` sinks them.
+        fn differing_fields_at(&self, other: &Self, tick: usize) -> Vec<&'static str> {
+            let (mine, theirs) = (&self.outcomes[tick], &other.outcomes[tick]);
+            let mut differing = Vec::new();
+            if mine.parent() != theirs.parent() {
+                differing.push("parent (inherited fork)");
+            }
+            if mine.pre_world() != theirs.pre_world() {
+                differing.push("pre_world");
+            }
+            if mine.pre_history() != theirs.pre_history() {
+                differing.push("pre_history");
+            }
+            if mine.input().flags() != theirs.input().flags() {
+                differing.push("input.flags");
+            }
+            if mine.input().mouse_bits() != theirs.input().mouse_bits() {
+                differing.push("input.mouse");
+            }
+            if mine.input().dimensions() != theirs.input().dimensions() {
+                differing.push("input.dimensions");
+            }
+            if mine.actions() != theirs.actions() {
+                differing.push("action ledger");
+            }
+            if mine.attempts() != theirs.attempts() {
+                differing.push("attempts");
+            }
+            if mine.post_world() != theirs.post_world() {
+                differing.push("post_world");
+            }
+            if mine.post_history() != theirs.post_history() {
+                differing.push("post_history");
+            }
+            if mine.post_camera() != theirs.post_camera() {
+                differing.push("post_camera");
+            }
+            if mine.game() != theirs.game() {
+                differing.push("game frame commitment");
+            }
+            if mine.composite() != theirs.composite() {
+                differing.push("composite frame commitment");
+            }
+            differing
+        }
+
+        fn report(&self, other: &Self, tick: usize) -> String {
+            format!(
+                "tick {tick}\n{}{}  differing hashed fields: {:?}\n",
+                self.describe_tick(tick),
+                other.describe_tick(tick),
+                self.differing_fields_at(other, tick),
+            )
+        }
+
+        /// Rebuilds this run's tick with only the other run's viewport dimensions
+        /// substituted, holding every other hashed field fixed.
+        ///
+        /// `parent` is inherited, so once tick zero forks every later tick differs for
+        /// two reasons at once. This reconstruction removes the inherited difference and
+        /// leaves exactly one variable, which is what makes the dimension leak an
+        /// observation rather than a deduction from the encoder.
+        fn reconstructed_with_dimensions_of(&self, other: &Self, tick: usize) -> TickOutcome {
+            let outcome = &self.outcomes[tick];
+            let borrowed = other.outcomes[tick].input();
+            assert_eq!(
+                outcome.input().flags(),
+                borrowed.flags(),
+                "the reconstruction is only single-variable while the input flags agree"
+            );
+            assert_eq!(
+                outcome.input().mouse_bits(),
+                borrowed.mouse_bits(),
+                "the reconstruction is only single-variable while the analog lanes agree"
+            );
+            TickOutcome::new(
+                outcome.parent(),
+                outcome.tick(),
+                outcome.pre_world(),
+                outcome.pre_history(),
+                borrowed,
+                outcome.actions(),
+                outcome.attempts().iter().copied(),
+                outcome.post_world(),
+                outcome.post_history(),
+                outcome.post_camera(),
+                outcome.game(),
+                outcome.composite(),
+            )
+            .expect("swapping only the viewport dimensions keeps the outcome structurally valid")
+        }
+    }
+
+    /// One ordered sequence of already-resolved exact edits.
+    ///
+    /// Every coordinate is clear of the observer spawn cell, so
+    /// `edit_would_enclose_observer` admits all three at every viewport: the edit set
+    /// committed to the world is identical across runs by construction.
+    const AUTHORITY_SPLIT_EDITS: [WorldEdit; 3] = [
+        WorldEdit::new(Operation::On, Coord::new(7, -8, 9)),
+        WorldEdit::new(Operation::On, Coord::new(-4, 5, 6)),
+        WorldEdit::new(Operation::Toggle, Coord::new(2, 3, -11)),
+    ];
+
+    /// The same sequence with one coordinate moved: the powered control for assay 2.
+    const AUTHORITY_SPLIT_EDITS_MOVED: [WorldEdit; 3] = [
+        WorldEdit::new(Operation::On, Coord::new(7, -8, 10)),
+        WorldEdit::new(Operation::On, Coord::new(-4, 5, 6)),
+        WorldEdit::new(Operation::Toggle, Coord::new(2, 3, -11)),
+    ];
+
+    /// Runs one fixed tick schedule at one viewport and keeps the resulting chain.
+    ///
+    /// The schedule is chosen so the hashed inputs separate by observation:
+    ///   tick 0 - initial render: dimensions and both frame commitments are live
+    ///   tick 1 - the resolved exact edits, rendered
+    ///   tick 2 - idle: no frame commitments at all, camera untouched
+    ///   tick 3 - `FitWorld`, applied last so no camera divergence can reach admission
+    fn authority_split_run(
+        client_width: u32,
+        client_height: u32,
+        edits: [WorldEdit; 3],
+    ) -> AuthoritySplitRun {
+        let mut app = App::for_headless_simulation();
+        app.apply_infallible_accepted_action(AcceptedAction::Resize(client_width, client_height));
+
+        app.fixed_tick();
+        for edit in edits {
+            app.apply_infallible_accepted_action(AcceptedAction::ExactEdit(edit));
+        }
+        app.fixed_tick();
+        app.fixed_tick();
+        app.apply_infallible_accepted_action(AcceptedAction::FitWorld);
+        app.fixed_tick();
+
+        AuthoritySplitRun {
+            client_width,
+            client_height,
+            outcomes: app.tick_outcomes.clone(),
+        }
+    }
+
+    /// Assay 1 of the authority-split charter. **Captured red.**
+    ///
+    /// One ordered sequence of resolved exact edits, executed at three viewports, must
+    /// produce one identical world chain. It does not today: viewport resolution leaks
+    /// into the canonical tick tag, so two machines with different window sizes produce
+    /// different canonical history from identical actions.
+    ///
+    /// `#[ignore]` records that colour without breaking CI. Do not delete or weaken this
+    /// assay to make it pass; it turns green only when the world chain stops hashing
+    /// interaction and display state, which is the charter's terminating condition.
+    #[test]
+    #[ignore = "captured-red assay 1 for the authority-split charter: the canonical tick chain still hashes viewport state, so identical resolved edits produce different history at different window sizes. Ignored so the suite stays green until the world chain is split from the interaction and display chains."]
+    fn assay_one_resolved_edits_produce_one_world_chain_at_every_viewport() {
+        // Client sizes chosen so the simulation viewport matches the charter's measured
+        // table: 640x480, 1280x960, 801x801.
+        let runs = [
+            authority_split_run(640 + SIDEBAR_WIDTH, 480, AUTHORITY_SPLIT_EDITS),
+            authority_split_run(1280 + SIDEBAR_WIDTH, 960, AUTHORITY_SPLIT_EDITS),
+            authority_split_run(801 + SIDEBAR_WIDTH, 801, AUTHORITY_SPLIT_EDITS),
+        ];
+        let reference = &runs[0];
+        // Every differing tick is reported in one panic rather than aborting at the
+        // first, so the captured colour records which hashed field diverged at each tick.
+        let mut divergences = String::new();
+
+        for run in &runs[1..] {
+            // The admitted world transition itself must not depend on the viewport. If
+            // either of these fires the defect is worse than the charter records:
+            // admission, not just commitment, diverged.
+            for tick in 0..reference.outcomes.len() {
+                assert_eq!(
+                    reference.outcomes[tick].post_world(),
+                    run.outcomes[tick].post_world(),
+                    "resolved exact edits were admitted differently at tick {tick} between {} and {}",
+                    reference.viewport(),
+                    run.viewport(),
+                );
+                assert_eq!(
+                    reference.outcomes[tick].attempts(),
+                    run.outcomes[tick].attempts(),
+                    "resolved exact edits were dispositioned differently at tick {tick} between {} and {}",
+                    reference.viewport(),
+                    run.viewport(),
+                );
+            }
+
+            for tick in 0..reference.outcomes.len() {
+                if reference.outcomes[tick].tag() != run.outcomes[tick].tag() {
+                    divergences.push_str(&reference.report(run, tick));
+                }
+            }
+        }
+
+        // Single-variable observation. Tick 2 is idle: no frame commitments exist and the
+        // camera is untouched, so substituting only the viewport dimensions into an
+        // otherwise byte-identical outcome isolates the dimension leak from both the
+        // frame commitments and the inherited parent fork.
+        const IDLE_TICK: usize = 2;
+        assert_eq!(reference.outcomes[IDLE_TICK].game(), None);
+        assert_eq!(reference.outcomes[IDLE_TICK].composite(), None);
+        let isolated = reference.reconstructed_with_dimensions_of(&runs[1], IDLE_TICK);
+        divergences.push_str(&format!(
+            "dimension-only reconstruction at tick {IDLE_TICK} (parent, camera, world, history, ledger and attempts all held fixed; no frame commitments exist)\n    dimensions {:?} -> tag {}\n    dimensions {:?} -> tag {}\n    tags differ: {}\n",
+            reference.outcomes[IDLE_TICK].input().dimensions(),
+            reference.outcomes[IDLE_TICK].tag(),
+            isolated.input().dimensions(),
+            isolated.tag(),
+            isolated.tag() != reference.outcomes[IDLE_TICK].tag(),
+        ));
+
+        assert!(
+            divergences.is_empty(),
+            "identical resolved exact edits produced different canonical tick chains at different viewports\n\n{divergences}"
+        );
+    }
+
+    /// Assay 2 of the authority-split charter. **Powered control, must stay green.**
+    ///
+    /// Different resolved coordinates must produce different world tags. Without this,
+    /// assay 1 could be satisfied by a chain that has simply stopped distinguishing
+    /// anything.
+    #[test]
+    fn assay_two_different_resolved_coordinates_produce_different_world_tags() {
+        let width = 801 + SIDEBAR_WIDTH;
+        let height = 801;
+        let baseline = authority_split_run(width, height, AUTHORITY_SPLIT_EDITS);
+        let moved = authority_split_run(width, height, AUTHORITY_SPLIT_EDITS_MOVED);
+
+        // The runs are identical in everything except the edit coordinates: same
+        // viewport, and tick zero precedes the edits.
+        assert_eq!(
+            moved.outcomes[0].input().dimensions(),
+            baseline.outcomes[0].input().dimensions()
+        );
+        assert_eq!(moved.outcomes[0].tag(), baseline.outcomes[0].tag());
+
+        // Powered: both runs actually executed all three edits, so a difference in the
+        // world tag is a difference in committed world content and not a shared refusal.
+        for (run, edits) in [
+            (&baseline, AUTHORITY_SPLIT_EDITS),
+            (&moved, AUTHORITY_SPLIT_EDITS_MOVED),
+        ] {
+            assert_eq!(
+                run.outcomes[1].attempts(),
+                edits.map(TickAttempt::ExactExecuted),
+                "assay 2 is unpowered: the resolved edits were not all executed"
+            );
+        }
+
+        assert_ne!(
+            moved.outcomes[1].post_world(),
+            baseline.outcomes[1].post_world(),
+            "different resolved coordinates produced the same post-tick world tag"
+        );
+        assert_ne!(
+            moved.outcomes.last().unwrap().post_world(),
+            baseline.outcomes.last().unwrap().post_world(),
+            "different resolved coordinates produced the same final world tag"
+        );
+        assert_ne!(
+            moved.outcomes[1].tag(),
+            baseline.outcomes[1].tag(),
+            "different resolved coordinates produced the same tick tag"
+        );
+    }
+
+    /// One marker 80,000 cells behind the origin bedrock, on the view axis.
+    ///
+    /// With the bedrock this makes the world exactly one column: the AABB spans
+    /// `[-0.5, 0.5]` in x and y and `[-80000.5, 0.5]` in z, so its center is the integer
+    /// point `(0, 0, -40000)`. A fit therefore leaves the observer on the axis through
+    /// those cell centers and the aim ray is exact, not a face or corner tie.
+    ///
+    /// The depth is what makes the fork reachable. After a fit the gap from the observer
+    /// to the marker's near face is exactly the viewport focal length, `0.866 *
+    /// simulation_height`, while one movement tick covers `0.0125 * observation_distance`,
+    /// which this depth pins near 500 cells at every viewport. So 640x480 reaches the
+    /// marker and stops flush against it while 1280x960 and 801x801 stop hundreds of cells
+    /// short -- one geometry, three different observers.
+    const AUTHORITY_SPLIT_DEEP_MARK: WorldEdit =
+        WorldEdit::new(Operation::On, Coord::new(0, 0, -80_000));
+
+    /// The tick that moves and aims. Ticks 0 and 1 build the world and fit the camera.
+    const WORLD_FORK_EDIT_TICK: usize = 2;
+
+    /// Test-only projection of one `fit` -> `move` -> `aim` run at one viewport.
+    ///
+    /// The tick chain carries the camera only as opaque bits, so the quantities the
+    /// charter asks for -- the fitted observation distance and the observer position in
+    /// every lane -- are captured beside the outcomes rather than recovered from them.
+    #[derive(Clone, Debug)]
+    struct WorldForkRun {
+        client_width: u32,
+        client_height: u32,
+        fit_distance: f64,
+        fitted_position: Vec3,
+        moved_position: Vec3,
+        moved_anchor: Vec3,
+        outcomes: Vec<TickOutcome>,
+    }
+
+    impl WorldForkRun {
+        fn viewport(&self) -> String {
+            let [simulation_width, simulation_height, _, _] = self.outcomes[0].input().dimensions();
+            format!(
+                "client {}x{} (simulation {simulation_width}x{simulation_height})",
+                self.client_width, self.client_height
+            )
+        }
+
+        /// The single aim disposition this run produced, and the coordinate it resolved to.
+        fn aim(&self) -> TickAttempt {
+            let attempts = self.outcomes[WORLD_FORK_EDIT_TICK].attempts();
+            assert_eq!(
+                attempts.len(),
+                1,
+                "the edit tick offers exactly one aimed place at {}",
+                self.viewport()
+            );
+            attempts[0]
+        }
+
+        fn describe(&self) -> String {
+            let aim = self.aim();
+            format!(
+                "  {}\n    observation_distance after fit  {:?}\n    position after fit              [{:?}, {:?}, {:?}]\n    position after move             [{:?}, {:?}, {:?}]\n    observer cell after move        {:?}\n    anchor after move               [{:?}, {:?}, {:?}]\n    anchor cell after move          {:?}\n    resolved coordinate             {}\n    disposition                     {:?}\n    post_world                      {}\n",
+                self.viewport(),
+                self.fit_distance,
+                self.fitted_position.x,
+                self.fitted_position.y,
+                self.fitted_position.z,
+                self.moved_position.x,
+                self.moved_position.y,
+                self.moved_position.z,
+                coord_containing(self.moved_position),
+                self.moved_anchor.x,
+                self.moved_anchor.y,
+                self.moved_anchor.z,
+                coord_containing(self.moved_anchor),
+                aim.edit()
+                    .map_or_else(|| "unresolved".to_owned(), |edit| edit.to_string()),
+                aim,
+                self.outcomes[WORLD_FORK_EDIT_TICK].post_world(),
+            )
+        }
+    }
+
+    /// Runs one `fit` -> `move` -> `aim` schedule at one viewport and keeps the result.
+    ///
+    ///   tick 0 - the deep marker lands. The world is identical at every viewport here.
+    ///   tick 1 - `FitWorld` alone. The camera forks; the world does not.
+    ///   tick 2 - one movement tick at the fitted speed, then one aimed place resolved
+    ///            against the position that movement produced.
+    ///
+    /// The movement key is released afterwards so the captured run is exactly three ticks
+    /// of motion-free history plus this one.
+    fn world_fork_run(client_width: u32, client_height: u32, control: MoveControl) -> WorldForkRun {
+        let mut app = App::for_headless_simulation();
+        app.apply_infallible_accepted_action(AcceptedAction::Resize(client_width, client_height));
+
+        app.apply_infallible_accepted_action(AcceptedAction::ExactEdit(AUTHORITY_SPLIT_DEEP_MARK));
+        app.fixed_tick();
+
+        app.apply_infallible_accepted_action(AcceptedAction::FitWorld);
+        app.fixed_tick();
+        let fit_distance = app.camera.observation_distance();
+        let fitted_position = app.camera.position();
+
+        app.apply_infallible_accepted_action(AcceptedAction::MoveEdge(control, true));
+        app.apply_infallible_accepted_action(AcceptedAction::AimPlace);
+        app.fixed_tick();
+        app.apply_infallible_accepted_action(AcceptedAction::MoveEdge(control, false));
+
+        WorldForkRun {
+            client_width,
+            client_height,
+            fit_distance,
+            fitted_position,
+            moved_position: app.camera.position(),
+            moved_anchor: app.camera.observation_anchor(),
+            outcomes: app.tick_outcomes.clone(),
+        }
+    }
+
+    /// Assay 3 of the authority-split charter. **Captured red.**
+    ///
+    /// One ordered action sequence, executed at three viewports, must produce one world.
+    /// It does not, and the difference is not confined to the tick tag this time: it
+    /// reaches `post_world` and the admission dispositions. That is a state fork, not a
+    /// commitment fork -- two machines running the same actions hold different worlds.
+    ///
+    /// Assay 1 could not see this. Its coordinates are clear of the observer cell and its
+    /// `FitWorld` is applied last, so camera divergence never reached admission. The
+    /// reachable ordering is `fit` -> `move` -> `aim`:
+    ///
+    ///   1. `FitWorld` derives `observation_distance` from the live renderer dimensions,
+    ///      so the fitted observer sits at a different distance at each viewport.
+    ///   2. `fixed_tick` scales movement by that distance -- `observation_distance *
+    ///      0.75 / TICK_RATE` -- so one movement tick carries the observer a different
+    ///      distance at each viewport.
+    ///   3. `resolve_aim_edit` and `edit_would_enclose_observer` both consult the camera
+    ///      that movement produced.
+    ///
+    /// Two lanes are run from the one world of [`AUTHORITY_SPLIT_DEEP_MARK`], differing
+    /// only in which movement key is held:
+    ///
+    ///   forward - admission forks. The aim resolves to the *same* coordinate at all three
+    ///             viewports, and it is executed at two of them and refused at the third,
+    ///             because only the 640x480 observer travelled far enough to end flush
+    ///             against the marker and so occupy the cell the place would fill.
+    ///   right   - resolution forks. The displaced center ray misses the world entirely,
+    ///             `resolve_aim_edit` falls back to `coord_containing(observation_anchor)`,
+    ///             and the anchor has been carried a viewport-dependent distance: three
+    ///             viewports, three coordinates, three worlds.
+    ///
+    /// Ticks 0 and 1 are asserted identical first, so the fork is located rather than
+    /// merely observed: the camera forks at the fit while the world is still shared, and
+    /// the world forks at the tick that moves and aims.
+    ///
+    /// `#[ignore]` records that colour without breaking CI. Do not delete or weaken this
+    /// assay to make it pass; it turns green only when observer motion and aim resolution
+    /// stop depending on display state, which is the charter's terminating condition.
+    #[test]
+    #[ignore = "captured-red assay 3 for the authority-split charter: viewport resolution reaches the world itself, not only its tag. FitWorld derives observation_distance from the live renderer dimensions, movement speed is proportional to it, and the camera that movement produces decides both which coordinate an aim resolves to and whether that edit is admitted, so identical actions commit different worlds at different window sizes. Ignored so the suite stays green until observer motion and aim resolution are split from display state."]
+    fn assay_three_one_action_sequence_produces_one_world_at_every_viewport() {
+        // Every differing lane is reported in one panic rather than aborting at the
+        // first, so the captured colour records both mechanisms and their full evidence.
+        let mut divergences = String::new();
+
+        for control in [MoveControl::Forward, MoveControl::Right] {
+            // The charter's measured table: simulation viewports 640x480, 1280x960,
+            // 801x801. 640x480 is first because it is the lane that diverges alone.
+            let runs = [
+                world_fork_run(640 + SIDEBAR_WIDTH, 480, control),
+                world_fork_run(1280 + SIDEBAR_WIDTH, 960, control),
+                world_fork_run(801 + SIDEBAR_WIDTH, 801, control),
+            ];
+            let reference = &runs[0];
+
+            for run in &runs {
+                // Powered: an aim that resolved to nothing at every viewport would agree
+                // trivially, and one that resolved at only some would make the comparison
+                // a comparison of refusals. Every viewport must reach a coordinate.
+                assert_ne!(
+                    run.aim(),
+                    TickAttempt::AimPlaceUnresolved,
+                    "assay 3 is unpowered at {}: the aim resolved to no coordinate",
+                    run.viewport()
+                );
+
+                // The fork is located, not assumed. Through tick 1 the world is shared at
+                // every viewport, so nothing below is inherited from an earlier split.
+                for tick in 0..WORLD_FORK_EDIT_TICK {
+                    assert_eq!(
+                        reference.outcomes[tick].post_world(),
+                        run.outcomes[tick].post_world(),
+                        "the world already differed at tick {tick}, before the aim"
+                    );
+                    assert_eq!(
+                        reference.outcomes[tick].attempts(),
+                        run.outcomes[tick].attempts(),
+                        "the dispositions already differed at tick {tick}, before the aim"
+                    );
+                }
+            }
+
+            // The camera has forked by the fit -- that much assay 1 already recorded.
+            // What follows is whether that fork reaches the world.
+            for run in &runs[1..] {
+                assert_ne!(
+                    reference.outcomes[WORLD_FORK_EDIT_TICK - 1].post_camera(),
+                    run.outcomes[WORLD_FORK_EDIT_TICK - 1].post_camera(),
+                    "the fitted camera did not fork, so this lane cannot test anything"
+                );
+            }
+
+            for run in &runs[1..] {
+                let forked = reference.outcomes[WORLD_FORK_EDIT_TICK].post_world()
+                    != run.outcomes[WORLD_FORK_EDIT_TICK].post_world()
+                    || reference.outcomes[WORLD_FORK_EDIT_TICK].attempts()
+                        != run.outcomes[WORLD_FORK_EDIT_TICK].attempts();
+                if !forked {
+                    continue;
+                }
+                let separation = (reference.moved_position - run.moved_position).length();
+                divergences.push_str(&format!(
+                    "lane {control:?}, tick {WORLD_FORK_EDIT_TICK}\n{}{}    observer positions after the move are {separation:?} apart\n",
+                    reference.describe(),
+                    run.describe(),
+                ));
+            }
+        }
+
+        assert!(
+            divergences.is_empty(),
+            "one action sequence produced different worlds at different viewports\n\n{divergences}"
+        );
+    }
+
     #[test]
     fn fixed_tick_reuses_the_history_world_root_for_idle_and_edit_ticks() {
         let mut app = App::new();

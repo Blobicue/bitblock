@@ -656,7 +656,7 @@
    ]
   },
   "test": {
-   "code_lines": 18618,
+   "code_lines": 18992,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -692,7 +692,7 @@
     {
      "left": "main:4180",
      "lines": 17,
-     "right": "main:5352"
+     "right": "main:5901"
     },
     {
      "left": "presentation_output:693",
@@ -747,7 +747,7 @@
     {
      "left": "frame_v2:967",
      "lines": 8,
-     "right": "main:4774"
+     "right": "main:5323"
     },
     {
      "left": "history_store:1595",
