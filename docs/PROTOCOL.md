@@ -328,24 +328,44 @@ before relying on any tag:
 
 | kind | viewport-dependent | why |
 | --- | --- | --- |
-| `#bb.world` | no | `world_tag` hashes the sorted occupied coordinates and nothing else |
-| history `#bb.receipt` | no | `bitblock/history/receipt/v1` commits the edit sequence, not the observer |
+| `#bb.world` | the function is not; the chain is | `world_tag` hashes the sorted occupied coordinates and nothing else, but the *admitted* set reaching it diverges -- see below |
+| history `#bb.receipt` | the function is not; the chain is | commits the edit sequence, not the observer, but that sequence diverges for the same reason |
 | `#bb.tick-outcome` | yes | dimensions, `post_camera` and frame commitments are all hashed |
 | `#bb.frame-input` | yes | `FrameInput::capture` takes the renderer width and height |
 | `#bb.frame` | yes | a framebuffer's shape is intrinsic to it |
 | frame and display receipts | yes | they commit the frame objects above |
 
-So the world commitment is resolution-independent and the tick chain is not.
-That is a real distinction rather than an accident of the fixtures, and any
-argument that two implementations "agree on state" has to say which of the two it
-means. One caveat on the world side: `world_tag` is a pure function of the
-occupied set, but the *admitted* set is decided by `edit_would_enclose_observer`,
-which consults the camera. World-chain independence therefore holds exactly as
-far as admission does, and that boundary has not yet been measured.
+It is tempting to read that table as "the world commitment is resolution-
+independent and the tick chain is not". That reading is wrong, and the difference
+matters more than the table does.
 
-Nothing here is fixed by writing it down. Separating world authority from
-interaction and display evidence is the change that would remove the dependence;
-this section records the current, honest scope until then.
+`world_tag` is a pure function of the occupied set. But the *admitted* set is not
+pure: `resolve_aim_edit` and `edit_would_enclose_observer` both consult the
+camera, and after a `FitWorld` the camera carries the viewport. A captured assay
+demonstrates both routes from one identical accepted-action sequence:
+
+- **Admission forks.** The same aim resolves to the same coordinate
+  `on 0 0 -80001` at every viewport, and is then *executed* at 1280x960 and
+  *refused* as observer-enclosing at 640x480. Same action, same target, different
+  world.
+- **Resolution forks.** With the observer displaced laterally, the same aim
+  resolves to `505`, `509` and `510` at the three viewports -- three coordinates,
+  three worlds.
+
+The margin is not numerical luck. The refusing case stops 1e-6 from the cell
+boundary, against an f64 ulp of 1.5e-11 at that magnitude: a factor of 68,719,
+nearly five orders. It is a deterministic semantic divergence.
+
+So **both** chains are viewport-dependent, by different routes. The tick chain
+hashes the viewport directly; the world chain inherits it through admission.
+Neither is currently a resolution-independent commitment, and an implementation
+cannot become one by choosing which chain to trust.
+
+Nothing here is fixed by writing it down. Removing the dependence needs the
+observer-policy boundary moved: aim resolution and enclosure admission are
+interaction-layer decisions whose *output* -- a resolved, admitted exact edit --
+is the only thing the world reducer should see. This section records the current,
+honest scope until then.
 
 ### Why the counters, and why only counters
 
