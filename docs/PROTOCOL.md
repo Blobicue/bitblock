@@ -309,6 +309,44 @@ with `genesis-idle` and differs only in four accepted occurrences across three
 control-action kinds -- two sidebar toggles, one resize, and one motion clear.
 Under v2 the two payloads were identical.
 
+### Scope: tick-derived tags are reproducible at a fixed viewport
+
+The canonical tick payload includes the simulation and output dimensions, the
+post-tick camera, and any frame commitments. All three vary with the viewport, so
+a tick-outcome tag is reproducible only at the viewport that produced it. Every
+literal tick-derived tag in this repository was produced at the fixture viewport
+-- simulation `801x801`, output `1201x801`, from `INITIAL_VIEWPORT` plus
+`SIDEBAR_WIDTH` -- and the Python reconstructions encode those same dimensions.
+
+This has been true since v2 and is a statement of scope, not a recent change. It
+was never written down because nothing varied the viewport; a captured assay now
+does, and it forks the tick chain at three viewports from one identical ordered
+sequence of resolved exact edits.
+
+The dependence is not uniform across kinds, and the division is worth knowing
+before relying on any tag:
+
+| kind | viewport-dependent | why |
+| --- | --- | --- |
+| `#bb.world` | no | `world_tag` hashes the sorted occupied coordinates and nothing else |
+| history `#bb.receipt` | no | `bitblock/history/receipt/v1` commits the edit sequence, not the observer |
+| `#bb.tick-outcome` | yes | dimensions, `post_camera` and frame commitments are all hashed |
+| `#bb.frame-input` | yes | `FrameInput::capture` takes the renderer width and height |
+| `#bb.frame` | yes | a framebuffer's shape is intrinsic to it |
+| frame and display receipts | yes | they commit the frame objects above |
+
+So the world commitment is resolution-independent and the tick chain is not.
+That is a real distinction rather than an accident of the fixtures, and any
+argument that two implementations "agree on state" has to say which of the two it
+means. One caveat on the world side: `world_tag` is a pure function of the
+occupied set, but the *admitted* set is decided by `edit_would_enclose_observer`,
+which consults the camera. World-chain independence therefore holds exactly as
+far as admission does, and that boundary has not yet been measured.
+
+Nothing here is fixed by writing it down. Separating world authority from
+interaction and display evidence is the change that would remove the dependence;
+this section records the current, honest scope until then.
+
 ### Why the counters, and why only counters
 
 The lanes are the interaction-tape opcodes, so one tape record and the tick that
