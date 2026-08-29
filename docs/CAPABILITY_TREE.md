@@ -103,7 +103,7 @@ candidate to choose its own authority.
 | PS-060 | L1-PRODUCTION | base | LOCKED |
 | PS-061 | VALUE-1 | base | LOCKED |
 | PS-062 | COST-1 | base | READY |
-| PS-063 | COST-1 | budget | OPEN-DECISION |
+| PS-063 | COST-1 | budget | BOUNDED |
 | PS-064 | CODEC-1 | base | READY |
 | PS-065 | EXECUTOR-1 | base | LOCKED |
 | PS-066 | THREAT-D0 | base | READY |
@@ -1179,13 +1179,15 @@ is invalid input, not a third collision row.
 
 ### `COST-1` — cheapness budgets and measurements
 
-- **Status:** `PS-062:COST-1@base=READY`, `PS-063:COST-1@budget=OPEN-DECISION`.
+- **Status:** `PS-062:COST-1@base=READY`, `PS-063:COST-1@budget=BOUNDED`.
 - **Depends on:** `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, `PROOF-0`; repeats for every
   activated feature.
 - **Motive:** turn “as cheap as possible” into separate, attackable resource claims.
-- **Artifact:** pinned measurements and proposed budgets for default binary/dependency size,
-  touched-state memory, tick work, renderer/collision work, commitment updates, proof verification,
-  bandwidth, database writes, retained history, recovery, and idle overhead.
+- **Artifact:** [`COST_1_BUDGET.md`](COST_1_BUDGET.md) fixes the local-reference budgets and
+  dispositions; [`cost-1-measurement-v1.json`](cost-1-measurement-v1.json) pins their raw receipts
+  for default binary/dependency size, touched-state memory, tick work, renderer/collision work,
+  commitment updates, proof verification, bandwidth, database writes, retained history, recovery,
+  and idle overhead.
 - **Gate:** every reported number identifies build, workload, machine where relevant, deterministic
   counters where possible, distribution/failure point, and powered control; budgets are fixed before
   optimizing against them.
