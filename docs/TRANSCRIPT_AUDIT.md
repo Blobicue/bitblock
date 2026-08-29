@@ -74,6 +74,11 @@ The semantic boundary is narrower than “every tick draws”: idle ticks still 
 state, but `fixed_tick` can return without deriving a new frame. Window submission/presentation
 is a separate boundary. This distinction is now reflected in `README.md` and `SEMANTICS.md`.
 
+**Successor provenance, local to the following two paragraphs:** these runtime claims were
+verified against commit `17ae90ecef14ef4016c574b53de6440bc88ba4d0`, tree
+`6f877616f68f3687251c6f5f1412f0360cec5e11`. This does not update, extend, or rerun the broader
+snapshot reconciliation declared above.
+
 The edit path now exposes its internal boundary explicitly. `admit_pending_edit` owns
 camera-dependent resolution and overlap policy; only the exact edit returned by
 `TickAttempt::executed_edit()` reaches `TickTransaction::apply_edit`. Compact gates show equal
