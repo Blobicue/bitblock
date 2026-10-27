@@ -1325,6 +1325,7 @@
 {"from": "module:history", "kind": "depends_on", "to": "module:world"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:history"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:journal"}
+{"from": "module:history_store", "kind": "depends_on", "to": "module:local_bounds"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:program"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:storage"}

@@ -566,7 +566,7 @@
     ]
    }
   ],
-  "pub_items": 633,
+  "pub_items": 635,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -590,8 +590,8 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 30670,
-   "duplicated_lines": 416,
+   "code_lines": 30705,
+   "duplicated_lines": 407,
    "regions": [
     {
      "left": "presentation_output:376",
@@ -694,11 +694,6 @@
      "right": "frame:555"
     },
     {
-     "left": "display_store:578",
-     "lines": 9,
-     "right": "history_store:1157"
-    },
-    {
      "left": "history_store:426",
      "lines": 9,
      "right": "sequential:1269"
@@ -776,7 +771,7 @@
    ]
   },
   "test": {
-   "code_lines": 18886,
+   "code_lines": 18913,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -827,7 +822,7 @@
     {
      "left": "history:938",
      "lines": 12,
-     "right": "history_store:1499"
+     "right": "history_store:1539"
     },
     {
      "left": "physical_sensor:1613",
@@ -870,12 +865,12 @@
      "right": "main:4774"
     },
     {
-     "left": "history_store:1595",
+     "left": "history_store:1635",
      "lines": 8,
-     "right": "history_store:1674"
+     "right": "history_store:1714"
     },
     {
-     "left": "history_store:2059",
+     "left": "history_store:2099",
      "lines": 8,
      "right": "journal:1808"
     },

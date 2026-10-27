@@ -229,7 +229,7 @@
     ],
     "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested. unreferenced_pub_items went 4 -> 3 when examples/render_time_probe.rs started calling Camera::set_observation_anchor, which had been dead. Writing a probe that needed it is what made it live.",
     "reuse": {
-        "production_duplicated_lines": 416,
+        "production_duplicated_lines": 407,
         "test_duplicated_lines": 341,
         "unreferenced_pub_items": 3
     }

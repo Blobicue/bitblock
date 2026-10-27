@@ -587,6 +587,7 @@ pub enum HistoryStoreError {
         previous: u64,
         actual: u64,
     },
+    LocalBounds(crate::local_bounds::BoundsError),
     Poisoned,
 }
 
@@ -627,6 +628,9 @@ impl fmt::Display for HistoryStoreError {
                 formatter,
                 "coordinate receipt tick {actual} does not advance after {previous}"
             ),
+            Self::LocalBounds(source) => {
+                write!(formatter, "local storage bounds rejected: {source}")
+            }
             Self::Poisoned => formatter.write_str(
                 "coordinate journal is poisoned; close and reopen through semantic replay",
             ),
@@ -643,8 +647,15 @@ impl std::error::Error for HistoryStoreError {
             Self::Semantic(source) => Some(source),
             Self::ReplayLimit(source) => Some(source),
             Self::ReceiptLength(source) => Some(source),
+            Self::LocalBounds(source) => Some(source),
             _ => None,
         }
+    }
+}
+
+impl From<crate::local_bounds::BoundsError> for HistoryStoreError {
+    fn from(source: crate::local_bounds::BoundsError) -> Self {
+        Self::LocalBounds(source)
     }
 }
 
@@ -1158,6 +1169,35 @@ impl HistoryJournal {
             },
             receipt,
         ))
+    }
+
+    /// Creates a new persistent history journal using limits from a LocalStorageProfile.
+    pub fn create_new_with_profile<P: AsRef<Path>>(
+        path: P,
+        profile: &crate::local_bounds::LocalStorageProfile,
+        initial_world: &World,
+    ) -> Result<(Self, HistoryCreateReceipt), HistoryStoreError> {
+        let storage_limits = profile.to_storage_limits()?;
+        let replay_limits = profile.to_history_replay_limits()?;
+        Self::create_new_with_replay_limits(path, storage_limits, replay_limits, initial_world)
+    }
+
+    /// Opens an existing journal using limits from a LocalStorageProfile.
+    pub fn open_existing_with_profile<P: AsRef<Path>>(
+        path: P,
+        profile: &crate::local_bounds::LocalStorageProfile,
+        anchor: AnchorPolicy,
+        initial_world: &World,
+    ) -> Result<OpenHistoryJournal, HistoryStoreError> {
+        let storage_limits = profile.to_storage_limits()?;
+        let replay_limits = profile.to_history_replay_limits()?;
+        Self::open_existing_with_replay_limits(
+            path,
+            storage_limits,
+            replay_limits,
+            anchor,
+            initial_world,
+        )
     }
 
     /// Opens an existing journal only after semantically replaying its admitted physical prefix.
@@ -2128,6 +2168,36 @@ mod tests {
             assert_eq!(carrier_report.valid_record_count, 3);
             assert_eq!(journal.history().active_mint(Q), expected_mint);
             assert_eq!(journal.history().active_mint(P), None);
+        }
+
+        #[test]
+        fn profile_backed_history_journal_creates_appends_and_reopens() {
+            let path = TempHistoryPath::new("profile_journal");
+            let initial = World::new();
+            let profile = crate::local_bounds::LocalStorageProfile::DEFAULT;
+            let (mut journal, created) =
+                HistoryJournal::create_new_with_profile(&path.0, &profile, &initial).unwrap();
+            assert_eq!(created.genesis, journal.history().genesis());
+
+            journal
+                .append_tick(1, &[Edit::new(Operation::On, P)])
+                .unwrap()
+                .unwrap();
+            let expected_head = journal.history().head();
+            drop(journal);
+
+            let OpenHistoryJournal::Ready { journal, .. } =
+                HistoryJournal::open_existing_with_profile(
+                    &path.0,
+                    &profile,
+                    AnchorPolicy::UnanchoredLocal,
+                    &initial,
+                )
+                .unwrap()
+            else {
+                panic!("profile backed journal failed to open");
+            };
+            assert_eq!(journal.history().head(), expected_head);
         }
 
         #[test]
