@@ -138,13 +138,15 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # checked preallocation arithmetic, recovery scanner bounds, and prune limits.
 # 417 -> 418 / 428 -> 429: one profile-backed history journal create/reopen test in history_store.rs.
 # 418 -> 420 / 429 -> 431: two LEDGER-1 occupancy episode ledger tests in coordinate_episode.rs.
+# 420 -> 437 / 431 -> 448: seventeen tests across world.rs, camera.rs, render.rs,
+# commit_r1.rs, octree_commit.rs, scale_assay.rs, and optimization.rs.
 WINDOWS_ONLY_TESTS = {
-    "quick": 29,  # 420 on Windows - 391 on Linux
-    "full": 38,   # 431 on Windows - 393 on Linux
+    "quick": 29,  # 437 on Windows - 408 on Linux
+    "full": 38,   # 448 on Windows - 410 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 420, "full": 431}.items()
+    for t, count in {"quick": 437, "full": 448}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

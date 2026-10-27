@@ -200,12 +200,6 @@
     ]
    },
    {
-    "item": "KEY_BYTES",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
     "item": "LADDER_QUOTE_RECEIPT_SCHEMA",
     "modules": [
      "ladder_bridge"
@@ -578,7 +572,7 @@
     ]
    }
   ],
-  "pub_items": 662,
+  "pub_items": 728,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -602,7 +596,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 31756,
+   "code_lines": 33835,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -783,7 +777,7 @@
    ]
   },
   "test": {
-   "code_lines": 19169,
+   "code_lines": 20556,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -844,7 +838,7 @@
     {
      "left": "frame_v2:979",
      "lines": 10,
-     "right": "optimization:1680"
+     "right": "optimization:1684"
     },
     {
      "left": "journal:1264",

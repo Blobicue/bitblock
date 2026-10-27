@@ -296,6 +296,17 @@
   ]
  },
  {
+  "id": "sub:octree-commit",
+  "members": [
+   "module:octree_commit"
+  ],
+  "name": "octree-commit",
+  "terms": [
+   "commit",
+   "octree"
+  ]
+ },
+ {
   "id": "sub:optimization-equivalence",
   "members": [
    "module:optimization"
@@ -398,6 +409,17 @@
   "terms": [
    "profile",
    "renderer"
+  ]
+ },
+ {
+  "id": "sub:scale-assay",
+  "members": [
+   "module:scale_assay"
+  ],
+  "name": "scale-assay",
+  "terms": [
+   "assay",
+   "scale"
   ]
  },
  {

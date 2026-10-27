@@ -164,9 +164,8 @@ pub struct Renderer {
     keyed: Vec<(f64, Coord)>,
     /// The same bits in front-to-back traversal order.
     order: Vec<Coord>,
-    /// Test-only switch back to unordered traversal with no hidden-bit test, so a fixture can
-    /// compare the two traversals rather than compare the optimized one against itself.
-    #[cfg(test)]
+    /// Switch back to unordered traversal with no hidden-bit test or chunk frustum culling, so a
+    /// fixture can compare the two traversals rather than compare the optimized one against itself.
     reference_traversal: bool,
     /// Test-only count of bits the hidden-bit test declined to rasterise, so a fixture can show
     /// it is exercising that path rather than passing vacuously.
@@ -256,7 +255,6 @@ impl Renderer {
             world_pixels: 0,
             keyed: Vec::new(),
             order: Vec::new(),
-            #[cfg(test)]
             reference_traversal: false,
             #[cfg(test)]
             hidden_bits: 0,
@@ -304,6 +302,14 @@ impl Renderer {
     /// Number of non-background pixels written by the world pass, before overlays.
     pub const fn world_pixel_count(&self) -> u64 {
         self.world_pixels
+    }
+
+    pub fn set_reference_traversal(&mut self, enabled: bool) {
+        self.reference_traversal = enabled;
+    }
+
+    pub const fn is_reference_traversal(&self) -> bool {
+        self.reference_traversal
     }
 
     pub fn render(&mut self, world: &World, camera: &Camera) {
@@ -362,11 +368,46 @@ impl Renderer {
         keyed.clear();
         let mut nearest = f64::INFINITY;
         let mut farthest = f64::NEG_INFINITY;
-        for coord in world.iter_on() {
-            let key = projection.view_depth(coord_center(coord));
-            nearest = f64::min(nearest, key);
-            farthest = f64::max(farthest, key);
-            keyed.push((key, coord));
+        for (chunk_coord, _count, chunk_bounds, words) in world.iter_chunks() {
+            let (chunk_min, chunk_max) = bounds_aabb(chunk_bounds);
+            if projection.aabb_definitely_outside_frustum(chunk_min, chunk_max) {
+                #[cfg(test)]
+                if self.verify_hidden_bits {
+                    self.verify_hidden_bits = false;
+                    let (pixels, depth, world_pixels, hidden_bits) = (
+                        self.pixels.clone(),
+                        self.depth.clone(),
+                        self.world_pixels,
+                        self.hidden_bits,
+                    );
+                    for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+                        self.draw_bit(projection, coord);
+                    }
+                    assert_eq!(
+                        self.pixels, pixels,
+                        "culled chunk {chunk_coord:?} would have written a pixel"
+                    );
+                    let word = self
+                        .depth
+                        .iter()
+                        .zip(&depth)
+                        .position(|(after, before)| after.to_bits() != before.to_bits());
+                    assert_eq!(
+                        word, None,
+                        "culled chunk {chunk_coord:?} would have written a depth"
+                    );
+                    assert_eq!(self.world_pixels, world_pixels);
+                    self.hidden_bits = hidden_bits;
+                    self.verify_hidden_bits = true;
+                }
+                continue;
+            }
+            for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+                let key = projection.view_depth(coord_center(coord));
+                nearest = f64::min(nearest, key);
+                farthest = f64::max(farthest, key);
+                keyed.push((key, coord));
+            }
         }
 
         let span = farthest - nearest;
@@ -406,14 +447,8 @@ impl Renderer {
         self.order = order;
     }
 
-    #[cfg(test)]
     const fn optimized_traversal(&self) -> bool {
         !self.reference_traversal
-    }
-
-    #[cfg(not(test))]
-    const fn optimized_traversal(&self) -> bool {
-        true
     }
 
     /// Draws a one-physical-pixel crosshair without covering the exact aim pixel.
@@ -705,35 +740,64 @@ fn select_raycast_hit(best: Option<Hit>, candidate: Hit) -> Option<Hit> {
     replace.then_some(candidate).or(best)
 }
 
-pub fn raycast(world: &World, ray: Ray) -> Option<Hit> {
+fn test_raycast_coord(best: Option<Hit>, ray: Ray, coord: Coord) -> Option<Hit> {
+    let center = coord_center(coord);
+    let min = center - Vec3::splat(0.5);
+    let max = center + Vec3::splat(0.5);
+    let Some((distance, normal)) = ray_box(ray, min, max) else {
+        return best;
+    };
+    let adjacent = offset_coord(coord, normal);
+    let candidate = Hit {
+        coord,
+        adjacent,
+        distance,
+    };
+    select_raycast_hit(best, candidate)
+}
+
+pub fn ray_aabb_entry_distance(ray: Ray, min: Vec3, max: Vec3) -> Option<f64> {
+    let interval = box_interval(ray.origin, ray.direction, min, max)?;
+    if interval.exit < 0.0 {
+        return None;
+    }
+    Some(if interval.entry >= 0.0 {
+        interval.entry
+    } else {
+        0.0
+    })
+}
+
+pub fn raycast_reference(world: &World, ray: Ray) -> Option<Hit> {
     let mut best: Option<Hit> = None;
 
     for coord in world.iter_on() {
-        let center = coord_center(coord);
-        let min = center - Vec3::splat(0.5);
-        let max = center + Vec3::splat(0.5);
-        let Some((distance, normal)) = ray_box(ray, min, max) else {
-            continue;
-        };
-        let adjacent = offset_coord(coord, normal);
-        let candidate = Hit {
-            coord,
-            adjacent,
-            distance,
-        };
-        best = select_raycast_hit(best, candidate);
+        best = test_raycast_coord(best, ray, coord);
     }
 
     best
 }
 
-/// Sweeps a point from `start` through the complete finite segment `start + delta`.
-///
-/// This tests the segment against every occupied voxel AABB, so a large delta cannot tunnel
-/// through a block. Exact simultaneous hits are resolved by [`Coord`]'s lexicographic order,
-/// making the result independent of the world's unspecified iteration order. The segment start,
-/// delta, endpoint, and Euclidean delta length must all be finite.
-pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
+pub fn raycast(world: &World, ray: Ray) -> Option<Hit> {
+    let mut best: Option<Hit> = None;
+
+    for (chunk_coord, _count, chunk_bounds, words) in world.iter_chunks() {
+        let (cmin, cmax) = bounds_aabb(chunk_bounds);
+        let Some(chunk_entry) = ray_aabb_entry_distance(ray, cmin, cmax) else {
+            continue;
+        };
+        if best.is_some_and(|current| chunk_entry > current.distance) {
+            continue;
+        }
+        for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+            best = test_raycast_coord(best, ray, coord);
+        }
+    }
+
+    best
+}
+
+fn validate_sweep_movement(start: Vec3, delta: Vec3) -> f64 {
     assert!(
         start.is_finite() && delta.is_finite(),
         "swept point inputs must be finite"
@@ -747,25 +811,66 @@ pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> 
         movement_length.is_finite(),
         "swept point distance must be representable"
     );
+    movement_length
+}
 
+fn test_sweep_coord(
+    best: Option<(f64, Coord)>,
+    start: Vec3,
+    delta: Vec3,
+    coord: Coord,
+) -> Option<(f64, Coord)> {
+    let center = coord_center(coord);
+    let min = center - Vec3::splat(0.5);
+    let max = center + Vec3::splat(0.5);
+    let Some(fraction) = segment_box_entry_fraction(start, delta, min, max) else {
+        return best;
+    };
+
+    let candidate = (fraction, coord);
+    let replace = best.is_none_or(|current| {
+        fraction
+            .total_cmp(&current.0)
+            .then_with(|| coord.cmp(&current.1))
+            .is_lt()
+    });
+    if replace { Some(candidate) } else { best }
+}
+
+pub fn sweep_point_reference(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
+    let movement_length = validate_sweep_movement(start, delta);
     let mut best: Option<(f64, Coord)> = None;
+
     for coord in world.iter_on() {
-        let center = coord_center(coord);
-        let min = center - Vec3::splat(0.5);
-        let max = center + Vec3::splat(0.5);
-        let Some(fraction) = segment_box_entry_fraction(start, delta, min, max) else {
+        best = test_sweep_coord(best, start, delta, coord);
+    }
+
+    best.map(|(fraction, coord)| SweepHit {
+        coord,
+        distance: movement_length * fraction,
+    })
+}
+
+/// Sweeps a point from `start` through the complete finite segment `start + delta`.
+///
+/// This tests the segment against every occupied voxel AABB, so a large delta cannot tunnel
+/// through a block. Exact simultaneous hits are resolved by [`Coord`]'s lexicographic order,
+/// making the result independent of the world's unspecified iteration order. The segment start,
+/// delta, endpoint, and Euclidean delta length must all be finite.
+pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
+    let movement_length = validate_sweep_movement(start, delta);
+    let mut best: Option<(f64, Coord)> = None;
+
+    for (chunk_coord, _count, chunk_bounds, words) in world.iter_chunks() {
+        let (cmin, cmax) = bounds_aabb(chunk_bounds);
+        let Some(chunk_fraction) = segment_box_entry_fraction(start, delta, cmin, cmax) else {
             continue;
         };
-
-        let candidate = (fraction, coord);
-        let replace = best.is_none_or(|current| {
-            fraction
-                .total_cmp(&current.0)
-                .then_with(|| coord.cmp(&current.1))
-                .is_lt()
-        });
-        if replace {
-            best = Some(candidate);
+        if best.is_some_and(|(best_fraction, _)| chunk_fraction > best_fraction) {
+            continue;
+        }
+        for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+            best = test_sweep_coord(best, start, delta, coord);
         }
     }
 
@@ -2057,6 +2162,147 @@ mod tests {
             assert_eq!(
                 renderer.pixels[(center + distance) * 11 + center],
                 BACKGROUND
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_frustum_culling_matches_reference_traversal_across_far_extrema_and_offscreen_chunks() {
+        let mut world = World::new();
+        for &sx in &[-1_i64, 1] {
+            for &sy in &[-1_i64, 1] {
+                for &sz in &[-1_i64, 1] {
+                    world.set_on(Coord::new(sx * 1_048_576, sy * 1_048_576, sz * 1_048_576));
+                }
+            }
+        }
+        for coord in [
+            Coord::new(0, 0, 2),
+            Coord::new(-32, 0, -32),
+            Coord::new(64, 64, 16),
+            Coord::new(-64, -64, 16),
+        ] {
+            world.set_on(coord);
+        }
+
+        let bounds = world.bounds().expect("non-empty world bounds");
+        let (bmin, bmax) = bounds_aabb(bounds);
+        assert_eq!(bmin, Vec3::splat(-1_048_576.5));
+        assert_eq!(bmax, Vec3::splat(1_048_576.5));
+
+        let camera = Camera::for_observer_spawn();
+        let mut reference = Renderer::new(64, 64);
+        assert!(!reference.is_reference_traversal());
+        reference.set_reference_traversal(true);
+        assert!(reference.is_reference_traversal());
+        reference.render(&world, &camera);
+
+        let mut optimized = Renderer::new(64, 64);
+        optimized.set_reference_traversal(false);
+        assert!(!optimized.is_reference_traversal());
+        optimized.verify_hidden_bits = true;
+        optimized.render(&world, &camera);
+
+        assert_eq!(optimized.pixels(), reference.pixels());
+        let depth_diff = optimized
+            .depth
+            .iter()
+            .zip(&reference.depth)
+            .position(|(a, b)| a.to_bits() != b.to_bits());
+        assert_eq!(depth_diff, None);
+        assert_eq!(optimized.world_pixel_count(), reference.world_pixel_count());
+    }
+
+    #[test]
+    fn ray_aabb_entry_distance_and_slab_pruned_queries_match_reference_oracles() {
+        let (min, max) = bounds_aabb(Bounds {
+            min: BEDROCK_COORD,
+            max: BEDROCK_COORD,
+        });
+        let hit_ray = Ray {
+            origin: Vec3::new(0.0, 0.0, -4.0),
+            direction: Vec3::Z,
+        };
+        assert_close(
+            ray_aabb_entry_distance(hit_ray, min, max).expect("ray hits origin AABB"),
+            3.5,
+        );
+        let inside_ray = Ray {
+            origin: Vec3::ZERO,
+            direction: Vec3::Z,
+        };
+        assert_eq!(ray_aabb_entry_distance(inside_ray, min, max), Some(0.0));
+        let miss_ray = Ray {
+            origin: Vec3::new(0.0, 0.0, 4.0),
+            direction: Vec3::Z,
+        };
+        assert_eq!(ray_aabb_entry_distance(miss_ray, min, max), None);
+
+        let mut world = World::new();
+        for coord in [
+            Coord::new(-1, -1, -1),
+            Coord::new(0, 0, 1),
+            Coord::new(16, 0, 0),
+            Coord::new(0, 0, 16),
+            Coord::new(-16, -16, -16),
+            Coord::new(1_048_576, 1_048_576, 1_048_576),
+            Coord::new(-1_048_576, -1_048_576, -1_048_576),
+        ] {
+            world.set_on(coord);
+        }
+
+        // Negative-zero ray direction boundary case (`-0.0` vs `+0.0` slab entry).
+        let neg_zero_ray = Ray {
+            origin: Vec3::new(-0.5, 0.0, -5.0),
+            direction: Vec3::new(-0.0, -0.0, 1.0),
+        };
+        assert_eq!(
+            raycast(&world, neg_zero_ray),
+            raycast_reference(&world, neg_zero_ray)
+        );
+        assert!(raycast(&world, neg_zero_ray).is_some());
+
+        // Sub-ULP slab boundary case (`start = -0.5 - f64::EPSILON, delta = 2.0`).
+        let boundary_start = Vec3::new(-0.5 - f64::EPSILON, 0.0, 0.0);
+        let boundary_delta = Vec3::new(2.0, 0.0, 0.0);
+        assert_eq!(
+            sweep_point(&world, boundary_start, boundary_delta),
+            sweep_point_reference(&world, boundary_start, boundary_delta)
+        );
+        assert!(sweep_point(&world, boundary_start, boundary_delta).is_some());
+
+        // Seeded randomized multi-chunk parity corpus for raycast and sweep_point.
+        let mut rng = Rng(0x517c_c1b7_2722_0a95);
+        for trial in 0..128 {
+            let mut trial_world = World::new();
+            for _ in 0..24 {
+                let cx = (rng.below(9) as i64 - 4) * 16 + rng.below(4) as i64;
+                let cy = (rng.below(9) as i64 - 4) * 16 + rng.below(4) as i64;
+                let cz = (rng.below(9) as i64 - 4) * 16 + rng.below(4) as i64;
+                trial_world.set_on(Coord::new(cx, cy, cz));
+            }
+            let origin = Vec3::new(
+                rng.range(-40.0, 40.0),
+                rng.range(-40.0, 40.0),
+                rng.range(-40.0, 40.0),
+            );
+            let delta = Vec3::new(
+                rng.range(-80.0, 80.0),
+                rng.range(-80.0, 80.0),
+                rng.range(-80.0, 80.0),
+            );
+            if let Some(direction) = delta.try_normalized() {
+                let ray = Ray { origin, direction };
+                assert_eq!(
+                    raycast(&trial_world, ray),
+                    raycast_reference(&trial_world, ray),
+                    "raycast mismatch on trial {trial}"
+                );
+            }
+            assert_eq!(
+                sweep_point(&trial_world, origin, delta),
+                sweep_point_reference(&trial_world, origin, delta),
+                "sweep_point mismatch on trial {trial}"
             );
         }
     }

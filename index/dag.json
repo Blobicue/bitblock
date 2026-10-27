@@ -98,6 +98,11 @@
    "windows_topology",
    "world"
   ],
+  "octree_commit": [
+   "commit_r1",
+   "protocol",
+   "world"
+  ],
   "optimization": [
    "display",
    "frame",
@@ -153,6 +158,14 @@
    "interaction",
    "protocol"
   ],
+  "scale_assay": [
+   "camera",
+   "commit_r1",
+   "octree_commit",
+   "protocol",
+   "render",
+   "world"
+  ],
   "sequential": [
    "history",
    "history_store",
@@ -189,7 +202,7 @@
   ],
   "world": []
  },
- "edges": 121,
+ "edges": 130,
  "stratum": {
   "camera": 0,
   "commit_r1": 1,
@@ -207,6 +220,7 @@
   "lib": 1,
   "local_bounds": 2,
   "main": 9,
+  "octree_commit": 2,
   "optimization": 5,
   "output_color": 2,
   "output_topology": 1,
@@ -218,6 +232,7 @@
   "protocol": 0,
   "render": 2,
   "replay_evidence": 3,
+  "scale_assay": 3,
   "sequential": 4,
   "sidebar": 3,
   "storage": 1,
@@ -228,13 +243,13 @@
   "world": 0
  },
  "transitive_dependents": {
-  "camera": 15,
-  "commit_r1": 0,
+  "camera": 16,
+  "commit_r1": 2,
   "coordinate_episode": 0,
   "display": 7,
   "display_artifact": 5,
   "display_store": 1,
-  "frame": 14,
+  "frame": 15,
   "frame_v2": 10,
   "history": 6,
   "history_store": 4,
@@ -244,6 +259,7 @@
   "lib": 0,
   "local_bounds": 4,
   "main": 0,
+  "octree_commit": 1,
   "optimization": 0,
   "output_color": 4,
   "output_topology": 7,
@@ -252,9 +268,10 @@
   "presentation_output": 4,
   "presentation_output_v2": 2,
   "program": 20,
-  "protocol": 32,
-  "render": 3,
+  "protocol": 34,
+  "render": 4,
   "replay_evidence": 1,
+  "scale_assay": 0,
   "sequential": 0,
   "sidebar": 2,
   "storage": 11,
@@ -262,6 +279,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 24
+  "world": 26
  }
 }

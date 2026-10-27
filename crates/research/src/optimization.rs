@@ -972,7 +972,11 @@ mod tests {
     use crate::frame_v2::{FrameReceiptV2, admit_frame_pair_derived};
     use crate::history::{NoOpReason, TransitionEffect};
     use crate::program::{Edit, Operation};
-    use crate::render::{crosshair_overlay_input, renderer_profile_tag};
+    use crate::render::{
+        Renderer, bounds_aabb, crosshair_overlay_input, raycast, raycast_reference,
+        renderer_profile_tag, sweep_point, sweep_point_reference,
+    };
+    use crate::scale_assay::{ALL_SCALE_WORKLOADS, build_workload_world};
     use crate::sidebar::{
         DisplayStatus, FrameCompositor, SidebarRasterFacts, SidebarSnapshot,
         TwoBufferReferenceCompositor, composite_overlay_input, composite_policy_tag,
@@ -2590,5 +2594,204 @@ mod tests {
                 }
             ))
         ));
+    }
+
+    fn render_workload_artifact(
+        world: &World,
+        camera: &Camera,
+        width: u32,
+        height: u32,
+        reference_traversal: bool,
+    ) -> OptimizationArtifact {
+        let history = History::new(world);
+        let world_root = world_tag(world);
+        let mut renderer = Renderer::new(width, height);
+        renderer.set_reference_traversal(reference_traversal);
+        assert_eq!(renderer.is_reference_traversal(), reference_traversal);
+        renderer.render(world, camera);
+        let render_overlay = crosshair_overlay_input();
+        renderer.draw_crosshair(render_overlay);
+        let game_pixels = renderer.pixels().to_vec();
+        let frame_input = FrameInput::capture(
+            world_root,
+            camera,
+            width,
+            height,
+            renderer_profile_tag(),
+            render_overlay.tag(),
+        )
+        .unwrap();
+        let game_observation = FrameRef::new(width, height, &game_pixels)
+            .unwrap()
+            .observe();
+        let game_commitment =
+            TickFrameCommitment::new(frame_input.tag(), game_observation.tag).unwrap();
+        let composite_overlay =
+            composite_overlay_input(tag(TagKind::MetricSnapshot, b"scale2-snapshot")).unwrap();
+        let composite_input = CompositeFrameInput::new(
+            frame_input.tag(),
+            game_observation.tag,
+            composite_overlay,
+            width,
+            height,
+            width + 1,
+            height,
+        );
+        let composite_commitment =
+            TickFrameCommitment::new(composite_input.tag(), game_observation.tag).unwrap();
+        let camera_state = TickCameraState::capture(camera);
+        let idle_input = TickInputState::new(
+            TickInputFlags::default(),
+            0.0,
+            0.0,
+            0.0,
+            width,
+            height,
+            width + 1,
+            height,
+        )
+        .unwrap();
+        let genesis = TickOutcome::with_edit_attempts_only(
+            None,
+            0,
+            world_root,
+            history.genesis(),
+            idle_input,
+            [],
+            world_root,
+            history.genesis(),
+            camera_state,
+            None,
+            None,
+        )
+        .unwrap();
+        let rendered_input = TickInputState::new(
+            TickInputFlags::new(
+                false, false, false, false, false, false, false, true, true, true, false,
+            ),
+            0.0,
+            0.0,
+            0.0,
+            width,
+            height,
+            width + 1,
+            height,
+        )
+        .unwrap();
+        let rendered_outcome = TickOutcome::with_edit_attempts_only(
+            Some(genesis.tag()),
+            1,
+            world_root,
+            history.head(),
+            rendered_input,
+            [],
+            world_root,
+            history.head(),
+            camera_state,
+            Some(game_commitment),
+            Some(composite_commitment),
+        )
+        .unwrap();
+        let mut frame_ledger =
+            FrameLedgerV2::new_structural_genesis(FrameStream::Game, genesis).unwrap();
+        frame_ledger
+            .admit_derived(vec![rendered_outcome].into_boxed_slice())
+            .unwrap();
+        let impl_bytes: &[u8] = if reference_traversal {
+            b"scale2-reference-traversal"
+        } else {
+            b"scale2-octree-candidate-traversal"
+        };
+        OptimizationArtifact {
+            identity: OptimizationIdentity {
+                implementation: Some(tag(TagKind::Registry, impl_bytes)),
+                policy: Some(renderer_profile_tag()),
+            },
+            final_world: world.clone(),
+            final_world_tag: world_root,
+            history,
+            frame_input,
+            game_pixels,
+            game_observation,
+            frame_ledger,
+            composite: None,
+            synthetic_display: None,
+        }
+    }
+
+    #[test]
+    fn scale2_octree_renderer_and_spatial_queries_are_v3_equivalent_across_scale_workloads() {
+        let viewport_w = 64_u32;
+        let viewport_h = 64_u32;
+        for id in ALL_SCALE_WORKLOADS {
+            let world = build_workload_world(id);
+            let bounds = world.bounds().expect("workload world is non-empty");
+            let (bmin, bmax) = bounds_aabb(bounds);
+            let anchor = bmin + (bmax - bmin) * 0.5;
+            let orbit_dist = ((bmax - bmin).length() * 1.25).max(3.0);
+
+            let spawn_camera = Camera::for_observer_spawn();
+            let mut top_camera = Camera::for_observer_spawn();
+            let fit_dist = top_camera.fit_bounds(bmin, bmax, viewport_w, viewport_h);
+            assert!(top_camera.bounds_fit_one_pixel(bmin, bmax, viewport_w, viewport_h));
+
+            let mut inside_top_camera = top_camera.clone();
+            inside_top_camera.set_observation_distance(fit_dist * 0.95);
+            assert!(!inside_top_camera.bounds_fit_one_pixel(bmin, bmax, viewport_w, viewport_h));
+
+            let mut oblique_rotated_camera = top_camera.clone();
+            oblique_rotated_camera.rotate(-0.45, 0.35);
+
+            let oblique_orbit_camera = Camera::from_anchor(
+                anchor,
+                orbit_dist,
+                -0.45,
+                0.35,
+                crate::camera::DEFAULT_VERTICAL_FOV_RADIANS,
+            );
+
+            let cameras = [
+                spawn_camera,
+                oblique_rotated_camera,
+                oblique_orbit_camera,
+                top_camera,
+                inside_top_camera,
+            ];
+
+            for (cam_idx, camera) in cameras.iter().enumerate() {
+                let reference =
+                    render_workload_artifact(&world, camera, viewport_w, viewport_h, true);
+                let candidate =
+                    render_workload_artifact(&world, camera, viewport_w, viewport_h, false);
+                let case_label = [id as u8, cam_idx as u8];
+                let case = OptimizationCase {
+                    case_tag: Some(tag(TagKind::Registry, &case_label)),
+                    initial_world: world.clone(),
+                    reference,
+                    candidate,
+                };
+                let receipt = assay_optimization_equivalence(&case)
+                    .expect("SCALE-2 reference and candidate traversals must be v3-equivalent");
+                assert_eq!(
+                    receipt.reference_identity().policy,
+                    Some(renderer_profile_tag())
+                );
+                assert_eq!(
+                    receipt.candidate_identity().policy,
+                    Some(renderer_profile_tag())
+                );
+
+                let center_ray = camera.center_ray();
+                assert_eq!(
+                    raycast(&world, center_ray),
+                    raycast_reference(&world, center_ray)
+                );
+                let sweep_delta = center_ray.direction * 64.0;
+                assert_eq!(
+                    sweep_point(&world, camera.position(), sweep_delta),
+                    sweep_point_reference(&world, camera.position(), sweep_delta)
+                );
+            }
+        }
     }
 }

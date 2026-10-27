@@ -20,6 +20,8 @@ pub const COMMIT_R1_WORLD_SMT_SCHEMA: &[u8] = b"bitblock/commit-r1/world-smt/v1"
 pub const COMMIT_R1_PATRICIA_PROOF_SCHEMA: &[u8] = b"bitblock/commit-r1/patricia-proof/v1";
 pub const COMMIT_R1_SMT_PROOF_SCHEMA: &[u8] = b"bitblock/commit-r1/smt-proof/v1";
 pub const COMMIT_R1_ASSAY_REPORT_SCHEMA: &[u8] = b"bitblock/commit-r1/assay-report/v1";
+pub const MORTON_KEY_V1_SCHEMA: &[u8] = b"bitblock/commit-r1/morton-key/v1";
+pub const MORTON_GAP_STREAM_V1_SCHEMA: &[u8] = b"bitblock/commit-r1/morton-gap-stream/v1";
 
 pub const KEY_BITS: usize = 192;
 pub const KEY_BYTES: usize = 24;
@@ -111,6 +113,322 @@ impl fmt::Debug for CoordinateKeyV1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let c = self.to_coord();
         write!(f, "CoordinateKeyV1(({}, {}, {}))", c.x, c.y, c.z)
+    }
+}
+
+/// Bijective 192-bit 3D Morton-interleaved spatial coordinate key (`bitblock/commit-r1/morton-key/v1`).
+///
+/// Maps each signed axis `c in {x, y, z}` to `u = (c as u64) ^ 0x8000_0000_0000_0000` and
+/// interleaves octant trios `(x_bit, y_bit, z_bit)` from MSB (`level = 0`, bit 63) to LSB
+/// (`level = 63`, bit 0). The top 60 octant levels (180 bits) identify the exact 16x16x16
+/// `ChunkCoord` across the entire signed `i64` domain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct MortonKeyV1([u8; KEY_BYTES]);
+
+impl MortonKeyV1 {
+    pub fn from_coord(coord: Coord) -> Self {
+        let ux = (coord.x as u64) ^ 0x8000_0000_0000_0000;
+        let uy = (coord.y as u64) ^ 0x8000_0000_0000_0000;
+        let uz = (coord.z as u64) ^ 0x8000_0000_0000_0000;
+        let axes = [ux, uy, uz];
+        let mut bytes = [0u8; KEY_BYTES];
+        for level in 0..64usize {
+            for (axis, &u_axis) in axes.iter().enumerate() {
+                let bit_pos = 3 * level + axis;
+                bytes[bit_pos / 8] |= (((u_axis >> (63 - level)) & 1) as u8) << (7 - (bit_pos % 8));
+            }
+        }
+        Self(bytes)
+    }
+
+    pub const fn from_bytes(bytes: [u8; KEY_BYTES]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn to_coord(self) -> Coord {
+        let mut axes = [0u64; 3];
+        for level in 0..64usize {
+            let shift = 63 - level;
+            for (axis, u_axis) in axes.iter_mut().enumerate() {
+                let bit_pos = 3 * level + axis;
+                let bit = (self.0[bit_pos / 8] >> (7 - (bit_pos % 8))) & 1;
+                *u_axis |= (bit as u64) << shift;
+            }
+        }
+        let x = (axes[0] ^ 0x8000_0000_0000_0000) as i64;
+        let y = (axes[1] ^ 0x8000_0000_0000_0000) as i64;
+        let z = (axes[2] ^ 0x8000_0000_0000_0000) as i64;
+        Coord::new(x, y, z)
+    }
+
+    pub const fn as_bytes(&self) -> &[u8; KEY_BYTES] {
+        &self.0
+    }
+
+    pub fn octant_at(&self, level: u8) -> u8 {
+        if level >= 64 {
+            return 0;
+        }
+        let base = 3 * (level as usize);
+        let bit = |p: usize| (self.0[p / 8] >> (7 - (p % 8))) & 1;
+        (bit(base) << 2) | (bit(base + 1) << 1) | bit(base + 2)
+    }
+
+    pub fn chunk_prefix_180b(&self) -> [u8; 23] {
+        let mut out = [0u8; 23];
+        out[0..22].copy_from_slice(&self.0[0..22]);
+        out[22] = self.0[22] & 0xF0;
+        out
+    }
+
+    pub fn tag(&self) -> ContentTag {
+        hash_canonical(
+            TagKind::World,
+            MORTON_KEY_V1_SCHEMA,
+            KEY_BYTES as u64,
+            |sink| {
+                sink(&self.0);
+            },
+        )
+        .expect("MortonKeyV1 tag encoding is canonical")
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MortonGapStreamError {
+    DuplicateCoordinate(Coord),
+    CountOverflow(usize),
+    TruncatedHeader {
+        actual_bytes: usize,
+    },
+    TruncatedEntry {
+        index: usize,
+    },
+    InvalidSharedPrefixLength {
+        index: usize,
+        shared_prefix_bytes: u8,
+    },
+    NonCanonicalOrderOrPrefix {
+        index: usize,
+        shared_prefix_bytes: u8,
+        prev_byte: u8,
+        next_byte: u8,
+    },
+    TrailingBytes {
+        remaining: usize,
+    },
+}
+
+impl fmt::Display for MortonGapStreamError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::DuplicateCoordinate(coord) => write!(
+                f,
+                "duplicate coordinate ({}, {}, {}) in MortonGapStreamV1",
+                coord.x, coord.y, coord.z
+            ),
+            Self::CountOverflow(count) => {
+                write!(f, "coordinate count {count} exceeds u32::MAX")
+            }
+            Self::TruncatedHeader { actual_bytes } => write!(
+                f,
+                "MortonGapStreamV1 header truncated at {actual_bytes} bytes"
+            ),
+            Self::TruncatedEntry { index } => {
+                write!(f, "MortonGapStreamV1 entry {index} is truncated")
+            }
+            Self::InvalidSharedPrefixLength {
+                index,
+                shared_prefix_bytes,
+            } => write!(
+                f,
+                "MortonGapStreamV1 entry {index} has invalid shared prefix length {shared_prefix_bytes}"
+            ),
+            Self::NonCanonicalOrderOrPrefix {
+                index,
+                shared_prefix_bytes,
+                prev_byte,
+                next_byte,
+            } => write!(
+                f,
+                "MortonGapStreamV1 entry {index} at prefix byte {shared_prefix_bytes} has suffix[0]={next_byte:#04x} <= prev[k]={prev_byte:#04x}"
+            ),
+            Self::TrailingBytes { remaining } => write!(
+                f,
+                "MortonGapStreamV1 has {remaining} trailing bytes after final entry"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MortonGapStreamError {}
+
+/// Canonical prefix-compressed stream of coordinates ordered strictly ascending by [`MortonKeyV1`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MortonGapStreamV1 {
+    keys: Vec<MortonKeyV1>,
+}
+
+impl MortonGapStreamV1 {
+    pub fn from_coords(coords: &[Coord]) -> Result<Self, MortonGapStreamError> {
+        if coords.len() > u32::MAX as usize {
+            return Err(MortonGapStreamError::CountOverflow(coords.len()));
+        }
+        let mut keys: Vec<MortonKeyV1> = coords
+            .iter()
+            .copied()
+            .map(MortonKeyV1::from_coord)
+            .collect();
+        keys.sort_unstable();
+        for window in keys.windows(2) {
+            if window[0] == window[1] {
+                return Err(MortonGapStreamError::DuplicateCoordinate(
+                    window[1].to_coord(),
+                ));
+            }
+        }
+        Ok(Self { keys })
+    }
+
+    pub fn keys(&self) -> &[MortonKeyV1] {
+        &self.keys
+    }
+
+    pub fn coords(&self) -> Vec<Coord> {
+        self.keys
+            .iter()
+            .copied()
+            .map(MortonKeyV1::to_coord)
+            .collect()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub fn encoded_len(&self) -> usize {
+        if self.keys.is_empty() {
+            return 4;
+        }
+        let mut total = 4 + KEY_BYTES;
+        for window in self.keys.windows(2) {
+            let prev = window[0].as_bytes();
+            let curr = window[1].as_bytes();
+            let mut shared = 0usize;
+            while shared < KEY_BYTES && prev[shared] == curr[shared] {
+                shared += 1;
+            }
+            total += 1 + (KEY_BYTES - shared);
+        }
+        total
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.encoded_len());
+        out.extend_from_slice(&(self.keys.len() as u32).to_be_bytes());
+        if self.keys.is_empty() {
+            return out;
+        }
+        out.extend_from_slice(self.keys[0].as_bytes());
+        for window in self.keys.windows(2) {
+            let prev = window[0].as_bytes();
+            let curr = window[1].as_bytes();
+            let mut shared = 0usize;
+            while shared < KEY_BYTES && prev[shared] == curr[shared] {
+                shared += 1;
+            }
+            debug_assert!(shared < KEY_BYTES && curr[shared] > prev[shared]);
+            out.push(shared as u8);
+            out.extend_from_slice(&curr[shared..KEY_BYTES]);
+        }
+        out
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, MortonGapStreamError> {
+        if bytes.len() < 4 {
+            return Err(MortonGapStreamError::TruncatedHeader {
+                actual_bytes: bytes.len(),
+            });
+        }
+        let count = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let mut cursor = 4usize;
+        if count == 0 {
+            if cursor != bytes.len() {
+                return Err(MortonGapStreamError::TrailingBytes {
+                    remaining: bytes.len() - cursor,
+                });
+            }
+            return Ok(Self { keys: Vec::new() });
+        }
+
+        if bytes.len() - cursor < KEY_BYTES {
+            return Err(MortonGapStreamError::TruncatedEntry { index: 0 });
+        }
+        let mut prev = [0u8; KEY_BYTES];
+        prev.copy_from_slice(&bytes[cursor..cursor + KEY_BYTES]);
+        cursor += KEY_BYTES;
+
+        let mut keys = Vec::with_capacity(count.min((bytes.len() - 4) / 2));
+        keys.push(MortonKeyV1::from_bytes(prev));
+
+        for index in 1..count {
+            if cursor >= bytes.len() {
+                return Err(MortonGapStreamError::TruncatedEntry { index });
+            }
+            let shared_u8 = bytes[cursor];
+            cursor += 1;
+            if shared_u8 as usize >= KEY_BYTES {
+                return Err(MortonGapStreamError::InvalidSharedPrefixLength {
+                    index,
+                    shared_prefix_bytes: shared_u8,
+                });
+            }
+            let shared = shared_u8 as usize;
+            let suffix_len = KEY_BYTES - shared;
+            if bytes.len() - cursor < suffix_len {
+                return Err(MortonGapStreamError::TruncatedEntry { index });
+            }
+            let suffix = &bytes[cursor..cursor + suffix_len];
+            cursor += suffix_len;
+
+            if suffix[0] <= prev[shared] {
+                return Err(MortonGapStreamError::NonCanonicalOrderOrPrefix {
+                    index,
+                    shared_prefix_bytes: shared_u8,
+                    prev_byte: prev[shared],
+                    next_byte: suffix[0],
+                });
+            }
+            prev[shared..KEY_BYTES].copy_from_slice(suffix);
+            keys.push(MortonKeyV1::from_bytes(prev));
+        }
+
+        if cursor != bytes.len() {
+            return Err(MortonGapStreamError::TrailingBytes {
+                remaining: bytes.len() - cursor,
+            });
+        }
+
+        Ok(Self { keys })
+    }
+
+    pub fn tag(&self) -> ContentTag {
+        let bytes = self.encode();
+        let len = self.encoded_len();
+        debug_assert_eq!(bytes.len(), len);
+        hash_canonical(
+            TagKind::Receipt,
+            MORTON_GAP_STREAM_V1_SCHEMA,
+            len as u64,
+            |sink| {
+                sink(&bytes);
+            },
+        )
+        .expect("MortonGapStreamV1 tag encoding is canonical")
     }
 }
 
@@ -2210,5 +2528,262 @@ mod tests {
         assert_eq!(key.bit_at(KEY_BITS), 0);
         assert_eq!(key.bit_at(KEY_BITS + 10), 0);
         assert_eq!(key.bit_at(usize::MAX), 0);
+    }
+
+    #[test]
+    fn morton_key_v1_bijection_octants_chunk_prefix_and_canonical_tag() {
+        assert!(!MORTON_KEY_V1_SCHEMA.is_empty());
+
+        let min_key = MortonKeyV1::from_coord(Coord::new(i64::MIN, i64::MIN, i64::MIN));
+        assert_eq!(min_key.as_bytes(), &[0x00; KEY_BYTES]);
+        assert_eq!(min_key.to_coord(), Coord::new(i64::MIN, i64::MIN, i64::MIN));
+
+        let max_key = MortonKeyV1::from_coord(Coord::new(i64::MAX, i64::MAX, i64::MAX));
+        assert_eq!(max_key.as_bytes(), &[0xff; KEY_BYTES]);
+        assert_eq!(max_key.to_coord(), Coord::new(i64::MAX, i64::MAX, i64::MAX));
+
+        let required_coords = [
+            Coord::new(0, 0, 0),
+            Coord::new(-1, -1, -1),
+            Coord::new(-16, -16, -16),
+            Coord::new(-17, 0, 15),
+            Coord::new(i64::MIN, 0, i64::MAX),
+        ];
+
+        for &coord in &required_coords {
+            let key = MortonKeyV1::from_coord(coord);
+            let roundtrip = MortonKeyV1::from_bytes(*key.as_bytes());
+            assert_eq!(roundtrip, key);
+            assert_eq!(roundtrip.to_coord(), coord);
+
+            // Reconstruct (ux, uy, uz) purely from octant_at(0..64)
+            let mut ux = 0u64;
+            let mut uy = 0u64;
+            let mut uz = 0u64;
+            for level in 0..64u8 {
+                let oct = key.octant_at(level);
+                assert!(oct < 8);
+                let shift = 63 - level;
+                ux |= (((oct >> 2) & 1) as u64) << shift;
+                uy |= (((oct >> 1) & 1) as u64) << shift;
+                uz |= ((oct & 1) as u64) << shift;
+            }
+            assert_eq!((ux ^ 0x8000_0000_0000_0000) as i64, coord.x);
+            assert_eq!((uy ^ 0x8000_0000_0000_0000) as i64, coord.y);
+            assert_eq!((uz ^ 0x8000_0000_0000_0000) as i64, coord.z);
+            assert_eq!(key.octant_at(64), 0);
+            assert_eq!(key.octant_at(u8::MAX), 0);
+        }
+
+        let zero_key = MortonKeyV1::from_coord(Coord::new(0, 0, 0));
+        assert_eq!(zero_key.octant_at(0), 7);
+        for level in 1..64u8 {
+            assert_eq!(zero_key.octant_at(level), 0);
+        }
+        assert_eq!(
+            zero_key.tag().to_string(),
+            "#bb.world.sha256.ml3dfiypdfxv6jfv5stpsau5fmux6wffg3vdw62lul2gmcjc5r7q"
+        );
+
+        let neg_one_key = MortonKeyV1::from_coord(Coord::new(-1, -1, -1));
+        assert_eq!(neg_one_key.octant_at(0), 0);
+        for level in 1..64u8 {
+            assert_eq!(neg_one_key.octant_at(level), 7);
+        }
+
+        let probe_key = MortonKeyV1::from_coord(Coord::new(-17, 0, 15));
+        assert_eq!(probe_key.octant_at(0), 0b011);
+        assert_eq!(probe_key.octant_at(63), 0b101);
+        assert_eq!(
+            probe_key.tag().to_string(),
+            "#bb.world.sha256.qdyxv5zm5jugwjmfbfyz5zjvqfxylnv3qedxqvik4kazxqrabuja"
+        );
+
+        // Verify all 4,096 coords in chunk (-1, 0, 2) share the exact same chunk_prefix_180b()
+        let base_x = -16i64;
+        let base_y = 0i64;
+        let base_z = 32i64;
+        let expected_prefix =
+            MortonKeyV1::from_coord(Coord::new(base_x, base_y, base_z)).chunk_prefix_180b();
+        assert_eq!(expected_prefix[22] & 0x0F, 0);
+
+        let mut chunk_keys = Vec::with_capacity(4096);
+        for dx in 0..16i64 {
+            for dy in 0..16i64 {
+                for dz in 0..16i64 {
+                    let c = Coord::new(base_x + dx, base_y + dy, base_z + dz);
+                    assert_eq!(c.x.div_euclid(16), -1);
+                    assert_eq!(c.y.div_euclid(16), 0);
+                    assert_eq!(c.z.div_euclid(16), 2);
+                    let k = MortonKeyV1::from_coord(c);
+                    assert_eq!(k.chunk_prefix_180b(), expected_prefix);
+                    chunk_keys.push(k);
+                }
+            }
+        }
+        chunk_keys.sort_unstable();
+        chunk_keys.dedup();
+        assert_eq!(chunk_keys.len(), 4096);
+
+        // Adjacent chunks must have distinct 180-bit chunk prefixes
+        let neighbor_chunk_coords = [
+            Coord::new(-17, 0, 32),
+            Coord::new(0, 0, 32),
+            Coord::new(-16, -1, 32),
+            Coord::new(-16, 16, 32),
+            Coord::new(-16, 0, 31),
+            Coord::new(-16, 0, 48),
+        ];
+        for &nc in &neighbor_chunk_coords {
+            assert_ne!(
+                MortonKeyV1::from_coord(nc).chunk_prefix_180b(),
+                expected_prefix
+            );
+        }
+    }
+
+    #[test]
+    fn morton_gap_stream_v1_codec_canonical_tags_and_negative_controls() {
+        assert!(!MORTON_GAP_STREAM_V1_SCHEMA.is_empty());
+
+        // 1. Empty stream
+        let empty_stream = MortonGapStreamV1::from_coords(&[]).expect("empty stream valid");
+        assert!(empty_stream.is_empty());
+        assert_eq!(empty_stream.len(), 0);
+        assert!(empty_stream.keys().is_empty());
+        assert!(empty_stream.coords().is_empty());
+        assert_eq!(empty_stream.encoded_len(), 4);
+        let empty_bytes = empty_stream.encode();
+        assert_eq!(empty_bytes, [0, 0, 0, 0]);
+        assert_eq!(
+            MortonGapStreamV1::decode(&empty_bytes).expect("decode empty"),
+            empty_stream
+        );
+        assert_eq!(
+            empty_stream.tag().to_string(),
+            "#bb.receipt.sha256.2rpg7dirkby5eyu7glmwwfsocoslxvrc2a6obmoaqykgmgxhfsza"
+        );
+
+        // 2. Non-empty stream (count == 5, exercising k == 0 and k == 22 shared prefixes)
+        let input_coords = [
+            Coord::new(0, 0, 0),
+            Coord::new(-1, -1, -1),
+            Coord::new(-16, -16, -16),
+            Coord::new(-17, 0, 15),
+            Coord::new(1, 2, 3),
+        ];
+        let stream = MortonGapStreamV1::from_coords(&input_coords).expect("valid stream");
+        assert!(!stream.is_empty());
+        assert_eq!(stream.len(), 5);
+        assert_eq!(stream.keys().len(), 5);
+        for w in stream.keys().windows(2) {
+            assert!(w[0] < w[1]);
+        }
+        assert_eq!(
+            stream.coords(),
+            vec![
+                Coord::new(-16, -16, -16),
+                Coord::new(-1, -1, -1),
+                Coord::new(-17, 0, 15),
+                Coord::new(0, 0, 0),
+                Coord::new(1, 2, 3),
+            ]
+        );
+        assert_eq!(stream.encoded_len(), 83);
+        let wire = stream.encode();
+        assert_eq!(wire.len(), 83);
+        let decoded = MortonGapStreamV1::decode(&wire).expect("canonical stream decodes");
+        assert_eq!(decoded, stream);
+        assert_eq!(
+            stream.tag().to_string(),
+            "#bb.receipt.sha256.zs7hrcgejo572r64u3f3m2voxtty62sp242jk7k66ldu55vfou5q"
+        );
+
+        // 3. Negative controls
+        let dup_err = MortonGapStreamV1::from_coords(&[Coord::new(1, 2, 3), Coord::new(1, 2, 3)])
+            .expect_err("duplicate coordinates must fail");
+        assert_eq!(
+            dup_err,
+            MortonGapStreamError::DuplicateCoordinate(Coord::new(1, 2, 3))
+        );
+        assert!(!dup_err.to_string().is_empty());
+        assert!(
+            !MortonGapStreamError::CountOverflow(usize::MAX)
+                .to_string()
+                .is_empty()
+        );
+
+        let trunc_hdr = MortonGapStreamV1::decode(&[0, 0, 0]).expect_err("truncated header");
+        assert_eq!(
+            trunc_hdr,
+            MortonGapStreamError::TruncatedHeader { actual_bytes: 3 }
+        );
+        assert!(!trunc_hdr.to_string().is_empty());
+
+        let trunc_first =
+            MortonGapStreamV1::decode(&[0, 0, 0, 1, 0xaa, 0xbb]).expect_err("truncated entry 0");
+        assert_eq!(
+            trunc_first,
+            MortonGapStreamError::TruncatedEntry { index: 0 }
+        );
+        assert!(!trunc_first.to_string().is_empty());
+
+        let trunc_second =
+            MortonGapStreamV1::decode(&wire[..wire.len() - 1]).expect_err("truncated entry");
+        assert_eq!(
+            trunc_second,
+            MortonGapStreamError::TruncatedEntry { index: 4 }
+        );
+
+        // k >= 24 must reject
+        let mut bad_k = Vec::new();
+        bad_k.extend_from_slice(&2u32.to_be_bytes());
+        bad_k.extend_from_slice(stream.keys()[0].as_bytes());
+        bad_k.push(24);
+        let err_k = MortonGapStreamV1::decode(&bad_k).expect_err("k == 24 must reject");
+        assert_eq!(
+            err_k,
+            MortonGapStreamError::InvalidSharedPrefixLength {
+                index: 1,
+                shared_prefix_bytes: 24,
+            }
+        );
+        assert!(!err_k.to_string().is_empty());
+
+        // Non-maximal shared prefix (k = 0 when byte 0 is identical, so suffix[0] == prev[0]) must reject
+        let mut non_maximal = Vec::new();
+        non_maximal.extend_from_slice(&2u32.to_be_bytes());
+        non_maximal.extend_from_slice(stream.keys()[0].as_bytes());
+        non_maximal.push(0);
+        non_maximal.extend_from_slice(stream.keys()[1].as_bytes());
+        let err_order =
+            MortonGapStreamV1::decode(&non_maximal).expect_err("non-maximal k must reject");
+        assert_eq!(
+            err_order,
+            MortonGapStreamError::NonCanonicalOrderOrPrefix {
+                index: 1,
+                shared_prefix_bytes: 0,
+                prev_byte: stream.keys()[0].as_bytes()[0],
+                next_byte: stream.keys()[1].as_bytes()[0],
+            }
+        );
+        assert!(!err_order.to_string().is_empty());
+
+        // Trailing bytes must reject
+        let mut trailing = wire.clone();
+        trailing.push(0);
+        let err_trail = MortonGapStreamV1::decode(&trailing).expect_err("trailing byte");
+        assert_eq!(
+            err_trail,
+            MortonGapStreamError::TrailingBytes { remaining: 1 }
+        );
+        assert!(!err_trail.to_string().is_empty());
+
+        let err_empty_trail =
+            MortonGapStreamV1::decode(&[0, 0, 0, 0, 0xff]).expect_err("empty trailing byte");
+        assert_eq!(
+            err_empty_trail,
+            MortonGapStreamError::TrailingBytes { remaining: 1 }
+        );
     }
 }

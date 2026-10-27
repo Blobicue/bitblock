@@ -14,6 +14,8 @@ The schemas vectored here:
   * bitblock/commit-r1/patricia-proof/v1
   * bitblock/commit-r1/smt-proof/v1
   * bitblock/commit-r1/assay-report/v1
+  * bitblock/commit-r1/morton-key/v1
+  * bitblock/commit-r1/morton-gap-stream/v1
 """
 
 from __future__ import annotations
@@ -39,6 +41,8 @@ COMMIT_R1_WORLD_SMT_SCHEMA = b"bitblock/commit-r1/world-smt/v1"
 COMMIT_R1_PATRICIA_PROOF_SCHEMA = b"bitblock/commit-r1/patricia-proof/v1"
 COMMIT_R1_SMT_PROOF_SCHEMA = b"bitblock/commit-r1/smt-proof/v1"
 COMMIT_R1_ASSAY_REPORT_SCHEMA = b"bitblock/commit-r1/assay-report/v1"
+MORTON_KEY_V1_SCHEMA = b"bitblock/commit-r1/morton-key/v1"
+MORTON_GAP_STREAM_V1_SCHEMA = b"bitblock/commit-r1/morton-gap-stream/v1"
 
 SMT_EMPTY_LEAF_TYPE = 0
 SMT_PRESENT_LEAF_TYPE = 1
@@ -76,6 +80,18 @@ EXPECTED_3KEY_SMT_PROOF_TAG = (
 EXPECTED_3KEY_PATRICIA_PROOF_TAG = (
     "#bb.receipt.sha256.rjm2d4ykhamhdxkbc3gv2pmeqdgjeiop7gfvq3cf4py4rejonnqq"
 )
+EXPECTED_ZERO_MORTON_KEY_TAG = (
+    "#bb.world.sha256.ml3dfiypdfxv6jfv5stpsau5fmux6wffg3vdw62lul2gmcjc5r7q"
+)
+EXPECTED_NONZERO_MORTON_KEY_TAG = (
+    "#bb.world.sha256.qdyxv5zm5jugwjmfbfyz5zjvqfxylnv3qedxqvik4kazxqrabuja"
+)
+EXPECTED_EMPTY_MORTON_GAP_STREAM_TAG = (
+    "#bb.receipt.sha256.2rpg7dirkby5eyu7glmwwfsocoslxvrc2a6obmoaqykgmgxhfsza"
+)
+EXPECTED_5KEY_MORTON_GAP_STREAM_TAG = (
+    "#bb.receipt.sha256.zs7hrcgejo572r64u3f3m2voxtty62sp242jk7k66ldu55vfou5q"
+)
 
 
 def field(val: bytes) -> bytes:
@@ -112,6 +128,109 @@ def key_bit_at(key_bytes: bytes, depth: int) -> int:
     byte_idx = depth // 8
     bit_idx = 7 - (depth % 8)
     return (key_bytes[byte_idx] >> bit_idx) & 1
+
+
+def morton_key_from_coord(x: int, y: int, z: int) -> bytes:
+    axes = (bias64(x), bias64(y), bias64(z))
+    out = bytearray(KEY_BYTES)
+    for level in range(64):
+        shift = 63 - level
+        for axis, u_axis in enumerate(axes):
+            bit_pos = 3 * level + axis
+            bit = (u_axis >> shift) & 1
+            out[bit_pos // 8] |= bit << (7 - (bit_pos % 8))
+    return bytes(out)
+
+
+def morton_key_to_coord(key_bytes: bytes) -> tuple[int, int, int]:
+    assert len(key_bytes) == KEY_BYTES
+    axes = [0, 0, 0]
+    for level in range(64):
+        shift = 63 - level
+        for axis in range(3):
+            bit_pos = 3 * level + axis
+            bit = (key_bytes[bit_pos // 8] >> (7 - (bit_pos % 8))) & 1
+            axes[axis] |= bit << shift
+    res = []
+    for u_axis in axes:
+        raw = u_axis ^ SIGN_BIAS
+        if raw >= (1 << 63):
+            raw -= 1 << 64
+        res.append(raw)
+    return (res[0], res[1], res[2])
+
+
+def morton_octant_at(key_bytes: bytes, level: int) -> int:
+    if level < 0 or level >= 64:
+        return 0
+    base = 3 * level
+    b0 = (key_bytes[base // 8] >> (7 - (base % 8))) & 1
+    b1 = (key_bytes[(base + 1) // 8] >> (7 - ((base + 1) % 8))) & 1
+    b2 = (key_bytes[(base + 2) // 8] >> (7 - ((base + 2) % 8))) & 1
+    return (b0 << 2) | (b1 << 1) | b2
+
+
+def morton_chunk_prefix_180b(key_bytes: bytes) -> bytes:
+    out = bytearray(23)
+    out[:22] = key_bytes[:22]
+    out[22] = key_bytes[22] & 0xF0
+    return bytes(out)
+
+
+def morton_gap_stream_encode(coords: list[tuple[int, int, int]]) -> bytes:
+    keys = sorted(morton_key_from_coord(x, y, z) for (x, y, z) in coords)
+    for i in range(1, len(keys)):
+        if keys[i - 1] == keys[i]:
+            raise ValueError("duplicate coordinate in morton gap stream")
+    out = bytearray(struct.pack(">I", len(keys)))
+    if not keys:
+        return bytes(out)
+    out.extend(keys[0])
+    for i in range(1, len(keys)):
+        prev = keys[i - 1]
+        curr = keys[i]
+        k = 0
+        while k < KEY_BYTES and prev[k] == curr[k]:
+            k += 1
+        assert k < KEY_BYTES and curr[k] > prev[k]
+        out.append(k)
+        out.extend(curr[k:])
+    return bytes(out)
+
+
+def morton_gap_stream_decode(data: bytes) -> list[bytes] | None:
+    if len(data) < 4:
+        return None
+    (count,) = struct.unpack(">I", data[:4])
+    cursor = 4
+    if count == 0:
+        return [] if cursor == len(data) else None
+    if cursor + KEY_BYTES > len(data):
+        return None
+    first = data[cursor : cursor + KEY_BYTES]
+    cursor += KEY_BYTES
+    keys = [first]
+    prev = first
+    for _ in range(1, count):
+        if cursor >= len(data):
+            return None
+        k = data[cursor]
+        cursor += 1
+        if k >= KEY_BYTES:
+            return None
+        suffix_len = KEY_BYTES - k
+        if cursor + suffix_len > len(data):
+            return None
+        suffix = data[cursor : cursor + suffix_len]
+        cursor += suffix_len
+        if suffix[0] <= prev[k]:
+            return None
+        curr = prev[:k] + suffix
+        keys.append(curr)
+        prev = curr
+    if cursor != len(data):
+        return None
+    return keys
 
 
 def node_hash(node_type: int, depth: int, payload: bytes) -> bytes:
@@ -533,7 +652,113 @@ def run_all():
     assay_tag = content_tag_render("receipt", COMMIT_R1_ASSAY_REPORT_SCHEMA, assay_payload)
     assert assay_tag.startswith("#bb.receipt.sha256.")
 
-    print("commit_r1_vectors: ok (empty, bedrock, SMT, MPT, point proofs, wire tags, and soundness controls pass)")
+    # 5. MortonKeyV1 bijection, octant trios, 180-bit chunk prefixes, and canonical tags
+    i64_min = -(1 << 63)
+    i64_max = (1 << 63) - 1
+    assert morton_key_from_coord(i64_min, i64_min, i64_min) == b"\x00" * KEY_BYTES
+    assert morton_key_from_coord(i64_max, i64_max, i64_max) == b"\xff" * KEY_BYTES
+
+    morton_probe_coords = [
+        (0, 0, 0),
+        (-1, -1, -1),
+        (-16, -16, -16),
+        (-17, 0, 15),
+        (i64_min, 0, i64_max),
+    ]
+    for cx, cy, cz in morton_probe_coords:
+        mk = morton_key_from_coord(cx, cy, cz)
+        assert morton_key_to_coord(mk) == (cx, cy, cz)
+        assert morton_octant_at(mk, 64) == 0
+        assert morton_octant_at(mk, 255) == 0
+
+    zero_morton = morton_key_from_coord(0, 0, 0)
+    assert morton_octant_at(zero_morton, 0) == 7
+    assert all(morton_octant_at(zero_morton, lvl) == 0 for lvl in range(1, 64))
+    zero_morton_tag = content_tag_render("world", MORTON_KEY_V1_SCHEMA, zero_morton)
+    assert (
+        zero_morton_tag == EXPECTED_ZERO_MORTON_KEY_TAG
+    ), f"MortonKeyV1 zero tag mismatch: {zero_morton_tag}"
+
+    nonzero_morton = morton_key_from_coord(-17, 0, 15)
+    assert morton_octant_at(nonzero_morton, 0) == 0b011
+    assert morton_octant_at(nonzero_morton, 63) == 0b101
+    nonzero_morton_tag = content_tag_render("world", MORTON_KEY_V1_SCHEMA, nonzero_morton)
+    assert (
+        nonzero_morton_tag == EXPECTED_NONZERO_MORTON_KEY_TAG
+    ), f"MortonKeyV1 nonzero tag mismatch: {nonzero_morton_tag}"
+
+    # Verify all 4,096 coordinates in chunk (-1, 0, 2) share the exact same 180-bit chunk prefix
+    expected_prefix = morton_chunk_prefix_180b(morton_key_from_coord(-16, 0, 32))
+    assert (expected_prefix[22] & 0x0F) == 0
+    chunk_morton_set = set()
+    for dx in range(16):
+        for dy in range(16):
+            for dz in range(16):
+                mk = morton_key_from_coord(-16 + dx, dy, 32 + dz)
+                assert morton_chunk_prefix_180b(mk) == expected_prefix
+                chunk_morton_set.add(mk)
+    assert len(chunk_morton_set) == 4096
+    for ncx, ncy, ncz in [
+        (-17, 0, 32),
+        (0, 0, 32),
+        (-16, -1, 32),
+        (-16, 16, 32),
+        (-16, 0, 31),
+        (-16, 0, 48),
+    ]:
+        assert morton_chunk_prefix_180b(morton_key_from_coord(ncx, ncy, ncz)) != expected_prefix
+
+    # 6. MortonGapStreamV1 wire codec, canonical tags, and soundness negative controls
+    empty_stream_bytes = morton_gap_stream_encode([])
+    assert empty_stream_bytes == b"\x00\x00\x00\x00"
+    assert morton_gap_stream_decode(empty_stream_bytes) == []
+    empty_stream_tag = content_tag_render(
+        "receipt", MORTON_GAP_STREAM_V1_SCHEMA, empty_stream_bytes
+    )
+    assert (
+        empty_stream_tag == EXPECTED_EMPTY_MORTON_GAP_STREAM_TAG
+    ), f"MortonGapStreamV1 empty tag mismatch: {empty_stream_tag}"
+
+    stream_coords = [
+        (0, 0, 0),
+        (-1, -1, -1),
+        (-16, -16, -16),
+        (-17, 0, 15),
+        (1, 2, 3),
+    ]
+    stream_bytes = morton_gap_stream_encode(stream_coords)
+    assert len(stream_bytes) == 83
+    decoded_keys = morton_gap_stream_decode(stream_bytes)
+    assert decoded_keys is not None
+    assert [morton_key_to_coord(k) for k in decoded_keys] == [
+        (-16, -16, -16),
+        (-1, -1, -1),
+        (-17, 0, 15),
+        (0, 0, 0),
+        (1, 2, 3),
+    ]
+    stream_tag = content_tag_render("receipt", MORTON_GAP_STREAM_V1_SCHEMA, stream_bytes)
+    assert (
+        stream_tag == EXPECTED_5KEY_MORTON_GAP_STREAM_TAG
+    ), f"MortonGapStreamV1 5-key tag mismatch: {stream_tag}"
+
+    # Negative controls for MortonGapStreamV1
+    assert morton_gap_stream_decode(b"\x00\x00\x00") is None
+    assert morton_gap_stream_decode(b"\x00\x00\x00\x00\xff") is None
+    assert morton_gap_stream_decode(stream_bytes[:-1]) is None
+    assert morton_gap_stream_decode(stream_bytes + b"\x00") is None
+    assert (
+        morton_gap_stream_decode(struct.pack(">I", 2) + decoded_keys[0] + bytes([24]))
+        is None
+    )
+    assert (
+        morton_gap_stream_decode(
+            struct.pack(">I", 2) + decoded_keys[0] + bytes([0]) + decoded_keys[1]
+        )
+        is None
+    )
+
+    print("commit_r1_vectors: ok (empty, bedrock, SMT, MPT, MortonKeyV1, MortonGapStreamV1, point proofs, wire tags, and soundness controls pass)")
 
 
 if __name__ == "__main__":

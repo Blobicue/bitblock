@@ -181,7 +181,7 @@ pub struct ProjectedPoint {
 /// It preserves the arithmetic in [`Camera::project`] while avoiding repeated basis and focal
 /// setup for each cube vertex.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct CameraProjection {
+pub struct CameraProjection {
     position: Vec3,
     basis: CameraBasis,
     focal_length: f64,
@@ -247,6 +247,52 @@ impl CameraProjection {
                     && (projected.y - self.half_height).abs() <= 0.5 + ONE_PIXEL_EPSILON
             })
         })
+    }
+
+    /// Conservative homogeneous view-frustum rejection for an axis-aligned bounding box.
+    ///
+    /// Evaluates all eight corners of `[min, max]` in camera space before perspective divide so
+    /// boxes straddling the camera plane (`z_cam <= 0.0`) are never falsely rejected. Returns
+    /// `true` if and only if all eight corners satisfy at least one single-plane rejection
+    /// predicate with a 1-pixel guard band.
+    pub fn aabb_definitely_outside_frustum(&self, min: Vec3, max: Vec3) -> bool {
+        if !bounds_are_valid(min, max) {
+            return false;
+        }
+
+        let corners = [
+            Vec3::new(min.x, min.y, min.z),
+            Vec3::new(min.x, min.y, max.z),
+            Vec3::new(min.x, max.y, min.z),
+            Vec3::new(min.x, max.y, max.z),
+            Vec3::new(max.x, min.y, min.z),
+            Vec3::new(max.x, min.y, max.z),
+            Vec3::new(max.x, max.y, min.z),
+            Vec3::new(max.x, max.y, max.z),
+        ];
+
+        let mut all_behind = true;
+        let mut all_left = true;
+        let mut all_right = true;
+        let mut all_above = true;
+        let mut all_below = true;
+
+        for corner in corners {
+            let rel = corner - self.position;
+            let x_cam = rel.dot(self.basis.right);
+            let y_cam = rel.dot(self.basis.up);
+            let z_cam = rel.dot(self.basis.forward);
+
+            all_behind &= z_cam <= 0.0;
+            all_left &= z_cam > 0.0 && self.focal_length * x_cam < -(self.half_width + 1.0) * z_cam;
+            all_right &= z_cam > 0.0 && self.focal_length * x_cam > (self.half_width + 1.0) * z_cam;
+            all_above &=
+                z_cam > 0.0 && self.focal_length * y_cam > (self.half_height + 1.0) * z_cam;
+            all_below &=
+                z_cam > 0.0 && self.focal_length * y_cam < -(self.half_height + 1.0) * z_cam;
+        }
+
+        all_behind || all_left || all_right || all_above || all_below
     }
 }
 
@@ -500,7 +546,7 @@ impl Camera {
     }
 
     /// Captures the invariant setup shared by projections in one nonzero viewport.
-    pub(crate) fn projection_for_viewport(
+    pub fn projection_for_viewport(
         &self,
         viewport_width: u32,
         viewport_height: u32,
@@ -991,5 +1037,83 @@ mod tests {
         assert!(camera.bounds_fit_one_pixel(min, max, viewport, viewport));
         camera.dolly_clamped(-10.0, 1.0, 0.1, top);
         assert_close(camera.observation_distance(), top);
+    }
+
+    #[test]
+    fn aabb_definitely_outside_frustum_classifies_planes_and_straddling_boxes() {
+        let camera = Camera::for_observer_spawn();
+        let projection: CameraProjection = camera.projection_for_viewport(64, 64).unwrap();
+
+        // Origin voxel [-0.5, 0.5]^3 directly in front of observer at (0, 0, -1) -> visible (false).
+        assert!(!projection.aabb_definitely_outside_frustum(Vec3::splat(-0.5), Vec3::splat(0.5)));
+
+        // Completely behind camera plane (all 8 corners have z_cam <= 0.0, including z == -1.0 -> z_cam == 0.0).
+        assert!(projection.aabb_definitely_outside_frustum(
+            Vec3::new(-4.0, -4.0, -10.0),
+            Vec3::new(4.0, 4.0, -1.0),
+        ));
+
+        // Straddling camera plane z = -1.0 (some corners z_cam <= 0.0, some z_cam > 0.0) -> never culled (false),
+        // even when shifted far to the left/right/top/bottom.
+        assert!(!projection.aabb_definitely_outside_frustum(
+            Vec3::new(-0.5, -0.5, -1.5),
+            Vec3::new(0.5, 0.5, -0.5),
+        ));
+        assert!(!projection.aabb_definitely_outside_frustum(
+            Vec3::new(-500.0, -0.5, -1.5),
+            Vec3::new(-400.0, 0.5, 0.5),
+        ));
+
+        // Strictly left, right, above, and below the viewport at z in [9.0, 10.0] (z_cam in [10.0, 11.0]).
+        assert!(projection.aabb_definitely_outside_frustum(
+            Vec3::new(-50.0, -1.0, 9.0),
+            Vec3::new(-20.0, 1.0, 10.0),
+        ));
+        assert!(projection.aabb_definitely_outside_frustum(
+            Vec3::new(20.0, -1.0, 9.0),
+            Vec3::new(50.0, 1.0, 10.0),
+        ));
+        assert!(projection.aabb_definitely_outside_frustum(
+            Vec3::new(-1.0, 20.0, 9.0),
+            Vec3::new(1.0, 50.0, 10.0),
+        ));
+        assert!(projection.aabb_definitely_outside_frustum(
+            Vec3::new(-1.0, -50.0, 9.0),
+            Vec3::new(1.0, -20.0, 10.0),
+        ));
+
+        // Box straddling left and right outside without all 8 corners on one side -> not culled (false).
+        assert!(!projection.aabb_definitely_outside_frustum(
+            Vec3::new(-50.0, -1.0, 9.0),
+            Vec3::new(50.0, 1.0, 10.0),
+        ));
+
+        // Invalid bounds (inverted axes or NaN/infinity) -> never culled (false).
+        assert!(
+            !projection.aabb_definitely_outside_frustum(
+                Vec3::new(2.0, -1.0, 5.0),
+                Vec3::new(1.0, 1.0, 6.0),
+            )
+        );
+        assert!(
+            !projection.aabb_definitely_outside_frustum(
+                Vec3::new(-1.0, 2.0, 5.0),
+                Vec3::new(1.0, 1.0, 6.0),
+            )
+        );
+        assert!(
+            !projection.aabb_definitely_outside_frustum(
+                Vec3::new(-1.0, -1.0, 7.0),
+                Vec3::new(1.0, 1.0, 6.0),
+            )
+        );
+        assert!(!projection.aabb_definitely_outside_frustum(
+            Vec3::new(f64::NAN, -1.0, 5.0),
+            Vec3::new(1.0, 1.0, 6.0),
+        ));
+        assert!(!projection.aabb_definitely_outside_frustum(
+            Vec3::new(-1.0, -1.0, 5.0),
+            Vec3::new(f64::INFINITY, 1.0, 6.0),
+        ));
     }
 }

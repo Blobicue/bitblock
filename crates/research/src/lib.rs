@@ -24,6 +24,7 @@ pub mod history_store;
 pub mod journal;
 pub mod ladder_bridge;
 pub mod local_bounds;
+pub mod octree_commit;
 pub mod optimization;
 pub mod output_color;
 pub mod output_topology;
@@ -32,6 +33,7 @@ pub mod presentation;
 pub mod presentation_output;
 pub mod presentation_output_v2;
 pub mod replay_evidence;
+pub mod scale_assay;
 pub mod sequential;
 pub mod storage;
 #[cfg(windows)]
