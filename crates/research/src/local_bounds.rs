@@ -186,7 +186,7 @@ impl LocalStorageProfile {
         Ok(HistoryReplayLimits::new(
             receipts,
             256,
-            receipts.saturating_mul(16),
+            receipts.saturating_mul(256),
             receipts,
             receipts,
             receipts.saturating_mul(16),

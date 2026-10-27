@@ -10,7 +10,9 @@
 //! atomic-append, power-loss, rollback-resistance, custody, availability, or consensus proof.
 
 use std::fmt;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
+#[cfg(any(unix, windows))]
+use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
@@ -1015,7 +1017,7 @@ fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
         .map_err(|source| JournalError::Io { phase, source })
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
     use std::os::unix::io::AsRawFd;
 
@@ -1037,6 +1039,11 @@ fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
         return Err(JournalError::Io { phase, source });
     }
     Ok(file)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_exclusive(_path: &Path, _create_new: bool) -> Result<File, JournalError> {
+    Err(JournalError::UnsupportedExclusivePlatform)
 }
 
 impl fmt::Display for JournalError {

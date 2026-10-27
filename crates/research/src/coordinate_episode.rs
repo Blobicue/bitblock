@@ -627,12 +627,16 @@ fn validate_fields(
         });
     }
 
+    let max_events = episodes
+        .len()
+        .checked_mul(2)
+        .ok_or(CoordinateEpisodeError::LengthOverflow)?;
     let mut seen_events = HashSet::new();
-    seen_events.try_reserve(episodes.len()).map_err(|_| {
-        CoordinateEpisodeError::AllocationFailed {
-            requested: episodes.len(),
-        }
-    })?;
+    seen_events
+        .try_reserve(max_events)
+        .map_err(|_| CoordinateEpisodeError::AllocationFailed {
+            requested: max_events,
+        })?;
     for (index, episode) in episodes.iter().enumerate() {
         require_kind("mint event", episode.mint, TagKind::Event)?;
         if !seen_events.insert(episode.mint) {

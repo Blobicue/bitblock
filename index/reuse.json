@@ -8,6 +8,24 @@
     ]
    },
    {
+    "item": "COMMIT_R1_ASSAY_REPORT_SCHEMA",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "COMMIT_R1_PATRICIA_PROOF_SCHEMA",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "COMMIT_R1_SMT_PROOF_SCHEMA",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
     "item": "COMMIT_R1_WORLD_PATRICIA_SCHEMA",
     "modules": [
      "commit_r1"
@@ -182,12 +200,6 @@
     ]
    },
    {
-    "item": "KEY_BITS",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
     "item": "KEY_BYTES",
     "modules": [
      "commit_r1"
@@ -350,24 +362,6 @@
     ]
    },
    {
-    "item": "PatriciaPointProof",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
-    "item": "PatriciaProofStep",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
-    "item": "PatriciaTerminal",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
     "item": "PreparedTick",
     "modules": [
      "history"
@@ -440,7 +434,7 @@
     ]
    },
    {
-    "item": "SmtPointProof",
+    "item": "SmtNode",
     "modules": [
      "commit_r1"
     ]
@@ -524,7 +518,31 @@
     ]
    },
    {
+    "item": "insert_counted",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
     "item": "is_occupied",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "multiproof_wire_bytes",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "node_counts",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "non_default_branch_count",
     "modules": [
      "commit_r1"
     ]
@@ -554,19 +572,13 @@
     ]
    },
    {
-    "item": "smt_default_hashes",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
     "item": "smt_present_leaf_hash",
     "modules": [
      "commit_r1"
     ]
    }
   ],
-  "pub_items": 648,
+  "pub_items": 662,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -590,7 +602,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 30841,
+   "code_lines": 31756,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -679,12 +691,12 @@
      "right": "interaction:1319"
     },
     {
-     "left": "coordinate_episode:667",
+     "left": "coordinate_episode:671",
      "lines": 9,
      "right": "physical_sensor:1343"
     },
     {
-     "left": "coordinate_episode:863",
+     "left": "coordinate_episode:867",
      "lines": 9,
      "right": "display:1111"
     },
@@ -771,7 +783,7 @@
    ]
   },
   "test": {
-   "code_lines": 19075,
+   "code_lines": 19169,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -835,7 +847,7 @@
      "right": "optimization:1680"
     },
     {
-     "left": "journal:1257",
+     "left": "journal:1264",
      "lines": 10,
      "right": "storage:962"
     },
@@ -852,7 +864,7 @@
     {
      "left": "display_store:1489",
      "lines": 8,
-     "right": "journal:1810"
+     "right": "journal:1817"
     },
     {
      "left": "display_store:1627",
@@ -872,7 +884,7 @@
     {
      "left": "history_store:2099",
      "lines": 8,
-     "right": "journal:1808"
+     "right": "journal:1815"
     },
     {
      "left": "physical_sensor:1652",

@@ -1,5 +1,5 @@
 {
- "docs": 245,
+ "docs": 250,
  "examples": 13,
  "gates": {
   "metric_accounting": true,
@@ -26,7 +26,7 @@
   "world"
  ],
  "proofs": 8,
- "schemas": 63,
+ "schemas": 66,
  "schemas_fixtures": 23,
  "schemas_tool_local": [
   "bitblock/history-mode/open-local/v2",
@@ -38,8 +38,8 @@
   "bitblock/reference-renderer/analytic-six-face/v1"
  ],
  "schemas_uncovered": [],
- "schemas_vectored": 63,
- "source_lines": 55433,
- "tests": 430,
+ "schemas_vectored": 66,
+ "source_lines": 56526,
+ "tests": 431,
  "tools": 42
 }

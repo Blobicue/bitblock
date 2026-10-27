@@ -1205,6 +1205,9 @@
 {"from": "doc:docs/metrics/world.md#temporal-world-dynamics", "kind": "cites", "to": "metric:#bb.metric.world.mutable-occupied-bit-population"}
 {"from": "doc:docs/metrics/world.md#temporal-world-dynamics", "kind": "cites", "to": "metric:#bb.metric.world.origin-relative-radial-mass-distribution"}
 {"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-profile/r1"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/assay-report/v1"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/patricia-proof/v1"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/smt-proof/v1"}
 {"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/world-patricia/v1"}
 {"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/world-smt/v1"}
 {"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/world-root/v1"}
@@ -1477,6 +1480,9 @@
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:protocol"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-profile/r1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/assay-report/v1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/patricia-proof/v1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/smt-proof/v1"}
 {"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/world-patricia/v1"}
 {"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/world-smt/v1"}
 {"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
