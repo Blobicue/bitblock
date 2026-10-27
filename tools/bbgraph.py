@@ -10,6 +10,7 @@ against the tree that produced it.
     schema <name>       One protocol object: who declares it, who checks it.
     metric <query...>   Metric families by name, with owner and definition tag.
     dag [--full]        Module strata and which modules are load-bearing.
+    wave <modules...>   Partition modules into parallel subagent waves (deps + test_deps).
     dup [test]          Where the tree repeats itself, and where a shared
                         helper could legally live. Production scope by default.
     dead                Public items nothing else in the tree names.
@@ -313,8 +314,25 @@ def cmd_ask(query: str) -> int:
     groups = sorted(
         GROUPS, key=lambda g: 0 if (want & set(g[1])) else 1
     )
+    lead = next((n for _s, n in scored if n["kind"] == "module"), None)
+    edges = load_edges() if lead is not None else []
     for title, kinds, note in groups:
         picks = [(s, n) for s, n in scored if n["kind"] in kinds]
+        if title == "EVIDENCE" and lead is not None and len(picks) < 4:
+            seen_ids = {n["id"] for _s, n in picks}
+            declared = {"schema:" + s for s in lead.get("declares", ())}
+            hop_ids: list[str] = []
+            for edge in edges:
+                if edge["kind"] == "proves" and edge["to"] == lead["id"]:
+                    hop_ids.append(edge["from"])
+                elif edge["kind"] == "vectors" and edge["to"] in declared:
+                    hop_ids.append(edge["from"])
+                elif edge["kind"] == "uses" and edge["to"] == lead["id"]:
+                    hop_ids.append(edge["from"])
+            for hid in sorted(set(hop_ids)):
+                if hid not in seen_ids and hid in by_id:
+                    picks.append((0.0, by_id[hid]))
+                    seen_ids.add(hid)
         if not picks:
             continue
         limit = 4 if title != "METRICS" else 3
@@ -337,7 +355,6 @@ def cmd_ask(query: str) -> int:
             elif describe(node):
                 print("      %s" % describe(node)[:100])
 
-    lead = next((n for _s, n in scored if n["kind"] == "module"), None)
     if lead is not None:
         if lead["gate"] not in ("default", "binary"):
             print("\nNOTE  %s is behind cfg(%s). It is not in a default build."
@@ -395,6 +412,11 @@ def cmd_node(name: str) -> int:
             for dep in node["deps"]:
                 child = next((n for n in nodes if n["id"] == "module:" + dep), None)
                 print("  %-24s %s" % (dep, describe(child)[:62] if child else ""))
+        if node.get("test_deps"):
+            print("\nTEST DEPS  (#[cfg(test)] only -- does not move DAG stratum)")
+            for dep in node["test_deps"]:
+                child = next((n for n in nodes if n["id"] == "module:" + dep), None)
+                print("  %-24s %s" % (dep, describe(child)[:62] if child else ""))
         parents = sorted(
             e["from"].split(":", 1)[1]
             for e in edges
@@ -409,6 +431,14 @@ def cmd_node(name: str) -> int:
             for schema in owned:
                 vec = ", ".join(v.split(":", 1)[1] for v in schema["vectored_by"])
                 print("  %-52s %s" % (schema["name"][:52], vec or "NO INDEPENDENT VECTORS"))
+        proofs = sorted(
+            e["from"] for e in edges if e["kind"] == "proves" and e["to"] == node["id"]
+        )
+        if proofs:
+            print("\nPROVED BY")
+            for pid in proofs:
+                pnode = next((n for n in nodes if n["id"] == pid), None)
+                print("  %-36s %s" % (pid.split(":", 1)[1], describe(pnode) if pnode else ""))
         docs = sorted(
             e["from"] for e in edges if e["kind"] == "documents" and e["to"] == node["id"]
         )
@@ -439,6 +469,13 @@ def cmd_node(name: str) -> int:
 
     elif node["kind"] == "proof":
         print("  size      %d lines" % node["lines"])
+        targets = sorted(
+            e["to"].split(":", 1)[1]
+            for e in edges
+            if e["kind"] == "proves" and e["from"] == node["id"]
+        )
+        if targets:
+            print("  proves    %s" % ", ".join(targets))
         if node["theorems"]:
             print("\nTHEOREMS")
             for name in node["theorems"]:
@@ -531,6 +568,78 @@ def cmd_dag(full: bool) -> int:
         print("  %-26s %2d dependents   %s"
               % (name, count, describe(by_name.get(name, {}))[:44]))
     print("\nChanging a high-dependent module changes everything above it.")
+    return 0
+
+
+def compute_waves(nodes: list[dict], names: list[str]) -> list[list[str]]:
+    """Partition target modules into parallel execution waves.
+
+    Uses both production `deps` and `#[cfg(test)]` `test_deps` within the target
+    set so a module whose unit tests import a sibling module is scheduled in a
+    strictly later wave.
+    """
+    by_name = {n["name"]: n for n in nodes if n["kind"] == "module"}
+    target = {m for m in names if m in by_name}
+    prereqs: dict[str, set[str]] = {}
+    for name in target:
+        mod = by_name[name]
+        coupled = set(mod.get("deps", ())) | set(mod.get("test_deps", ()))
+        prereqs[name] = (coupled & target) - {name}
+    remaining = set(target)
+    waves: list[list[str]] = []
+    while remaining:
+        ready = sorted(m for m in remaining if not (prereqs[m] & remaining))
+        if not ready:
+            waves.append(sorted(remaining))
+            break
+        waves.append(ready)
+        remaining -= set(ready)
+    return waves
+
+
+def cmd_wave(query: str) -> int:
+    nodes, _subs, dag = load()
+    edges = load_edges()
+    by_name = {n["name"]: n for n in nodes if n["kind"] == "module"}
+    by_id = {n["id"]: n for n in nodes}
+    parts = [p for p in re.split(r"[\s,]+", query.strip()) if p]
+    if not parts:
+        return die("wave needs module names (e.g. bbgraph.py wave world camera render)")
+    unknown = [p for p in parts if p not in by_name]
+    if unknown:
+        return die("unknown module(s): %s" % ", ".join(unknown))
+    target = set(parts)
+    waves = compute_waves(nodes, parts)
+    print("WAVE TOPOLOGY   %d modules across %d parallel wave(s)" % (len(target), len(waves)))
+    print("Includes both production `deps` and `#[cfg(test)]` `test_deps` so every")
+    print("wave compiles and passes `cargo test` before the next wave begins.")
+    for idx, wave in enumerate(waves, 1):
+        print("\n  WAVE %d  (%d parallel subagent lock%s)"
+              % (idx, len(wave), "" if len(wave) == 1 else "s"))
+        for name in wave:
+            mod = by_name[name]
+            prod_in = sorted(set(mod.get("deps", ())) & target)
+            test_in = sorted(set(mod.get("test_deps", ())) & target)
+            waits = prod_in + ["%s (test)" % d for d in test_in]
+            wait_str = "waits on: " + ", ".join(waits) if waits else "root in wave set"
+            print("    %-22s %-36s cfg(%s), %d dependents"
+                  % (name, mod["path"], mod["gate"], load_bearing(dag, mod)))
+            print("      %s" % wait_str)
+            declared = {"schema:" + s for s in mod.get("declares", ())}
+            vecs = sorted({
+                e["from"].split(":", 1)[1]
+                for e in edges
+                if e["kind"] == "vectors" and e["to"] in declared
+            })
+            if vecs:
+                print("      vectors:  %s" % ", ".join(vecs))
+            proofs = sorted({
+                e["from"].split(":", 1)[1]
+                for e in edges
+                if e["kind"] == "proves" and e["to"] == mod["id"]
+            })
+            if proofs:
+                print("      proves:   %s" % ", ".join(proofs))
     return 0
 
 
@@ -802,6 +911,14 @@ def cmd_selftest() -> int:
                 % (case["module"], got, case["dependents"])
             )
 
+    for case in spec.get("waves", []):
+        checks += 1
+        got = compute_waves(nodes, case["modules"])
+        if got != case["expect"]:
+            failures.append(
+                "wave %r -> %r, expected %r" % (case["modules"], got, case["expect"])
+            )
+
     for case in spec.get("schemas", []):
         checks += 1
         node = next(
@@ -842,6 +959,8 @@ def main(argv: list[str]) -> int:
         return cmd_metric(joined)
     if cmd == "dag":
         return cmd_dag("--full" in rest)
+    if cmd == "wave":
+        return cmd_wave(joined)
     if cmd == "dup":
         return cmd_dup(joined)
     if cmd == "dead":

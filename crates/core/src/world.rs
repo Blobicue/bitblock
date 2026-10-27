@@ -1,3 +1,5 @@
+//! Sparse 16x16x16 chunked voxel world, immutable origin bedrock, exposed-face masks, and 8-level sparse octree pyramid.
+
 use std::collections::HashMap;
 
 /// Number of coordinates along each axis of one sparse chunk.

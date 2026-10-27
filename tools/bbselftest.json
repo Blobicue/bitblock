@@ -52,6 +52,21 @@
             "q": "coordinate history",
             "top": "history",
             "note": "Not history_store: the store is the persistence layer, the history is the object."
+        },
+        {
+            "q": "octree commit point proof",
+            "top": "octree_commit",
+            "note": "Arity-8 sparse cryptographic octree and point-proof module."
+        },
+        {
+            "q": "scale workload assay",
+            "top": "scale_assay",
+            "note": "SCALE-1 multi-chunk workload assay and comparative synthesis report."
+        },
+        {
+            "q": "morton gap stream",
+            "top": "commit_r1",
+            "note": "192-bit 3D Morton Z-order spatial keys and delta-prefix gap stream in commit_r1."
         }
     ],
     "no_match": [
@@ -72,6 +87,14 @@
         },
         {
             "q": "physical sensor",
+            "expect": "high"
+        },
+        {
+            "q": "octree commit point proof",
+            "expect": "high"
+        },
+        {
+            "q": "scale workload assay",
             "expect": "high"
         },
         {
@@ -118,6 +141,54 @@
             "module": "coordinate_episode",
             "dependents": 0,
             "note": "A leaf: research-only, nothing depends on it. Safe to change in isolation."
+        },
+        {
+            "module": "commit_r1",
+            "dependents": 2,
+            "note": "Reached by octree_commit (which reuses MortonKeyV1) and scale_assay."
+        },
+        {
+            "module": "octree_commit",
+            "dependents": 1,
+            "note": "Reached by scale_assay for comparative root and proof synthesis."
+        },
+        {
+            "module": "scale_assay",
+            "dependents": 0,
+            "note": "Production leaf; optimization reaches it through #[cfg(test)] test_deps rather than production deps."
+        }
+    ],
+    "waves": [
+        {
+            "modules": [
+                "world",
+                "camera",
+                "commit_r1",
+                "render",
+                "octree_commit",
+                "scale_assay",
+                "optimization"
+            ],
+            "expect": [
+                [
+                    "camera",
+                    "world"
+                ],
+                [
+                    "commit_r1",
+                    "render"
+                ],
+                [
+                    "octree_commit"
+                ],
+                [
+                    "scale_assay"
+                ],
+                [
+                    "optimization"
+                ]
+            ],
+            "note": "Strict module-level topological wave schedule across production deps and #[cfg(test)] test_deps. camera and world are stratum-0 roots; commit_r1 and render depend on world/camera; octree_commit depends on commit_r1; scale_assay depends on octree_commit and render; optimization waits for scale_assay through #[cfg(test)] test_deps."
         }
     ],
     "schemas": [
@@ -225,6 +296,46 @@
             "schema": "bitblock/local-bounds-profile/v1",
             "vectored": true,
             "note": "LOCAL-BOUNDS-1 canonical storage and recovery limits profile. tools/local_bounds_vectors.py independently derives payload and tag."
+        },
+        {
+            "schema": "bitblock/commit-r1/morton-key/v1",
+            "vectored": true,
+            "note": "192-bit 3D Z-order Morton spatial key interleaving sign-offset 64-bit axes MSB-first. tools/commit_r1_vectors.py independently derives the bijection and tag."
+        },
+        {
+            "schema": "bitblock/commit-r1/morton-gap-stream/v1",
+            "vectored": true,
+            "note": "Prefix-compressed Morton-sorted coordinate stream with strict ascending suffix check. tools/commit_r1_vectors.py independently derives the stream and tag."
+        },
+        {
+            "schema": "bitblock/octree-commit/chunk-leaf/v1",
+            "vectored": true,
+            "note": "537-byte sparse 16x16x16 chunk leaf binding the 180-bit Morton chunk prefix, occupied bit count, and 512-byte voxel occupancy bitset. Vectored in tools/octree_commit_vectors.py."
+        },
+        {
+            "schema": "bitblock/octree-commit/internal-node/v1",
+            "vectored": true,
+            "note": "Arity-8 path-compressed internal octree node binding branch depth, masked 180-bit prefix, 8-bit child mask, and active child digests. Vectored in tools/octree_commit_vectors.py."
+        },
+        {
+            "schema": "bitblock/octree-commit/root/v1",
+            "vectored": true,
+            "note": "49-byte sparse octree world commitment root binding tree_state_u8, occupied chunk and bit counts, and root node digest. Vectored in tools/octree_commit_vectors.py."
+        },
+        {
+            "schema": "bitblock/octree-commit/point-proof/v1",
+            "vectored": true,
+            "note": "Self-contained membership and non-membership octree point proof across all 7 termination cases. Vectored in tools/octree_commit_vectors.py."
+        },
+        {
+            "schema": "bitblock/octree-commit/verkle-r1-feasibility/v1",
+            "vectored": true,
+            "note": "VERKLE-R1 arity-8 vs arity-256 polynomial/IPA commitment feasibility synthesis receipt. Vectored in tools/octree_commit_vectors.py."
+        },
+        {
+            "schema": "bitblock/scale-assay/workload-report/v1",
+            "vectored": true,
+            "note": "SCALE-1 deterministic 5-workload structural assay binding octree/frustum/ray metrics and Patricia/SMT/Octree root digests. Vectored in tools/scale_assay_vectors.py."
         }
     ],
     "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested. unreferenced_pub_items went 4 -> 3 when examples/render_time_probe.rs started calling Camera::set_observation_anchor, which had been dead. Writing a probe that needed it is what made it live.",

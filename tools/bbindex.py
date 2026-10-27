@@ -103,7 +103,7 @@ RE_TEST = re.compile(r"#\[test\]")
 RE_HEADING = re.compile(r"^(#{1,6}) +(.+?)\s*$", re.M)
 RE_METRIC_REF = re.compile(r"#bb\.metric\.[a-z0-9-]+\.[a-z0-9-]+")
 RE_TAG_KIND = re.compile(r"#bb\.([a-z0-9-]+)\.")
-RE_SRC_CITE = re.compile(r"`?(src/[a-z0-9_]+\.rs)`?")
+RE_SRC_CITE = re.compile(r"`?((?:crates/(?:core|research)/)?src/[a-z0-9_]+\.rs)`?")
 RE_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 RE_LEAN_DECL = re.compile(r"^(theorem|lemma|def|structure|inductive) ([^\s:]+)", re.M)
 
@@ -148,13 +148,16 @@ def module_gate(lib_text: str) -> dict[str, str]:
     gates: dict[str, str] = {}
     pending: str | None = None
     for line in lib_text.splitlines():
-        cfg = RE_CFG.match(line.strip())
+        stripped = line.strip()
+        cfg = RE_CFG.match(stripped)
         if cfg:
             pending = cfg.group(1)
             continue
         mod = re.match(r"^\s*pub mod ([a-z0-9_]+);", line)
         if mod:
             gates[mod.group(1)] = pending or "default"
+            pending = None
+        elif stripped and not stripped.startswith("//"):
             pending = None
     return gates
 
@@ -382,6 +385,7 @@ def extract_proofs() -> list[dict]:
         decls = RE_LEAN_DECL.findall(text)
         theorems = sorted({n for k, n in decls if k in ("theorem", "lemma")})
         defs = sorted({n for k, n in decls if k not in ("theorem", "lemma")})
+        cites_src = sorted(set(RE_SRC_CITE.findall(text)))
         nodes.append(
             {
                 "id": "proof:" + rel(path),
@@ -391,6 +395,7 @@ def extract_proofs() -> list[dict]:
                 "lines": text.count("\n") + 1,
                 "theorems": theorems,
                 "defs": defs,
+                "cites_src": cites_src,
                 "summary": "%d theorems, %d definitions." % (len(theorems), len(defs)),
                 "terms": sorted(
                     set(
@@ -601,10 +606,25 @@ def stage_link(nodes: list[dict]) -> list[dict]:
                 edges.append(
                     {"from": mod["id"], "to": "module:" + dep, "kind": "depends_on"}
                 )
+        for dep in mod.get("test_deps", ()):
+            if dep in module_names:
+                edges.append(
+                    {"from": mod["id"], "to": "module:" + dep, "kind": "tests_with"}
+                )
         for schema in mod["declares"]:
             edges.append(
                 {"from": mod["id"], "to": "schema:" + schema, "kind": "declares"}
             )
+
+    for proof in (n for n in nodes if n["kind"] == "proof"):
+        targets = {Path(p).stem for p in proof.get("cites_src", ())}
+        if proof["name"].lower() in module_names:
+            targets.add(proof["name"].lower())
+        for name in sorted(targets):
+            if name in module_names:
+                edges.append(
+                    {"from": proof["id"], "to": "module:" + name, "kind": "proves"}
+                )
 
     for tool in (n for n in nodes if n["kind"] == "tool"):
         for schema in tool["schemas"]:
