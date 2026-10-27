@@ -128,20 +128,23 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # 400 -> 402 / 411 -> 413: the swapped-lane control, which pins that the
 # reconciliation is per-lane and not per-total, and the replayed-tape test
 # that accounts for control actions arriving from a tape.
-# 402 -> 403 / 413 -> 414: one hostile-decoder control that distinguishes a
-# 403 -> 408 / 414 -> 419: five COMMIT-R1 tests in commit_r1.rs for CoordinateKeyV1,
+# mathematical over-limit total from debug overflow and release wrapping.
+# 403 -> 406 / 414 -> 417: three production-path gates for the exact-edit world
+# seam -- equal admitted streams across Resize contexts, one moved coordinate,
+# and separately characterized viewport-dependent local aim resolution.
+# 406 -> 411 / 417 -> 422: five COMMIT-R1 tests in commit_r1.rs for CoordinateKeyV1,
 # SMT and Patricia determinism, point proof verification, side-by-side assay, and rebuild parity.
-# 408 -> 414 / 419 -> 425: six LOCAL-BOUNDS-1 tests in local_bounds.rs for LocalStorageProfile,
+# 411 -> 417 / 422 -> 428: six LOCAL-BOUNDS-1 tests in local_bounds.rs for LocalStorageProfile,
 # checked preallocation arithmetic, recovery scanner bounds, and prune limits.
-# 414 -> 415 / 425 -> 426: one profile-backed history journal create/reopen test in history_store.rs.
-# 415 -> 417 / 426 -> 428: two LEDGER-1 occupancy episode ledger tests in coordinate_episode.rs.
+# 417 -> 418 / 428 -> 429: one profile-backed history journal create/reopen test in history_store.rs.
+# 418 -> 420 / 429 -> 431: two LEDGER-1 occupancy episode ledger tests in coordinate_episode.rs.
 WINDOWS_ONLY_TESTS = {
-    "quick": 29,  # 417 on Windows - 388 on Linux
-    "full": 38,   # 428 on Windows - 390 on Linux
+    "quick": 29,  # 420 on Windows - 391 on Linux
+    "full": 38,   # 431 on Windows - 393 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 417, "full": 428}.items()
+    for t, count in {"quick": 420, "full": 431}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

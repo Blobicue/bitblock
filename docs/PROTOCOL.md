@@ -309,7 +309,7 @@ with `genesis-idle` and differs only in four accepted occurrences across three
 control-action kinds -- two sidebar toggles, one resize, and one motion clear.
 Under v2 the two payloads were identical.
 
-### Scope: tick-derived tags are reproducible at a fixed viewport
+### Scope: tick tags are viewport-scoped; coordinate reduction begins after local admission
 
 The canonical tick payload includes the simulation and output dimensions, the
 post-tick camera, and any frame commitments. All three vary with the viewport, so
@@ -318,39 +318,40 @@ literal tick-derived tag in this repository was produced at the fixture viewport
 -- simulation `801x801`, output `1201x801`, from `INITIAL_VIEWPORT` plus
 `SIDEBAR_WIDTH` -- and the Python reconstructions encode those same dimensions.
 
-This has been true since v2 and is a statement of scope, not a recent change. It
-was never written down because nothing varied the viewport; a captured assay now
-does, and it forks the tick chain at three viewports from one identical ordered
-sequence of resolved exact edits.
+This has been true since v2 and is a statement of scope, not a recent change.
+The diagnostic is preserved on the non-ancestor `assay-capture-main` branch at
+commit `def3c31cf29290375dfdb45bfe528040e1711100`; it is evidence, not a landing
+gate. It varies the viewport with action sequences that differ in their
+canonical `Resize` payload and locates both the direct tick-tag dependence and
+the route by which local observer policy can produce different exact edits.
 
 The dependence is not uniform across kinds, and the division is worth knowing
 before relying on any tag:
 
 | kind | viewport-dependent | why |
 | --- | --- | --- |
-| `#bb.world` | the function is not; the chain is | `world_tag` hashes the sorted occupied coordinates and nothing else, but the *admitted* set reaching it diverges -- see below |
-| history `#bb.receipt` | the function is not; the chain is | commits the edit sequence, not the observer, but that sequence diverges for the same reason |
+| `#bb.world` | no, for one occupied set | `world_tag` hashes the sorted occupied coordinates and nothing else; local observer policy can still supply a different admitted set -- see below |
+| history `#bb.receipt` | no, for one parent, local tick, and ordered exact-edit sequence | commits the transition, not the observer; local observer policy can still supply a different sequence |
 | `#bb.tick-outcome` | yes | dimensions, `post_camera` and frame commitments are all hashed |
 | `#bb.frame-input` | yes | `FrameInput::capture` takes the renderer width and height |
 | `#bb.frame` | yes | a framebuffer's shape is intrinsic to it |
 | frame and display receipts | yes | they commit the frame objects above |
 
-It is tempting to read that table as "the world commitment is resolution-
-independent and the tick chain is not". That reading is wrong, and the difference
-matters more than the table does.
-
-`world_tag` is a pure function of the occupied set. But the *admitted* set is not
-pure: `resolve_aim_edit` and `edit_would_enclose_observer` both consult the
-camera, and after a `FitWorld` the camera carries the viewport.
+`world_tag` is a pure function of the occupied set, and coordinate-history
+receipts are pure functions of their declared transition inputs. The local
+observer path that supplies those inputs is viewport-sensitive:
+`resolve_aim_edit` and `edit_would_enclose_observer` both consult the camera, and
+after a `FitWorld` the camera carries the viewport.
 
 State the defect carefully, because the obvious phrasing overstates it. `Resize`
 is a canonical accepted action -- interaction-tape opcode 8, with width and
 height serialized into the tape -- so a tape carrying `resize 1280 960` replays
 identically on any machine. **Replay is deterministic.** What the protocol does
 is admit environmental configuration into the canonical action stream: in live
-play a `Resize` originates from an OS `WindowEvent::Resized`, and its payload
-then reaches world state. Two sessions differing only in window size are two
-different tapes, and they reach different worlds.
+play a `Resize` originates from an OS `WindowEvent::Resized`, and its payload can
+then reach world state. Two sessions differing only in window size are two
+different tapes, and the diagnostic below shows one schedule where their worlds
+diverge.
 
 A captured assay demonstrates both routes, from two action sequences differing
 only in their `Resize` payload:
@@ -367,21 +368,39 @@ The margin is not numerical luck. The refusing case stops 1e-6 from the cell
 boundary, against an f64 ulp of 1.5e-11 at that magnitude: a factor of 68,719,
 nearly five orders. It is a deterministic semantic divergence.
 
-So **both** chains are viewport-dependent, by different routes. The tick chain
-hashes the viewport directly; the world chain inherits it through admission.
-Neither is currently a resolution-independent commitment, and an implementation
-cannot become one by choosing which chain to trust.
+The tick chain is intrinsically viewport-dependent because it hashes the
+viewport directly. The world/history encoders are not; local interaction can
+nevertheless feed them viewport-dependent exact edits. A raw interaction tape
+is therefore not a viewport-independent world-transition stream merely because
+the downstream tag functions omit camera fields.
 
 For a local simulator that is defensible: the window is part of the machine and
 the tape records what happened on it. For anything that must agree across
 machines it is not, because a node's display configuration becomes an input to
 world state.
 
-Nothing here is fixed by writing it down. Removing the dependence needs the
-observer-policy boundary moved: aim resolution and enclosure admission are
-interaction-layer decisions whose *output* -- a resolved, admitted exact edit --
-is the only thing the world reducer should see. This section records the current,
-honest scope until then.
+The live reducer now makes that implementation boundary explicit.
+`admit_pending_edit(world, camera, pending)` performs aim resolution and
+observer-enclosure policy and returns one named `TickAttempt` disposition. Only
+`TickAttempt::executed_edit()` may cross into
+`TickTransaction::apply_edit`; unresolved and rejected attempts remain in the
+viewport-bearing tick outcome and never enter coordinate history.
+
+Three compact production-path gates bound the claim. With the same history
+parent, local tick, and ordered admitted exact edits, 640x480 and 1280x960
+contexts produce identical coordinate-history receipts, world roots, and heads.
+Moving one executed `On` edit from z=9 to z=10 changes both identities for that
+concrete pair. Separately, explicit different `Resize` inputs followed by
+fit/move/aim resolve to x=505 and x=510, preserving the honest local interaction
+behavior instead of disguising it as a world-chain failure. The second gate is
+not a universal injectivity claim: no-ops, cancellation, and independent edit
+reordering can make different edit streams end at one occupied set.
+
+This is an enforced reducer seam, not a new wire schema or a claim that raw
+interaction tapes, tick outcomes, or local camera policy are viewport-
+independent. Anything that must agree across machines still needs an authority
+boundary whose input is the admitted exact-edit stream rather than OS display
+configuration.
 
 ### Why the counters, and why only counters
 
@@ -417,8 +436,10 @@ it to green.
 
 The live fold captures pre-world/history, all entry flags and accumulated
 controls, and all four dimensions before mutation. It consumes viewport refit,
-mouse, movement, explicit fit, wheel, and ordered edits; commits coordinate
-history; renders optional game/composite outputs; constructs and link-verifies
+mouse, movement, explicit fit, and wheel; maps each pending edit through
+`admit_pending_edit`; passes only an executed exact edit into
+`TickTransaction::apply_edit`; commits coordinate history; renders optional
+game/composite outputs; constructs and link-verifies
 the outcome; reconstructs any game `FrameInput` tag from post-world,
 post-camera bits, simulation dimensions, and the exact renderer/crosshair
 policy tags used for that invocation; derives legacy pending-frame

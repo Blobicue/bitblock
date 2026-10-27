@@ -74,6 +74,22 @@ The semantic boundary is narrower than “every tick draws”: idle ticks still 
 state, but `fixed_tick` can return without deriving a new frame. Window submission/presentation
 is a separate boundary. This distinction is now reflected in `README.md` and `SEMANTICS.md`.
 
+**Successor provenance, local to the following two paragraphs:** these runtime claims were
+verified against commit `17ae90ecef14ef4016c574b53de6440bc88ba4d0`, tree
+`6f877616f68f3687251c6f5f1412f0360cec5e11`. This does not update, extend, or rerun the broader
+snapshot reconciliation declared above.
+
+The edit path now exposes its internal boundary explicitly. `admit_pending_edit` owns
+camera-dependent resolution and overlap policy; only the exact edit returned by
+`TickAttempt::executed_edit()` reaches `TickTransaction::apply_edit`. Compact gates show equal
+admitted exact-edit streams producing equal world/history identities across two resize contexts,
+one moved executed coordinate changing the concrete world/history identities, and different
+canonical resize inputs producing different local aim coordinates.
+
+The resize cases are different tapes. This result preserves deterministic replay and isolates
+coordinate reduction; it does not make the complete interaction or tick chain viewport-
+independent.
+
 ### 3. “Make it cheap in Rust”
 
 User intent: keep the core minimal and avoid paying for entities or a preallocated world.
@@ -670,8 +686,10 @@ gaps and zero falsely closed material residuals before broad tests begin.
    off, not unloaded and not a hidden default block.
 2. **The tick is the state authority.** Input adapters, reducers, renderers, and presenters may
    be separate code, but only the fixed-tick fold changes simulation meaning.
-3. **Accepted input is a boundary.** A replay receipt begins after OS acceptance; it cannot be
-   promoted into device or display evidence.
+3. **Accepted input and admitted world input are separate boundaries.** A replay receipt begins
+   after OS acceptance; observer-local policy then determines a disposition, and only executed
+   exact edits enter coordinate history. Neither boundary is device/display evidence or network
+   authority.
 4. **Camera, world, frame, and physical display are different objects.** A camera coordinate is
    not an entity; a frame tag is not a world tag; a GDI submission is not monitor light.
 5. **The origin is a semantic anchor.** It keeps the world non-empty and supplies a permanent
