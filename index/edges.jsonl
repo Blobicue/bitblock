@@ -1204,6 +1204,10 @@
 {"from": "doc:docs/metrics/world.md#temporal-world-dynamics", "kind": "cites", "to": "metric:#bb.metric.topo.persistent-homology-barcode"}
 {"from": "doc:docs/metrics/world.md#temporal-world-dynamics", "kind": "cites", "to": "metric:#bb.metric.world.mutable-occupied-bit-population"}
 {"from": "doc:docs/metrics/world.md#temporal-world-dynamics", "kind": "cites", "to": "metric:#bb.metric.world.origin-relative-radial-mass-distribution"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-profile/r1"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/world-patricia/v1"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/commit-r1/world-smt/v1"}
+{"from": "module:commit_r1", "kind": "declares", "to": "schema:bitblock/world-root/v1"}
 {"from": "module:coordinate_episode", "kind": "declares", "to": "schema:bitblock/coordinate-episode-derivation-policy/v1"}
 {"from": "module:coordinate_episode", "kind": "declares", "to": "schema:bitblock/coordinate-episode-evidence/v1"}
 {"from": "module:display", "kind": "declares", "to": "schema:bitblock/display-capture-policy/gdi-screen-dc/v1"}
@@ -1288,6 +1292,8 @@
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/test-object/v1"}
 {"from": "module:tick", "kind": "declares", "to": "schema:bitblock/tick-outcome/v3"}
 {"from": "module:windows_present", "kind": "declares", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}
+{"from": "module:commit_r1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:commit_r1", "kind": "depends_on", "to": "module:world"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history_store"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:protocol"}
@@ -1465,6 +1471,11 @@
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:protocol"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:world"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-profile/r1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/world-patricia/v1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/commit-r1/world-smt/v1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:commit_r1_vectors", "kind": "vectors", "to": "schema:bitblock/world-root/v1"}
 {"from": "tool:composite_frame_input_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:composite_frame_input_vectors", "kind": "vectors", "to": "schema:bitblock/overlay-input/v1"}
 {"from": "tool:composite_frame_input_vectors", "kind": "vectors", "to": "schema:bitblock/sidebar/composite-frame-input/v1"}

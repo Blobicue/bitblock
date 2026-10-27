@@ -14,11 +14,11 @@
   "world": 284
  },
  "metrics_claimed_by_doc": 1112,
- "modules": 33,
+ "modules": 34,
  "modules_by_gate": {
   "binary": 1,
   "default": 13,
-  "protocol-research": 15,
+  "protocol-research": 16,
   "windows": 4
  },
  "modules_undocumented": [
@@ -26,7 +26,7 @@
   "world"
  ],
  "proofs": 8,
- "schemas": 58,
+ "schemas": 62,
  "schemas_fixtures": 23,
  "schemas_tool_local": [
   "bitblock/history-mode/open-local/v2",
@@ -38,8 +38,8 @@
   "bitblock/reference-renderer/analytic-six-face/v1"
  ],
  "schemas_uncovered": [],
- "schemas_vectored": 58,
- "source_lines": 53482,
- "tests": 413,
- "tools": 40
+ "schemas_vectored": 62,
+ "source_lines": 54615,
+ "tests": 418,
+ "tools": 41
 }

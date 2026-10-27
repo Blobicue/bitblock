@@ -8,6 +8,18 @@
     ]
    },
    {
+    "item": "COMMIT_R1_WORLD_PATRICIA_SCHEMA",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "COMMIT_R1_WORLD_SMT_SCHEMA",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
     "item": "COMPOSITION_TIMING_ENVELOPE_SCHEMA",
     "modules": [
      "presentation"
@@ -35,6 +47,12 @@
     "item": "CameraBasis",
     "modules": [
      "camera"
+    ]
+   },
+   {
+    "item": "CommitAssayReport",
+    "modules": [
+     "commit_r1"
     ]
    },
    {
@@ -137,6 +155,18 @@
     "item": "JOURNAL_REJECTED_TAIL_SCHEMA",
     "modules": [
      "journal"
+    ]
+   },
+   {
+    "item": "KEY_BITS",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "KEY_BYTES",
+    "modules": [
+     "commit_r1"
     ]
    },
    {
@@ -284,6 +314,30 @@
     ]
    },
    {
+    "item": "PatriciaNode",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "PatriciaPointProof",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "PatriciaProofStep",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "PatriciaTerminal",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
     "item": "PreparedTick",
     "modules": [
      "history"
@@ -356,6 +410,12 @@
     ]
    },
    {
+    "item": "SmtPointProof",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
     "item": "SweepHit",
     "modules": [
      "render"
@@ -410,6 +470,12 @@
     ]
    },
    {
+    "item": "common_prefix_len",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
     "item": "dolly",
     "modules": [
      "camera"
@@ -419,6 +485,12 @@
     "item": "end_iteration",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "is_occupied",
+    "modules": [
+     "commit_r1"
     ]
    },
    {
@@ -444,9 +516,21 @@
     "modules": [
      "physical_sensor"
     ]
+   },
+   {
+    "item": "smt_default_hashes",
+    "modules": [
+     "commit_r1"
+    ]
+   },
+   {
+    "item": "smt_present_leaf_hash",
+    "modules": [
+     "commit_r1"
+    ]
    }
   ],
-  "pub_items": 583,
+  "pub_items": 614,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -470,7 +554,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 29654,
+   "code_lines": 30421,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -656,7 +740,7 @@
    ]
   },
   "test": {
-   "code_lines": 18626,
+   "code_lines": 18809,
    "duplicated_lines": 341,
    "regions": [
     {

@@ -1,5 +1,26 @@
 [
  {
+  "id": "sub:commit-profile",
+  "members": [
+   "module:commit_r1"
+  ],
+  "name": "commit-profile",
+  "terms": [
+   "commit",
+   "profile"
+  ]
+ },
+ {
+  "id": "sub:commit-r1",
+  "members": [
+   "module:commit_r1"
+  ],
+  "name": "commit-r1",
+  "terms": [
+   "commit"
+  ]
+ },
+ {
   "id": "sub:composition-timing-envelope",
   "members": [
    "module:presentation"
@@ -456,6 +477,17 @@
   ],
   "name": "world",
   "terms": [
+   "world"
+  ]
+ },
+ {
+  "id": "sub:world-root",
+  "members": [
+   "module:commit_r1"
+  ],
+  "name": "world-root",
+  "terms": [
+   "root",
    "world"
   ]
  }

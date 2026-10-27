@@ -1,6 +1,10 @@
 {
  "adjacency": {
   "camera": [],
+  "commit_r1": [
+   "protocol",
+   "world"
+  ],
   "coordinate_episode": [
    "history",
    "history_store",
@@ -179,9 +183,10 @@
   ],
   "world": []
  },
- "edges": 115,
+ "edges": 117,
  "stratum": {
   "camera": 0,
+  "commit_r1": 1,
   "coordinate_episode": 4,
   "display": 4,
   "display_artifact": 5,
@@ -217,6 +222,7 @@
  },
  "transitive_dependents": {
   "camera": 15,
+  "commit_r1": 0,
   "coordinate_episode": 0,
   "display": 7,
   "display_artifact": 5,
@@ -238,7 +244,7 @@
   "presentation_output": 4,
   "presentation_output_v2": 2,
   "program": 19,
-  "protocol": 30,
+  "protocol": 31,
   "render": 3,
   "replay_evidence": 1,
   "sequential": 0,
@@ -248,6 +254,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 22
+  "world": 23
  }
 }

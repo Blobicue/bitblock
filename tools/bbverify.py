@@ -129,13 +129,15 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # reconciliation is per-lane and not per-total, and the replayed-tape test
 # that accounts for control actions arriving from a tape.
 # 402 -> 403 / 413 -> 414: one hostile-decoder control that distinguishes a
+# 403 -> 408 / 414 -> 419: five COMMIT-R1 tests in commit_r1.rs for CoordinateKeyV1,
+# SMT and Patricia determinism, point proof verification, side-by-side assay, and rebuild parity.
 WINDOWS_ONLY_TESTS = {
-    "quick": 29,  # 403 on Windows - 374 on Linux
-    "full": 38,   # 414 on Windows - 376 on Linux
+    "quick": 29,  # 408 on Windows - 379 on Linux
+    "full": 38,   # 419 on Windows - 381 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 403, "full": 414}.items()
+    for t, count in {"quick": 408, "full": 419}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

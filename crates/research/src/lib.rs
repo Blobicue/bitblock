@@ -16,6 +16,7 @@ pub use bitblock_core::{
     tick, world,
 };
 
+pub mod commit_r1;
 pub mod coordinate_episode;
 pub mod display_artifact;
 pub mod display_store;
