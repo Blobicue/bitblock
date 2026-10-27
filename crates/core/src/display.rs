@@ -6,7 +6,9 @@
 
 use std::fmt;
 
-use crate::frame::{FrameFacts, FrameObservation, FrameRef};
+#[cfg(any(windows, test))]
+use crate::frame::FrameRef;
+use crate::frame::{FrameFacts, FrameObservation};
 use crate::frame_v2::{FrameReceiptV2, FrameReceiptV2Error, FrameStream};
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 
@@ -16,6 +18,7 @@ const DISPLAY_RECEIPT_V2_SCHEMA: &[u8] = b"bitblock/display-receipt/v2";
 const DISPLAY_POLICY_PAYLOAD_LEN: u64 = 13;
 const DISPLAY_RECEIPT_PAYLOAD_LEN: u64 = 312;
 pub const DISPLAY_RECEIPT_V2_PAYLOAD_LEN: usize = 378;
+#[cfg(any(windows, test))]
 const RGB_MASK: u32 = 0x00ff_ffff;
 const SRCCOPY_CAPTUREBLT: u32 = 0x40cc_0020;
 
@@ -158,6 +161,7 @@ impl DisplayCapture {
     }
 }
 
+#[cfg(any(windows, test))]
 /// One owned desktop readback after its pixels have been canonicalized and observed exactly once.
 ///
 /// Keeping the pixels and their observation together prevents successful capture finalization
@@ -168,6 +172,7 @@ struct CanonicalCapture {
     observation: FrameObservation,
 }
 
+#[cfg(any(windows, test))]
 /// Compares one already-canonicalized desktop readback against the expected XRGB frame.
 fn finalize_capture(
     expected: FrameRef<'_>,
@@ -201,6 +206,7 @@ fn finalize_capture(
     }
 }
 
+#[cfg(any(windows, test))]
 fn canonicalize_captured(expected: FrameRef<'_>, mut pixels: Vec<u32>) -> CanonicalCapture {
     for word in pixels.iter_mut() {
         *word &= RGB_MASK;

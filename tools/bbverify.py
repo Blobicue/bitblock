@@ -129,8 +129,14 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # reconciliation is per-lane and not per-total, and the replayed-tape test
 # that accounts for control actions arriving from a tape.
 # 402 -> 403 / 413 -> 414: one hostile-decoder control that distinguishes a
-# mathematical over-limit total from debug overflow and release wrapping.
-EXPECTED_TESTS = {"quick": 403, "full": 414}
+WINDOWS_ONLY_TESTS = {
+    "quick": 29,  # 403 on Windows - 374 on Linux
+    "full": 38,   # 414 on Windows - 376 on Linux
+}
+EXPECTED_TESTS = {
+    t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
+    for t, count in {"quick": 403, "full": 414}.items()
+}
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
 # build on cargo's lock. Sharing one, the two cargo invocations serialise: 7.1s

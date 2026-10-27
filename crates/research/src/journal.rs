@@ -1016,8 +1016,27 @@ fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
 }
 
 #[cfg(not(windows))]
-fn open_exclusive(_path: &Path, _create_new: bool) -> Result<File, JournalError> {
-    Err(JournalError::UnsupportedExclusivePlatform)
+fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
+    use std::os::unix::io::AsRawFd;
+
+    let mut options = OpenOptions::new();
+    options.read(true).write(true);
+    let phase = if create_new {
+        options.create_new(true);
+        JournalIoPhase::CreateNew
+    } else {
+        JournalIoPhase::OpenExisting
+    };
+    let file = options
+        .open(path)
+        .map_err(|source| JournalError::Io { phase, source })?;
+
+    let res = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if res != 0 {
+        let source = io::Error::last_os_error();
+        return Err(JournalError::Io { phase, source });
+    }
+    Ok(file)
 }
 
 impl fmt::Display for JournalError {
@@ -1777,8 +1796,7 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
-    mod windows {
+    mod tests_exclusive {
         use super::*;
         use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -1825,7 +1843,17 @@ mod tests {
             let (journal, receipt) = Journal::create_new(&path.0, StorageLimits::DEFAULT).unwrap();
             assert_eq!(receipt.file_bytes, 0);
             assert!(Journal::create_new(&path.0, StorageLimits::DEFAULT).is_err());
+            #[cfg(windows)]
             assert!(OpenOptions::new().read(true).open(&path.0).is_err());
+            #[cfg(not(windows))]
+            assert!(
+                Journal::open_existing(
+                    &path.0,
+                    StorageLimits::DEFAULT,
+                    AnchorPolicy::UnanchoredLocal
+                )
+                .is_err()
+            );
             drop(journal);
 
             assert!(OpenOptions::new().read(true).open(&path.0).is_ok());

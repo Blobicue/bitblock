@@ -105,6 +105,7 @@ name = "bitblock-research"
 version = "0.1.0"
 dependencies = [
  "bitblock-core",
+ "libc",
  "sha2",
  "windows-sys 0.61.2",
 ]

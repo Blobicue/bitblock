@@ -10,6 +10,9 @@ rust-version = "1.96"
 bitblock-core = { path = "../core", features = ["protocol-research"] }
 sha2 = { version = "=0.10.9", default-features = false }
 
+[target.'cfg(not(windows))'.dependencies]
+libc = { version = "=0.2.189", default-features = false }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
     "Win32_Devices_Display",
@@ -20,3 +23,4 @@ windows-sys = { version = "=0.61.2", features = [
     "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
 ] }
+

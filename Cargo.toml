@@ -48,6 +48,7 @@ windows-sys = { version = "=0.61.2", features = [
 # any opt-level, so f64 camera geometry is bit-identical across all of them.
 [profile.dev]
 opt-level = 3
+debug = 1
 debug-assertions = true
 overflow-checks = true
 

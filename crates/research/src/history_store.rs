@@ -2045,8 +2045,7 @@ mod tests {
         assert_ne!(alternate_history.head(), shorter_state.history().head());
     }
 
-    #[cfg(windows)]
-    mod windows {
+    mod file_backed {
         use super::*;
         use std::fs::OpenOptions;
         use std::io::{Read, Seek, SeekFrom, Write};
