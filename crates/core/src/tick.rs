@@ -20,6 +20,7 @@ use crate::frame::{FrameInput, FrameProtocolError};
 use crate::program::{EDIT_CANONICAL_LEN, Edit, EditCodecError, Operation};
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 
+/// Canonical schema identifier for a v3 simulation tick outcome payload.
 pub const TICK_OUTCOME_SCHEMA: &[u8] = b"bitblock/tick-outcome/v3";
 
 /// Bytes present in every v3 payload, excluding its ordered edit-attempt records.
@@ -34,14 +35,23 @@ pub const ACTION_LANE_COUNT: usize = 10;
 /// record and the tick outcome that consumes it count the same actions into the
 /// same slots and can be reconciled without a translation table.
 pub const LANE_MOVE_EDGE: usize = 0;
+/// Action-ledger lane ordinal for accepted camera look-delta events.
 pub const LANE_LOOK_DELTA: usize = 1;
+/// Action-ledger lane ordinal for accepted mouse wheel scroll-line events.
 pub const LANE_WHEEL_LINES: usize = 2;
+/// Action-ledger lane ordinal for accepted aim-targeted voxel delete attempts.
 pub const LANE_AIM_DELETE: usize = 3;
+/// Action-ledger lane ordinal for accepted aim-targeted voxel placement attempts.
 pub const LANE_AIM_PLACE: usize = 4;
+/// Action-ledger lane ordinal for accepted exact-coordinate edit attempts.
 pub const LANE_EXACT_EDIT: usize = 5;
+/// Action-ledger lane ordinal for accepted fit-world camera framing commands.
 pub const LANE_FIT_WORLD: usize = 6;
+/// Action-ledger lane ordinal for accepted sidebar visibility toggle commands.
 pub const LANE_TOGGLE_SIDEBAR: usize = 7;
+/// Action-ledger lane ordinal for accepted viewport resize events.
 pub const LANE_RESIZE: usize = 8;
+/// Action-ledger lane ordinal for accepted focus-loss motion-clearing events.
 pub const LANE_CLEAR_MOTION: usize = 9;
 
 /// Most accepted actions one tick may consume, matching the interaction tape's
@@ -106,6 +116,7 @@ pub struct TickActionLedger {
 }
 
 impl TickActionLedger {
+    /// Returns a zeroed per-tick action ledger with no accepted actions in any lane.
     pub const fn empty() -> Self {
         Self {
             lanes: [0; ACTION_LANE_COUNT],
@@ -151,6 +162,7 @@ impl TickActionLedger {
         Ok(())
     }
 
+    /// Returns the accepted action count recorded in the specified `lane` ordinal.
     pub const fn lane(&self, lane: usize) -> u32 {
         self.lanes[lane]
     }
@@ -254,6 +266,7 @@ pub struct TickInputFlags {
 }
 
 impl TickInputFlags {
+    /// Decodes packed 11-bit tick input flags, rejecting any set reserved upper bits.
     pub fn from_bits(bits: u16) -> Result<Self, TickProtocolError> {
         if bits & !INPUT_FLAG_MASK != 0 {
             return Err(TickProtocolError::ReservedInputFlags { bits });
@@ -261,6 +274,7 @@ impl TickInputFlags {
         Ok(Self { bits })
     }
 
+    /// Packs eleven Boolean movement, dirty-state, and viewport switches into `TickInputFlags`.
     #[allow(clippy::too_many_arguments)]
     pub const fn new(
         forward: bool,
@@ -290,50 +304,62 @@ impl TickInputFlags {
         }
     }
 
+    /// Returns the raw 16-bit integer representation of these tick input flags.
     pub const fn bits(self) -> u16 {
         self.bits
     }
 
+    /// Returns `true` if the forward movement control is active for this tick.
     pub const fn forward(self) -> bool {
         self.bits & (1 << 0) != 0
     }
 
+    /// Returns `true` if the backward movement control is active for this tick.
     pub const fn backward(self) -> bool {
         self.bits & (1 << 1) != 0
     }
 
+    /// Returns `true` if the strafe-left movement control is active for this tick.
     pub const fn left(self) -> bool {
         self.bits & (1 << 2) != 0
     }
 
+    /// Returns `true` if the strafe-right movement control is active for this tick.
     pub const fn right(self) -> bool {
         self.bits & (1 << 3) != 0
     }
 
+    /// Returns `true` if the vertical-up movement control is active for this tick.
     pub const fn up(self) -> bool {
         self.bits & (1 << 4) != 0
     }
 
+    /// Returns `true` if the vertical-down movement control is active for this tick.
     pub const fn down(self) -> bool {
         self.bits & (1 << 5) != 0
     }
 
+    /// Returns `true` if the camera fit-world command was requested for this tick.
     pub const fn fit_world(self) -> bool {
         self.bits & (1 << 6) != 0
     }
 
+    /// Returns `true` if entry state requires rendering a fresh game frame during this tick.
     pub const fn game_dirty(self) -> bool {
         self.bits & (1 << 7) != 0
     }
 
+    /// Returns `true` if sidebar state changed and requires a composite frame render.
     pub const fn sidebar_dirty(self) -> bool {
         self.bits & (1 << 8) != 0
     }
 
+    /// Returns `true` if the diagnostic sidebar overlay is visible during this tick.
     pub const fn sidebar_visible(self) -> bool {
         self.bits & (1 << 9) != 0
     }
 
+    /// Returns `true` if a viewport resize triggered a camera refit on this tick.
     pub const fn viewport_refit(self) -> bool {
         self.bits & (1 << 10) != 0
     }
@@ -353,6 +379,7 @@ pub struct TickInputState {
 }
 
 impl TickInputState {
+    /// Validates finite mouse deltas and positive viewport dimensions to construct `TickInputState`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         flags: TickInputFlags,
@@ -430,26 +457,32 @@ impl TickInputState {
         })
     }
 
+    /// Returns the packed Boolean control and dirty-state flags for this tick.
     pub const fn flags(self) -> TickInputFlags {
         self.flags
     }
 
+    /// Returns the horizontal mouse look delta consumed by this tick.
     pub fn mouse_x(self) -> f64 {
         f64::from_bits(self.mouse_x_bits)
     }
 
+    /// Returns the vertical mouse look delta consumed by this tick.
     pub fn mouse_y(self) -> f64 {
         f64::from_bits(self.mouse_y_bits)
     }
 
+    /// Returns the mouse wheel scroll-line delta consumed by this tick.
     pub fn wheel(self) -> f64 {
         f64::from_bits(self.wheel_bits)
     }
 
+    /// Returns the raw IEEE-754 `u64` bit patterns for `[mouse_x, mouse_y, wheel]`.
     pub const fn mouse_bits(self) -> [u64; 3] {
         [self.mouse_x_bits, self.mouse_y_bits, self.wheel_bits]
     }
 
+    /// Returns `[simulation_width, simulation_height, output_width, output_height]` in pixels.
     pub const fn dimensions(self) -> [u32; 4] {
         [
             self.simulation_width,
@@ -465,6 +498,7 @@ impl TickInputState {
 pub struct TickCameraState([u64; CAMERA_LANES]);
 
 impl TickCameraState {
+    /// Captures the ten bit-exact IEEE-754 `f64` lanes of `camera` into `TickCameraState`.
     pub fn capture(camera: &Camera) -> Self {
         let position = camera.position();
         let anchor = camera.observation_anchor();
@@ -482,6 +516,7 @@ impl TickCameraState {
         ])
     }
 
+    /// Validates finiteness and angular/distance bounds for ten raw camera `f64` bit lanes.
     pub fn from_bits(bits: [u64; CAMERA_LANES]) -> Result<Self, TickProtocolError> {
         const FIELDS: [&str; CAMERA_LANES] = [
             "camera_position_x",
@@ -522,6 +557,7 @@ impl TickCameraState {
         Ok(Self(bits))
     }
 
+    /// Returns the ten raw `u64` IEEE-754 bit lanes of this post-tick camera state.
     pub const fn bits(self) -> [u64; CAMERA_LANES] {
         self.0
     }
@@ -540,6 +576,7 @@ pub enum TickAttempt {
 }
 
 impl TickAttempt {
+    /// Returns the canonical 1-byte wire tag (`0..=6`) identifying this edit attempt variant.
     pub const fn canonical_code(self) -> u8 {
         match self {
             Self::AimDeleteUnresolved => 0,
@@ -552,6 +589,7 @@ impl TickAttempt {
         }
     }
 
+    /// Returns the resolved coordinate `Edit` associated with this attempt, if any.
     pub const fn edit(self) -> Option<Edit> {
         match self {
             Self::AimDeleteUnresolved | Self::AimPlaceUnresolved => None,
@@ -563,6 +601,7 @@ impl TickAttempt {
         }
     }
 
+    /// Returns the `Edit` if this attempt was admitted and executed against the world and history.
     pub const fn executed_edit(self) -> Option<Edit> {
         match self {
             Self::AimDeleteExecuted(edit)
@@ -626,16 +665,19 @@ pub struct TickFrameCommitment {
 }
 
 impl TickFrameCommitment {
+    /// Validates `FrameInput` and `Frame` tag kinds to construct a `TickFrameCommitment`.
     pub fn new(input: ContentTag, frame: ContentTag) -> Result<Self, TickProtocolError> {
         require_kind("frame commitment input", input, TagKind::FrameInput)?;
         require_kind("frame commitment frame", frame, TagKind::Frame)?;
         Ok(Self { input, frame })
     }
 
+    /// Returns the `TagKind::FrameInput` content tag committed for this rendered frame.
     pub const fn input(self) -> ContentTag {
         self.input
     }
 
+    /// Returns the `TagKind::Frame` content tag of the rendered framebuffer bytes.
     pub const fn frame(self) -> ContentTag {
         self.frame
     }
@@ -660,6 +702,7 @@ pub struct TickOutcome {
 }
 
 impl TickOutcome {
+    /// Validates all tick transition, action-ledger, and frame-presence invariants to build a `TickOutcome`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         parent: Option<ContentTag>,
@@ -761,58 +804,72 @@ impl TickOutcome {
         )
     }
 
+    /// Returns the canonical `TagKind::TickOutcome` content tag of this tick outcome.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the parent `TickOutcome` content tag, or `None` for tick zero.
     pub const fn parent(&self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the zero-based simulation tick ordinal of this outcome.
     pub const fn tick(&self) -> u64 {
         self.tick
     }
 
+    /// Returns the canonical world content tag observed at the start of this tick.
     pub const fn pre_world(&self) -> ContentTag {
         self.pre_world
     }
 
+    /// Returns the coordinate-history head receipt tag observed at the start of this tick.
     pub const fn pre_history(&self) -> ContentTag {
         self.pre_history
     }
 
+    /// Returns the non-edit control inputs and viewport dimensions consumed by this tick.
     pub const fn input(&self) -> TickInputState {
         self.input
     }
 
+    /// Returns the ordered slice of edit attempts and their dispositions during this tick.
     pub fn attempts(&self) -> &[TickAttempt] {
         &self.attempts
     }
 
+    /// Returns the canonical world content tag produced at the end of this tick.
     pub const fn post_world(&self) -> ContentTag {
         self.post_world
     }
 
+    /// Returns the coordinate-history head receipt tag at the end of this tick.
     pub const fn post_history(&self) -> ContentTag {
         self.post_history
     }
 
+    /// Returns the bit-exact post-tick camera state captured after observer integration.
     pub const fn post_camera(&self) -> TickCameraState {
         self.post_camera
     }
 
+    /// Returns the game framebuffer input/output commitment if a game frame was rendered.
     pub const fn game(&self) -> Option<TickFrameCommitment> {
         self.game
     }
 
+    /// Returns the composite framebuffer input/output commitment if a composite frame was rendered.
     pub const fn composite(&self) -> Option<TickFrameCommitment> {
         self.composite
     }
 
+    /// Returns `true` if this tick produced a composite output frame commitment.
     pub const fn rendered(&self) -> bool {
         self.composite.is_some()
     }
 
+    /// Iterates over the subset of attempted edits that were admitted and executed during this tick.
     pub fn executed_edits(&self) -> impl Iterator<Item = Edit> + '_ {
         self.attempts
             .iter()
@@ -853,11 +910,13 @@ impl TickOutcome {
         Ok(())
     }
 
+    /// Returns the exact byte length of this tick outcome's canonical v3 payload.
     pub fn encoded_len(&self) -> usize {
         canonical_payload_len(&self.attempts)
             .expect("an admitted tick outcome has a representable payload length")
     }
 
+    /// Encodes this tick outcome into a newly allocated canonical v3 byte vector.
     pub fn encode_canonical(&self) -> Vec<u8> {
         let expected = self.encoded_len();
         let mut bytes = Vec::with_capacity(expected);
@@ -871,11 +930,13 @@ impl TickOutcome {
         encode_fields(self, &mut sink);
     }
 
+    /// Decodes and validates a canonical v3 `TickOutcome` using default decode resource limits.
     #[cfg(any(test, feature = "protocol-research"))]
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, TickProtocolError> {
         Self::decode_canonical_with_limits(bytes, TickDecodeLimits::default())
     }
 
+    /// Decodes and validates a canonical v3 `TickOutcome` under caller-supplied `TickDecodeLimits`.
     #[cfg(any(test, feature = "protocol-research"))]
     pub fn decode_canonical_with_limits(
         bytes: &[u8],
@@ -1039,6 +1100,7 @@ impl TickOutcome {
         Ok(outcome)
     }
 
+    /// Re-verifies all internal invariants and checks that `self.tag()` matches the canonical payload hash.
     pub fn verify(&self) -> Result<(), TickProtocolError> {
         if self.parent.is_none() != (self.tick == 0) {
             return Err(TickProtocolError::ParentTickMismatch {
@@ -1359,6 +1421,7 @@ fn validate_world_history_progress(
     Ok(())
 }
 
+/// Validation, invariant, or canonical codec failure for a simulation `TickOutcome`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TickProtocolError {
     /// An action was counted into a lane that does not exist.

@@ -15,6 +15,7 @@ use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::render::{crosshair_policy_tag, renderer_profile_tag};
 use crate::world::{Bounds, Coord};
 
+/// Fixed horizontal width in pixels reserved for the F3 diagnostic metrics sidebar panel.
 pub const SIDEBAR_WIDTH: u32 = 400;
 
 const SNAPSHOT_SCHEMA: &[u8] = b"bitblock/sidebar/metric-snapshot/v1";
@@ -36,6 +37,7 @@ const HEADING: u32 = 0x00f2_c14e;
 const LABEL: u32 = 0x008d_a2b8;
 const VALUE: u32 = 0x00e8_edf2;
 
+/// Static pairing between a human-readable sidebar metric alias and its canonical registry definition tag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MetricBinding {
     pub alias: &'static str,
@@ -188,6 +190,7 @@ pub const DISPLAYED_METRICS: &[MetricBinding] = &[
     ),
 ];
 
+/// Predecessor display-capture verification status reported inside a sidebar metric snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DisplayStatus {
@@ -212,6 +215,7 @@ impl DisplayStatus {
     }
 }
 
+/// Measured glyph, pixel, and clipping counts emitted while rasterizing the sidebar text region.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SidebarRasterFacts {
     pub displayed_metrics: u32,
@@ -221,6 +225,7 @@ pub struct SidebarRasterFacts {
     pub unavailable_fields: u32,
 }
 
+/// Complete predecessor-bound telemetry payload hashed and rendered into the F3 sidebar panel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SidebarSnapshot {
     pub frame_source_tick: u64,
@@ -255,6 +260,7 @@ pub struct SidebarSnapshot {
 }
 
 impl SidebarSnapshot {
+    /// Computes the canonical `MetricSnapshot` content tag over all fixed-width sidebar telemetry fields.
     pub fn tag(&self) -> ContentTag {
         assert_eq!(self.world.kind(), TagKind::World);
         assert_eq!(self.history_head.kind(), TagKind::Receipt);
@@ -395,12 +401,14 @@ impl SidebarSnapshot {
     }
 }
 
+/// Canonical `FrameInput` commitment binding a simulation frame, overlay snapshot, and composite viewport geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompositeFrameInput {
     tag: ContentTag,
 }
 
 impl CompositeFrameInput {
+    /// Hashes a composite `FrameInput` tag over the game frame input, rendered game frame, overlay, and dimensions.
     pub fn new(
         game_input: ContentTag,
         game_frame: ContentTag,
@@ -431,16 +439,19 @@ impl CompositeFrameInput {
         Self { tag }
     }
 
+    /// Returns the canonical `FrameInput` content tag for this composite client frame input.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 }
 
+/// Wraps a `MetricSnapshot` content tag inside an `OverlayInput` governed by `composite_policy_tag`.
 pub fn composite_overlay_input(snapshot: ContentTag) -> Result<OverlayInput, FrameProtocolError> {
     assert_eq!(snapshot.kind(), TagKind::MetricSnapshot);
     OverlayInput::new(composite_policy_tag(), Some(snapshot))
 }
 
+/// Returns the memoized `Policy` content tag for the 3x5 ASCII sidebar rasterizer and metric bindings.
 pub fn sidebar_policy_tag() -> ContentTag {
     *SIDEBAR_POLICY_TAG.get_or_init(|| {
         hash_canonical(
@@ -507,6 +518,7 @@ fn sidebar_policy_payload_reference() -> Vec<u8> {
     payload
 }
 
+/// Returns the memoized `Policy` content tag uniting renderer profile, crosshair policy, and sidebar policy.
 pub fn composite_policy_tag() -> ContentTag {
     *COMPOSITE_POLICY_TAG.get_or_init(|| {
         hash_canonical(TagKind::Policy, COMPOSITE_POLICY_SCHEMA, 96, |sink| {
@@ -518,6 +530,7 @@ pub fn composite_policy_tag() -> ContentTag {
     })
 }
 
+/// Single-buffer XRGB8888 client compositor uniting the left simulation viewport and right F3 sidebar panel.
 pub struct FrameCompositor {
     width: u32,
     height: u32,
@@ -537,6 +550,7 @@ pub struct FrameCompositor {
 }
 
 impl FrameCompositor {
+    /// Allocates a `FrameCompositor` sized for the full output dimensions and left simulation viewport width.
     pub fn new(width: u32, height: u32, simulation_width: u32) -> Self {
         let mut compositor = Self {
             width: 0,
@@ -550,6 +564,7 @@ impl FrameCompositor {
         compositor
     }
 
+    /// Resizes the composite XRGB8888 output buffer and invalidates any cached simulation frame prefix.
     pub fn resize(&mut self, width: u32, height: u32, simulation_width: u32) {
         assert!(simulation_width <= width);
         self.width = width;
@@ -560,22 +575,27 @@ impl FrameCompositor {
         self.last_game_prefix_copy_words = 0;
     }
 
+    /// Returns the total horizontal width in pixels of the composite client framebuffer.
     pub const fn width(&self) -> u32 {
         self.width
     }
 
+    /// Returns the vertical height in pixels of the composite client framebuffer.
     pub const fn height(&self) -> u32 {
         self.height
     }
 
+    /// Returns the horizontal width in pixels of the left simulation viewport region.
     pub const fn simulation_width(&self) -> u32 {
         self.simulation_width
     }
 
+    /// Returns the horizontal width in pixels of the right sidebar panel region.
     pub const fn sidebar_width(&self) -> u32 {
         self.width - self.simulation_width
     }
 
+    /// Borrows the row-major XRGB8888 pixel slice of the composite client framebuffer.
     pub fn pixels(&self) -> &[u32] {
         &self.pixels
     }
@@ -585,6 +605,7 @@ impl FrameCompositor {
         self.last_game_prefix_copy_words
     }
 
+    /// Copies simulation row prefixes and rasterizes the right-hand F3 sidebar from `snapshot`.
     pub fn compose(
         &mut self,
         game_pixels: &[u32],
@@ -671,6 +692,7 @@ pub struct TwoBufferReferenceCompositor {
 
 #[cfg(any(test, feature = "protocol-research"))]
 impl TwoBufferReferenceCompositor {
+    /// Allocates the two-buffer reference compositor with separate sidebar and composite pixel buffers.
     pub fn new(width: u32, height: u32, simulation_width: u32) -> Self {
         assert!(simulation_width <= width);
         Self {
@@ -682,6 +704,7 @@ impl TwoBufferReferenceCompositor {
         }
     }
 
+    /// Rasterizes the sidebar into a staging buffer before copying both regions into the output buffer.
     pub fn compose(
         &mut self,
         game_pixels: &[u32],
@@ -719,6 +742,7 @@ impl TwoBufferReferenceCompositor {
         facts
     }
 
+    /// Borrows the composed row-major XRGB8888 output pixel slice from the reference compositor.
     pub fn pixels(&self) -> &[u32] {
         &self.pixels
     }

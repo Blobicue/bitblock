@@ -115,6 +115,7 @@ pub fn renderer_profile_tag() -> ContentTag {
     })
 }
 
+/// Declared semantic policy tag for the static physical-pixel crosshair overlay.
 pub fn crosshair_policy_tag() -> ContentTag {
     *CROSSHAIR_POLICY_TAG.get_or_init(|| {
         hash_canonical(TagKind::Policy, CROSSHAIR_POLICY_SCHEMA, 16, |sink| {
@@ -135,6 +136,7 @@ pub fn crosshair_overlay_input() -> OverlayInput {
         .expect("crosshair policy has the required policy tag kind")
 }
 
+/// Nearest occupied voxel intersection along a world-space ray, with adjacent placement coordinate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hit {
     pub coord: Coord,
@@ -154,6 +156,7 @@ pub struct SweepHit {
     pub distance: f64,
 }
 
+/// Software voxel rasterizer maintaining XRGB pixel and `f64` depth framebuffers.
 pub struct Renderer {
     width: u32,
     height: u32,
@@ -189,14 +192,17 @@ pub struct IllegalFinalGameColor {
 }
 
 impl IllegalFinalGameColor {
+    /// Returns the linear row-major framebuffer index of the first illegal game pixel.
     pub const fn pixel_index(self) -> usize {
         self.pixel_index
     }
 
+    /// Returns the full 32-bit XRGB framebuffer word recorded at the illegal pixel.
     pub const fn word(self) -> u32 {
         self.word
     }
 
+    /// Returns the low 24-bit RGB payload of the illegal post-overlay game pixel.
     pub const fn rgb(self) -> u32 {
         self.rgb
     }
@@ -215,18 +221,22 @@ pub struct FinalGamePaletteAudit {
 }
 
 impl FinalGamePaletteAudit {
+    /// Returns the total number of game framebuffer pixels inspected by this palette audit.
     pub const fn pixel_count(self) -> u64 {
         self.pixel_count
     }
 
+    /// Returns the count of game framebuffer pixels outside the declared final RGB palette.
     pub const fn illegal_rgb_count(self) -> u64 {
         self.illegal_rgb_count
     }
 
+    /// Returns the first out-of-palette pixel witness encountered during the framebuffer scan.
     pub const fn first_illegal(self) -> Option<IllegalFinalGameColor> {
         self.first_illegal
     }
 
+    /// Returns `true` when every inspected game pixel belongs to the declared final RGB palette.
     pub const fn is_valid(self) -> bool {
         self.illegal_rgb_count == 0
     }
@@ -246,6 +256,7 @@ impl FinalGamePaletteAudit {
 }
 
 impl Renderer {
+    /// Allocates a software voxel renderer sized to `width` by `height` physical pixels.
     pub fn new(width: u32, height: u32) -> Self {
         let mut renderer = Self {
             width: 0,
@@ -265,6 +276,7 @@ impl Renderer {
         renderer
     }
 
+    /// Resizes the renderer pixel and depth buffers to `width` by `height` physical pixels.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
@@ -275,14 +287,17 @@ impl Renderer {
         self.depth.resize(len, f64::INFINITY);
     }
 
+    /// Returns the current game framebuffer width in physical pixels.
     pub const fn width(&self) -> u32 {
         self.width
     }
 
+    /// Returns the current game framebuffer height in physical pixels.
     pub const fn height(&self) -> u32 {
         self.height
     }
 
+    /// Returns the row-major slice of 32-bit XRGB game framebuffer pixels.
     pub fn pixels(&self) -> &[u32] {
         &self.pixels
     }
@@ -304,14 +319,17 @@ impl Renderer {
         self.world_pixels
     }
 
+    /// Enables or disables unoptimized reference voxel traversal without frustum or occlusion culling.
     pub fn set_reference_traversal(&mut self, enabled: bool) {
         self.reference_traversal = enabled;
     }
 
+    /// Returns `true` if the renderer is configured to use unoptimized reference voxel traversal.
     pub const fn is_reference_traversal(&self) -> bool {
         self.reference_traversal
     }
 
+    /// Projects and rasterizes all visible occupied voxels of `world` from `camera` into the framebuffer.
     pub fn render(&mut self, world: &World, camera: &Camera) {
         self.pixels.fill(BACKGROUND);
         self.depth.fill(f64::INFINITY);
@@ -756,6 +774,7 @@ fn test_raycast_coord(best: Option<Hit>, ray: Ray, coord: Coord) -> Option<Hit> 
     select_raycast_hit(best, candidate)
 }
 
+/// Returns the non-negative entry distance along `ray` into the closed axis-aligned box `min..=max`.
 pub fn ray_aabb_entry_distance(ray: Ray, min: Vec3, max: Vec3) -> Option<f64> {
     let interval = box_interval(ray.origin, ray.direction, min, max)?;
     if interval.exit < 0.0 {
@@ -768,6 +787,7 @@ pub fn ray_aabb_entry_distance(ray: Ray, min: Vec3, max: Vec3) -> Option<f64> {
     })
 }
 
+/// Exhaustively tests every occupied coordinate in `world` to find the nearest ray intersection.
 pub fn raycast_reference(world: &World, ray: Ray) -> Option<Hit> {
     let mut best: Option<Hit> = None;
 
@@ -778,6 +798,7 @@ pub fn raycast_reference(world: &World, ray: Ray) -> Option<Hit> {
     best
 }
 
+/// Finds the nearest occupied voxel hit along `ray` using chunk-bounds AABB pruning.
 pub fn raycast(world: &World, ray: Ray) -> Option<Hit> {
     let mut best: Option<Hit> = None;
 
@@ -837,6 +858,7 @@ fn test_sweep_coord(
     if replace { Some(candidate) } else { best }
 }
 
+/// Exhaustively sweeps a point segment across all occupied voxels without chunk-level pruning.
 pub fn sweep_point_reference(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
     let movement_length = validate_sweep_movement(start, delta);
     let mut best: Option<(f64, Coord)> = None;
@@ -880,6 +902,7 @@ pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> 
     })
 }
 
+/// Maps a finite world-space point to the integer voxel coordinate whose closed unit cube contains it.
 pub fn coord_containing(point: Vec3) -> Option<Coord> {
     fn axis(value: f64) -> Option<i64> {
         let centered = (value + 0.5).floor();
@@ -890,6 +913,7 @@ pub fn coord_containing(point: Vec3) -> Option<Coord> {
     Some(Coord::new(axis(point.x)?, axis(point.y)?, axis(point.z)?))
 }
 
+/// Expands inclusive integer voxel `Bounds` into its world-space `min` and `max` AABB corners.
 pub fn bounds_aabb(bounds: Bounds) -> (Vec3, Vec3) {
     (
         Vec3::new(

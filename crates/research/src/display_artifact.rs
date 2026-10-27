@@ -15,7 +15,9 @@ use crate::frame::{CANONICAL_FRAME_DOMAIN, FrameObservation, FrameRef, FrameShap
 use crate::protocol::{ContentTag, TagError, TagKind, hash_canonical};
 use crate::storage::MAX_STORAGE_PAYLOAD_BYTES;
 
+/// Canonical schema string for self-contained display capture artifact payloads.
 pub const DISPLAY_CAPTURE_ARTIFACT_SCHEMA: &[u8] = b"bitblock/display-capture-artifact/v1";
+/// Maximum byte length admitted for a canonical display capture artifact payload.
 pub const MAX_DISPLAY_CAPTURE_ARTIFACT_BYTES: usize = MAX_STORAGE_PAYLOAD_BYTES;
 
 const LENGTH_BYTES: usize = 8;
@@ -24,6 +26,7 @@ const FIXED_PAYLOAD_BYTES: usize =
     DISPLAY_RECEIPT_V2_PAYLOAD_LEN + LENGTH_BYTES + FORM_BYTES + LENGTH_BYTES;
 const FRAME_FIXED_BYTES: usize = 2 + CANONICAL_FRAME_DOMAIN.len() + 4 + 4 + 8;
 
+/// Wire representation mode for captured desktop pixels inside a `DisplayCaptureArtifact`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CapturedPixelForm {
@@ -49,6 +52,7 @@ pub struct DisplayCaptureArtifact {
 }
 
 impl DisplayCaptureArtifact {
+    /// Validates and constructs a `DisplayCaptureArtifact` from a receipt and frame slices.
     pub fn new(
         receipt: DisplayReceiptV2,
         expected: FrameRef<'_>,
@@ -176,18 +180,22 @@ impl DisplayCaptureArtifact {
         Ok(artifact)
     }
 
+    /// Returns the canonical content tag identifying this display capture artifact.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the `DisplayReceiptV2` bound to this display capture artifact.
     pub const fn receipt(&self) -> DisplayReceiptV2 {
         self.receipt
     }
 
+    /// Returns the canonical expected composite framebuffer pixels for this artifact.
     pub fn expected_pixels(&self) -> &[u32] {
         &self.expected_pixels
     }
 
+    /// Returns the captured desktop raster pixels when a complete capture occurred.
     pub fn captured_pixels(&self) -> Option<&[u32]> {
         match &self.captured_pixels {
             CapturedPixels::Absent => None,
@@ -196,6 +204,7 @@ impl DisplayCaptureArtifact {
         }
     }
 
+    /// Returns the wire storage form selected for the captured pixel payload.
     pub const fn captured_form(&self) -> CapturedPixelForm {
         match self.captured_pixels {
             CapturedPixels::Absent => CapturedPixelForm::Absent,
@@ -204,11 +213,13 @@ impl DisplayCaptureArtifact {
         }
     }
 
+    /// Returns the exact canonical byte length of this display capture artifact.
     pub fn encoded_len(&self) -> usize {
         self.preflight_payload_len()
             .expect("admitted display artifact length remains valid")
     }
 
+    /// Encodes this `DisplayCaptureArtifact` into its canonical byte representation.
     pub fn encode_canonical(&self) -> Result<Vec<u8>, DisplayArtifactError> {
         let length = self.preflight_payload_len()?;
         let mut encoded = Vec::new();
@@ -223,6 +234,7 @@ impl DisplayCaptureArtifact {
         Ok(encoded)
     }
 
+    /// Decodes and validates a `DisplayCaptureArtifact` from canonical payload bytes.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, DisplayArtifactError> {
         if bytes.len() > MAX_DISPLAY_CAPTURE_ARTIFACT_BYTES {
             return Err(DisplayArtifactError::PayloadTooLarge {
@@ -332,6 +344,7 @@ impl DisplayCaptureArtifact {
         Ok(artifact)
     }
 
+    /// Re-verifies the receipt, frame observations, and content tag of this artifact.
     pub fn verify(&self) -> Result<(), DisplayArtifactError> {
         self.receipt
             .verify()
@@ -604,6 +617,7 @@ fn decode_frame(field: &'static str, bytes: &[u8]) -> Result<DecodedFrame, Displ
     })
 }
 
+/// Validation failure when decoding an embedded canonical framebuffer payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CanonicalFrameError {
     Truncated,
@@ -622,6 +636,7 @@ pub enum CanonicalFrameError {
     },
 }
 
+/// Validation or canonical codec failure for a `DisplayCaptureArtifact`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayArtifactError {
     InvalidDisplayReceipt(DisplayProtocolError),

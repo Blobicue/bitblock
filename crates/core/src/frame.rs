@@ -14,8 +14,11 @@ use crate::protocol::{ContentTag, TagKind, hash_canonical};
 /// The stream is: two-byte big-endian domain length, these domain bytes, big-endian width,
 /// height and pixel count, followed by every complete XRGB word in row-major big-endian order.
 pub const CANONICAL_FRAME_DOMAIN: &[u8] = b"bitblock/frame/xrgb8888-row-major/v1";
+/// Canonical schema identifier for `OverlayInput` policy and dynamic payload bindings.
 pub const OVERLAY_INPUT_SCHEMA: &[u8] = b"bitblock/overlay-input/v1";
+/// Canonical schema identifier for `FrameInput` renderer invocation commitments.
 pub const FRAME_INPUT_SCHEMA: &[u8] = b"bitblock/frame-input/v1";
+/// Canonical schema identifier for v1 `FrameReceipt` submitted-frame provenance records.
 pub const FRAME_RECEIPT_SCHEMA: &[u8] = b"bitblock/frame-receipt/v1";
 
 const RGB_MASK: u32 = 0x00ff_ffff;
@@ -33,6 +36,7 @@ pub struct FrameRef<'a> {
 }
 
 impl<'a> FrameRef<'a> {
+    /// Constructs a validated `FrameRef` after checking that `xrgb.len()` equals `width * height`.
     pub fn new(width: u32, height: u32, xrgb: &'a [u32]) -> Result<Self, FrameShapeError> {
         let expected = u64::from(width) * u64::from(height);
         if expected != xrgb.len() as u64 {
@@ -50,18 +54,22 @@ impl<'a> FrameRef<'a> {
         })
     }
 
+    /// Returns the horizontal width in pixels of this validated CPU framebuffer view.
     pub const fn width(self) -> u32 {
         self.width
     }
 
+    /// Returns the vertical height in pixels of this validated CPU framebuffer view.
     pub const fn height(self) -> u32 {
         self.height
     }
 
+    /// Returns the underlying row-major XRGB8888 pixel slice of this framebuffer view.
     pub const fn pixels(self) -> &'a [u32] {
         self.xrgb
     }
 
+    /// Computes RGB channel sums, set-bit counts, and high-byte validity facts across `self.pixels()`.
     pub fn facts(self) -> FrameFacts {
         let mut facts = FrameFacts {
             pixel_count: self.xrgb.len() as u64,
@@ -104,6 +112,7 @@ impl<'a> FrameRef<'a> {
         }
     }
 
+    /// Returns the exact byte length of the canonical `CANONICAL_FRAME_DOMAIN` stream for `self`.
     pub fn canonical_len(self) -> usize {
         2 + CANONICAL_FRAME_DOMAIN.len() + 4 + 4 + 8 + self.xrgb.len() * 4
     }
@@ -154,6 +163,7 @@ impl<'a> FrameRef<'a> {
     }
 }
 
+/// Combined single-pass `FrameFacts` summary and canonical `Frame` content tag for a framebuffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameObservation {
     pub facts: FrameFacts,
@@ -172,6 +182,7 @@ pub struct OverlayInput {
 }
 
 impl OverlayInput {
+    /// Constructs a canonical `OverlayInput` commitment from a `Policy` tag and optional payload tag.
     pub fn new(
         policy: ContentTag,
         payload: Option<ContentTag>,
@@ -185,18 +196,22 @@ impl OverlayInput {
         })
     }
 
+    /// Returns the `Policy` content tag governing the overlay rasterization rules.
     pub const fn policy(self) -> ContentTag {
         self.policy
     }
 
+    /// Returns the optional dynamic payload content tag bound to this overlay input.
     pub const fn payload(self) -> Option<ContentTag> {
         self.payload
     }
 
+    /// Returns the canonical `Policy` content tag representing this `OverlayInput` commitment.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Verifies that `self.policy` has kind `Policy` and `self.tag` matches the canonical encoding.
     pub fn verify(self) -> Result<(), FrameProtocolError> {
         require_kind("overlay policy", self.policy, TagKind::Policy)?;
         if self.tag != self.recompute_tag() {
@@ -268,6 +283,7 @@ pub struct FrameInput {
 }
 
 impl FrameInput {
+    /// Captures a canonical `FrameInput` commitment from `world`, `camera`, viewport dimensions, and policies.
     pub fn capture(
         world: ContentTag,
         camera: &Camera,
@@ -339,26 +355,32 @@ impl FrameInput {
         })
     }
 
+    /// Returns the `World` content tag committed inside this `FrameInput`.
     pub const fn world(self) -> ContentTag {
         self.world
     }
 
+    /// Returns the `(width, height)` physical viewport dimensions in pixels committed by `self`.
     pub const fn viewport(self) -> (u32, u32) {
         (self.width, self.height)
     }
 
+    /// Returns the `Policy` content tag identifying the renderer profile for this frame input.
     pub const fn renderer_profile(self) -> ContentTag {
         self.renderer_profile
     }
 
+    /// Returns the `Policy` content tag identifying the `OverlayInput` commitment for this frame.
     pub const fn overlay_input(self) -> ContentTag {
         self.overlay_input
     }
 
+    /// Returns the canonical `FrameInput` content tag computed over all committed input fields.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Verifies that all bound tags have their required kinds and `self.tag` matches the canonical digest.
     pub fn verify(self) -> Result<(), FrameProtocolError> {
         require_kind("frame world", self.world, TagKind::World)?;
         require_kind("renderer profile", self.renderer_profile, TagKind::Policy)?;
@@ -418,6 +440,7 @@ pub struct FrameReceipt {
 }
 
 impl FrameReceipt {
+    /// Constructs a canonical v1 `FrameReceipt` binding `parent`, `source_tick`, `input`, and `frame`.
     pub fn new(
         parent: Option<ContentTag>,
         source_tick: u64,
@@ -438,22 +461,27 @@ impl FrameReceipt {
         })
     }
 
+    /// Returns the canonical `FrameReceipt` content tag for this v1 submitted-frame receipt.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the optional parent `FrameReceipt` content tag in the v1 frame ledger chain.
     pub const fn parent(self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the monotonically increasing simulation `source_tick` index for this v1 receipt.
     pub const fn source_tick(self) -> u64 {
         self.source_tick
     }
 
+    /// Returns the `FrameInput` content tag committed by this v1 frame receipt.
     pub const fn input(self) -> ContentTag {
         self.input
     }
 
+    /// Returns the canonical XRGB8888 `Frame` content tag committed by this v1 frame receipt.
     pub const fn frame(self) -> ContentTag {
         self.frame
     }
@@ -499,22 +527,27 @@ pub struct FrameLedger {
 }
 
 impl FrameLedger {
+    /// Borrows the ordered slice of committed v1 `FrameReceipt` entries in this frame ledger.
     pub fn receipts(&self) -> &[FrameReceipt] {
         &self.receipts
     }
 
+    /// Returns `true` when this v1 frame ledger contains no committed frame receipts.
     pub fn is_empty(&self) -> bool {
         self.receipts.is_empty()
     }
 
+    /// Returns the number of v1 `FrameReceipt` entries currently recorded in this frame ledger.
     pub fn len(&self) -> usize {
         self.receipts.len()
     }
 
+    /// Returns the `FrameReceipt` content tag at the tip of this v1 ledger, or `None` if empty.
     pub fn head(&self) -> Option<ContentTag> {
         self.receipts.last().map(|receipt| receipt.tag)
     }
 
+    /// Verifies parent linkage, tick monotonicity, and digest integrity before appending `receipt`.
     pub fn append(&mut self, receipt: FrameReceipt) -> Result<&FrameReceipt, FrameProtocolError> {
         let expected_parent = self.head();
         if receipt.parent != expected_parent {
@@ -541,6 +574,7 @@ impl FrameLedger {
             .expect("a just-appended frame receipt must exist"))
     }
 
+    /// Re-verifies parent linkage, strictly increasing `source_tick` order, and tags across all receipts.
     pub fn verify(&self) -> Result<(), FrameProtocolError> {
         let mut rebuilt = Self::default();
         for &receipt in &self.receipts {
@@ -550,6 +584,7 @@ impl FrameLedger {
     }
 }
 
+/// Protocol error returned when constructing or verifying `OverlayInput`, `FrameInput`, or `FrameReceipt`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FrameProtocolError {
     WrongKind {
@@ -621,6 +656,7 @@ fn require_kind(
     Ok(())
 }
 
+/// Deterministic pixel, RGB channel-sum, and high-byte validity statistics for an XRGB8888 framebuffer.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameFacts {
     /// Complete physical-pixel count, including background and overlay pixels.
@@ -637,6 +673,7 @@ pub struct FrameFacts {
     pub blue_sum: u64,
 }
 
+/// Dimension or slice-length mismatch returned when constructing or copying a `FrameRef`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FrameShapeError {
     PixelCount {

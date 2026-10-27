@@ -10,7 +10,9 @@ use std::fmt;
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::tick::{TickFrameCommitment, TickOutcome, TickProtocolError, verify_successor};
 
+/// Canonical schema identifier for `FrameReceiptV2` tick-outcome-bound frame receipts.
 pub const FRAME_RECEIPT_V2_SCHEMA: &[u8] = b"bitblock/frame-receipt/v2";
+/// Fixed canonical payload byte length for a `FrameReceiptV2` under `FRAME_RECEIPT_V2_SCHEMA`.
 pub const FRAME_RECEIPT_V2_PAYLOAD_LEN: usize = 130;
 
 /// Which outcome commitment the receipt declares.
@@ -55,6 +57,7 @@ pub struct FrameReceiptV2 {
 }
 
 impl FrameReceiptV2 {
+    /// Constructs a canonical `FrameReceiptV2` binding `parent`, `stream`, `outcome`, `input`, and `frame`.
     pub fn new(
         parent: Option<ContentTag>,
         stream: FrameStream,
@@ -78,30 +81,37 @@ impl FrameReceiptV2 {
         })
     }
 
+    /// Returns the canonical `FrameReceipt` content tag for this v2 frame receipt.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the optional parent `FrameReceipt` content tag in the v2 frame stream chain.
     pub const fn parent(self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the `FrameStream` discriminator (`Game` or `Composite`) declared by `self`.
     pub const fn stream(self) -> FrameStream {
         self.stream
     }
 
+    /// Returns the `TickOutcome` content tag authenticating the tick that produced this frame.
     pub const fn outcome(self) -> ContentTag {
         self.outcome
     }
 
+    /// Returns the `FrameInput` content tag committed inside this v2 frame receipt.
     pub const fn input(self) -> ContentTag {
         self.input
     }
 
+    /// Returns the rendered XRGB8888 `Frame` content tag committed inside this v2 frame receipt.
     pub const fn frame(self) -> ContentTag {
         self.frame
     }
 
+    /// Serializes `self` into its fixed 130-byte canonical `FRAME_RECEIPT_V2_SCHEMA` payload.
     pub fn encode_canonical(self) -> [u8; FRAME_RECEIPT_V2_PAYLOAD_LEN] {
         let mut bytes = [0_u8; FRAME_RECEIPT_V2_PAYLOAD_LEN];
         if let Some(parent) = self.parent {
@@ -115,6 +125,7 @@ impl FrameReceiptV2 {
         bytes
     }
 
+    /// Decodes and validates a 130-byte canonical `FrameReceiptV2` payload slice.
     #[cfg(any(test, feature = "protocol-research"))]
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, FrameReceiptV2Error> {
         if bytes.len() != FRAME_RECEIPT_V2_PAYLOAD_LEN {
@@ -154,6 +165,7 @@ impl FrameReceiptV2 {
         )
     }
 
+    /// Verifies that all bound tags have their required kinds and `self.tag` matches the canonical digest.
     pub fn verify(self) -> Result<(), FrameReceiptV2Error> {
         if let Some(parent) = self.parent {
             require_kind("frame-receipt-v2 parent", parent, TagKind::FrameReceipt)?;
@@ -277,6 +289,7 @@ fn frame_receipt_v2_tag(
     .expect("frame-receipt-v2 encoding has a fixed length")
 }
 
+/// Structural or canonical codec failure returned when constructing or decoding a `FrameReceiptV2`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FrameReceiptV2Error {
     WrongKind {
@@ -333,6 +346,7 @@ impl fmt::Display for FrameReceiptV2Error {
 
 impl std::error::Error for FrameReceiptV2Error {}
 
+/// Outcome-binding failure returned when deriving or verifying a `FrameReceiptV2` against a `TickOutcome`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FrameReceiptV2AdmissionError {
     InvalidReceipt {
@@ -439,10 +453,12 @@ pub struct FrameAdmissionV2 {
 }
 
 impl FrameAdmissionV2 {
+    /// Returns the admitted `FrameReceiptV2` committed at the endpoint of this successor path.
     pub const fn receipt(&self) -> FrameReceiptV2 {
         self.receipt
     }
 
+    /// Borrows the verified `TickOutcome` successor path connecting this admission to the prior head.
     pub fn successors(&self) -> &[TickOutcome] {
         &self.successors
     }
@@ -458,6 +474,7 @@ pub struct FrameLedgerV2 {
 }
 
 impl FrameLedgerV2 {
+    /// Constructs a `FrameLedgerV2` for `stream` rooted at a verified tick-zero `genesis` outcome.
     pub fn new_structural_genesis(
         stream: FrameStream,
         genesis: TickOutcome,
@@ -465,6 +482,7 @@ impl FrameLedgerV2 {
         Self::with_limits(stream, genesis, FrameLedgerV2Limits::default())
     }
 
+    /// Constructs a `FrameLedgerV2` with explicit `FrameLedgerV2Limits` work bounds per admission path.
     pub fn with_limits(
         stream: FrameStream,
         genesis: TickOutcome,
@@ -480,36 +498,44 @@ impl FrameLedgerV2 {
         })
     }
 
+    /// Returns the fixed `FrameStream` role (`Game` or `Composite`) enforced by this v2 ledger.
     pub const fn stream(&self) -> FrameStream {
         self.stream
     }
 
+    /// Returns the per-admission successor outcome and attempt work limits for this v2 ledger.
     pub const fn limits(&self) -> FrameLedgerV2Limits {
         self.limits
     }
 
+    /// Borrows the verified tick-zero `TickOutcome` genesis root of this v2 frame ledger.
     pub fn genesis(&self) -> &TickOutcome {
         &self.genesis
     }
 
+    /// Borrows the ordered slice of `FrameAdmissionV2` entries committed in this v2 ledger.
     pub fn admissions(&self) -> &[FrameAdmissionV2] {
         &self.admissions
     }
 
+    /// Returns the number of `FrameAdmissionV2` entries currently committed in this v2 ledger.
     pub fn len(&self) -> usize {
         self.admissions.len()
     }
 
+    /// Returns `true` when this v2 frame ledger has no committed admissions beyond `genesis`.
     pub fn is_empty(&self) -> bool {
         self.admissions.is_empty()
     }
 
+    /// Returns the `FrameReceipt` content tag at the tip of this v2 ledger, or `None` if empty.
     pub fn head(&self) -> Option<ContentTag> {
         self.admissions
             .last()
             .map(|admission| admission.receipt.tag())
     }
 
+    /// Borrows the most recent `TickOutcome` reached by the latest admission, or `self.genesis()`.
     pub fn outcome_head(&self) -> &TickOutcome {
         self.admissions
             .last()
@@ -684,10 +710,12 @@ pub struct FrameReceiptPairV2 {
 }
 
 impl FrameReceiptPairV2 {
+    /// Returns the optional `Game` stream `FrameReceiptV2` published during this paired submission.
     pub const fn game(self) -> Option<FrameReceiptV2> {
         self.game
     }
 
+    /// Returns the required `Composite` stream `FrameReceiptV2` published during this paired submission.
     pub const fn composite(self) -> FrameReceiptV2 {
         self.composite
     }
@@ -757,6 +785,7 @@ pub fn admit_frame_pair_derived<E>(
     Ok(receipts)
 }
 
+/// Error returned when atomic paired `Game` and `Composite` v2 frame admission or submission fails.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FramePairAdmissionV2Error<E> {
     Game { source: FrameLedgerV2Error },
@@ -811,6 +840,7 @@ fn verify_successor_path<'a>(
     Ok(previous)
 }
 
+/// Ledger verification or path-admission failure returned by `FrameLedgerV2` operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FrameLedgerV2Error {
     InvalidGenesis {

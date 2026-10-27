@@ -38,11 +38,16 @@ use windows_sys::Win32::Graphics::Gdi::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::GetClientRect;
 
+/// Primary Win32 CCD `QueryDisplayConfig` flags requesting active paths, virtual modes, and VRR awareness.
 pub const PRIMARY_QUERY_FLAGS: u32 =
     QDC_ONLY_ACTIVE_PATHS | QDC_VIRTUAL_MODE_AWARE | QDC_VIRTUAL_REFRESH_RATE_AWARE;
+/// Fallback Win32 CCD `QueryDisplayConfig` flags omitting virtual refresh-rate awareness on older hosts.
 pub const FALLBACK_QUERY_FLAGS: u32 = QDC_ONLY_ACTIVE_PATHS | QDC_VIRTUAL_MODE_AWARE;
+/// Maximum bounded retry cycles when Win32 CCD display topology buffer sizes race or fall back.
 pub const MAX_SIZE_QUERY_CYCLES: usize = 4;
+/// Maximum active Win32 CCD display topology path entries admitted in one query buffer.
 pub const MAX_QUERY_PATHS: u32 = DISPLAYCONFIG_MAXPATH;
+/// Maximum Win32 CCD display mode entries admitted across source, target, and desktop-image tables.
 pub const MAX_QUERY_MODES: u32 = MAX_QUERY_PATHS * 3;
 
 const PROFILE_VRR: u32 = u32::from_be_bytes(*b"VRR1");
@@ -368,14 +373,17 @@ impl ActiveOutputWithColor {
         Ok(observation)
     }
 
+    /// Returns the canonical Win32 CCD active-output display topology observation from this paired report.
     pub const fn topology(&self) -> &OutputTopologyObservation {
         &self.topology
     }
 
+    /// Returns the canonical per-route Windows Advanced Color observation bound to the active topology.
     pub const fn color(&self) -> &OutputColorObservation {
         &self.color
     }
 
+    /// Verifies both the active display topology observation and its cross-checked Advanced Color binding.
     pub fn verify(&self) -> Result<(), ActiveOutputObservationError> {
         self.topology
             .verify()
@@ -386,6 +394,7 @@ impl ActiveOutputWithColor {
     }
 }
 
+/// Validation failure when collecting or cross-checking paired Win32 active-output topology and color reports.
 #[derive(Debug)]
 pub enum ActiveOutputObservationError {
     Topology(OutputTopologyError),

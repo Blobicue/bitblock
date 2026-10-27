@@ -600,54 +600,54 @@
    "duplicated_lines": 407,
    "regions": [
     {
-     "left": "presentation_output:376",
+     "left": "presentation_output:391",
      "lines": 27,
      "right": "presentation_output_v2:332"
     },
     {
      "left": "output_color:438",
      "lines": 22,
-     "right": "output_topology:1211"
+     "right": "output_topology:1241"
     },
     {
-     "left": "presentation_output:241",
+     "left": "presentation_output:255",
      "lines": 21,
      "right": "presentation_output_v2:211"
     },
     {
      "left": "output_color:388",
      "lines": 19,
-     "right": "output_topology:1143"
+     "right": "output_topology:1173"
     },
     {
-     "left": "presentation_output:449",
+     "left": "presentation_output:464",
      "lines": 17,
      "right": "presentation_output_v2:384"
     },
     {
-     "left": "display:1108",
+     "left": "display:1146",
      "lines": 16,
-     "right": "frame:574"
+     "right": "frame:609"
     },
     {
-     "left": "frame:241",
+     "left": "frame:256",
      "lines": 15,
-     "right": "tick:469"
+     "right": "tick:503"
     },
     {
      "left": "physical_sensor:1562",
      "lines": 14,
-     "right": "presentation_output:452"
+     "right": "presentation_output:467"
     },
     {
-     "left": "display:859",
+     "left": "display:896",
      "lines": 13,
-     "right": "tick:1192"
+     "right": "tick:1254"
     },
     {
-     "left": "display_artifact:415",
+     "left": "display_artifact:428",
      "lines": 13,
-     "right": "presentation_output:245"
+     "right": "presentation_output:259"
     },
     {
      "left": "interaction:1313",
@@ -657,7 +657,7 @@
     {
      "left": "history_store:517",
      "lines": 12,
-     "right": "sequential:1345"
+     "right": "sequential:1397"
     },
     {
      "left": "interaction:1208",
@@ -665,22 +665,22 @@
      "right": "replay_evidence:864"
     },
     {
-     "left": "frame:476",
+     "left": "frame:504",
      "lines": 11,
-     "right": "frame_v2:260"
+     "right": "frame_v2:272"
     },
     {
-     "left": "presentation_output:491",
+     "left": "presentation_output:506",
      "lines": 11,
      "right": "presentation_output_v2:425"
     },
     {
-     "left": "frame:436",
+     "left": "frame:459",
      "lines": 10,
-     "right": "frame_v2:76"
+     "right": "frame_v2:79"
     },
     {
-     "left": "history:344",
+     "left": "history:369",
      "lines": 10,
      "right": "interaction:1319"
     },
@@ -692,17 +692,17 @@
     {
      "left": "coordinate_episode:867",
      "lines": 9,
-     "right": "display:1111"
+     "right": "display:1149"
     },
     {
-     "left": "display:1067",
+     "left": "display:1105",
      "lines": 9,
-     "right": "frame:555"
+     "right": "frame:590"
     },
     {
      "left": "history_store:426",
      "lines": 9,
-     "right": "sequential:1269"
+     "right": "sequential:1320"
     },
     {
      "left": "interaction:838",
@@ -710,24 +710,24 @@
      "right": "replay_evidence:650"
     },
     {
-     "left": "presentation_output:61",
+     "left": "presentation_output:65",
      "lines": 9,
      "right": "presentation_output_v2:57"
     },
     {
-     "left": "sequential:1158",
+     "left": "sequential:1208",
      "lines": 9,
      "right": "storage:751"
     },
     {
-     "left": "display:1154",
+     "left": "display:1192",
      "lines": 8,
-     "right": "display_artifact:763"
+     "right": "display_artifact:778"
     },
     {
-     "left": "display:1163",
+     "left": "display:1201",
      "lines": 8,
-     "right": "frame:598"
+     "right": "frame:633"
     },
     {
      "left": "display_store:286",
@@ -740,34 +740,34 @@
      "right": "replay_evidence:799"
     },
     {
-     "left": "ladder_bridge:20",
+     "left": "ladder_bridge:24",
      "lines": 8,
-     "right": "ladder_bridge:21"
+     "right": "ladder_bridge:25"
     },
     {
      "left": "output_color:229",
      "lines": 8,
-     "right": "output_topology:933"
+     "right": "output_topology:955"
     },
     {
      "left": "output_color:409",
      "lines": 8,
-     "right": "output_topology:1195"
+     "right": "output_topology:1225"
     },
     {
      "left": "output_color:492",
      "lines": 8,
-     "right": "presentation_output:434"
+     "right": "presentation_output:449"
     },
     {
      "left": "physical_sensor:1391",
      "lines": 8,
-     "right": "presentation_output:334"
+     "right": "presentation_output:348"
     },
     {
      "left": "physical_sensor:1475",
      "lines": 8,
-     "right": "presentation_output:388"
+     "right": "presentation_output:403"
     },
     {
      "left": "program:90",
@@ -781,12 +781,12 @@
    "duplicated_lines": 341,
    "regions": [
     {
-     "left": "presentation_output:600",
+     "left": "presentation_output:615",
      "lines": 56,
      "right": "presentation_output_v2:498"
     },
     {
-     "left": "display_artifact:831",
+     "left": "display_artifact:846",
      "lines": 32,
      "right": "display_store:1526"
     },
@@ -798,7 +798,7 @@
     {
      "left": "physical_sensor:1660",
      "lines": 20,
-     "right": "presentation_output:627"
+     "right": "presentation_output:642"
     },
     {
      "left": "display_store:1685",
@@ -806,9 +806,9 @@
      "right": "main:4141"
     },
     {
-     "left": "output_topology:1469",
+     "left": "output_topology:1499",
      "lines": 18,
-     "right": "presentation_output:663"
+     "right": "presentation_output:678"
     },
     {
      "left": "main:4183",
@@ -816,7 +816,7 @@
      "right": "main:5495"
     },
     {
-     "left": "presentation_output:693",
+     "left": "presentation_output:708",
      "lines": 13,
      "right": "presentation_output_v2:587"
     },
@@ -826,7 +826,7 @@
      "right": "main:4100"
     },
     {
-     "left": "history:938",
+     "left": "history:980",
      "lines": 12,
      "right": "history_store:1539"
     },
@@ -836,9 +836,9 @@
      "right": "presentation_output_v2:464"
     },
     {
-     "left": "frame_v2:979",
+     "left": "frame_v2:1009",
      "lines": 10,
-     "right": "optimization:1684"
+     "right": "optimization:1699"
     },
     {
      "left": "journal:1264",
@@ -846,14 +846,14 @@
      "right": "storage:962"
     },
     {
-     "left": "presentation:1090",
+     "left": "presentation:1115",
      "lines": 10,
-     "right": "presentation:1147"
+     "right": "presentation:1172"
     },
     {
-     "left": "display:1549",
+     "left": "display:1587",
      "lines": 9,
-     "right": "display_artifact:790"
+     "right": "display_artifact:805"
     },
     {
      "left": "display_store:1489",
@@ -866,7 +866,7 @@
      "right": "physical_sensor:1625"
     },
     {
-     "left": "frame_v2:967",
+     "left": "frame_v2:997",
      "lines": 8,
      "right": "main:4917"
     },
@@ -883,15 +883,15 @@
     {
      "left": "physical_sensor:1652",
      "lines": 8,
-     "right": "presentation:1209"
+     "right": "presentation:1234"
     },
     {
      "left": "physical_sensor:1683",
      "lines": 8,
-     "right": "presentation_output:649"
+     "right": "presentation_output:664"
     },
     {
-     "left": "presentation_output:744",
+     "left": "presentation_output:759",
      "lines": 8,
      "right": "presentation_output_v2:665"
     }

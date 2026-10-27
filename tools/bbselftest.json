@@ -399,7 +399,7 @@
         "test_fns_match_coverage": true,
         "pub_counts": {
             "total": 1306,
-            "documented": 462
+            "documented": 951
         },
         "type_checks": [
             {

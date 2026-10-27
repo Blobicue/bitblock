@@ -16,12 +16,15 @@ use crate::world::BEDROCK_COORD;
 use crate::world::{Coord, World, is_bedrock};
 
 const WORLD_SCHEMA: &[u8] = b"bitblock/world/sorted-i64-be/v1";
+/// Canonical schema identifier for a coordinate-history genesis receipt.
 pub const GENESIS_SCHEMA: &[u8] = b"bitblock/history/genesis/v1";
 const EVENT_SCHEMA: &[u8] = b"bitblock/history/event/v1";
+/// Canonical schema identifier for a committed coordinate-history edit receipt.
 pub const RECEIPT_SCHEMA: &[u8] = b"bitblock/history/receipt/v1";
 
 const RECEIPT_FIXED_BYTES: usize = 32 + 8 + 8 + 32 + 32 + 2;
 
+/// Reason an attempted coordinate-history edit left voxel occupancy unchanged.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NoOpReason {
     BedrockProtected,
@@ -29,6 +32,7 @@ pub enum NoOpReason {
     AlreadyOff,
 }
 
+/// Deterministic provenance effect recorded when applying one edit to coordinate history.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransitionEffect {
     Mint {
@@ -48,6 +52,7 @@ pub enum TransitionEffect {
 }
 
 impl TransitionEffect {
+    /// Returns the content-addressed event tag chained by this coordinate transition effect.
     pub const fn event(self) -> ContentTag {
         match self {
             Self::Mint { event, .. } | Self::Burn { event, .. } | Self::NoOp { event, .. } => event,
@@ -55,6 +60,7 @@ impl TransitionEffect {
     }
 }
 
+/// Committed coordinate-history receipt binding a tick's applied edits, effects, and post-world tag.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Receipt {
     tag: ContentTag,
@@ -66,30 +72,37 @@ pub struct Receipt {
 }
 
 impl Receipt {
+    /// Returns the canonical content tag identifying this committed history receipt.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the content tag of the preceding history receipt or genesis record.
     pub const fn parent(&self) -> ContentTag {
         self.parent
     }
 
+    /// Returns the simulation tick ordinal at which this history receipt was committed.
     pub const fn tick(&self) -> u64 {
         self.tick
     }
 
+    /// Returns the ordered slice of coordinate edits committed in this history receipt.
     pub fn edits(&self) -> &[Edit] {
         &self.edits
     }
 
+    /// Returns the ordered mint, burn, and no-op provenance effects produced by this receipt's edits.
     pub fn effects(&self) -> &[TransitionEffect] {
         &self.effects
     }
 
+    /// Returns the canonical world content tag immediately after applying this receipt's edits.
     pub const fn post_world(&self) -> ContentTag {
         self.post_world
     }
 
+    /// Returns the terminal event content tag chained by the last transition effect in this receipt.
     pub fn final_event(&self) -> ContentTag {
         self.effects
             .last()
@@ -120,6 +133,7 @@ pub struct HistoryReceiptPayload {
 }
 
 impl HistoryReceiptPayload {
+    /// Validates tag kinds and edit count to construct a canonical history receipt payload.
     pub fn new(
         parent: ContentTag,
         tick: u64,
@@ -155,31 +169,38 @@ impl HistoryReceiptPayload {
         })
     }
 
+    /// Returns the parent receipt content tag committed by this history receipt payload.
     pub const fn parent(&self) -> ContentTag {
         self.parent
     }
 
+    /// Returns the simulation tick ordinal encoded in this history receipt payload.
     pub const fn tick(&self) -> u64 {
         self.tick
     }
 
+    /// Returns the ordered slice of coordinate edits encoded in this history receipt payload.
     pub fn edits(&self) -> &[Edit] {
         &self.edits
     }
 
+    /// Returns the post-tick world content tag committed by this history receipt payload.
     pub const fn post_world(&self) -> ContentTag {
         self.post_world
     }
 
+    /// Returns the final chained event content tag committed by this history receipt payload.
     pub const fn final_event(&self) -> ContentTag {
         self.final_event
     }
 
+    /// Returns the exact canonical byte length of this history receipt payload.
     pub fn encoded_len(&self) -> usize {
         canonical_receipt_payload_len(self.edits.len())
             .expect("an admitted receipt payload has a representable length")
     }
 
+    /// Encodes this history receipt payload into its canonical big-endian byte representation.
     pub fn encode_canonical(&self) -> Vec<u8> {
         encode_receipt_fields(
             self.parent,
@@ -190,6 +211,7 @@ impl HistoryReceiptPayload {
         )
     }
 
+    /// Validates the byte length header and extracts the declared edit count from a canonical receipt.
     #[cfg(any(test, feature = "protocol-research"))]
     pub fn declared_edit_count(bytes: &[u8]) -> Result<usize, HistoryReceiptCodecError> {
         if bytes.len() < RECEIPT_FIXED_BYTES {
@@ -215,6 +237,7 @@ impl HistoryReceiptPayload {
         Ok(edit_count)
     }
 
+    /// Decodes and validates a canonical history receipt payload from raw bytes.
     #[cfg(any(test, feature = "protocol-research"))]
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, HistoryReceiptCodecError> {
         let edit_count = Self::declared_edit_count(bytes)?;
@@ -268,6 +291,7 @@ impl HistoryReceiptPayload {
         Ok(payload)
     }
 
+    /// Computes the `TagKind::Receipt` content tag over this payload under `RECEIPT_SCHEMA`.
     pub fn content_tag(&self) -> ContentTag {
         let encoded = self.encode_canonical();
         hash_canonical(
@@ -280,6 +304,7 @@ impl HistoryReceiptPayload {
     }
 }
 
+/// Validation or canonical decoding failure for a `HistoryReceiptPayload`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryReceiptCodecError {
     ParentKind {
@@ -385,6 +410,7 @@ fn encode_receipt_fields(
     encoded
 }
 
+/// In-memory content-addressed coordinate history chain tracking receipts and active mint provenance.
 #[derive(Clone, Debug)]
 pub struct History {
     genesis: ContentTag,
@@ -395,6 +421,7 @@ pub struct History {
 }
 
 impl History {
+    /// Initializes a coordinate history chain anchored at the genesis tag of `initial_world`.
     pub fn new(initial_world: &World) -> Self {
         let genesis_world = world_tag(initial_world);
         let genesis = genesis_tag(genesis_world);
@@ -412,10 +439,12 @@ impl History {
         }
     }
 
+    /// Returns the genesis receipt content tag at the root of this coordinate history chain.
     pub const fn genesis(&self) -> ContentTag {
         self.genesis
     }
 
+    /// Returns the canonical world content tag of the initial genesis world.
     pub const fn genesis_world(&self) -> ContentTag {
         self.genesis_world
     }
@@ -425,6 +454,7 @@ impl History {
         self.genesis_world.digest()
     }
 
+    /// Returns the latest committed receipt content tag (or genesis tag if no edits were committed).
     pub const fn head(&self) -> ContentTag {
         self.head
     }
@@ -439,18 +469,22 @@ impl History {
             .map_or(self.genesis_world, Receipt::post_world)
     }
 
+    /// Returns the chronological slice of committed edit receipts in this coordinate history.
     pub fn receipts(&self) -> &[Receipt] {
         &self.receipts
     }
 
+    /// Looks up the active mint provenance tag for an occupied mutable coordinate.
     pub fn active_mint(&self, coord: Coord) -> Option<ContentTag> {
         self.active_mints.get(&coord).copied()
     }
 
+    /// Returns the count of currently occupied mutable coordinates with active mint provenance.
     pub fn circulating_supply(&self) -> usize {
         self.active_mints.len()
     }
 
+    /// Opens a staged coordinate-history transaction for `tick` parented at the current head.
     pub fn begin_tick(&self, tick: u64) -> TickTransaction {
         TickTransaction {
             parent: self.head,
@@ -480,6 +514,7 @@ impl History {
         })
     }
 
+    /// Commits a non-empty `TickTransaction` against the post-tick `world` and advances the history head.
     pub fn commit_tick(&mut self, transaction: TickTransaction, world: &World) -> Option<&Receipt> {
         let prepared = self.prepare_tick(transaction, world)?;
         Some(self.commit_prepared_tick(prepared, world))
@@ -646,6 +681,7 @@ impl PreparedTick {
     }
 }
 
+/// Open per-tick coordinate edit transaction accumulating event chain tags and provenance updates.
 pub struct TickTransaction {
     parent: ContentTag,
     tick: u64,
@@ -657,6 +693,7 @@ pub struct TickTransaction {
 }
 
 impl TickTransaction {
+    /// Applies `edit` to `world`, chains its event tag, and records the resulting mint, burn, or no-op effect.
     pub fn apply_edit(&mut self, history: &History, world: &mut World, edit: Edit) -> bool {
         let before = world.is_on(edit.coord);
         let event = event_tag(self.event_head, self.tick, edit);
@@ -709,14 +746,17 @@ impl TickTransaction {
         changed
     }
 
+    /// Returns the ordered coordinate edits applied so far within this tick transaction.
     pub fn edits(&self) -> &[Edit] {
         &self.edits
     }
 
+    /// Returns the ordered transition effects recorded so far within this tick transaction.
     pub fn effects(&self) -> &[TransitionEffect] {
         &self.effects
     }
 
+    /// Returns the number of applied edits that changed voxel occupancy during this tick transaction.
     pub const fn changes(&self) -> usize {
         self.changes
     }
@@ -729,6 +769,7 @@ impl TickTransaction {
     }
 }
 
+/// Verification failure detected while replaying a coordinate `History` chain from genesis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryError {
     GenesisMismatch,
@@ -760,6 +801,7 @@ impl fmt::Display for HistoryError {
 
 impl std::error::Error for HistoryError {}
 
+/// Computes the canonical `TagKind::World` content tag over all sorted occupied coordinates in `world`.
 pub fn world_tag(world: &World) -> ContentTag {
     let mut coords = Vec::with_capacity(world.len());
     coords.extend(world.iter_on());

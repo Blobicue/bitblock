@@ -20,24 +20,28 @@ const RECEIPT_SCHEMA: &[u8] = b"bitblock/optimization-equivalence/bounded-corpus
 const OUTPUT_SCHEMA: &[u8] = b"bitblock/optimization-equivalence/output/v3";
 const LEDGER_EVIDENCE_SCHEMA: &[u8] = b"bitblock/optimization-equivalence/frame-ledger-evidence/v1";
 
+/// Identifies whether an optimization equivalence tournament artifact belongs to the reference or candidate side.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AssaySide {
     Reference,
     Candidate,
 }
 
+/// Names which content-addressed identity tag field failed validation during optimization equivalence assaying.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IdentityField {
     Implementation,
     Policy,
 }
 
+/// Content-addressed implementation registry and policy tags identifying one optimization tournament participant.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OptimizationIdentity {
     pub implementation: Option<ContentTag>,
     pub policy: Option<ContentTag>,
 }
 
+/// Retained composite-stream framebuffer pixels, overlay input, observation, and v2 frame ledger for equivalence checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompositeFrameArtifact {
     pub width: u32,
@@ -55,16 +59,19 @@ pub struct CompositeFrameArtifact {
 pub struct DeterministicSyntheticDisplay(DisplayLedgerV2);
 
 impl DeterministicSyntheticDisplay {
+    /// Verifies and wraps a deterministic synthetic `DisplayLedgerV2` fixture for optimization equivalence comparison.
     pub fn new(ledger: DisplayLedgerV2) -> Result<Self, DisplayProtocolError> {
         ledger.verify()?;
         Ok(Self(ledger))
     }
 
+    /// Borrows the verified `DisplayLedgerV2` underlying this deterministic synthetic display fixture.
     pub fn ledger(&self) -> &DisplayLedgerV2 {
         &self.0
     }
 }
 
+/// Complete simulation, history, game framebuffer, composite, and synthetic-display evidence for one assay side.
 #[derive(Clone, Debug)]
 pub struct OptimizationArtifact {
     pub identity: OptimizationIdentity,
@@ -79,6 +86,7 @@ pub struct OptimizationArtifact {
     pub synthetic_display: Option<DeterministicSyntheticDisplay>,
 }
 
+/// Bounded-corpus optimization equivalence tournament case pairing reference and candidate artifacts over one initial world.
 #[derive(Clone, Debug)]
 pub struct OptimizationCase {
     pub case_tag: Option<ContentTag>,
@@ -227,6 +235,7 @@ pub enum OptimizationMismatch {
     OutputCommitment,
 }
 
+/// Refusal reason returned when an optimization v3 equivalence tournament assay fails identity or output checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OptimizationRefusal {
     Mismatch(OptimizationMismatch),
@@ -260,27 +269,33 @@ pub struct OptimizationEquivalenceReceipt {
 }
 
 impl OptimizationEquivalenceReceipt {
+    /// Returns the canonical v3 receipt `ContentTag` committing to this bounded-corpus optimization equivalence assay.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the `ContentTag` naming the bounded optimization tournament case or corpus verified by this receipt.
     pub const fn case(self) -> ContentTag {
         self.case
     }
 
+    /// Returns the implementation and policy `OptimizationIdentity` of the reference side in this equivalence receipt.
     pub const fn reference_identity(self) -> OptimizationIdentity {
         self.reference
     }
 
+    /// Returns the implementation and policy `OptimizationIdentity` of the candidate side in this equivalence receipt.
     pub const fn candidate_identity(self) -> OptimizationIdentity {
         self.candidate
     }
 
+    /// Returns the shared v3 output commitment `ContentTag` matched by both reference and candidate artifacts.
     pub const fn output(self) -> ContentTag {
         self.output
     }
 }
 
+/// Verifies byte-exact world, history, framebuffer, ledger, and synthetic-display equivalence for one `OptimizationCase`.
 pub fn assay_optimization_equivalence(
     case: &OptimizationCase,
 ) -> Result<OptimizationEquivalenceReceipt, OptimizationRefusal> {

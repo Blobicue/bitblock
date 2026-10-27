@@ -15,14 +15,22 @@ use crate::history_store::{
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::World;
 
+/// Canonical protocol schema string for the iterated SHA-256 sequential-history recurrence policy.
 pub const SEQUENTIAL_FUNCTION_SCHEMA: &[u8] =
     b"bitblock/sequential-history/function/sha256-chain-v1";
+/// Canonical protocol schema string for binding an initial sequential-history state to a source tag.
 pub const SEQUENTIAL_INPUT_SCHEMA: &[u8] = b"bitblock/sequential-history/input/v1";
+/// Canonical protocol schema string for one single-step iterated SHA-256 sequential transition.
 pub const SEQUENTIAL_STEP_SCHEMA: &[u8] = b"bitblock/sequential-history/step/v1";
+/// Canonical protocol schema string for a multi-step sequential-history segment checkpoint.
 pub const SEQUENTIAL_SEGMENT_SCHEMA: &[u8] = b"bitblock/sequential-history/segment/v1";
+/// Canonical protocol schema string for the open-local coordinate-history admission mode policy.
 pub const OPEN_LOCAL_MODE_SCHEMA: &[u8] = b"bitblock/history-mode/open-local/v1";
+/// Canonical protocol schema string for open-local coordinate-history admission evidence receipts.
 pub const OPEN_LOCAL_EVIDENCE_SCHEMA: &[u8] = b"bitblock/history-mode/open-local-evidence/v1";
+/// Canonical protocol schema string for the sequential-history admission mode policy.
 pub const SEQUENTIAL_MODE_SCHEMA: &[u8] = b"bitblock/history-mode/sequential-history/v1";
+/// Canonical protocol schema string for coordinate-history event coverage evidence under sequential mode.
 pub const COORDINATE_EVIDENCE_SCHEMA: &[u8] = b"bitblock/sequential-history/coordinate-evidence/v1";
 
 const SEGMENT_FIXED_BYTES: usize = 32 + 1 + 32 + 8 + 8 + 32 + 8 + 32;
@@ -43,6 +51,7 @@ pub struct SequentialLimits {
 }
 
 impl SequentialLimits {
+    /// Default local resource and iteration limits for verifying a sequential-history segment chain.
     pub const DEFAULT: Self = Self {
         max_segments: 4_096,
         max_iterations_per_segment: 1_048_576,
@@ -51,6 +60,7 @@ impl SequentialLimits {
         max_total_injections: 262_144,
     };
 
+    /// Constructs custom local computation and allocation limits for sequential-history verification.
     pub const fn new(
         max_segments: usize,
         max_iterations_per_segment: u64,
@@ -67,22 +77,27 @@ impl SequentialLimits {
         }
     }
 
+    /// Returns the maximum number of sequential segments admitted in one chain verification.
     pub const fn max_segments(self) -> usize {
         self.max_segments
     }
 
+    /// Returns the maximum recurrence iterations permitted within any single sequential segment.
     pub const fn max_iterations_per_segment(self) -> u64 {
         self.max_iterations_per_segment
     }
 
+    /// Returns the maximum cumulative recurrence iterations permitted across the entire sequential chain.
     pub const fn max_total_iterations(self) -> u64 {
         self.max_total_iterations
     }
 
+    /// Returns the maximum event injections permitted within any single sequential segment.
     pub const fn max_injections_per_segment(self) -> usize {
         self.max_injections_per_segment
     }
 
+    /// Returns the maximum cumulative event injections permitted across the entire sequential chain.
     pub const fn max_total_injections(self) -> usize {
         self.max_total_injections
     }
@@ -113,8 +128,10 @@ pub struct SequentialSegmentLimits {
 }
 
 impl SequentialSegmentLimits {
+    /// Default per-segment iteration and injection limits derived from `SequentialLimits::DEFAULT`.
     pub const DEFAULT: Self = SequentialLimits::DEFAULT.segment_limits();
 
+    /// Constructs custom per-segment iteration and event-injection limits for isolated segment checks.
     pub const fn new(max_iterations: u64, max_injections: usize) -> Self {
         Self {
             max_iterations,
@@ -122,10 +139,12 @@ impl SequentialSegmentLimits {
         }
     }
 
+    /// Returns the maximum recurrence iterations allowed when building or decoding one segment.
     pub const fn max_iterations(self) -> u64 {
         self.max_iterations
     }
 
+    /// Returns the maximum event injections allowed when building or decoding one segment.
     pub const fn max_injections(self) -> usize {
         self.max_injections
     }
@@ -145,6 +164,7 @@ pub struct SequentialInjection {
 }
 
 impl SequentialInjection {
+    /// Creates a sequential event injection at `offset` after verifying `event` has `TagKind::Event`.
     pub fn new(offset: u64, event: ContentTag) -> Result<Self, SequentialSemanticError> {
         if event.kind() != TagKind::Event {
             return Err(SequentialSemanticError::EventKind {
@@ -155,10 +175,12 @@ impl SequentialInjection {
         Ok(Self { offset, event })
     }
 
+    /// Returns the segment-relative iteration offset at which this event tag is injected.
     pub const fn offset(self) -> u64 {
         self.offset
     }
 
+    /// Returns the `TagKind::Event` content tag injected into the sequential step recurrence.
     pub const fn event(self) -> ContentTag {
         self.event
     }
@@ -177,45 +199,55 @@ pub struct SequentialSegmentPayload {
 }
 
 impl SequentialSegmentPayload {
+    /// Returns the sequential recurrence function policy `ContentTag` claimed by this segment.
     pub const fn function(&self) -> ContentTag {
         self.function
     }
 
+    /// Returns the optional parent segment `ContentTag` preceding this sequential segment.
     pub const fn parent(&self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the starting cumulative iteration index at the beginning of this sequential segment.
     pub const fn start_iteration(&self) -> u64 {
         self.start_iteration
     }
 
+    /// Returns the non-zero number of recurrence iterations executed across this sequential segment.
     pub const fn iteration_count(&self) -> u64 {
         self.iteration_count
     }
 
+    /// Returns the input `SequentialHistory` state `ContentTag` entering this segment.
     pub const fn input(&self) -> ContentTag {
         self.input
     }
 
+    /// Returns the ordered slice of event injections scheduled within this sequential segment.
     pub fn injections(&self) -> &[SequentialInjection] {
         &self.injections
     }
 
+    /// Returns the terminal `SequentialHistory` state `ContentTag` produced at the end of this segment.
     pub const fn output(&self) -> ContentTag {
         self.output
     }
 
+    /// Returns the exclusive ending cumulative iteration index (`start_iteration + iteration_count`).
     pub fn end_iteration(&self) -> u64 {
         self.start_iteration
             .checked_add(self.iteration_count)
             .expect("an admitted segment has a representable end iteration")
     }
 
+    /// Returns the exact canonical byte length of this sequential segment payload.
     pub fn encoded_len(&self) -> usize {
         canonical_segment_payload_len(self.injections.len())
             .expect("an admitted segment has a representable encoded length")
     }
 
+    /// Encodes this sequential segment payload into its canonical big-endian wire byte vector.
     pub fn encode_canonical(&self) -> Vec<u8> {
         let mut encoded = Vec::with_capacity(self.encoded_len());
         encoded.extend_from_slice(&self.function.digest());
@@ -242,6 +274,7 @@ impl SequentialSegmentPayload {
         encoded
     }
 
+    /// Computes the canonical `TagKind::SequentialHistory` content tag for this segment payload.
     pub fn content_tag(&self) -> ContentTag {
         let encoded = self.encode_canonical();
         hash_canonical(
@@ -396,6 +429,7 @@ pub struct SequentialSegment {
 }
 
 impl SequentialSegment {
+    /// Executes and builds the root `SequentialSegment` starting at iteration zero with no parent.
     pub fn first(
         input: ContentTag,
         iteration_count: u64,
@@ -405,6 +439,7 @@ impl SequentialSegment {
         build_segment(None, 0, input, iteration_count, injections, limits, 0)
     }
 
+    /// Executes and builds the next contiguous `SequentialSegment` chained directly after `self`.
     pub fn next(
         &self,
         iteration_count: u64,
@@ -422,6 +457,7 @@ impl SequentialSegment {
         )
     }
 
+    /// Decodes and structurally validates one canonical `SequentialSegment` under bounded per-segment limits.
     pub fn decode_canonical(
         bytes: &[u8],
         limits: SequentialSegmentLimits,
@@ -456,19 +492,23 @@ impl SequentialSegment {
         Self { tag, payload }
     }
 
+    /// Returns the canonical `TagKind::SequentialHistory` content tag of this segment.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Borrows the decoded `SequentialSegmentPayload` of this sequential segment.
     pub const fn payload(&self) -> &SequentialSegmentPayload {
         &self.payload
     }
 
+    /// Encodes this sequential segment into its canonical wire byte representation.
     pub fn encode_canonical(&self) -> Vec<u8> {
         self.payload.encode_canonical()
     }
 }
 
+/// Accounting summary of segments, recurrence iterations, and event injections verified across a chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SequentialUsage {
     pub segment_count: usize,
@@ -476,6 +516,7 @@ pub struct SequentialUsage {
     pub total_injections: usize,
 }
 
+/// Verified sequential-history chain summary containing the recurrence policy, head segment, terminal state, and usage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SequentialVerification {
     pub function: ContentTag,
@@ -484,6 +525,7 @@ pub struct SequentialVerification {
     pub usage: SequentialUsage,
 }
 
+/// Returns the canonical policy `ContentTag` for the iterated SHA-256 sequential recurrence function.
 pub fn sequential_function_tag() -> ContentTag {
     hash_canonical(TagKind::Policy, SEQUENTIAL_FUNCTION_SCHEMA, 0, |_| {})
         .expect("sequential function policy has an empty payload")
@@ -507,6 +549,7 @@ pub fn sequential_initial_state(source: ContentTag) -> ContentTag {
     .expect("sequential input encoding emits its measured length")
 }
 
+/// Returns the canonical policy `ContentTag` identifying the open-local coordinate-history admission mode.
 pub fn open_local_mode_tag() -> ContentTag {
     hash_canonical(TagKind::Policy, OPEN_LOCAL_MODE_SCHEMA, 0, |_| {})
         .expect("open-local mode has an empty payload")
@@ -536,6 +579,7 @@ fn open_local_evidence_tag_from_fields(
     .expect("open-local evidence has a fixed payload length")
 }
 
+/// Returns the canonical policy `ContentTag` identifying the sequential-history admission mode.
 pub fn sequential_mode_tag() -> ContentTag {
     let function = sequential_function_tag();
     hash_canonical(TagKind::Policy, SEQUENTIAL_MODE_SCHEMA, 32, |sink| {
@@ -544,6 +588,7 @@ pub fn sequential_mode_tag() -> ContentTag {
     .expect("sequential mode encodes one function digest")
 }
 
+/// Computes the exact canonical byte length of a `SequentialSegmentPayload` with `injection_count` events.
 pub fn canonical_segment_payload_len(
     injection_count: usize,
 ) -> Result<usize, SequentialCodecError> {
@@ -553,6 +598,7 @@ pub fn canonical_segment_payload_len(
         .ok_or(SequentialCodecError::LengthOverflow)
 }
 
+/// Recomputes and verifies a contiguous chain of `SequentialSegment` checkpoints from `initial_state` under `limits`.
 pub fn verify_sequential_chain(
     initial_state: ContentTag,
     segments: &[SequentialSegment],
@@ -716,6 +762,7 @@ pub enum CoordinateHistoryModeClaim<'a> {
     StakeConsensus,
 }
 
+/// Verified coordinate-history admission outcome carrying the mode policy tag, evidence tag, and replay usage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdmittedCoordinateHistoryMode {
     OpenLocal {
@@ -732,6 +779,7 @@ pub enum AdmittedCoordinateHistoryMode {
     },
 }
 
+/// Verifies and admits a `History` under `claim` using default history replay limits and `sequential_limits`.
 pub fn admit_coordinate_history_mode(
     history: &History,
     initial_world: &World,
@@ -747,6 +795,7 @@ pub fn admit_coordinate_history_mode(
     )
 }
 
+/// Verifies and admits a `History` under `claim` using explicit `history_limits` and `sequential_limits`.
 pub fn admit_coordinate_history_mode_with_limits(
     history: &History,
     initial_world: &World,
@@ -1085,6 +1134,7 @@ fn coordinate_evidence_tag_from_fields(
     .expect("coordinate evidence has a fixed payload length")
 }
 
+/// Wire-format and structural decoding failure for canonical `SequentialSegment` bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SequentialCodecError {
     LengthOverflow,
@@ -1167,6 +1217,7 @@ impl fmt::Display for SequentialCodecError {
 
 impl std::error::Error for SequentialCodecError {}
 
+/// Semantic chain-linking or step-recomputation failure during sequential-history verification.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SequentialSemanticError {
     StateKind {
@@ -1278,6 +1329,7 @@ impl fmt::Display for SequentialSemanticError {
 
 impl std::error::Error for SequentialSemanticError {}
 
+/// Local computation or allocation bound refusal when verifying a sequential segment or chain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SequentialLimitError {
     SegmentCount {
@@ -1357,6 +1409,7 @@ impl fmt::Display for SequentialLimitError {
 
 impl std::error::Error for SequentialLimitError {}
 
+/// Top-level error combining codec, semantic, and local policy refusals for sequential-history operations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SequentialError {
     Codec(SequentialCodecError),
@@ -1402,6 +1455,7 @@ impl From<SequentialLimitError> for SequentialError {
     }
 }
 
+/// Refusal returned when sequential segment injections fail to cover a coordinate `History`'s exact event stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventCoverageError {
     CountOverflow,
@@ -1440,6 +1494,7 @@ impl fmt::Display for EventCoverageError {
 
 impl std::error::Error for EventCoverageError {}
 
+/// Refusal returned when admitting a coordinate `History` under a requested `CoordinateHistoryModeClaim`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModeAdmissionError {
     History(InMemoryHistoryVerificationError),

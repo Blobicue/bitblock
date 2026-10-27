@@ -12,7 +12,9 @@ use crate::frame_v2::{
 };
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 
+/// Canonical schema string for Windows DWM composition timing envelopes.
 pub const COMPOSITION_TIMING_ENVELOPE_SCHEMA: &[u8] = b"bitblock/composition-timing-envelope/v1";
+/// Fixed canonical byte length of a `CompositionTimingEnvelope` payload.
 pub const COMPOSITION_TIMING_ENVELOPE_PAYLOAD_LEN: usize = 948;
 
 const COMPOSITION_TIMING_POLICY_SCHEMA: &[u8] =
@@ -64,6 +66,7 @@ pub struct PresenterEvidence {
 }
 
 impl PresenterEvidence {
+    /// Returns whether the presenter device-context release call reported a non-zero success status.
     pub const fn release_succeeded(self) -> bool {
         self.release_result != 0
     }
@@ -187,6 +190,7 @@ impl QpcFrequency {
     }
 }
 
+/// Paired `QpcRead` timestamps bracketing one presentation or timing API call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QpcBracket {
     pub before: QpcRead,
@@ -216,6 +220,7 @@ impl QpcBracket {
     }
 }
 
+/// Unsigned 32-bit numerator and denominator rate ratio from `DWM_TIMING_INFO`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DwmRatio {
     pub numerator: u32,
@@ -490,6 +495,7 @@ impl DwmTimingCall {
     }
 }
 
+/// QPC-bracketed `GdiFlush` synchronization call and its boolean completion status.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GdiFlushCall {
     pub bracket: QpcBracket,
@@ -508,6 +514,7 @@ impl GdiFlushCall {
     }
 }
 
+/// QPC-bracketed `DwmFlush` synchronization call and its raw `HRESULT` status.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DwmFlushCall {
     pub bracket: QpcBracket,
@@ -541,6 +548,7 @@ pub enum FrameAttribution {
     Unknown,
 }
 
+/// Tag-bound composition timing observation bundling presenter, flush, and DWM snapshots.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompositionTimingEnvelope {
     tag: ContentTag,
@@ -556,6 +564,7 @@ pub struct CompositionTimingEnvelope {
 }
 
 impl CompositionTimingEnvelope {
+    /// Validates and constructs a `CompositionTimingEnvelope` around one composite `FrameReceiptV2`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         receipt: FrameReceiptV2,
@@ -584,50 +593,62 @@ impl CompositionTimingEnvelope {
         Ok(envelope)
     }
 
+    /// Returns the canonical content tag identifying this composition timing envelope.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the canonical policy tag governing this composition timing observation.
     pub const fn timing_policy(self) -> ContentTag {
         self.timing_policy
     }
 
+    /// Returns the composite `FrameReceiptV2` bound to this composition timing envelope.
     pub const fn receipt(self) -> FrameReceiptV2 {
         self.receipt
     }
 
+    /// Returns the checked scanline-submission `PresenterEvidence` for this envelope.
     pub const fn presenter(self) -> PresenterEvidence {
         self.presenter
     }
 
+    /// Returns the `QpcFrequency` observation for the composition timing session.
     pub const fn qpc_frequency(self) -> QpcFrequency {
         self.qpc_frequency
     }
 
+    /// Returns the pre-presentation `DwmTimingCall` snapshot and QPC bracket.
     pub const fn pre(self) -> DwmTimingCall {
         self.pre
     }
 
+    /// Returns the `QpcBracket` recorded around the checked presenter submission.
     pub const fn presenter_bracket(self) -> QpcBracket {
         self.presenter_bracket
     }
 
+    /// Returns the QPC-bracketed `GdiFlushCall` recorded after presenter submission.
     pub const fn gdi_flush(self) -> GdiFlushCall {
         self.gdi_flush
     }
 
+    /// Returns the QPC-bracketed `DwmFlushCall` recorded after `GdiFlush`.
     pub const fn dwm_flush(self) -> DwmFlushCall {
         self.dwm_flush
     }
 
+    /// Returns the post-flush `DwmTimingCall` snapshot and QPC bracket.
     pub const fn post(self) -> DwmTimingCall {
         self.post
     }
 
+    /// Returns the conservative `FrameAttribution` classification for this timing envelope.
     pub const fn frame_attribution(self) -> FrameAttribution {
         FrameAttribution::Unknown
     }
 
+    /// Derives the session-level `CompositionProgress` between the pre and post DWM snapshots.
     pub fn progress(self) -> CompositionProgress {
         if !self.has_complete_pair() {
             return CompositionProgress::Unavailable;
@@ -650,12 +671,14 @@ impl CompositionTimingEnvelope {
         }
     }
 
+    /// Encodes this `CompositionTimingEnvelope` into its fixed-size canonical byte array.
     pub fn encode_canonical(self) -> [u8; COMPOSITION_TIMING_ENVELOPE_PAYLOAD_LEN] {
         let mut bytes = [0; COMPOSITION_TIMING_ENVELOPE_PAYLOAD_LEN];
         self.feed_payload(&mut bytes);
         bytes
     }
 
+    /// Decodes and validates a `CompositionTimingEnvelope` from canonical payload bytes.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, PresentationProtocolError> {
         if bytes.len() != COMPOSITION_TIMING_ENVELOPE_PAYLOAD_LEN {
             return Err(PresentationProtocolError::WrongPayloadLength {
@@ -696,6 +719,7 @@ impl CompositionTimingEnvelope {
         Ok(envelope)
     }
 
+    /// Re-verifies the timing policy, field invariants, and content tag of this envelope.
     pub fn verify(self) -> Result<(), PresentationProtocolError> {
         if self.timing_policy != composition_timing_policy_tag() {
             return Err(PresentationProtocolError::TimingPolicyMismatch {
@@ -818,6 +842,7 @@ fn qpc_reads_are_complete_and_ordered<const N: usize>(reads: [(&'static str, Qpc
     true
 }
 
+/// Validation or canonical codec failure for a `CompositionTimingEnvelope`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PresentationProtocolError {
     WrongPayloadLength {

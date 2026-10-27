@@ -11,10 +11,15 @@ use std::fmt;
 
 use crate::protocol::{ContentTag, TagError, TagKind, hash_canonical};
 
+/// Canonical schema string for active monitor output topology observations.
 pub const OUTPUT_TOPOLOGY_OBSERVATION_SCHEMA: &[u8] = b"bitblock/output-topology-observation/v1";
+/// Maximum byte length admitted for a canonical output topology observation payload.
 pub const MAX_OUTPUT_TOPOLOGY_PAYLOAD_BYTES: usize = 65_536;
+/// Maximum UTF-16 code unit count admitted for a topology device string.
 pub const MAX_OUTPUT_TOPOLOGY_UTF16_UNITS: usize = 8_192;
+/// Maximum number of cloned target routes admitted in one output topology observation.
 pub const MAX_OUTPUT_TOPOLOGY_ROUTES: usize = 256;
+/// Maximum number of DisplayConfig acquisition attempts retained in one observation.
 pub const MAX_OUTPUT_TOPOLOGY_ATTEMPTS: usize = 256;
 
 const AVAILABLE_MARKER: u8 = 0;
@@ -32,11 +37,13 @@ pub struct Utf16Text {
 }
 
 impl Utf16Text {
+    /// Validates and wraps an owned vector of non-empty, NUL-free UTF-16 code units.
     pub fn new(units: Vec<u16>) -> Result<Self, OutputTopologyError> {
         validate_utf16_units(&units)?;
         Ok(Self { units })
     }
 
+    /// Validates and clones a slice of non-empty, NUL-free UTF-16 code units into `Utf16Text`.
     pub fn from_units(units: &[u16]) -> Result<Self, OutputTopologyError> {
         validate_utf16_units(units)?;
         let mut owned = Vec::new();
@@ -49,10 +56,12 @@ impl Utf16Text {
         Ok(Self { units: owned })
     }
 
+    /// Returns the underlying slice of exact UTF-16 code units.
     pub fn units(&self) -> &[u16] {
         &self.units
     }
 
+    /// Consumes this `Utf16Text` and returns its owned vector of UTF-16 code units.
     pub fn into_units(self) -> Vec<u16> {
         self.units
     }
@@ -133,6 +142,7 @@ fn validate_utf16_units(units: &[u16]) -> Result<(), OutputTopologyError> {
     Ok(())
 }
 
+/// Signed 32-bit desktop coordinate rectangle for monitor, work, and client bounds.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RectI32 {
     pub left: i32,
@@ -159,6 +169,7 @@ impl RectI32 {
     }
 }
 
+/// Unsigned 32-bit width and height dimensions in physical or desktop pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PixelSize {
     pub width: u32,
@@ -359,6 +370,7 @@ impl AcquisitionFacts {
     }
 }
 
+/// DisplayConfig desktop source mode position, dimensions, and raw pixel format.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SourceModeFacts {
     pub position_x: i32,
@@ -388,6 +400,7 @@ impl SourceModeFacts {
     }
 }
 
+/// GDI device name, desktop rectangles, and mode facts for the active display source.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceFacts {
     pub gdi_device_name: Utf16Text,
@@ -400,6 +413,7 @@ pub struct SourceFacts {
 }
 
 impl SourceFacts {
+    /// Returns whether the monitor flags mark this display source as the primary desktop monitor.
     pub const fn primary(&self) -> bool {
         self.monitor_flags_raw & 1 != 0
     }
@@ -438,6 +452,7 @@ impl SourceFacts {
     }
 }
 
+/// Manufacturer identifier and product code extracted from a monitor EDID descriptor.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EdidIdentity {
     pub manufacturer_id: u16,
@@ -640,6 +655,7 @@ impl TargetIdentityObservation {
     }
 }
 
+/// Pixel clock rate, sync frequencies, and active/total dimensions for a display target.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct TargetSignalTiming {
     pub pixel_rate: u64,
@@ -686,6 +702,7 @@ impl TargetSignalTiming {
     }
 }
 
+/// Source size, desktop region, and clipping rectangle for a target desktop image.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DesktopImageFacts {
     pub path_source_size: PixelSize,
@@ -799,6 +816,7 @@ impl TargetRouteFacts {
     }
 }
 
+/// Acquisition trace, active source facts, and canonically ordered target routes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AvailableTopologyFacts {
     pub acquisition: AcquisitionFacts,
@@ -806,6 +824,7 @@ pub struct AvailableTopologyFacts {
     pub routes: Vec<TargetRouteFacts>,
 }
 
+/// Acquisition trace and raw failure codes when output topology collection is unavailable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnavailableTopologyFacts {
     pub acquisition: AcquisitionFacts,
@@ -813,6 +832,7 @@ pub struct UnavailableTopologyFacts {
     pub error_code: u32,
 }
 
+/// Outcome of an active monitor output topology query, either available or unavailable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OutputTopologyFacts {
     Available(AvailableTopologyFacts),
@@ -899,6 +919,7 @@ pub struct OutputTopologyObservation {
 }
 
 impl OutputTopologyObservation {
+    /// Validates, canonically sorts target routes, and constructs an available topology observation.
     pub fn new_available(
         acquisition: AcquisitionFacts,
         source: SourceFacts,
@@ -914,6 +935,7 @@ impl OutputTopologyObservation {
         }))
     }
 
+    /// Validates and constructs an unavailable `OutputTopologyObservation` with failure codes.
     pub fn new_unavailable(
         acquisition: AcquisitionFacts,
         reason_code_raw: u32,
@@ -936,14 +958,17 @@ impl OutputTopologyObservation {
         Ok(observation)
     }
 
+    /// Returns the canonical content tag identifying this output topology observation.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the underlying `OutputTopologyFacts` variant for this observation.
     pub fn facts(&self) -> &OutputTopologyFacts {
         &self.facts
     }
 
+    /// Returns the `AvailableTopologyFacts` when output topology collection succeeded.
     pub fn available(&self) -> Option<&AvailableTopologyFacts> {
         match &self.facts {
             OutputTopologyFacts::Available(facts) => Some(facts),
@@ -951,6 +976,7 @@ impl OutputTopologyObservation {
         }
     }
 
+    /// Returns the `UnavailableTopologyFacts` when output topology collection failed.
     pub fn unavailable(&self) -> Option<&UnavailableTopologyFacts> {
         match &self.facts {
             OutputTopologyFacts::Available(_) => None,
@@ -974,6 +1000,7 @@ impl OutputTopologyObservation {
                 })
     }
 
+    /// Validates and encodes this `OutputTopologyObservation` into canonical payload bytes.
     pub fn try_encode_canonical(&self) -> Result<Vec<u8>, OutputTopologyError> {
         self.facts.validate()?;
         let length = self.facts.encoded_len()?;
@@ -988,6 +1015,7 @@ impl OutputTopologyObservation {
         Ok(bytes)
     }
 
+    /// Decodes and validates an `OutputTopologyObservation` from canonical payload bytes.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, OutputTopologyError> {
         if bytes.is_empty() {
             return Err(OutputTopologyError::WrongPayloadLength {
@@ -1076,6 +1104,7 @@ impl OutputTopologyObservation {
         Ok(observation)
     }
 
+    /// Re-verifies the topology facts, tag kind, and canonical content tag of this observation.
     pub fn verify(&self) -> Result<(), OutputTopologyError> {
         self.facts.validate()?;
         if self.tag.kind() != TagKind::OutputTopology {
@@ -1138,6 +1167,7 @@ fn validate_routes(routes: &[TargetRouteFacts]) -> Result<(), OutputTopologyErro
     Ok(())
 }
 
+/// Validation or canonical codec failure for an `OutputTopologyObservation`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OutputTopologyError {
     WrongPayloadLength {

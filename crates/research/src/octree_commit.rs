@@ -11,10 +11,15 @@ use crate::commit_r1::MortonKeyV1;
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::{CHUNK_WORDS, Coord, World};
 
+/// Canonical schema string for 180-bit Morton-prefixed `ChunkLeafV1` payloads.
 pub const OCTREE_CHUNK_LEAF_V1_SCHEMA: &[u8] = b"bitblock/octree-commit/chunk-leaf/v1";
+/// Canonical schema string for path-compressed arity-8 `OctreeInternalNodeV1` payloads.
 pub const OCTREE_INTERNAL_NODE_V1_SCHEMA: &[u8] = b"bitblock/octree-commit/internal-node/v1";
+/// Canonical schema string for top-level `OctreeRootV1` state commitments.
 pub const OCTREE_ROOT_V1_SCHEMA: &[u8] = b"bitblock/octree-commit/root/v1";
+/// Canonical schema string for `OctreePointProofV1` coordinate inclusion witnesses.
 pub const OCTREE_POINT_PROOF_V1_SCHEMA: &[u8] = b"bitblock/octree-commit/point-proof/v1";
+/// Canonical schema string for `VerkleR1FeasibilityReportV1` cost comparison payloads.
 pub const VERKLE_R1_FEASIBILITY_V1_SCHEMA: &[u8] =
     b"bitblock/octree-commit/verkle-r1-feasibility/v1";
 
@@ -74,6 +79,7 @@ pub struct ChunkLeafV1 {
 }
 
 impl ChunkLeafV1 {
+    /// Constructs a `ChunkLeafV1` from a chunk origin, occupied voxel count, and bitset words.
     pub fn from_chunk_words(
         chunk_origin: Coord,
         occupied_count_u16: u16,
@@ -92,6 +98,7 @@ impl ChunkLeafV1 {
         }
     }
 
+    /// Returns whether the chunk prefix padding, occupied count, and popcount are canonical.
     pub fn is_canonical(&self) -> bool {
         if (self.chunk_prefix_180b[22] & 0x0F) != 0 {
             return false;
@@ -103,6 +110,7 @@ impl ChunkLeafV1 {
         popcount == u32::from(self.occupied_count_u16)
     }
 
+    /// Returns whether the local voxel bit for `coord` is set inside this 512-byte chunk leaf.
     pub fn is_coord_on(&self, coord: Coord) -> bool {
         let lx = coord.x.rem_euclid(16) as usize;
         let ly = coord.y.rem_euclid(16) as usize;
@@ -115,6 +123,7 @@ impl ChunkLeafV1 {
         (self.bits_512b[byte_index] & mask) != 0
     }
 
+    /// Encodes this `ChunkLeafV1` into its fixed 537-byte canonical payload array.
     pub fn encode(&self) -> [u8; CHUNK_LEAF_PAYLOAD_LEN] {
         let mut out = [0u8; CHUNK_LEAF_PAYLOAD_LEN];
         out[0..23].copy_from_slice(&self.chunk_prefix_180b);
@@ -123,6 +132,7 @@ impl ChunkLeafV1 {
         out
     }
 
+    /// Decodes and validates a canonical `ChunkLeafV1` from a 537-byte slice.
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes.len() != CHUNK_LEAF_PAYLOAD_LEN {
             return None;
@@ -143,6 +153,7 @@ impl ChunkLeafV1 {
         Some(leaf)
     }
 
+    /// Computes the canonical `ContentTag` for this `ChunkLeafV1`.
     pub fn tag(&self) -> ContentTag {
         hash_canonical(
             TagKind::World,
@@ -168,6 +179,7 @@ pub struct OctreeInternalNodeV1 {
 }
 
 impl OctreeInternalNodeV1 {
+    /// Returns whether the branch depth, masked prefix, child mask, and child count are canonical.
     pub fn is_canonical(&self) -> bool {
         if self.branch_depth >= CHUNK_PREFIX_LEVELS {
             return false;
@@ -179,10 +191,12 @@ impl OctreeInternalNodeV1 {
         ones >= 2 && self.child_digests.len() == ones
     }
 
+    /// Returns the canonical byte length of this `OctreeInternalNodeV1` payload.
     pub fn encoded_len(&self) -> usize {
         INTERNAL_NODE_HEADER_LEN + 32 * self.child_digests.len()
     }
 
+    /// Encodes this `OctreeInternalNodeV1` into its canonical byte vector.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.encoded_len());
         out.push(self.branch_depth);
@@ -194,6 +208,7 @@ impl OctreeInternalNodeV1 {
         out
     }
 
+    /// Decodes and validates a canonical `OctreeInternalNodeV1` from a byte slice.
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < INTERNAL_NODE_HEADER_LEN {
             return None;
@@ -225,6 +240,7 @@ impl OctreeInternalNodeV1 {
         Some(node)
     }
 
+    /// Computes the canonical `ContentTag` for this `OctreeInternalNodeV1`.
     pub fn tag(&self) -> ContentTag {
         let payload_len =
             INTERNAL_NODE_HEADER_LEN as u64 + 32 * (self.child_mask.count_ones() as u64);
@@ -255,6 +271,7 @@ pub struct OctreeRootV1 {
 }
 
 impl OctreeRootV1 {
+    /// Returns the canonical `OctreeRootV1` header representing an empty sparse octree.
     pub const fn empty() -> Self {
         Self {
             tree_state_u8: 0,
@@ -264,6 +281,7 @@ impl OctreeRootV1 {
         }
     }
 
+    /// Returns whether the tree state, occupied counts, and root digest satisfy canonical bounds.
     pub fn is_canonical(&self) -> bool {
         match self.tree_state_u8 {
             0 => {
@@ -286,6 +304,7 @@ impl OctreeRootV1 {
         }
     }
 
+    /// Encodes this `OctreeRootV1` into its fixed 49-byte canonical payload array.
     pub fn encode(&self) -> [u8; ROOT_PAYLOAD_LEN] {
         let mut out = [0u8; ROOT_PAYLOAD_LEN];
         out[0] = self.tree_state_u8;
@@ -295,6 +314,7 @@ impl OctreeRootV1 {
         out
     }
 
+    /// Decodes and validates a canonical `OctreeRootV1` from a 49-byte slice.
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes.len() != ROOT_PAYLOAD_LEN {
             return None;
@@ -318,6 +338,7 @@ impl OctreeRootV1 {
         Some(root)
     }
 
+    /// Computes the canonical `ContentTag` for this `OctreeRootV1`.
     pub fn tag(&self) -> ContentTag {
         hash_canonical(
             TagKind::World,
@@ -361,6 +382,7 @@ pub struct OctreePointProofV1 {
 }
 
 impl OctreePointProofV1 {
+    /// Returns the canonical byte length of this `OctreePointProofV1` witness.
     pub fn encoded_len(&self) -> usize {
         let steps_bytes: usize = self
             .steps
@@ -375,6 +397,7 @@ impl OctreePointProofV1 {
         24 + 1 + steps_bytes + terminal_bytes
     }
 
+    /// Encodes this `OctreePointProofV1` witness into its canonical byte vector.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.encoded_len());
         out.extend_from_slice(&self.query_coord.x.to_be_bytes());
@@ -405,6 +428,7 @@ impl OctreePointProofV1 {
         out
     }
 
+    /// Decodes and validates a canonical `OctreePointProofV1` witness from a byte slice.
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < 26 {
             return None;
@@ -498,6 +522,7 @@ impl OctreePointProofV1 {
         })
     }
 
+    /// Computes the canonical `ContentTag` for this `OctreePointProofV1` witness.
     pub fn tag(&self) -> ContentTag {
         let payload_len = self.encoded_len() as u64;
         hash_canonical(
@@ -566,6 +591,7 @@ pub struct SparseOctreeV1 {
 }
 
 impl SparseOctreeV1 {
+    /// Constructs an empty `SparseOctreeV1` with a zeroed `OctreeRootV1` commitment.
     pub fn empty() -> Self {
         Self {
             root: OctreeRootV1::empty(),
@@ -573,6 +599,7 @@ impl SparseOctreeV1 {
         }
     }
 
+    /// Builds a deterministic path-compressed `SparseOctreeV1` from the occupied chunks of `world`.
     pub fn from_world(world: &World) -> Self {
         let mut leaves: Vec<(ChunkLeafV1, [u8; 32])> = world
             .iter_chunks()
@@ -669,14 +696,17 @@ impl SparseOctreeV1 {
         }
     }
 
+    /// Returns the top-level `OctreeRootV1` header committing to this sparse octree.
     pub const fn root(&self) -> &OctreeRootV1 {
         &self.root
     }
 
+    /// Computes the canonical `ContentTag` of this octree's `OctreeRootV1` header.
     pub fn root_tag(&self) -> ContentTag {
         self.root.tag()
     }
 
+    /// Generates a self-contained `OctreePointProofV1` inclusion or non-inclusion witness for `coord`.
     pub fn prove(&self, coord: Coord) -> OctreePointProofV1 {
         let Some(ref root_node) = self.tree else {
             return OctreePointProofV1 {
@@ -743,6 +773,7 @@ impl SparseOctreeV1 {
         }
     }
 
+    /// Verifies an `OctreePointProofV1` against `root`, returning `Some(true)` if the voxel is occupied.
     pub fn verify_proof(root: &OctreeRootV1, proof: &OctreePointProofV1) -> Option<bool> {
         if !root.is_canonical() || proof.steps.len() > CHUNK_PREFIX_LEVELS as usize {
             return None;
@@ -892,6 +923,7 @@ pub struct VerkleR1FeasibilityReportV1 {
 }
 
 impl VerkleR1FeasibilityReportV1 {
+    /// Returns the canonical `VerkleR1FeasibilityReportV1` cost comparison baseline.
     pub fn canonical() -> Self {
         Self {
             descriptor_version_u16: 1,
@@ -928,6 +960,7 @@ impl VerkleR1FeasibilityReportV1 {
         }
     }
 
+    /// Returns whether the descriptor version, arity, digests, and flags satisfy canonical bounds.
     pub fn is_canonical(&self) -> bool {
         self.descriptor_version_u16 >= 1
             && self.arity_u16 >= 2
@@ -938,6 +971,7 @@ impl VerkleR1FeasibilityReportV1 {
             && self.subgroup_check_required_u8 <= 1
     }
 
+    /// Encodes this `VerkleR1FeasibilityReportV1` into its fixed 198-byte canonical payload array.
     pub fn encode(&self) -> [u8; VERKLE_FEASIBILITY_PAYLOAD_LEN] {
         let mut out = [0u8; VERKLE_FEASIBILITY_PAYLOAD_LEN];
         out[0..2].copy_from_slice(&self.descriptor_version_u16.to_be_bytes());
@@ -963,6 +997,7 @@ impl VerkleR1FeasibilityReportV1 {
         out
     }
 
+    /// Decodes and validates a canonical `VerkleR1FeasibilityReportV1` from a 198-byte slice.
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes.len() != VERKLE_FEASIBILITY_PAYLOAD_LEN {
             return None;
@@ -1011,6 +1046,7 @@ impl VerkleR1FeasibilityReportV1 {
         Some(report)
     }
 
+    /// Computes the canonical `ContentTag` for this `VerkleR1FeasibilityReportV1`.
     pub fn tag(&self) -> ContentTag {
         hash_canonical(
             TagKind::Receipt,

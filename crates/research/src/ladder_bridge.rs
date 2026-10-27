@@ -11,9 +11,13 @@ use std::fmt;
 use crate::program::{EDIT_CANONICAL_LEN, EDIT_SCHEMA, Edit, EditCodecError};
 use crate::protocol::{ContentTag, TagError, TagKind, encode_canonical_preimage, hash_canonical};
 
+/// Domain prefix prepended to canonical content-tag preimages before quoting into the LadderLang `Lam` representation.
 pub const BRIDGE_NAME: &[u8] = b"bb-lam/v1";
+/// Canonical protocol schema string for the LadderLang quoted-byte representation policy tag.
 pub const BRIDGE_POLICY_SCHEMA: &[u8] = b"bitblock/ladderlang/quoted-byte-policy/v1";
+/// Canonical protocol schema string for expanded closed LadderLang `Lam` prefix-encoded terms.
 pub const LADDER_TERM_SCHEMA: &[u8] = b"bitblock/ladderlang/lam-prefix-vla-v1";
+/// Canonical protocol schema string for verified LadderLang quoted-byte cost and transition receipts.
 pub const LADDER_QUOTE_RECEIPT_SCHEMA: &[u8] = b"bitblock/ladderlang/quote-receipt/v1";
 
 const BRIDGE_POLICY_PAYLOAD: &[u8] = concat!(
@@ -47,6 +51,7 @@ pub struct BridgeObject<'a> {
 }
 
 impl<'a> BridgeObject<'a> {
+    /// Constructs a candidate `BridgeObject` from a claimed `TagKind`, schema slice, and canonical payload slice.
     pub const fn new(kind: TagKind, schema: &'a [u8], payload: &'a [u8]) -> Self {
         Self {
             kind,
@@ -55,14 +60,17 @@ impl<'a> BridgeObject<'a> {
         }
     }
 
+    /// Returns the claimed `TagKind` domain of this candidate LadderLang bridge object.
     pub const fn kind(self) -> TagKind {
         self.kind
     }
 
+    /// Returns the claimed canonical schema byte slice of this candidate LadderLang bridge object.
     pub const fn schema(self) -> &'a [u8] {
         self.schema
     }
 
+    /// Returns the borrowed canonical payload bytes presented to the LadderLang bridge verifier.
     pub const fn payload(self) -> &'a [u8] {
         self.payload
     }
@@ -156,66 +164,82 @@ impl LadderMetrics {
         Ok(metrics)
     }
 
+    /// Returns the total count of quoted preimage bytes (including `BRIDGE_NAME`) expanded into LadderLang `Lam`.
     pub const fn quoted_bytes(self) -> u64 {
         self.quoted_bytes
     }
 
+    /// Returns the exact byte length of the expanded closed LadderLang `Lam` prefix-encoded term.
     pub const fn lam_prefix_bytes(self) -> u64 {
         self.lam_prefix_bytes
     }
 
+    /// Returns the total AST node count of the expanded closed LadderLang `Lam` representation.
     pub const fn lam_size(self) -> u64 {
         self.lam_size
     }
 
+    /// Returns the count of De Bruijn `Var` nodes inside the expanded LadderLang `Lam` term.
     pub const fn lam_variable_nodes(self) -> u64 {
         self.lam_variable_nodes
     }
 
+    /// Returns the count of binary `App` nodes inside the expanded LadderLang `Lam` term.
     pub const fn lam_application_nodes(self) -> u64 {
         self.lam_application_nodes
     }
 
+    /// Returns the maximum nested lambda binder depth of the quoted-byte LadderLang `Lam` term.
     pub const fn binder_depth(self) -> u64 {
         self.binder_depth
     }
 
+    /// Returns the total count of `Lam` abstraction binders across the expanded LadderLang term.
     pub const fn total_binders(self) -> u64 {
         self.total_binders
     }
 
+    /// Returns the static LadderLang stratification layer computed for the closed quoted-byte term.
     pub const fn computed_layer(self) -> u64 {
         self.computed_layer
     }
 
+    /// Returns the projected count of `S` combinator atoms after LadderLang bracket abstraction.
     pub const fn s_atoms(self) -> u64 {
         self.s_atoms
     }
 
+    /// Returns the projected count of `K` combinator atoms after LadderLang bracket abstraction.
     pub const fn k_atoms(self) -> u64 {
         self.k_atoms
     }
 
+    /// Returns the projected count of `I` combinator atoms after LadderLang bracket abstraction.
     pub const fn i_atoms(self) -> u64 {
         self.i_atoms
     }
 
+    /// Returns the projected count of combinator application nodes in the lowered SKI tree.
     pub const fn sk_application_nodes(self) -> u64 {
         self.sk_application_nodes
     }
 
+    /// Returns the count of free variables surviving SKI lowering (always zero for closed quotes).
     pub const fn sk_surviving_variables(self) -> u64 {
         self.sk_surviving_variables
     }
 
+    /// Returns the static upper bound on total SKI combinator atoms (`S + K + I`) for the quote.
     pub const fn atoms_upper(self) -> u64 {
         self.atoms_upper
     }
 
+    /// Returns the static upper bound on weighted Iota combinator cost (`5*S + 4*K + 2*I`).
     pub const fn iota_upper(self) -> u64 {
         self.iota_upper
     }
 
+    /// Returns the static representation tick count (`iota_upper - 1`) under the pinned LadderLang cost model.
     pub const fn ticks(self) -> u64 {
         self.ticks
     }
@@ -233,26 +257,32 @@ pub struct VerifiedLadderQuote {
 }
 
 impl VerifiedLadderQuote {
+    /// Returns the verified canonical `ContentTag` of the source `Edit` admitted by the bridge.
     pub const fn source_tag(&self) -> ContentTag {
         self.source_tag
     }
 
+    /// Returns the `ContentTag` of the pinned LadderLang quoted-byte representation policy.
     pub const fn policy_tag(&self) -> ContentTag {
         self.policy_tag
     }
 
+    /// Returns the `ContentTag` committing to the expanded closed LadderLang `Lam` prefix stream.
     pub const fn term_tag(&self) -> ContentTag {
         self.term_tag
     }
 
+    /// Returns the `ContentTag` of the compact LadderLang quote receipt binding source, policy, term, and cost.
     pub const fn receipt_tag(&self) -> ContentTag {
         self.receipt_tag
     }
 
+    /// Returns the complete quoted byte sequence (`BRIDGE_NAME` followed by the canonical tag preimage).
     pub fn quoted_bytes(&self) -> &[u8] {
         &self.quoted_bytes
     }
 
+    /// Returns the static `LadderMetrics` cost projections computed for this verified quote.
     pub const fn metrics(&self) -> LadderMetrics {
         self.metrics
     }
@@ -263,6 +293,7 @@ impl VerifiedLadderQuote {
     }
 }
 
+/// Refusal error returned when verifying or quoting a candidate object across the LadderLang bridge.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BridgeError {
     UnsupportedKind { actual: TagKind },

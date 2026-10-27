@@ -15,10 +15,13 @@ use crate::presentation::{
 use crate::protocol::{ContentTag, TagError, TagKind, hash_canonical};
 use crate::storage::MAX_STORAGE_PAYLOAD_BYTES;
 
+/// Canonical schema string for presentation output artifact bundles.
 pub const PRESENTATION_OUTPUT_ARTIFACT_SCHEMA: &[u8] = b"bitblock/presentation-output-artifact/v1";
+/// Maximum byte length admitted for a canonical `PresentationOutputArtifact` payload.
 pub const MAX_PRESENTATION_OUTPUT_ARTIFACT_BYTES: usize = MAX_STORAGE_PAYLOAD_BYTES;
 
 const LENGTH_BYTES: usize = 8;
+/// Fixed framing byte overhead for a canonical `PresentationOutputArtifact` envelope.
 pub const PRESENTATION_OUTPUT_ARTIFACT_FIXED_BYTES: usize =
     LENGTH_BYTES + COMPOSITION_TIMING_ENVELOPE_PAYLOAD_LEN + LENGTH_BYTES + LENGTH_BYTES;
 
@@ -45,6 +48,7 @@ pub struct PresentationOutputArtifact {
 }
 
 impl PresentationOutputArtifact {
+    /// Validates and constructs a `PresentationOutputArtifact` from display, timing, and topology observations.
     pub fn new(
         display: DisplayCaptureArtifact,
         timing: CompositionTimingEnvelope,
@@ -65,26 +69,32 @@ impl PresentationOutputArtifact {
         Ok(artifact)
     }
 
+    /// Returns the canonical content tag identifying this presentation output artifact.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the embedded `DisplayCaptureArtifact` containing pixel capture evidence.
     pub const fn display(&self) -> &DisplayCaptureArtifact {
         &self.display
     }
 
+    /// Returns the `CompositionTimingEnvelope` recorded alongside the display capture.
     pub const fn timing(&self) -> CompositionTimingEnvelope {
         self.timing
     }
 
+    /// Returns the `OutputTopologyObservation` collected immediately before the display capture.
     pub const fn pre_topology(&self) -> &OutputTopologyObservation {
         &self.pre_topology
     }
 
+    /// Returns the `OutputTopologyObservation` collected immediately after the display capture.
     pub const fn post_topology(&self) -> &OutputTopologyObservation {
         &self.post_topology
     }
 
+    /// Classifies monitor route stability between the pre-capture and post-capture topology observations.
     pub fn route_stability(&self) -> RouteStability {
         match (
             self.pre_topology.available(),
@@ -98,10 +108,12 @@ impl PresentationOutputArtifact {
         }
     }
 
+    /// Returns the exact canonical byte length of this presentation output artifact.
     pub fn encoded_len(&self) -> usize {
         self.encoded_len
     }
 
+    /// Encodes this `PresentationOutputArtifact` into its canonical byte representation.
     pub fn encode_canonical(&self) -> Result<Vec<u8>, PresentationOutputArtifactError> {
         let parts = self.prepare_parts()?;
         let mut bytes = Vec::new();
@@ -115,6 +127,7 @@ impl PresentationOutputArtifact {
         Ok(bytes)
     }
 
+    /// Decodes and validates a `PresentationOutputArtifact` from canonical payload bytes.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, PresentationOutputArtifactError> {
         if bytes.len() > MAX_PRESENTATION_OUTPUT_ARTIFACT_BYTES {
             return Err(PresentationOutputArtifactError::PayloadTooLarge {
@@ -154,6 +167,7 @@ impl PresentationOutputArtifact {
         Ok(artifact)
     }
 
+    /// Re-verifies all nested components, QPC ordering invariants, and content tag of this artifact.
     pub fn verify(&self) -> Result<(), PresentationOutputArtifactError> {
         let parts = self.prepare_parts()?;
         if self.tag.kind() != TagKind::PresentationOutputArtifact {
@@ -355,6 +369,7 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// Validation or canonical codec failure for a `PresentationOutputArtifact`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PresentationOutputArtifactError {
     InvalidDisplayArtifact(DisplayArtifactError),

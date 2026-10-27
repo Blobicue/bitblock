@@ -17,6 +17,7 @@ const DISPLAY_RECEIPT_SCHEMA: &[u8] = b"bitblock/display-receipt/v1";
 const DISPLAY_RECEIPT_V2_SCHEMA: &[u8] = b"bitblock/display-receipt/v2";
 const DISPLAY_POLICY_PAYLOAD_LEN: u64 = 13;
 const DISPLAY_RECEIPT_PAYLOAD_LEN: u64 = 312;
+/// Fixed canonical payload byte length for a `DisplayReceiptV2` under `bitblock/display-receipt/v2`.
 pub const DISPLAY_RECEIPT_V2_PAYLOAD_LEN: usize = 378;
 #[cfg(any(windows, test))]
 const RGB_MASK: u32 = 0x00ff_ffff;
@@ -43,6 +44,7 @@ pub fn display_capture_policy_tag() -> ContentTag {
     .expect("display capture policy encoding has a fixed length")
 }
 
+/// Signed desktop screen-coordinate bounds bracketing a client window capture rectangle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CaptureRect {
     pub left: i32,
@@ -52,15 +54,18 @@ pub struct CaptureRect {
 }
 
 impl CaptureRect {
+    /// Computes the non-negative horizontal width in pixels of `self`, or `None` on overflow/inversion.
     pub fn width(self) -> Option<u32> {
         u32::try_from(self.right.checked_sub(self.left)?).ok()
     }
 
+    /// Computes the non-negative vertical height in pixels of `self`, or `None` on overflow/inversion.
     pub fn height(self) -> Option<u32> {
         u32::try_from(self.bottom.checked_sub(self.top)?).ok()
     }
 }
 
+/// Classification of a GDI screen-DC desktop readback comparison against an expected CPU frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DisplayOutcome {
@@ -69,6 +74,7 @@ pub enum DisplayOutcome {
     Unavailable = 2,
 }
 
+/// Pipeline stage reached by a Win32 GDI screen-DC desktop capture attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CaptureStage {
@@ -114,6 +120,7 @@ pub struct DisplayCaptureFacts {
 }
 
 impl DisplayCaptureFacts {
+    /// Constructs zeroed `Unavailable` capture facts recording the failing `CaptureStage` and `error_code`.
     pub const fn unavailable(stage: CaptureStage, error_code: u32) -> Self {
         Self {
             outcome: DisplayOutcome::Unavailable,
@@ -153,6 +160,7 @@ pub struct DisplayCapture {
 }
 
 impl DisplayCapture {
+    /// Constructs an unavailable `DisplayCapture` with no pixel buffer for a failed `CaptureStage`.
     pub fn unavailable(stage: CaptureStage, error_code: u32) -> Self {
         Self {
             facts: DisplayCaptureFacts::unavailable(stage, error_code),
@@ -220,6 +228,7 @@ fn canonicalize_captured(expected: FrameRef<'_>, mut pixels: Vec<u32>) -> Canoni
     }
 }
 
+/// Version 1 display-capture receipt binding a GDI screen readback to an expected v1 frame receipt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DisplayReceipt {
     tag: ContentTag,
@@ -233,30 +242,37 @@ pub struct DisplayReceipt {
 }
 
 impl DisplayReceipt {
+    /// Returns the canonical `DisplayReceipt` content tag for this v1 desktop capture receipt.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the optional parent `DisplayReceipt` content tag in the v1 display audit chain.
     pub const fn parent(self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the `FrameReceipt` content tag that this v1 display capture attempt audited.
     pub const fn expected_receipt(self) -> ContentTag {
         self.expected_receipt
     }
 
+    /// Returns the expected `Frame` content tag that the desktop readback was compared against.
     pub const fn expected_frame(self) -> ContentTag {
         self.expected_frame
     }
 
+    /// Returns the expected `(width, height)` viewport dimensions in pixels for this capture attempt.
     pub const fn expected_viewport(self) -> (u32, u32) {
         (self.expected_width, self.expected_height)
     }
 
+    /// Returns the `Policy` content tag identifying the GDI screen-DC capture semantics.
     pub const fn policy(self) -> ContentTag {
         self.policy
     }
 
+    /// Returns the `DisplayCaptureFacts` recorded during the GDI desktop readback attempt.
     pub const fn facts(self) -> DisplayCaptureFacts {
         self.facts
     }
@@ -274,28 +290,34 @@ impl DisplayReceipt {
     }
 }
 
+/// Append-only hash-linked ledger of verified v1 `DisplayReceipt` desktop capture records.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DisplayLedger {
     receipts: Vec<DisplayReceipt>,
 }
 
 impl DisplayLedger {
+    /// Borrows the ordered slice of committed v1 `DisplayReceipt` entries in this ledger.
     pub fn receipts(&self) -> &[DisplayReceipt] {
         &self.receipts
     }
 
+    /// Returns the number of v1 `DisplayReceipt` entries currently recorded in this ledger.
     pub fn len(&self) -> usize {
         self.receipts.len()
     }
 
+    /// Returns `true` when this v1 display ledger contains no committed capture receipts.
     pub fn is_empty(&self) -> bool {
         self.receipts.is_empty()
     }
 
+    /// Returns the `DisplayReceipt` content tag at the tip of this v1 ledger, or `None` if empty.
     pub fn head(&self) -> Option<ContentTag> {
         self.receipts.last().map(|receipt| receipt.tag)
     }
 
+    /// Validates and appends a new v1 `DisplayReceipt` chained to `self.head()`.
     pub fn append(
         &mut self,
         expected_receipt: ContentTag,
@@ -325,6 +347,7 @@ impl DisplayLedger {
         self.append_existing(receipt)
     }
 
+    /// Re-verifies parent linkage, capture-fact invariants, and tag hashes across the entire v1 ledger.
     pub fn verify(&self) -> Result<(), DisplayProtocolError> {
         let mut rebuilt = Self::default();
         for &receipt in &self.receipts {
@@ -431,30 +454,37 @@ impl DisplayReceiptV2 {
         Ok(receipt)
     }
 
+    /// Returns the canonical `DisplayReceipt` content tag for this v2 desktop capture receipt.
     pub const fn tag(self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the optional parent `DisplayReceipt` content tag in the v2 display audit chain.
     pub const fn parent(self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the composite `FrameReceiptV2` provenance bound to this v2 display capture receipt.
     pub const fn expected_receipt(self) -> FrameReceiptV2 {
         self.expected_receipt
     }
 
+    /// Returns the expected composite `Frame` content tag extracted from `expected_receipt`.
     pub const fn expected_frame(self) -> ContentTag {
         self.expected_receipt.frame()
     }
 
+    /// Returns the expected `(width, height)` composite viewport dimensions in pixels.
     pub const fn expected_viewport(self) -> (u32, u32) {
         (self.expected_width, self.expected_height)
     }
 
+    /// Returns the `Policy` content tag governing the GDI screen-DC capture semantics.
     pub const fn policy(self) -> ContentTag {
         self.policy
     }
 
+    /// Returns the `DisplayCaptureFacts` committed by this v2 desktop capture receipt.
     pub const fn facts(self) -> DisplayCaptureFacts {
         self.facts
     }
@@ -519,6 +549,7 @@ impl DisplayReceiptV2 {
         Ok(receipt)
     }
 
+    /// Verifies tag kinds, composite `FrameReceiptV2` provenance, capture facts, and receipt digest integrity.
     pub fn verify(self) -> Result<(), DisplayProtocolError> {
         require_kind("display-v2 parent", self.parent, TagKind::DisplayReceipt)?;
         self.expected_receipt
@@ -562,22 +593,27 @@ pub struct DisplayLedgerV2 {
 }
 
 impl DisplayLedgerV2 {
+    /// Borrows the ordered slice of committed `DisplayReceiptV2` records in this v2 ledger.
     pub fn receipts(&self) -> &[DisplayReceiptV2] {
         &self.receipts
     }
 
+    /// Returns the number of `DisplayReceiptV2` records currently committed in this v2 ledger.
     pub fn len(&self) -> usize {
         self.receipts.len()
     }
 
+    /// Returns `true` when this v2 display ledger contains no committed capture receipts.
     pub fn is_empty(&self) -> bool {
         self.receipts.is_empty()
     }
 
+    /// Returns the `DisplayReceipt` content tag at the tip of this v2 ledger, or `None` if empty.
     pub fn head(&self) -> Option<ContentTag> {
         self.receipts.last().map(|receipt| receipt.tag)
     }
 
+    /// Validates and appends a new `DisplayReceiptV2` bound to `expected_receipt` and `self.head()`.
     pub fn append(
         &mut self,
         expected_receipt: FrameReceiptV2,
@@ -595,6 +631,7 @@ impl DisplayLedgerV2 {
         self.append_existing(receipt)
     }
 
+    /// Re-verifies parent linkage, composite frame provenance, and capture facts across all v2 receipts.
     pub fn verify(&self) -> Result<(), DisplayProtocolError> {
         let mut rebuilt = Self::default();
         for &receipt in &self.receipts {
@@ -1062,6 +1099,7 @@ fn require_kind(
     Ok(())
 }
 
+/// Validation, decoding, or hash-linkage failure returned by v1 or v2 display capture receipts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayProtocolError {
     WrongKind {
