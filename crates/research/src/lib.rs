@@ -23,6 +23,7 @@ pub mod display_store;
 pub mod history_store;
 pub mod journal;
 pub mod ladder_bridge;
+pub mod local_bounds;
 pub mod optimization;
 pub mod output_color;
 pub mod output_topology;

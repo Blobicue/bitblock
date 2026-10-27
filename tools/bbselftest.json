@@ -96,23 +96,23 @@
     ],
     "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion. It moved 44 -> 51 when render_policy_vectors.py, frame_chain_vectors.py, display_receipt_v1_vectors.py and composite_frame_input_vectors.py closed the seven core-crate objects below. Six of the seven already had literal tag assertions in Rust and no second implementation, so those literals were a program agreeing with itself; every one of them reproduced from the Python side unchanged. It then moved again for the research-crate objects, two of them picked up transitively: the headless replay-rules policy names the renderer profile and the crosshair overlay by digest, so reconstructing the rules payload meant reconstructing both from their own constants. The count below is re-derived from the index rather than summed from the two branches, because the transitive pair would be double counted.",
     "counts": {
-        "modules": 34,
-        "schemas": 62,
+        "modules": 35,
+        "schemas": 63,
         "schemas_fixtures": 23,
-        "schemas_vectored": 62,
+        "schemas_vectored": 63,
         "metrics": 1112,
         "metrics_claimed_by_doc": 1112
     },
     "structure": [
         {
             "module": "protocol",
-            "dependents": 31,
-            "note": "The most load-bearing module in the workspace. Gained one dependent when the crate split introduced src/lib.rs as a facade that re-exports it -- a re-export is a real edge. Gained another (30 -> 31) when commit_r1 joined crates/research."
+            "dependents": 32,
+            "note": "The most load-bearing module in the workspace. Gained one dependent when the crate split introduced src/lib.rs as a facade that re-exports it -- a re-export is a real edge. Gained another (30 -> 31) when commit_r1 joined crates/research, and (31 -> 32) when local_bounds joined."
         },
         {
             "module": "world",
-            "dependents": 23,
-            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Gained one dependent (22 -> 23) when commit_r1 imported World for root hashing."
+            "dependents": 24,
+            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Gained one dependent (22 -> 23) when commit_r1 imported World for root hashing, and (23 -> 24) through local_bounds transitively reaching history_store/storage."
         },
         {
             "module": "coordinate_episode",
@@ -220,6 +220,11 @@
             "schema": "bitblock/commit-r1/world-patricia/v1",
             "vectored": true,
             "note": "Candidate A fixed-key binary Merkle Patricia Trie world root commitment. tools/commit_r1_vectors.py independently rebuilds empty root and bedrock world."
+        },
+        {
+            "schema": "bitblock/local-bounds-profile/v1",
+            "vectored": true,
+            "note": "LOCAL-BOUNDS-1 canonical storage and recovery limits profile. tools/local_bounds_vectors.py independently derives payload and tag."
         }
     ],
     "$reuse_comment": "Compression targets, so a refactor that claims to remove duplication has to move these. Production and test scope are separate on purpose: the first pass measured them together and named presentation_output <-> _v2 the biggest target in the crate, when most of that pair's overlap is test fixtures. Numbers here are the measured baseline, not a goal - the tree turned out to be far less duplicated than the first scan suggested. unreferenced_pub_items went 4 -> 3 when examples/render_time_probe.rs started calling Camera::set_observation_anchor, which had been dead. Writing a probe that needed it is what made it live.",

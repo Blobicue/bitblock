@@ -223,6 +223,18 @@
   ]
  },
  {
+  "id": "sub:local-bounds-profile",
+  "members": [
+   "module:local_bounds"
+  ],
+  "name": "local-bounds-profile",
+  "terms": [
+   "bounds",
+   "local",
+   "profile"
+  ]
+ },
+ {
   "id": "sub:local-replay-admission-policy",
   "members": [
    "module:main"

@@ -1237,6 +1237,7 @@
 {"from": "module:ladder_bridge", "kind": "declares", "to": "schema:bitblock/ladderlang/lam-prefix-vla-v1"}
 {"from": "module:ladder_bridge", "kind": "declares", "to": "schema:bitblock/ladderlang/quote-receipt/v1"}
 {"from": "module:ladder_bridge", "kind": "declares", "to": "schema:bitblock/ladderlang/quoted-byte-policy/v1"}
+{"from": "module:local_bounds", "kind": "declares", "to": "schema:bitblock/local-bounds-profile/v1"}
 {"from": "module:main", "kind": "declares", "to": "schema:bitblock/local-replay-admission-policy/headless-v1"}
 {"from": "module:main", "kind": "declares", "to": "schema:bitblock/local-replay-genesis/headless-v1"}
 {"from": "module:main", "kind": "declares", "to": "schema:bitblock/local-replay-rules/headless-v1"}
@@ -1336,6 +1337,9 @@
 {"from": "module:ladder_bridge", "kind": "depends_on", "to": "module:program"}
 {"from": "module:ladder_bridge", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:lib", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:local_bounds", "kind": "depends_on", "to": "module:history_store"}
+{"from": "module:local_bounds", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:local_bounds", "kind": "depends_on", "to": "module:storage"}
 {"from": "module:main", "kind": "depends_on", "to": "module:camera"}
 {"from": "module:main", "kind": "depends_on", "to": "module:display"}
 {"from": "module:main", "kind": "depends_on", "to": "module:display_store"}
@@ -1541,6 +1545,8 @@
 {"from": "tool:ladder_quote_vectors", "kind": "vectors", "to": "schema:bitblock/ladderlang/lam-prefix-vla-v1"}
 {"from": "tool:ladder_quote_vectors", "kind": "vectors", "to": "schema:bitblock/ladderlang/quote-receipt/v1"}
 {"from": "tool:ladder_quote_vectors", "kind": "vectors", "to": "schema:bitblock/ladderlang/quoted-byte-policy/v1"}
+{"from": "tool:local_bounds_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:local_bounds_vectors", "kind": "vectors", "to": "schema:bitblock/local-bounds-profile/v1"}
 {"from": "tool:local_replay_build_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:local_replay_build_vectors", "kind": "vectors", "to": "schema:bitblock/local-replay-build/executable-sha256/v1"}
 {"from": "tool:metric_registry", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}

@@ -68,6 +68,30 @@
     ]
    },
    {
+    "item": "DEFAULT_MAX_BACKUP_RESTORE_BYTES",
+    "modules": [
+     "local_bounds"
+    ]
+   },
+   {
+    "item": "DEFAULT_MAX_RECORDS_PER_COMMIT",
+    "modules": [
+     "local_bounds"
+    ]
+   },
+   {
+    "item": "DEFAULT_MAX_RESTART_SCAN_BYTES",
+    "modules": [
+     "local_bounds"
+    ]
+   },
+   {
+    "item": "DEFAULT_MAX_STAGED_WRITE_BYTES",
+    "modules": [
+     "local_bounds"
+    ]
+   },
+   {
     "item": "DisplayArtifactInventoryEntry",
     "modules": [
      "display_store"
@@ -185,6 +209,12 @@
     "item": "LANE_WHEEL_LINES",
     "modules": [
      "tick"
+    ]
+   },
+   {
+    "item": "LOCAL_BOUNDS_PROFILE_SCHEMA",
+    "modules": [
+     "local_bounds"
     ]
    },
    {
@@ -470,6 +500,12 @@
     ]
    },
    {
+    "item": "check_restart_scan",
+    "modules": [
+     "local_bounds"
+    ]
+   },
+   {
     "item": "common_prefix_len",
     "modules": [
      "commit_r1"
@@ -530,7 +566,7 @@
     ]
    }
   ],
-  "pub_items": 614,
+  "pub_items": 633,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -554,7 +590,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 30421,
+   "code_lines": 30670,
    "duplicated_lines": 416,
    "regions": [
     {
@@ -740,7 +776,7 @@
    ]
   },
   "test": {
-   "code_lines": 18809,
+   "code_lines": 18886,
    "duplicated_lines": 341,
    "regions": [
     {

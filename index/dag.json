@@ -71,6 +71,11 @@
   "lib": [
    "protocol"
   ],
+  "local_bounds": [
+   "history_store",
+   "protocol",
+   "storage"
+  ],
   "main": [
    "camera",
    "display",
@@ -183,7 +188,7 @@
   ],
   "world": []
  },
- "edges": 117,
+ "edges": 120,
  "stratum": {
   "camera": 0,
   "commit_r1": 1,
@@ -199,6 +204,7 @@
   "journal": 2,
   "ladder_bridge": 2,
   "lib": 1,
+  "local_bounds": 4,
   "main": 9,
   "optimization": 5,
   "output_color": 2,
@@ -229,12 +235,13 @@
   "display_store": 1,
   "frame": 14,
   "frame_v2": 10,
-  "history": 5,
-  "history_store": 2,
+  "history": 6,
+  "history_store": 3,
   "interaction": 2,
-  "journal": 5,
+  "journal": 6,
   "ladder_bridge": 0,
   "lib": 0,
+  "local_bounds": 0,
   "main": 0,
   "optimization": 0,
   "output_color": 4,
@@ -243,17 +250,17 @@
   "presentation": 6,
   "presentation_output": 4,
   "presentation_output_v2": 2,
-  "program": 19,
-  "protocol": 31,
+  "program": 20,
+  "protocol": 32,
   "render": 3,
   "replay_evidence": 1,
   "sequential": 0,
   "sidebar": 2,
-  "storage": 10,
+  "storage": 11,
   "tick": 11,
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 23
+  "world": 24
  }
 }

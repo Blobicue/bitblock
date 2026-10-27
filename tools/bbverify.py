@@ -131,13 +131,15 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "
 # 402 -> 403 / 413 -> 414: one hostile-decoder control that distinguishes a
 # 403 -> 408 / 414 -> 419: five COMMIT-R1 tests in commit_r1.rs for CoordinateKeyV1,
 # SMT and Patricia determinism, point proof verification, side-by-side assay, and rebuild parity.
+# 408 -> 414 / 419 -> 425: six LOCAL-BOUNDS-1 tests in local_bounds.rs for LocalStorageProfile,
+# checked preallocation arithmetic, recovery scanner bounds, and prune limits.
 WINDOWS_ONLY_TESTS = {
-    "quick": 29,  # 408 on Windows - 379 on Linux
-    "full": 38,   # 419 on Windows - 381 on Linux
+    "quick": 29,  # 414 on Windows - 385 on Linux
+    "full": 38,   # 425 on Windows - 387 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 408, "full": 419}.items()
+    for t, count in {"quick": 414, "full": 425}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
