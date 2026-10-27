@@ -1,0 +1,242 @@
+{
+  "format": "bitblock-cost-1-measurement-v1",
+  "receipt_finalized_utc": "2026-08-28T23:46:49.4280685Z",
+  "runtime_subject": {
+    "remote_ref": "refs/heads/main",
+    "commit": "6f80857d2a34b0d409afe2efa394a5c3c808da62",
+    "tree": "cbeb1d0069e2e42ed8c41fa4b7911ad0df54a0f6",
+    "parent": "5937056ef59d4659d68c6da0ab75b19469d2773d",
+    "status_at_measurement": "clean",
+    "cargo_lock_sha256": "997fc3b22912ed4de11f007e04303b9d4a651c816eedd09ce488d5998096b5a5",
+    "rust_toolchain_sha256": "0d7b2f6589d3a2d9ea22b782a107ddafc0da08bdca08e3524b0cf4db12c12da9"
+  },
+  "toolchain": {
+    "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+    "rustc_commit": "ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96",
+    "cargo": "1.96.0 (30a34c682 2026-05-25)",
+    "host": "x86_64-pc-windows-gnu",
+    "llvm": "22.1.2"
+  },
+  "machine": {
+    "cpu": "AMD Ryzen 7 7800X3D 8-Core Processor",
+    "physical_cores": 8,
+    "logical_processors": 16,
+    "process_affinity_mask_decimal": 65535,
+    "physical_memory_bytes": 67821977600,
+    "free_physical_memory_kib_at_provenance_sample": 2662200,
+    "os": "Microsoft Windows 11 Pro",
+    "os_version": "10.0.26200",
+    "os_build": "26200",
+    "power_scheme": "Balanced",
+    "power_scheme_guid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+    "background_load": "not isolated; Codex agents, ordinary desktop services, and user applications remained active"
+  },
+  "default_release_binary": {
+    "command": "cargo build --release --locked --bin bitblock",
+    "profile": "release",
+    "features": "default",
+    "target": "x86_64-pc-windows-gnu",
+    "path": "target/release/bitblock.exe",
+    "bytes": 991744,
+    "sha256": "9552b61fe13293e37968c5e770e7606093bf57f70974df360fcbe508baca65d6",
+    "unique_direct_external_crates": 4,
+    "active_direct_external_crates": [
+      "sha2",
+      "windows-sys",
+      "winit"
+    ],
+    "cargo_lock_package_records": 211,
+    "powered_subject_control": {
+      "base_commit": "6f80857d2a34b0d409afe2efa394a5c3c808da62",
+      "mutation": "reachable production static [u8; 400000] retained through std::hint::black_box",
+      "mutated_binary_bytes": 1391616,
+      "budget_bytes": 1310720,
+      "over_budget_bytes": 80896,
+      "mutated_binary_sha256": "cdb167e8a1f831351baeb242289a948d2c98105ddec6f682f3411ff025f1924a",
+      "result": "RED",
+      "restoration": "disposable exact-head clone moved to the Windows Recycle Bin"
+    }
+  },
+  "render_time_probe": {
+    "command": "cargo run --release --quiet --example render_time_probe",
+    "process_runs": 7,
+    "samples_per_phase_per_process": 12,
+    "statistic_per_process": "sum of the separately fastest render and observe samples",
+    "viewport_pixels": [801, 801],
+    "drawn_pixels_each_workload": 109561,
+    "nearest_rank_percentile_rule": true,
+    "workloads": [
+      {
+        "occupied_bits": 1,
+        "total_ms_process_statistics": [2.78, 2.80, 2.77, 2.78, 2.75, 2.78, 3.08],
+        "p50_ms": 2.78,
+        "p95_ms": 3.08,
+        "max_ms": 3.08
+      },
+      {
+        "occupied_bits": 99,
+        "total_ms_process_statistics": [3.36, 3.35, 3.31, 3.32, 3.30, 3.34, 3.32],
+        "p50_ms": 3.32,
+        "p95_ms": 3.36,
+        "max_ms": 3.36
+      },
+      {
+        "occupied_bits": 2649,
+        "total_ms_process_statistics": [4.06, 4.17, 4.11, 4.09, 4.13, 4.07, 4.15],
+        "p50_ms": 4.11,
+        "p95_ms": 4.17,
+        "max_ms": 4.17
+      },
+      {
+        "occupied_bits": 12699,
+        "total_ms_process_statistics": [5.57, 5.53, 5.51, 5.47, 5.88, 5.42, 5.98],
+        "p50_ms": 5.53,
+        "p95_ms": 5.98,
+        "max_ms": 5.98
+      }
+    ],
+    "admission_boundary": "These are distributions of a best-of-12 instrument statistic, not raw frame-latency distributions; they cannot establish a p99 compliance claim."
+  },
+  "render_phase_probe": {
+    "command": "cargo run --release --quiet --example render_phase_probe",
+    "process_runs": 7,
+    "samples_per_process": 12,
+    "statistic_per_process": "fastest total sample",
+    "viewport_pixels": [801, 801],
+    "drawn_pixels_each_workload": 109561,
+    "workloads": [
+      {
+        "occupied_bits": 1,
+        "total_ms_process_statistics": [0.91, 0.92, 0.93, 0.92, 0.92, 0.92, 0.92],
+        "p50_ms": 0.92,
+        "p95_ms": 0.93,
+        "max_ms": 0.93
+      },
+      {
+        "occupied_bits": 99,
+        "total_ms_process_statistics": [1.43, 1.42, 1.46, 1.44, 1.46, 1.44, 1.51],
+        "p50_ms": 1.44,
+        "p95_ms": 1.51,
+        "max_ms": 1.51
+      },
+      {
+        "occupied_bits": 2649,
+        "total_ms_process_statistics": [2.18, 2.22, 2.22, 2.18, 2.19, 2.25, 2.25],
+        "p50_ms": 2.22,
+        "p95_ms": 2.25,
+        "max_ms": 2.25
+      },
+      {
+        "occupied_bits": 12699,
+        "total_ms_process_statistics": [3.65, 3.59, 3.55, 3.56, 3.62, 3.65, 3.59],
+        "p50_ms": 3.59,
+        "p95_ms": 3.65,
+        "max_ms": 3.65
+      },
+      {
+        "occupied_bits": 58809,
+        "total_ms_process_statistics": [9.92, 9.66, 9.86, 9.87, 9.77, 10.65, 10.19],
+        "p50_ms": 9.87,
+        "p95_ms": 10.65,
+        "max_ms": 10.65
+      },
+      {
+        "occupied_bits": 149787,
+        "total_ms_process_statistics": [21.45, 21.23, 21.03, 21.57, 21.60, 23.44, 22.35],
+        "p50_ms": 21.57,
+        "p95_ms": 23.44,
+        "max_ms": 23.44
+      }
+    ],
+    "failure_bracket": {
+      "renderer_budget_ms": 8.33,
+      "last_probed_workload_below_budget_bits": 12699,
+      "first_probed_workload_above_budget_bits": 58809,
+      "tick_period_ms": 16.666666,
+      "first_probed_workload_above_tick_period_bits": 149787
+    },
+    "admission_boundary": "A best-of-12 result above a ceiling proves that sampled workload missed even in its least-busy observation; a value below the ceiling does not prove p99 compliance."
+  },
+  "world_tag_allocation_probe": {
+    "command": "cargo run --release --quiet --example world_tag_alloc_probe",
+    "process_runs": 7,
+    "origin": {
+      "occupied_bits": 1,
+      "allocations_each_run": [1, 1, 1, 1, 1, 1, 1],
+      "allocated_bytes_each_run": [24, 24, 24, 24, 24, 24, 24],
+      "tag": "#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca"
+    },
+    "spread": {
+      "occupied_bits": 4098,
+      "allocations_each_run": [1, 1, 1, 1, 1, 1, 1],
+      "allocated_bytes_each_run": [98352, 98352, 98352, 98352, 98352, 98352, 98352],
+      "tag": "#bb.world.sha256.7pdrty2m2vx2rggtcw4jfjwq4avsdwruoj4omw5mdksqqb3yfpua"
+    },
+    "powered_subject_control": {
+      "base_commit": "6f80857d2a34b0d409afe2efa394a5c3c808da62",
+      "mutation": "semantically inert reachable 64-byte Vec allocation inside production world_tag",
+      "origin_observed": [2, 88],
+      "spread_observed": [2, 98416],
+      "canonical_tags_unchanged": true,
+      "result": "RED",
+      "restoration": "disposable exact-head clone moved to the Windows Recycle Bin"
+    },
+    "claim_boundary": "Allocator requests made by world_tag only; not World residency, RSS, hardware traffic, or energy."
+  },
+  "verification_timing": {
+    "bbtime_command": "python -B tools/bbtime.py --best-of-3 --top 12",
+    "mode": "serial",
+    "per_test_repeats": 3,
+    "test_count": 414,
+    "profiled_wall_seconds": 130.2,
+    "summed_isolated_test_seconds": 7.5,
+    "bbtiming_json_sha256": "c082bd80772475cefac57e54c232b89806a649cc7ae96c4d00a734f9f59ec93b",
+    "slowest_test_seconds": 0.635,
+    "slowest_test": "headless_cli_output_is_independent_of_live_display_audit_environment",
+    "claim_boundary": "Best-of-three isolated test-process cost; not proof-verifier runtime, suite wall-clock additivity, or another machine."
+  },
+  "full_verifier": {
+    "command": "python -B tools/bbverify.py full --force",
+    "checks_passed": 12,
+    "tests_ran": 414,
+    "tests_expected": 414,
+    "independent_python_vectors": 34,
+    "metric_aliases": 1112,
+    "wall_seconds": 11.3,
+    "result": "PASS"
+  },
+  "existing_powered_controls_replayed": [
+    {
+      "command": "cargo test --workspace --features protocol-research tick::tests::decoded_action_totals_above_the_tick_limit_fail_closed -- --exact",
+      "relevant_tests_passed": 1,
+      "profile": "dev opt-level 3 with overflow checks"
+    },
+    {
+      "command": "cargo test --release --workspace --features protocol-research tick::tests::decoded_action_totals_above_the_tick_limit_fail_closed -- --exact",
+      "relevant_tests_passed": 1,
+      "profile": "release"
+    },
+    {
+      "command": "cargo test --workspace --features protocol-research history_store::tests::bounded_in_memory_verification_matches_persistent_usage_and_refuses_each_limit -- --exact",
+      "relevant_tests_passed": 1,
+      "profile": "dev opt-level 3 with overflow checks"
+    },
+    {
+      "command": "cargo test --workspace --features protocol-research tests::an_idle_tick_skips_an_unchanged_frame -- --exact",
+      "relevant_tests_passed": 1,
+      "profile": "dev opt-level 3 with overflow checks"
+    }
+  ],
+  "excluded_receipts": [
+    {
+      "reason": "Vacuous exact filter omitted the fully qualified test path.",
+      "observation": "The command exited zero but ran 0 tests in every binary.",
+      "admitted": false
+    },
+    {
+      "reason": "Package-isolated bitblock-core test did not receive the workspace's Windows feature unification.",
+      "observation": "Compilation failed before any test ran; the declared workspace command was used instead.",
+      "admitted": false
+    }
+  ]
+}

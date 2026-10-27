@@ -10,8 +10,9 @@ Implemented/source claims were reconciled to source/proof snapshot
 planning input `162406819133c1fd57d0fd26cbe5fa0b495766b8`. Documentation chronology is checked through
 that input plus the finite corrections in [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md), the
 second frozen planning audit in [`FUTURE_PLAN_AUDIT_LOOP2.md`](FUTURE_PLAN_AUDIT_LOOP2.md), and the
-design-successor chronology through
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md).
+design-successor chronology through frozen
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md) and
+the current coordinated documentation/checker descendant.
 Those audits cover planning/proposed-protocol corrections only; none silently extends or reruns the
 checkpoint-0.3 paper audit. Changes to named source/proof files or this chronology stale the
 corresponding statements.
@@ -443,8 +444,9 @@ and CI paths that neither run the powered planning controls nor invoke the scena
 
 The coordinated descendant correction is still documentation, checker, and CI-definition work. It
 does not activate any capability. Broad Rust, Lean, vector, headless, network, performance, and
-display testing begins only after the next complete read-only sweep either finds another material
-gap or records zero-new-gap convergence.
+display testing begins only after a complete read-only sweep freezes zero new material gaps and zero
+falsely closed material residuals within its declared finite lenses. A nonzero sweep is frozen and
+corrected while those broad tests remain gated.
 
 ### 29. “Keep running the same loop until diminishing returns, then actually test” (paraphrased)
 
@@ -679,6 +681,112 @@ cryptographic primitive, networking, authenticated state, cryptocurrency, or Lay
 No broad Rust, Python-vector, headless, release, Lean, network, performance, or display test is
 attributed to this correction. A later complete bounded sweep must first freeze zero new material
 gaps and zero falsely closed material residuals before broad tests begin.
+
+### 35. Ninth bounded successor sweep and the still-open convergence boundary
+
+User intent: continue the freeze-before-fix loop until a complete independent sweep finds neither a
+new material gap nor a falsely closed material residual, and only then begin broad implementation
+and proof tests.
+
+Current truth: the ninth sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md), with
+its exact Git identity and finding cardinality carried only by `Loop9ProvenanceV1` in
+[`HANDOFF.md`](HANDOFF.md). It found that candidate-selected certificate receipts did not establish
+a complete consensus-positioned occurrence/evidence universe, while content-derived occurrence
+identity could not power the claim that byte-identical content first archived later would reject.
+Its other finding classes were current-paper provenance drift, a cross-class dependency-cycle false
+closure, incomplete exact authority/archive schema guards, checker-authored audit cardinality,
+value-specific and incomplete semantic projection scanning, missing current-lineage ancestry for
+first-addition provenance, and a base-cycle negative control that exercised the digest guard rather
+than the named cycle mechanism. The current real compatible graph was acyclic; the guard gap is not
+evidence of a present capability cycle.
+
+The protocol correction direction is a consensus-native evidence cutoff and complete accepted-
+occurrence universe/root fixed before certificate admission, exact inclusion plus completeness/
+exclusion proof, and consensus-positioned occurrence identity that replay later reconstructs without
+becoming live authority. Exact carrier names remain paper-owner work. The paper-provenance direction
+is to preserve the pinned checkpoint-0.3 paper and audit as historical, relabel the mutable paper as
+the current proposed descendant, link the complete successor-review chronology, and scope the old
+checkpoint-obligations table to the pinned historical artifact. The checker direction is one
+compatible role-edge union plus exact schema/ID parsing, audit-derived cardinality, semantic-shape
+projection coverage across every mutable planning authority, current-lineage ancestry, and
+mechanism-specific powered controls. Recording these directions does not establish that the
+coordinated correction has implemented or passed them.
+
+The audit ran only the narrow planning-checker self-test and whitespace check. It ran no broad Rust,
+Python-vector, headless, release, Lean, network, storage-fault, cryptographic-implementation,
+performance, or physical-display test. Because the sweep found material gaps and falsely closed
+residuals, diminishing returns was not reached. Broad tests remain gated on a later complete
+read-only sweep that freezes zero new material gaps and zero falsely closed material residuals under
+its declared finite lenses.
+
+### 36. Ninth coordinated correction and next convergence attack
+
+The correction fixes live occurrence completeness at consensus rather than asking replay custody to
+prove live history. Every accepted wrapper enters an authenticated ordered occurrence universe under
+its exact lookup, unique core, and consensus-native position. The parent-profile resolver fixes the
+cutoff rule; required certificate position and parent consensus history derive the concrete cutoff,
+root, and inclusive scoped range. Authenticated lower-boundary exclusion, gap-free range, and upper-
+boundary exclusion derive the complete receipt set before admission. Each receipt binds the exact
+live position and outer bytes, so a whole pre-admission conflict wrapper cannot disappear through
+candidate selection.
+
+Replay remains downstream. An archive may recover byte-identical bytes after the consumer, but only
+as reconstruction of a receipt already committed by the live cutoff universe. Its event ordinal is
+custody order, not proof of creation time, and archive bytes absent from the pre-admission universe
+cannot authorize the earlier certificate. The mutable paper now identifies itself as the current
+proposed descendant, links the complete frozen review chronology, and limits its old checkpoint-
+obligations table to the pinned historical checkpoint-0.3 artifact.
+
+The checker correction combines inherited base, phase, and compatible conditional role edges into
+one acyclicity check and powers a cross-class cycle. It exactly guards the named certificate/replay
+assignment and hash-context chain, derives audit cardinality from contiguous IDs in each frozen
+finding table, scans all mutable planning authorities for malformed semantic projections, requires
+first-addition commits to reach the explicit checked lineage, and makes the base-cycle control reach
+the cycle mechanism rather than an earlier digest guard. The ordinary checker, its powered self-test,
+and whitespace check passed. These are narrow documentation/checker receipts only.
+
+No broad Rust, Python-vector, headless, release, Lean, network, storage-fault, cryptographic-
+implementation, performance, or physical-display test is attributed to this correction. A fresh
+complete bounded successor sweep must freeze zero new material gaps and zero falsely closed material
+residuals before those tests begin.
+
+### 37. Tenth bounded successor sweep, lifted cap, and coordinated correction
+
+User intent: the user first capped the process at Loop 10 after the Loop 9 correction was finished
+and pushed. The tenth read-only sweep was therefore frozen without a correction or Loop 11. The user
+later lifted that cap and authorized the coordinated correction plus renewed successor sweeps. This
+changes the work boundary, not the convergence criterion: broad implementation and proof tests still
+require a later complete sweep to freeze zero new material gaps and zero falsely closed material
+residuals within its declared finite lenses.
+
+Current truth: the tenth sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md), with
+its exact input, first-addition identity, and finding cardinality carried only by
+`Loop10ProvenanceV1` in [`HANDOFF.md`](HANDOFF.md). It found an unbound accepted-occurrence history
+start, historical signing chronology that the current artifacts cannot prove, a consumer-context
+exclusion contradiction, quoted-domain normalization, post-blank assignment tails, unguarded
+transitive envelope helpers, wrapped and negated semantic projection escapes, and operational/merge
+failure in first-addition proof. Its cross-document findings were implementation wording for the
+still-unstarted `COMMIT-R1`, a nonzero branch that incorrectly licensed broad tests, chronology that
+stopped at Loop 8, and historical checkpoint-0.3 audit ownership presented as current-paper review.
+
+The paper descendant now binds one immutable profile-derived inclusive occurrence-history start into
+both cutoff and scope and requires exact resolver/cutoff/scope equality before its range proof. It
+narrows release and activation chronology to verification/acceptance/use order rather than claiming
+unobservable physical signing time. Its recursive consumer-context guard forbids the current
+certificate/consumer chain while permitting only the independently verified prior migration
+activation-authorization path. These are proposed verifier contracts, not implementation evidence.
+
+Only the narrow planning-checker self-test and whitespace check ran during that audit; no broad Rust,
+Python-vector, headless, release, Lean, network, storage-fault, cryptographic-implementation,
+performance, or physical-display test ran. The current shared-worktree descendant coordinates the
+paper, checker, checkout policy, and mutable documentation corrections. The paper and cross-document
+projections now agree. The checker preserves quoted literal bytes, parses assignments through top-
+level boundaries, exact-guards the transitive envelope-helper closure, normalizes wrapped semantic
+claims including explicit zero/no/none forms, and makes first-addition proof fail closed on Git errors
+and inspect every parent before separately checking current-lineage ancestry. These are finite subject
+controls; their narrow receipts do not become broad implementation or security evidence.
 
 ## Semantic lessons that should survive future checkpoints
 

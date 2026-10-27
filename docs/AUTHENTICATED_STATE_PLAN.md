@@ -18,10 +18,13 @@ The current-source statements below were checked against source/proof snapshot
 [`FUTURE_PLAN_AUDIT.md`](FUTURE_PLAN_AUDIT.md). A change to a named source file, root/key contract,
 or this plan invalidates the corresponding statement rather than inheriting its “checked” status.
 The later network-integration boundary is reviewed through the frozen
-[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md); its
-exact accepted-core/collision, dual-purpose successor-authority, authorized replay-archive,
-historical-authority, and established-compromise corrections do not select or implement an
-authenticated-map candidate.
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md), with
+its exact provenance projected once in
+[`HANDOFF.md#loop10provenancev1`](HANDOFF.md#loop10provenancev1).
+The descendant's exact accepted-core/collision, dual-purpose successor-authority, authorized replay-
+archive, consensus-positioned occurrence-universe and immutable history-start equality, recursive
+consumer-context field guard, historical-authority, and established-compromise corrections do not
+select or implement an authenticated-map candidate.
 
 ## Outcome sought
 
@@ -82,7 +85,8 @@ World, active-token, episode, authorization, nonce, and asset proofs are not sub
 they use the same generic node codec. Their root wrapper type, tree-domain bytes, key codec, value
 codec, version, and commitment profile must be explicit.
 
-`COMMIT-R1` implements and compares only `WorldRootV1`. The other names reserve the required type
+`COMMIT-R1` is scoped to implementing and comparing only `WorldRootV1`; it has not started and has
+not selected or implemented either candidate. The other names reserve the required type
 and domain separations; their key widths, value schemas, and authoritative integration remain
 locked behind their owning capability nodes. `ActiveTokenRootV1` shares the 192-bit coordinate key
 but still needs independent `MintIdV1` value-codec/root vectors. `EventIdV1` width and
@@ -853,10 +857,13 @@ to the same unique parent lookup/core and governance root, while their use, poli
 status and evidence remain separate. Neither purpose may be coerced into or substituted for the
 other. The base context is neither serialized nor counted in the bundle and contains no historical
 ref or certificate-derived ID. Verification is staged: derive and verify the release core ID; resolve
-`VerifiedSuccessorReleaseAuthorityContextV1` and its accepted release-purpose certificate; sign and
-verify `AdmittedReleaseRecordV1`; finish the internal DAG and derive the bundle ID; then resolve
-`VerifiedSuccessorActivationAuthorityContextV1` and its accepted activation-purpose certificate
-before signing activation. The embedded `AdmittedReleaseRecordV1` predecessor authority reference MUST byte-equal
+`VerifiedSuccessorReleaseAuthorityContextV1` and its accepted release-purpose certificate; only then
+accept or use the release sign document, its authorization, and the derived
+`AdmittedReleaseRecordV1`; finish the internal DAG and derive the bundle ID; then resolve
+`VerifiedSuccessorActivationAuthorityContextV1` and its accepted activation-purpose certificate;
+only then accept or use the activation sign document, its ID, or its authorization. This is verifier
+dependency order, not a claim about historical signature-production time. The embedded
+`AdmittedReleaseRecordV1` predecessor authority reference MUST byte-equal
 `release_parent_authority_ref` and the reference bound inside
 `verified_release_parent_eligibility`. The activation sign document's complete predecessor
 authority reference MUST byte-equal `activation_parent_authority_ref` and the reference bound inside
@@ -1003,16 +1010,36 @@ lookup/core, exact purpose, policy, predicate, attained status, exact
 position, codec/crypto/consensus/availability policies, bounds, status, and equivocation/liveness
 rules from the verified parent profile and a certificate-independent
 `ParentAuthorityCertificateConsumerContextV1` derived before any historical ref or final consumer
-ID. A certificate becomes consumable only
-through `ConsensusNativeParentAuthorityCertificateAdmissionV1`: its authorization, exact evidence
-commitment with a complete `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1` and exact
-`AcceptedParentAuthorityWitnessReceiptCoverageV1`, consensus evidence, availability assessment,
-canonical position, and attained status all verify. Receipt verification total-decodes each wrapper
-and requires exact set equality for its credential, consensus, assessment, and dependency components;
-valid nonqualifying or conflicting components cannot be omitted from status evaluation. Its final
-admission ID is derived afterward. The child header, release sign document,
-or activation sign document binds that exact accepted admission; the replay archive is not a live
-authority or liveness dependency.
+ID. The resolver also fixes the rule that selects the last complete consensus state immediately
+preceding admission; the required certificate position and parent consensus history derive the
+concrete `ConsensusNativeParentAuthorityEvidenceCutoffV1`, which consensus authenticates. A
+certificate candidate cannot choose its cutoff, occurrence root, position, or range policy. The
+parent consensus state maintains one authenticated
+ordered occurrence universe. Each accepted wrapper is inserted atomically under
+`ConsensusNativeAcceptedRecordOccurrenceIndexKeyV1`, including its exact
+`ConsensusNativeAcceptedRecordOccurrencePositionV1`, and
+`ConsensusNativeAcceptedRecordOccurrenceReceiptV1` binds that position and the exact bounded outer
+bytes. `ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1` authenticates the cutoff,
+universe root, entry count, and state inclusion.
+
+A certificate becomes consumable only through
+`ConsensusNativeParentAuthorityCertificateAdmissionV1`. Its
+`CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1` supplies the exact
+`ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1`—lookup, core, inclusive consensus-history
+start, and `ConsensusNativeParentAuthorityEvidenceCutoffPositionV1`—the range-derived
+`ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1`, and
+`ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1`. Authenticated lower-
+boundary exclusion, gap-free range, and upper-boundary exclusion prove that every relevant
+occurrence through the inclusive cutoff is present; the range cannot be truncated, sampled, or
+candidate-selected.
+Receipt verification total-decodes and canonically re-encodes every wrapper and requires exact set
+equality for its credential, consensus, assessment, and dependency components through
+`AcceptedParentAuthorityWitnessReceiptCoverageV1`. Missing whole wrappers, valid nonqualifying or
+conflicting components, duplicate keys, extra receipts, or a wrong boundary/root/position reject.
+Only after the complete evidence commitment, consensus evidence, availability assessment, canonical
+position, and attained status verify is the final admission ID derived. The child header, release
+sign document, or activation sign document binds that exact accepted admission; the replay archive
+is not a live authority or liveness dependency.
 
 The replay witness carries the exact accepted certificate and admission, and the authenticated
 authority-use event commits their complete canonical bytes through
@@ -1020,14 +1047,20 @@ authority-use event commits their complete canonical bytes through
 insufficient.
 `ConsensusToReplayParentAuthorityCommitmentProofV1` reconstructs the certificate's exact committed
 credential/evidence preimages from byte-exact raw wrapper-occurrence events in one complete
-authorized archive prefix, byte-equals every outer preimage and receipt ID to the receipt set already
-inside the accepted commitment, and recomputes same-wrapper dependencies, dependency closure,
-purpose, and status. Those raw occurrences are replay-retention pins; a later synthetic wrapper
-cannot repair admission, and later normalized-witness replacement cannot erase them. The archive
-checkpoint may be created later; its append-consistency proof protects
-replay custody only. Candidate evidence subsets may create different certificate IDs, but the
-consensus rule accepts exactly one per parent/purpose/required position and only that admission may
-enter a consumer. Coverage is exact, with no missing or duplicate use. A later named view may
+authorized archive prefix. Every recovered occurrence carries and recomputes its earlier
+consensus-native position and receipt ID, and the archive witness set must be exactly total over the
+range-derived receipt set already inside the accepted commitment. The verifier rechecks the cutoff
+consensus proof and authenticated range-completeness proof, then recomputes same-wrapper
+dependencies, dependency closure, purpose, and status. Archive bytes absent from the pre-admission
+universe cannot justify a certificate, even if they are content-identical to another receipt. A
+later archive event may validly recover byte-identical bytes for an already positioned occurrence;
+its event ordinal is custody order, not live creation time. Those raw occurrences and live-position
+metadata are replay-retention pins that later normalized-witness replacement cannot erase. The
+archive checkpoint may be created later; its append-consistency proof protects replay custody only.
+For one `(parent core, purpose, consumer context, required consensus position)`, the profile accepts
+exactly one admission on canonical history, and only that admission may enter a consumer. Coverage
+is exact, with no missing or duplicate use. A later
+named view may
 separately emit
 `ReplayParentAuthorityStatusProjectionV1` values in
 `ReplayParentAuthorityStatusProjectionSetV1`; later evidence may update that projection but cannot

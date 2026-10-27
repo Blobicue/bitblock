@@ -49,7 +49,7 @@ candidate to choose its own authority.
 | PS-006 | REPLAY-0 | claim-scope | BOUNDED |
 | PS-007 | PROOF-0 | base | BOUNDED |
 | PS-008 | DOC-0 | base | IMPLEMENTED |
-| PS-009 | ACCOUNT-1 | base | READY |
+| PS-009 | ACCOUNT-1 | base | IMPLEMENTED |
 | PS-010 | LOCAL-BOUNDS-1 | base | LOCKED |
 | PS-011 | STORAGE-1 | base | LOCKED |
 | PS-012 | STORAGE-1 | research-journals | BOUNDED |
@@ -103,7 +103,7 @@ candidate to choose its own authority.
 | PS-060 | L1-PRODUCTION | base | LOCKED |
 | PS-061 | VALUE-1 | base | LOCKED |
 | PS-062 | COST-1 | base | READY |
-| PS-063 | COST-1 | budget | OPEN-DECISION |
+| PS-063 | COST-1 | budget | BOUNDED |
 | PS-064 | CODEC-1 | base | READY |
 | PS-065 | EXECUTOR-1 | base | LOCKED |
 | PS-066 | THREAT-D0 | base | READY |
@@ -433,7 +433,7 @@ a checker error.
 
 ### `ACCOUNT-1` — complete action/result accounting
 
-- **Status:** `PS-009:ACCOUNT-1@base=READY`.
+- **Status:** `PS-009:ACCOUNT-1@base=IMPLEMENTED`.
 - **Depends on:** `TICK-0`, `REPLAY-0`.
 - **Motive:** ensure every included action has one visible disposition before authority, programs,
   or money depend on the reducer.
@@ -442,7 +442,10 @@ a checker error.
   events that were never accepted.
 - **Gate:** replay and live adapters produce the same ordered dispositions for the same accepted
   actions; counts and effect commitments reconcile exactly; malformed or over-limit records fail
-  closed before mutation.
+  closed before mutation. The implementation receipt is remote `main` commit
+  `6f80857d2a34b0d409afe2efa394a5c3c808da62` (tree
+  `cbeb1d0069e2e42ed8c41fa4b7911ad0df54a0f6`) and exact-head CI run `33142396938`, whose Rust,
+  Python-vector, Lean, and generated-index jobs all completed successfully.
 - **Non-claim:** a complete local action record is not durable custody, authentication, ownership,
   or consensus.
 
@@ -625,7 +628,7 @@ a checker error.
   named profile-owned and protocol-identity compromise boundaries.
 - **Gate:** dependency-graph cycle check plus cross-domain, self-reference, field-omission,
   duplicate-field, alternate-body, wrong-parent, and wrong-version mutation corpus. Every
-  authority-relevant byte reaches exactly the intended identifier before it can be signed. Two
+  authority-relevant byte reaches exactly the intended identifier authenticated by its signature. Two
   valid proposal signatures and split evidence wrappers for one unsigned core normalize without
   extra weight or parent multiplication; same-wrapper availability dependencies insert atomically;
   a genuine distinct-unsigned-core collision rejects and is classified only through the exact
@@ -1176,13 +1179,15 @@ is invalid input, not a third collision row.
 
 ### `COST-1` — cheapness budgets and measurements
 
-- **Status:** `PS-062:COST-1@base=READY`, `PS-063:COST-1@budget=OPEN-DECISION`.
+- **Status:** `PS-062:COST-1@base=READY`, `PS-063:COST-1@budget=BOUNDED`.
 - **Depends on:** `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, `PROOF-0`; repeats for every
   activated feature.
 - **Motive:** turn “as cheap as possible” into separate, attackable resource claims.
-- **Artifact:** pinned measurements and proposed budgets for default binary/dependency size,
-  touched-state memory, tick work, renderer/collision work, commitment updates, proof verification,
-  bandwidth, database writes, retained history, recovery, and idle overhead.
+- **Artifact:** [`COST_1_BUDGET.md`](COST_1_BUDGET.md) fixes the local-reference budgets and
+  dispositions; [`cost-1-measurement-v1.json`](cost-1-measurement-v1.json) pins their raw receipts
+  for default binary/dependency size, touched-state memory, tick work, renderer/collision work,
+  commitment updates, proof verification, bandwidth, database writes, retained history, recovery,
+  and idle overhead.
 - **Gate:** every reported number identifies build, workload, machine where relevant, deterministic
   counters where possible, distribution/failure point, and powered control; budgets are fixed before
   optimizing against them.
@@ -1626,9 +1631,12 @@ is invalid input, not a third collision row.
   and evidence. After the release core ID exists,
   `VerifiedSuccessorReleaseAuthorityContextV1` binds its certificate-independent
   `ParentAuthorityCertificateConsumerContextV1` variant and
-  accepted release-purpose admission before the release is signed. Only after that admitted release
-  completes the bundle and yields its ID may `VerifiedSuccessorActivationAuthorityContextV1` bind the
-  distinct activation-purpose context/admission before activation is signed. The successor release
+  accepted release-purpose admission. That certificate must verify before the release sign document,
+  its ID, or its authorization is accepted or used; this does not claim historical signature-
+  production time. Only after that admitted release completes the bundle and yields its ID may
+  `VerifiedSuccessorActivationAuthorityContextV1` bind the distinct activation-purpose context and
+  admission. That certificate must likewise verify before the activation sign document, its ID, or
+  its authorization is accepted or used. The successor release
   sign document and activation sign document each carry the exact purpose-specific
   `HistoricalAcceptedParentAuthorityUseRefV1`, including the resolver-selected consensus position,
   exact evidence commitment with its complete
@@ -1692,25 +1700,37 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
-| 1 | `PS-009:ACCOUNT-1@base=READY` |
-| 2 | `PS-015:COMMIT-R1@base=READY` |
-| 3 | `PS-016:VERKLE-R1@base=READY` |
-| 4 | `PS-017:VERKLE-R1@feasibility=READY` |
-| 5 | `PS-021:REFINE-1@base=READY` |
-| 6 | `PS-022:REFINE-1@world=READY` |
-| 7 | `PS-044:LANGUAGE-R1@base=READY` |
-| 8 | `PS-051:SCALE-1@base=READY` |
-| 9 | `PS-062:COST-1@base=READY` |
-| 10 | `PS-064:CODEC-1@base=READY` |
-| 11 | `PS-066:THREAT-D0@base=READY` |
-| 12 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 13 | `PS-086:RELEASE-R1@base=READY` |
-| 14 | `PS-087:RELEASE-R1@framework=READY` |
+| 1 | `PS-015:COMMIT-R1@base=READY` |
+| 2 | `PS-016:VERKLE-R1@base=READY` |
+| 3 | `PS-017:VERKLE-R1@feasibility=READY` |
+| 4 | `PS-021:REFINE-1@base=READY` |
+| 5 | `PS-022:REFINE-1@world=READY` |
+| 6 | `PS-044:LANGUAGE-R1@base=READY` |
+| 7 | `PS-051:SCALE-1@base=READY` |
+| 8 | `PS-062:COST-1@base=READY` |
+| 9 | `PS-064:CODEC-1@base=READY` |
+| 10 | `PS-066:THREAT-D0@base=READY` |
+| 11 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 12 | `PS-086:RELEASE-R1@base=READY` |
+| 13 | `PS-087:RELEASE-R1@framework=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
 This is the sole exact numeric projection of the retained planning checker. Every value is derived
 from its canonical parsed source; prose elsewhere links here instead of repeating these numbers.
+
+The frozen ninth audit found that the audited checker could accept a cross-class cycle because it
+checked phase and conditional role graphs separately. Its correction checks one compatible
+inherited-base/phase/conditional role union and powers an exact cross-class cycle. The frozen tenth
+audit then found quoted-literal erasure, a blank-line assignment escape, unguarded transitive envelope
+helpers, wrapped/negated semantic projections, and operational/merge first-addition failure. The
+coordinated correction preserves quoted bytes, parses through the next top-level assignment boundary,
+exact-guards the declared envelope-helper closure, normalizes intra-paragraph semantic claims and
+explicit zero/no/none forms, fails closed on Git inspection errors, checks every addition parent for
+prior path presence, and still requires ancestry to the explicit checked lineage. Audit cardinality
+is derived from frozen finding tables. The real compatible graph at the audited inputs and corrected
+descendant is acyclic. These are checker controls, not a capability promotion or protocol-security
+proof.
 
 | Summary field | Canonical decimal value |
 | --- | ---: |
@@ -1718,15 +1738,15 @@ from its canonical parsed source; prose elsewhere links here instead of repeatin
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `14` |
+| `ready_frontier_count_u32` | `13` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
 | `total_declared_edge_count_u32` | `363` |
 | `predicate_entailment_count_u32` | `10` |
-| `planning_markdown_count_u32` | `22` |
-| `frozen_text_artifact_count_u32` | `12` |
-| `frozen_markdown_audit_count_u32` | `11` |
+| `planning_markdown_count_u32` | `24` |
+| `frozen_text_artifact_count_u32` | `14` |
+| `frozen_markdown_audit_count_u32` | `13` |
 | `frozen_json_receipt_count_u32` | `1` |
 
 `LEDGER-1`, a token/ownership system, networking, and autonomous rules should not be combined in
