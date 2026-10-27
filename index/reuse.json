@@ -482,6 +482,12 @@
     ]
    },
    {
+    "item": "apply_receipt",
+    "modules": [
+     "coordinate_episode"
+    ]
+   },
+   {
     "item": "bridge_policy_tag",
     "modules": [
      "ladder_bridge"
@@ -566,7 +572,7 @@
     ]
    }
   ],
-  "pub_items": 635,
+  "pub_items": 648,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -590,7 +596,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 30705,
+   "code_lines": 30844,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -679,12 +685,12 @@
      "right": "interaction:1319"
     },
     {
-     "left": "coordinate_episode:504",
+     "left": "coordinate_episode:667",
      "lines": 9,
      "right": "physical_sensor:1343"
     },
     {
-     "left": "coordinate_episode:700",
+     "left": "coordinate_episode:863",
      "lines": 9,
      "right": "display:1111"
     },
@@ -771,7 +777,7 @@
    ]
   },
   "test": {
-   "code_lines": 18913,
+   "code_lines": 18947,
    "duplicated_lines": 341,
    "regions": [
     {

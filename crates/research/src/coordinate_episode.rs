@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use crate::history::{History, TransitionEffect, world_tag};
+use crate::history::{History, Receipt, TransitionEffect, world_tag};
 use crate::history_store::{
     HistoryReplayLimits, InMemoryHistoryVerificationError, verify_in_memory_history_with_limits,
 };
@@ -318,6 +318,169 @@ pub fn coordinate_episode_derivation_policy_tag() -> ContentTag {
         |_| {},
     )
     .expect("coordinate-episode policy has an empty payload")
+}
+
+/// Durable local occupancy-episode ledger (LEDGER-1).
+///
+/// An authoritative local ledger maintaining the exact live episode per mutable occupied coordinate,
+/// consuming burns, recording fresh re-mints, and excluding bedrock coordinates (which originate at genesis).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OccupancyEpisodeLedger {
+    history_genesis: ContentTag,
+    history_head: ContentTag,
+    active_by_coord: HashMap<Coord, CoordinateEpisode>,
+    active_by_mint: HashMap<ContentTag, Coord>,
+    total_mints: usize,
+    total_burns: usize,
+}
+
+impl OccupancyEpisodeLedger {
+    /// Constructs an empty occupancy ledger for a given history genesis.
+    pub fn new(history_genesis: ContentTag) -> Self {
+        Self {
+            history_genesis,
+            history_head: history_genesis,
+            active_by_coord: HashMap::new(),
+            active_by_mint: HashMap::new(),
+            total_mints: 0,
+            total_burns: 0,
+        }
+    }
+
+    /// Reconstructs the ledger state by replaying a verified History.
+    pub fn from_history(
+        initial_world: &World,
+        history: &History,
+    ) -> Result<Self, CoordinateEpisodeError> {
+        let mut ledger = Self::new(history.genesis());
+        for receipt in history.receipts() {
+            ledger.apply_receipt(receipt)?;
+        }
+        if !ledger.verify_consistency(history, initial_world) {
+            return Err(CoordinateEpisodeError::DerivationMismatch);
+        }
+        Ok(ledger)
+    }
+
+    /// Applies one verified history receipt to advance the active episode map.
+    pub fn apply_receipt(&mut self, receipt: &Receipt) -> Result<(), CoordinateEpisodeError> {
+        for effect in receipt.effects() {
+            self.apply_effect(effect)?;
+        }
+        self.history_head = receipt.tag();
+        Ok(())
+    }
+
+    /// Applies one transition effect.
+    pub fn apply_effect(
+        &mut self,
+        effect: &TransitionEffect,
+    ) -> Result<(), CoordinateEpisodeError> {
+        match *effect {
+            TransitionEffect::Mint { coord, event } => {
+                if self.active_by_mint.contains_key(&event) {
+                    return Err(CoordinateEpisodeError::DuplicateMintEvent { event });
+                }
+                if self.active_by_coord.contains_key(&coord) {
+                    return Err(CoordinateEpisodeError::DuplicateMintEvent { event });
+                }
+                let episode = CoordinateEpisode {
+                    coord,
+                    mint: event,
+                    consuming_burn: None,
+                };
+                self.active_by_coord.insert(coord, episode);
+                self.active_by_mint.insert(event, coord);
+                self.total_mints += 1;
+            }
+            TransitionEffect::Burn {
+                coord,
+                event,
+                consumed_mint,
+            } => {
+                // Bedrock coordinates already on at genesis close no post-genesis episode
+                if consumed_mint == self.history_genesis {
+                    return Ok(());
+                }
+                let Some(mint_coord) = self.active_by_mint.remove(&consumed_mint) else {
+                    return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
+                        burn: event,
+                        consumed_mint,
+                    });
+                };
+                if mint_coord != coord {
+                    return Err(CoordinateEpisodeError::BurnProvenanceMismatch {
+                        burn: event,
+                        consumed_mint,
+                        expected_coord: mint_coord,
+                        actual_coord: coord,
+                    });
+                }
+                let Some(episode) = self.active_by_coord.remove(&coord) else {
+                    return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
+                        burn: event,
+                        consumed_mint,
+                    });
+                };
+                if episode.mint != consumed_mint {
+                    return Err(CoordinateEpisodeError::BurnProvenanceMismatch {
+                        burn: event,
+                        consumed_mint,
+                        expected_coord: episode.coord,
+                        actual_coord: coord,
+                    });
+                }
+                self.total_burns += 1;
+            }
+            TransitionEffect::NoOp { .. } => {}
+        }
+        Ok(())
+    }
+
+    pub fn get_active(&self, coord: Coord) -> Option<&CoordinateEpisode> {
+        self.active_by_coord.get(&coord)
+    }
+
+    pub fn is_active_mint(&self, mint: ContentTag) -> bool {
+        self.active_by_mint.contains_key(&mint)
+    }
+
+    pub fn active_episodes(&self) -> &HashMap<Coord, CoordinateEpisode> {
+        &self.active_by_coord
+    }
+
+    pub fn active_count(&self) -> usize {
+        self.active_by_coord.len()
+    }
+
+    pub fn total_mints(&self) -> usize {
+        self.total_mints
+    }
+
+    pub fn total_burns(&self) -> usize {
+        self.total_burns
+    }
+
+    pub fn history_genesis(&self) -> ContentTag {
+        self.history_genesis
+    }
+
+    pub fn history_head(&self) -> ContentTag {
+        self.history_head
+    }
+
+    /// Checks that the active episodes match the history's circulating supply and active mints.
+    pub fn verify_consistency(&self, history: &History, _initial_world: &World) -> bool {
+        if self.active_count() != history.circulating_supply() {
+            return false;
+        }
+        for (&coord, episode) in &self.active_by_coord {
+            if history.active_mint(coord) != Some(episode.mint) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 /// Builds only the relation that is actually serialized. The caller's replay policy bounds source
@@ -1010,6 +1173,48 @@ mod tests {
         assert!(matches!(
             CoordinateEpisodeEvidence::derive(&wrong_initial, &history),
             Err(CoordinateEpisodeError::History(_))
+        ));
+    }
+
+    #[test]
+    fn occupancy_ledger_tracks_mints_burns_and_re_mints() {
+        let (initial, history) = episode_history();
+        let evidence = CoordinateEpisodeEvidence::derive(&initial, &history).unwrap();
+        let ledger = OccupancyEpisodeLedger::from_history(&initial, &history).unwrap();
+
+        assert_eq!(ledger.total_mints(), 3);
+        assert_eq!(ledger.total_burns(), 2);
+        assert_eq!(ledger.active_count(), 1);
+        assert_eq!(ledger.active_count(), history.circulating_supply());
+
+        // Check active coordinate B has an active episode
+        let b_episode = ledger.get_active(B).unwrap();
+        assert_eq!(b_episode.coord(), B);
+        assert!(b_episode.is_active());
+        assert_eq!(b_episode.mint(), history.active_mint(B).unwrap());
+
+        // A was burned and is currently off
+        assert_eq!(ledger.get_active(A), None);
+        assert!(!ledger.is_active_mint(evidence.episodes()[0].mint()));
+        assert!(ledger.is_active_mint(b_episode.mint()));
+        assert_eq!(ledger.active_episodes().len(), 1);
+        assert!(ledger.verify_consistency(&history, &initial));
+    }
+
+    #[test]
+    fn occupancy_ledger_burn_on_unminted_coordinate_fails() {
+        let initial = World::new();
+        let history = History::new(&initial);
+        let mut ledger = OccupancyEpisodeLedger::new(history.genesis());
+
+        let fake_burn = TransitionEffect::Burn {
+            coord: Coord::new(10, 10, 10),
+            event: ContentTag::from_digest(TagKind::Event, [1; 32]),
+            consumed_mint: ContentTag::from_digest(TagKind::Event, [2; 32]),
+        };
+        assert!(matches!(
+            ledger.apply_effect(&fake_burn),
+            Err(CoordinateEpisodeError::BurnWithoutOpenMint { .. })
         ));
     }
 }
