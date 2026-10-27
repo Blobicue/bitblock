@@ -32,7 +32,9 @@ recipe), `wave <modules...>` (parallel subagent execution waves across `deps` +
 checks each object), `metric <words>` (registry families), `dag` (dependency
 strata and which modules are load-bearing), `sub [name]` (modules that move
 together), `coverage` (`//!` and public `///` documentation coverage), `eval`
-(self-supervised holdout retrieval benchmark), `stats`, `gates`, `selftest`.
+(self-supervised holdout retrieval benchmark), `html [path]` (standalone
+interactive HTML GraphRAG and DAG observatory compiler), `stats`, `gates`,
+`selftest`.
 
 Every line of output cites a path, so any claim can be checked against the tree
 that produced it.

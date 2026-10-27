@@ -26,10 +26,12 @@ against the tree that produced it.
     gates               Re-run the accounting gates and the staleness check.
     stats               Index shape.
     selftest            Run tools/bbselftest.json; non-zero exit on mismatch.
+    html [path]         Compile index/ into a standalone interactive HTML observatory.
 
     python tools/bbgraph.py ask "canonical framebuffer bytes"
     python tools/bbgraph.py schema bitblock/tick-outcome/v3
     python tools/bbgraph.py node frame
+    python tools/bbgraph.py html target/bitblock_graph.html
 
 How `ask` ranks, in three rules.
 
@@ -1847,8 +1849,7 @@ def tokens_from_module_without_summary(m: dict) -> list[str]:
     )
 
 
-def cmd_eval() -> int:
-    nodes, subs, dag = load()
+def compute_eval_rows(nodes: list[dict], subs: list[dict], dag: dict) -> list[dict]:
     mod_nodes = [n for n in nodes if n["kind"] == "module"]
 
     def score_holdout(cases: list[tuple[dict, str]]) -> tuple[int, int, int, int, int]:
@@ -1924,26 +1925,40 @@ def cmd_eval() -> int:
     ta_n, ta_s1, ta_s3, ta_h1, ta_h3 = score_holdout(test_all_cases)
     tl_n, tl_s1, tl_s3, tl_h1, tl_h3 = score_holdout(test_lib_cases)
 
-    def fmt_row(label: str, n: int, s1: int, s3: int, h1: int, h3: int) -> str:
+    def make_row(label: str, n: int, s1: int, s3: int, h1: int, h3: int) -> dict:
         denom = max(n, 1)
-        return (
-            "  %-28s %4d   %5.1f%% / %5.1f%%   %5.1f%% / %5.1f%%"
-            % (
-                label,
-                n,
-                100.0 * s1 / denom,
-                100.0 * s3 / denom,
-                100.0 * h1 / denom,
-                100.0 * h3 / denom,
-            )
-        )
+        return {
+            "label": label,
+            "n": n,
+            "s1": s1,
+            "s3": s3,
+            "h1": h1,
+            "h3": h3,
+            "s1_pct": round(100.0 * s1 / denom, 1),
+            "s3_pct": round(100.0 * s3 / denom, 1),
+            "h1_pct": round(100.0 * h1 / denom, 1),
+            "h3_pct": round(100.0 * h3 / denom, 1),
+        }
+
+    return [
+        make_row("module-doc (//! summary)", md_n, md_s1, md_s3, md_h1, md_h3),
+        make_row("symbol-doc (pub /// >=3t)", sd_n, sd_s1, sd_s3, sd_h1, sd_h3),
+        make_row("test-name (all #[test])", ta_n, ta_s1, ta_s3, ta_h1, ta_h3),
+        make_row("test-name (lib, no main)", tl_n, tl_s1, tl_s3, tl_h1, tl_h3),
+    ]
+
+
+def cmd_eval() -> int:
+    nodes, subs, dag = load()
+    rows = compute_eval_rows(nodes, subs, dag)
 
     print("SELF-SUPERVISED HOLDOUT RETRIEVAL BENCHMARK (37 modules)")
     print("  %-28s %4s   %-15s   %-15s" % ("holdout set", "N", "strict T1 / T3", "1-hop T1 / T3"))
-    print(fmt_row("module-doc (//! summary)", md_n, md_s1, md_s3, md_h1, md_h3))
-    print(fmt_row("symbol-doc (pub /// >=3t)", sd_n, sd_s1, sd_s3, sd_h1, sd_h3))
-    print(fmt_row("test-name (all #[test])", ta_n, ta_s1, ta_s3, ta_h1, ta_h3))
-    print(fmt_row("test-name (lib, no main)", tl_n, tl_s1, tl_s3, tl_h1, tl_h3))
+    for r in rows:
+        print(
+            "  %-28s %4d   %5.1f%% / %5.1f%%   %5.1f%% / %5.1f%%"
+            % (r["label"], r["n"], r["s1_pct"], r["s3_pct"], r["h1_pct"], r["h3_pct"])
+        )
     return 0
 
 
@@ -2292,6 +2307,3025 @@ def cmd_selftest() -> int:
     return 1 if failures else 0
 
 
+def build_html_payload() -> dict:
+    nodes, subs, dag = load()
+    edges = load_edges()
+    coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
+    reuse = json.loads(REUSE.read_text(encoding="utf-8"))
+    selftest_spec = json.loads(SELFTEST.read_text(encoding="utf-8"))
+    eval_rows = compute_eval_rows(nodes, subs, dag)
+
+    mods = {n["name"]: n for n in nodes if n["kind"] == "module"}
+    for scope in ("production", "test"):
+        for region in reuse.get("duplication", {}).get(scope, {}).get("regions", []):
+            left = region["left"].split(":")[0]
+            right = region["right"].split(":")[0]
+            a, b = mods.get(left), mods.get(right)
+            if not (a and b):
+                region["homes"] = []
+                continue
+            weakest = min(gate_rank(a["gate"]), gate_rank(b["gate"]))
+            if left in reachable(dag, right):
+                homes = [left]
+            elif right in reachable(dag, left):
+                homes = [right]
+            else:
+                common = reachable(dag, left) & reachable(dag, right)
+                homes = [c for c in common if gate_rank(mods[c]["gate"]) <= weakest]
+            homes = [h for h in homes if gate_rank(mods[h]["gate"]) <= weakest]
+            homes.sort(key=lambda m: (-dag["stratum"].get(m, 0), m))
+            region["homes"] = homes[:3]
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "dag": dag,
+        "subs": subs,
+        "coverage": coverage,
+        "reuse": reuse,
+        "selftest": selftest_spec,
+        "eval_rows": eval_rows,
+        "stop": sorted(STOP),
+        "kind_words": KIND_WORDS,
+    }
+
+
+HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bitblock — Knowledge Graph &amp; GraphRAG Auditor Observatory</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    code, pre, .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    .surface-card {
+      background: var(--card);
+      color: var(--foreground);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .surface-subtle {
+      background: color-mix(in srgb, var(--card) 75%, var(--background) 25%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .muted { color: var(--muted-foreground); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--card) 85%, var(--foreground) 6%);
+      color: var(--foreground);
+      white-space: nowrap;
+    }
+    .pill-core { border-color: rgba(16, 185, 129, 0.45); color: #10b981; background: rgba(16, 185, 129, 0.1); }
+    .pill-research { border-color: rgba(59, 130, 246, 0.45); color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+    .pill-binary { border-color: rgba(245, 158, 11, 0.45); color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+    .pill-win { border-color: rgba(168, 85, 247, 0.45); color: #a855f7; background: rgba(168, 85, 247, 0.1); }
+    .pill-high { border-color: rgba(16, 185, 129, 0.55); color: #10b981; background: rgba(16, 185, 129, 0.14); font-weight: 600; }
+    .pill-low { border-color: rgba(245, 158, 11, 0.55); color: #f59e0b; background: rgba(245, 158, 11, 0.14); font-weight: 600; }
+    .pill-danger { border-color: rgba(239, 68, 68, 0.55); color: #ef4444; background: rgba(239, 68, 68, 0.14); font-weight: 600; }
+    .btn {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      transition: all 0.12s ease;
+    }
+    .btn:hover {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--card) 82%, var(--primary) 18%);
+    }
+    .btn-active {
+      background: var(--primary);
+      color: var(--primary-foreground, #ffffff);
+      border-color: var(--primary);
+    }
+    .tab-btn {
+      cursor: pointer;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted-foreground);
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover {
+      color: var(--foreground);
+      background: color-mix(in srgb, var(--card) 80%, var(--foreground) 6%);
+    }
+    .tab-btn.active {
+      color: var(--foreground);
+      background: var(--card);
+      border-color: var(--primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    .input-box {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--background);
+      color: var(--foreground);
+      font-size: 13px;
+      outline: none;
+    }
+    .input-box:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent);
+    }
+    .clickable-row {
+      cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+    .clickable-row:hover {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--card) 88%, var(--primary) 12%);
+    }
+    .dag-node {
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.12s ease;
+    }
+    .dag-node:hover rect {
+      stroke-width: 2.4px;
+    }
+    .layout-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 410px;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 1180px) {
+      .layout-grid { grid-template-columns: 1fr; }
+    }
+    .sticky-drawer {
+      position: sticky;
+      top: 12px;
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+    }
+    table.audit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    table.audit-table th, table.audit-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    table.audit-table th {
+      font-weight: 600;
+      color: var(--muted-foreground);
+      background: color-mix(in srgb, var(--card) 92%, var(--foreground) 4%);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body class="antialiased p-4">
+  <!-- Header & Global KPI Ribbon -->
+  <header class="surface-card p-4 mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="pill pill-core mono">BITBLOCK INDEX OBSERVATORY</span>
+          <h1 class="text-lg font-bold tracking-tight m-0">Knowledge Graph &amp; Glass-Box GraphRAG Compiler</h1>
+        </div>
+        <p class="muted text-xs mt-1 mb-0">
+          Compiled directly from <code>index/nodes.jsonl</code>, <code>index/edges.jsonl</code>, <code>index/dag.json</code>, <code>index/subsystems.json</code>, <code>index/reuse.json</code>, <code>index/coverage.json</code> &amp; <code>tools/bbselftest.json</code>. Zero server, 100% deterministic parity with <code>tools/bbgraph.py</code>.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="header-selftest-badge" class="pill pill-high mono">SELFTEST 90/90 PASS</span>
+        <span id="header-gates-badge" class="pill pill-high mono">3/3 ACCOUNTING GATES</span>
+        <button id="theme-toggle-btn" class="btn mono" title="Toggle standalone light/dark palette">Theme</button>
+      </div>
+    </div>
+
+    <div id="kpi-ribbon" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2"></div>
+
+    <!-- Navigation Tabs -->
+    <nav class="flex flex-wrap gap-1.5 mt-4 pt-3 border-t border-[var(--border)]" role="tablist">
+      <button class="tab-btn active" data-tab="ask" id="tab-btn-ask">
+        <span>1. GraphRAG Search</span>
+        <span class="pill mono">ask</span>
+      </button>
+      <button class="tab-btn" data-tab="dag" id="tab-btn-dag">
+        <span>2. 10-Stratum DAG &amp; Subsystems</span>
+        <span class="pill mono">dag / sub</span>
+      </button>
+      <button class="tab-btn" data-tab="impact" id="tab-btn-impact">
+        <span>3. Blast-Radius &amp; Waves</span>
+        <span class="pill mono">impact / wave</span>
+      </button>
+      <button class="tab-btn" data-tab="symbols" id="tab-btn-symbols">
+        <span>4. Symbols, Types &amp; Callers</span>
+        <span class="pill mono">type / callers</span>
+      </button>
+      <button class="tab-btn" data-tab="protocol" id="tab-btn-protocol">
+        <span>5. Schemas, #bb. Tags &amp; Proofs</span>
+        <span class="pill mono">schema / tag</span>
+      </button>
+      <button class="tab-btn" data-tab="audit" id="tab-btn-audit">
+        <span>6. Auditor Gates &amp; Benchmarks</span>
+        <span class="pill mono">selftest / eval</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Workspace + Persistent Deep-Inspector Drawer -->
+  <div class="layout-grid">
+    <main id="main-workspace" class="min-w-0">
+      <!-- TAB 1: GRAPHRAG SEARCH (ask) -->
+      <section id="panel-ask" class="tab-panel space-y-4">
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 class="text-base font-bold m-0">Interactive Glass-Box GraphRAG Engine (<code>bbgraph.py ask</code>)</h2>
+            <span class="muted text-xs mono" id="ask-cli-cmd">python3 tools/bbgraph.py ask "canonical framebuffer bytes"</span>
+          </div>
+          <p class="muted text-xs mb-3">
+            Type any architectural question, Rust symbol (<code>SparseOctreeV1::from_world</code>), schema string (<code>bitblock/commit-r1/morton-key/v1</code>), or literal content tag (<code>#bb.&lt;kind&gt;.sha256.&lt;digest&gt;</code>). Every result exposes its exact 5-step mathematical ranking breakdown.
+          </p>
+          <div class="flex gap-2 mb-3">
+            <input id="ask-input" type="text" class="input-box mono" value="canonical framebuffer bytes" placeholder="Ask the Bitblock knowledge graph (e.g. canonical framebuffer bytes, SparseOctreeV1::from_world, #bb.receipt.sha256...)" />
+            <button id="ask-run-btn" class="btn btn-active">Run Query</button>
+          </div>
+          <div class="space-y-1.5">
+            <div class="text-xs font-semibold muted">Auditor Preset Queries (click to execute):</div>
+            <div id="ask-presets" class="flex flex-wrap gap-1.5"></div>
+          </div>
+        </div>
+
+        <!-- 5-Stage Glass-Box Pipeline Explainer -->
+        <div id="ask-pipeline-card" class="surface-card p-4"></div>
+
+        <!-- 5-Group Context Pack Output -->
+        <div id="ask-results" class="space-y-3"></div>
+      </section>
+
+      <!-- TAB 2: 10-STRATUM DAG & SUBSYSTEMS -->
+      <section id="panel-dag" class="tab-panel space-y-4" style="display:none;">
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+              <h2 class="text-base font-bold m-0">10-Stratum Topological Module DAG (37 Modules, 130 Prod Edges, 34 Test Edges)</h2>
+              <p class="muted text-xs mt-0.5 mb-0">
+                Stratum 0 modules depend on nothing in the workspace; Stratum 9 (<code>main</code>) is the binary entrypoint. Click any module node to highlight its upstream dependencies (cyan), downstream dependents (amber), and symbol-level coupling (<code>symbol_deps</code>).
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-1.5 items-center">
+              <select id="dag-crate-filter" class="btn mono">
+                <option value="all">Crate: All (37)</option>
+                <option value="core">bitblock-core (13)</option>
+                <option value="research">bitblock-research (22)</option>
+                <option value="binary">bitblock root/bin (2)</option>
+              </select>
+              <select id="dag-gate-filter" class="btn mono">
+                <option value="all">Gate: All cfg</option>
+                <option value="default">cfg(default) (15)</option>
+                <option value="protocol-research">cfg(protocol-research) (18)</option>
+                <option value="all(windows, feature = &quot;protocol-research&quot;)">cfg(windows + research) (3)</option>
+                <option value="binary">cfg(binary) (1)</option>
+              </select>
+              <label class="btn mono"><input type="checkbox" id="dag-show-prod" checked /> Prod Edges (130)</label>
+              <label class="btn mono"><input type="checkbox" id="dag-show-test" /> #[cfg(test)] Edges (34)</label>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2 mb-3 text-xs">
+            <span class="pill pill-core">bitblock-core (default)</span>
+            <span class="pill pill-research">bitblock-research (protocol-research)</span>
+            <span class="pill pill-win">windows + protocol-research</span>
+            <span class="pill pill-binary">bitblock binary / facade</span>
+            <span class="pill" style="border-color:#06b6d4;color:#06b6d4;">Cyan = Upstream Dependency (DEPENDS ON)</span>
+            <span class="pill" style="border-color:#f59e0b;color:#f59e0b;">Amber = Downstream Dependent (DEPENDED ON BY)</span>
+          </div>
+
+          <div id="dag-svg-wrap" class="overflow-x-auto surface-subtle p-2"></div>
+          <div id="dag-edge-detail" class="mt-3"></div>
+        </div>
+
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h3 class="text-sm font-bold m-0">46 Schema-Derived Collaborative Subsystems (<code>bbgraph.py sub</code>)</h3>
+            <input id="sub-filter-input" type="text" class="input-box mono" style="max-width:260px;" placeholder="Filter subsystems..." />
+          </div>
+          <p class="muted text-xs mb-3">
+            Subsystem membership is derived automatically from declared <code>bitblock/&lt;namespace&gt;/vN</code> schemas. Click any subsystem to highlight its collaborating modules on the 10-Stratum DAG above.
+          </p>
+          <div id="sub-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: 4-TIER BLAST RADIUS (impact) & PARALLEL WAVES (wave) -->
+      <section id="panel-impact" class="tab-panel space-y-4" style="display:none;">
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 class="text-base font-bold m-0">4-Tier Blast-Radius (<code>impact</code>) &amp; Parallel Subagent Wave (<code>wave</code>) Simulator</h2>
+            <span id="impact-cli-cmd" class="muted text-xs mono">python3 tools/bbgraph.py impact world camera render</span>
+          </div>
+          <p class="muted text-xs mb-3">
+            Select target modules below (or enter a symbol name like <code>World::exposed_faces</code> to auto-resolve to its owning module) to compute the 4-tier blast radius, runnable verification recipe, and conflict-free subagent execution waves over <code>deps &cup; test_deps</code>.
+          </p>
+          <div class="flex flex-wrap gap-1.5 mb-3" id="impact-presets"></div>
+          <div class="flex gap-2 mb-3">
+            <input id="impact-input" type="text" class="input-box mono" value="world camera render octree_commit scale_assay" placeholder="Enter module or symbol names (e.g. world, render, World::exposed_faces)..." />
+            <button id="impact-run-btn" class="btn btn-active">Simulate Impact &amp; Waves</button>
+          </div>
+          <div class="text-xs font-semibold muted mb-1.5">Click modules to toggle in target set:</div>
+          <div id="impact-mod-pills" class="flex flex-wrap gap-1"></div>
+        </div>
+
+        <div id="impact-output" class="space-y-4"></div>
+      </section>
+
+      <!-- TAB 4: SYMBOLS, SIGNATURE TYPES & 2-PASS CALLERS -->
+      <section id="panel-symbols" class="tab-panel space-y-4" style="display:none;">
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <!-- Left: Type Dataflow Explorer -->
+          <div class="surface-card p-4">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <h2 class="text-base font-bold m-0">Signature Type Dataflow (<code>type / returns / takes</code>)</h2>
+              <span class="pill mono">1,723 fn sigs</span>
+            </div>
+            <p class="muted text-xs mb-3">
+              4-step paren-balanced signature parser: inspect where any type is defined, constructed (<code>RETURNED BY</code>), implemented (<code>METHODS</code>), and consumed (<code>TAKEN BY</code>).
+            </p>
+            <div class="flex gap-2 mb-2">
+              <input id="type-input" type="text" class="input-box mono" value="SparseOctreeV1" placeholder="Type name (e.g. SparseOctreeV1, ContentTag, World, JournalIo)..." />
+              <button id="type-run-btn" class="btn btn-active">Inspect Type</button>
+            </div>
+            <div id="type-presets" class="flex flex-wrap gap-1 mb-3"></div>
+            <div id="type-output" class="space-y-3"></div>
+          </div>
+
+          <!-- Right: 2-Pass Caller & Symbol Explorer -->
+          <div class="surface-card p-4">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <h2 class="text-base font-bold m-0">2-Pass 3-Rule Caller Graph (<code>callers / sym</code>)</h2>
+              <span class="pill mono">2,475 syms + 448 #[test]</span>
+            </div>
+            <p class="muted text-xs mb-3">
+              Resolves qualified calls (<code>Type::method</code>), dot calls (<code>recv.method()</code>), and rare top-level functions across production spans and <code>#[test]</code> spans, emitting crate-aware <code>cargo test</code> commands.
+            </p>
+            <div class="flex gap-2 mb-2">
+              <input id="caller-input" type="text" class="input-box mono" value="CameraProjection::aabb_definitely_outside_frustum" placeholder="Function or Type::method (e.g. World::exposed_faces, JournalIo::metadata_len)..." />
+              <button id="caller-run-btn" class="btn btn-active">Trace Callers</button>
+            </div>
+            <div id="caller-presets" class="flex flex-wrap gap-1 mb-3"></div>
+            <div id="caller-output" class="space-y-3"></div>
+          </div>
+        </div>
+
+        <!-- Bottom: Full Workspace Symbol Search Table -->
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 class="text-sm font-bold m-0">Workspace Symbol Catalog (2,475 Production Symbols across 37 Modules)</h3>
+            <div class="flex flex-wrap gap-2">
+              <input id="sym-table-search" type="text" class="input-box mono" style="width:240px;" placeholder="Filter by symbol, type, sig, doc..." />
+              <select id="sym-table-kind" class="btn mono">
+                <option value="all">Kind: All</option>
+                <option value="fn">fn</option>
+                <option value="struct">struct</option>
+                <option value="enum">enum</option>
+                <option value="trait">trait</option>
+                <option value="const">const</option>
+                <option value="type">type</option>
+              </select>
+              <select id="sym-table-mod" class="btn mono">
+                <option value="all">Module: All (37)</option>
+              </select>
+            </div>
+          </div>
+          <div id="sym-table-wrap" class="max-h-96 overflow-y-auto surface-subtle"></div>
+        </div>
+      </section>
+
+      <!-- TAB 5: PROTOCOL SCHEMAS, #bb. TAG TRIANGULATOR, PROOFS & METRICS -->
+      <section id="panel-protocol" class="tab-panel space-y-4" style="display:none;">
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex flex-wrap gap-1.5">
+              <button class="btn btn-active proto-sub-btn" data-sub="tags">5A. #bb. ContentTag Triangulator</button>
+              <button class="btn proto-sub-btn" data-sub="schemas">5B. Protocol Surface (74 Schemas + 23 Fixtures)</button>
+              <button class="btn proto-sub-btn" data-sub="proofs">5C. Lean 4 Proofs (9) &amp; Metric Registry (1,112)</button>
+            </div>
+            <input id="proto-search" type="text" class="input-box mono" style="max-width:320px;" placeholder="Filter tags, schemas, theorems, or metrics..." />
+          </div>
+          <div id="proto-content"></div>
+        </div>
+      </section>
+
+      <!-- TAB 6: AUDITOR GATES, 90/90 SELFTEST, HOLDOUT EVAL & COVERAGE -->
+      <section id="panel-audit" class="tab-panel space-y-4" style="display:none;">
+        <!-- Top Row: 3 Accounting Gates + Holdout Eval Benchmark -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="surface-card p-4" id="audit-gates-card"></div>
+          <div class="surface-card p-4" id="audit-eval-card"></div>
+        </div>
+
+        <!-- Live In-Browser 90/90 Selftest Suite -->
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+              <h2 class="text-base font-bold m-0">Live In-Browser <code>bbselftest.json</code> Verification Runner (90 Assertions)</h2>
+              <p class="muted text-xs mt-0.5 mb-0">
+                Every expectation in <code>tools/bbselftest.json</code> is executed directly by this page's JavaScript GraphRAG engine. Click any row to load that exact test case in the Observatory.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="selftest-cat-filter" class="btn mono">
+                <option value="all">Category: All (90)</option>
+              </select>
+              <button id="selftest-rerun-btn" class="btn btn-active">Re-Run All 90 Checks Now</button>
+            </div>
+          </div>
+          <div id="selftest-table-wrap" class="max-h-96 overflow-y-auto surface-subtle"></div>
+        </div>
+
+        <!-- Per-Module Documentation & Mutation Coverage Matrix -->
+        <div class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h3 class="text-sm font-bold m-0">Per-Module Documentation (<code>///</code>), Test &amp; Canonical Mutation (<code>.to_be_bytes()</code>) Matrix (37 Modules)</h3>
+            <span class="pill mono">245 mutation sites across 29 modules</span>
+          </div>
+          <div id="coverage-table-wrap" class="max-h-96 overflow-y-auto surface-subtle"></div>
+        </div>
+
+        <!-- Structural Duplication & Dead Surface -->
+        <div class="surface-card p-4" id="audit-reuse-card"></div>
+      </section>
+    </main>
+
+    <!-- Persistent Right Drawer: Universal Node / Symbol / Tag Deep-Inspector -->
+    <aside id="inspector-drawer" class="surface-card p-4 sticky-drawer">
+      <div id="inspector-content"></div>
+    </aside>
+  </div>
+
+  <script id="bb-graph-data" type="application/json">__BB_GRAPH_PAYLOAD__</script>
+  <script>
+  (() => {
+    "use strict";
+
+    // Standalone theme fallback ONLY when opened outside Antigravity host iframe
+    const rootStyle = getComputedStyle(document.documentElement);
+    let standaloneDark = true;
+    function applyStandaloneTheme(dark) {
+      const s = document.documentElement.style;
+      if (dark) {
+        s.setProperty("--background", "#0b0f17");
+        s.setProperty("--card", "#111827");
+        s.setProperty("--foreground", "#f3f4f6");
+        s.setProperty("--muted-foreground", "#9ca3af");
+        s.setProperty("--border", "#1f2937");
+        s.setProperty("--primary", "#3b82f6");
+        s.setProperty("--primary-foreground", "#ffffff");
+      } else {
+        s.setProperty("--background", "#f8fafc");
+        s.setProperty("--card", "#ffffff");
+        s.setProperty("--foreground", "#0f172a");
+        s.setProperty("--muted-foreground", "#475569");
+        s.setProperty("--border", "#e2e8f0");
+        s.setProperty("--primary", "#2563eb");
+        s.setProperty("--primary-foreground", "#ffffff");
+      }
+    }
+    if (!rootStyle.getPropertyValue("--background").trim()) {
+      applyStandaloneTheme(true);
+    }
+    document.getElementById("theme-toggle-btn").addEventListener("click", () => {
+      standaloneDark = !standaloneDark;
+      applyStandaloneTheme(standaloneDark);
+    });
+
+    // Load compiled payload
+    const DATA = JSON.parse(document.getElementById("bb-graph-data").textContent);
+    const NODES = DATA.nodes;
+    const EDGES = DATA.edges;
+    const DAG = DATA.dag;
+    const SUBS = DATA.subs;
+    const COVERAGE = DATA.coverage;
+    const REUSE = DATA.reuse;
+    const SELFTEST = DATA.selftest;
+    const EVAL_ROWS = DATA.eval_rows;
+    const STOP_SET = new Set(DATA.stop);
+    const KIND_WORDS = DATA.kind_words;
+
+    const NODE_BY_ID = new Map(NODES.map(n => [n.id, n]));
+    const MODULES = NODES.filter(n => n.kind === "module");
+    const MOD_BY_NAME = new Map(MODULES.map(m => [m.name, m]));
+    const MODULE_NAMES = new Set(MODULES.map(m => m.name));
+
+    // Precompute DF & typical median lengths per kind (exact match with bbgraph.py)
+    const PER_KIND_DF = {};
+    const KIND_TOTALS = {};
+    const KIND_TYPICAL = {};
+    {
+      const sizes = {};
+      for (const node of NODES) {
+        const k = node.kind;
+        if (!PER_KIND_DF[k]) PER_KIND_DF[k] = {};
+        KIND_TOTALS[k] = (KIND_TOTALS[k] || 0) + 1;
+        const tset = new Set(node.terms || []);
+        for (const t of tset) {
+          PER_KIND_DF[k][t] = (PER_KIND_DF[k][t] || 0) + 1;
+        }
+        if (node.terms && node.terms.length) {
+          if (!sizes[k]) sizes[k] = [];
+          sizes[k].push(node.terms.length);
+        }
+      }
+      for (const [k, arr] of Object.entries(sizes)) {
+        const sorted = arr.slice().sort((a, b) => a - b);
+        KIND_TYPICAL[k] = sorted[Math.floor(sorted.length / 2)] || 1;
+      }
+    }
+
+    function esc(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function tokens(text) {
+      const words = String(text || "").toLowerCase().match(/[a-z0-9]+/g) || [];
+      return words.filter(w => w.length > 2 && !STOP_SET.has(w));
+    }
+
+    function idf(term, kind) {
+      const total = Math.max(KIND_TOTALS[kind] || 1, 1);
+      const seen = (PER_KIND_DF[kind] && PER_KIND_DF[kind][term]) || 0;
+      return Math.max(Math.log(total / (1 + seen)), 0.0);
+    }
+
+    function cite(node) {
+      if (!node) return "";
+      if (node.kind === "doc") return `${node.path}:${node.line}`;
+      if (node.kind === "schema") return (node.declared_at && node.declared_at[0]) || "(undeclared)";
+      return node.path || "";
+    }
+
+    function describe(node) {
+      return String((node && node.summary) || "").trim().replace(/\s+/g, " ").slice(0, 150);
+    }
+
+    function loadBearing(node) {
+      if (!node || node.kind !== "module") return 0;
+      return DAG.transitive_dependents[node.name] || 0;
+    }
+
+    function gatePillClass(gate, crateName) {
+      if (crateName === "core") return "pill-core";
+      if (String(gate).includes("windows")) return "pill-win";
+      if (crateName === "research" || String(gate).includes("protocol-research")) return "pill-research";
+      return "pill-binary";
+    }
+
+    function fmtSyms(syms, limit = 6) {
+      if (!syms || !syms.length) return "";
+      const head = syms.slice(0, limit).join(", ");
+      return syms.length > limit ? `${head}, +${syms.length - limit} more` : head;
+    }
+
+    // Tag triangulation resolver (exact match with bbgraph.py resolve_tag)
+    const RE_TAG_QUERY = /^(?:#bb\.([a-z0-9-]+)\.sha256\.([a-z0-9]*)|([a-z2-7]{52}))$/;
+    const RE_B32_DIGEST = /^[a-z2-7]{52}$/;
+
+    function resolveTag(query) {
+      const q = String(query || "").trim().replace(/^["']+|["']+$/g, "").trim().toLowerCase();
+      const m = q.match(RE_TAG_QUERY);
+      if (!m) return null;
+      const kind = m[1] || null;
+      const digest = kind !== null ? m[2] : m[3];
+      if (!digest || !RE_B32_DIGEST.test(digest)) {
+        return { query: query.trim(), kind, digest: digest || "", tags: [], nodes: [], ids: [] };
+      }
+      const targetFull = kind ? `#bb.${kind}.sha256.${digest}` : null;
+      const suffix = "." + digest;
+      const matchedTags = new Set();
+      const hits = [];
+      for (const n of NODES) {
+        if (["module", "tool", "doc", "example"].includes(n.kind)) {
+          const tags = (n.pinned_tags || []).filter(t => targetFull ? t === targetFull : t.endsWith(suffix));
+          if (tags.length) {
+            tags.forEach(t => matchedTags.add(t));
+            hits.push(n);
+          }
+        } else if (n.kind === "metric") {
+          const t = n.tag || "";
+          if (targetFull ? t === targetFull : t.endsWith(suffix)) {
+            matchedTags.add(t);
+            hits.push(n);
+          }
+        }
+      }
+      hits.sort((a, b) => a.id.localeCompare(b.id));
+      return {
+        query: query.trim(),
+        kind,
+        digest,
+        tags: Array.from(matchedTags).sort(),
+        nodes: hits,
+        ids: hits.map(n => n.id),
+      };
+    }
+
+    // 5-Step GraphRAG rank() (bit-exact with bbgraph.py + glass-box breakdown)
+    function rank(query, customNodes = null) {
+      const nodePool = customNodes || NODES;
+      let qt = tokens(query);
+      const raw = String(query || "").toLowerCase().match(/[a-z0-9_/.-]+/g) || [];
+      const wantKinds = new Set(raw.filter(w => KIND_WORDS[w]).map(w => KIND_WORDS[w]));
+      qt = qt.filter(t => !KIND_WORDS[t]);
+
+      // Recompute DF if customNodes passed (for module-doc holdout eval)
+      let localIdf = idf;
+      let localTypical = KIND_TYPICAL;
+      if (customNodes) {
+        const pk = {};
+        const tot = {};
+        const sz = {};
+        for (const n of nodePool) {
+          const k = n.kind;
+          if (!pk[k]) pk[k] = {};
+          tot[k] = (tot[k] || 0) + 1;
+          for (const t of new Set(n.terms || [])) pk[k][t] = (pk[k][t] || 0) + 1;
+          if (n.terms && n.terms.length) {
+            if (!sz[k]) sz[k] = [];
+            sz[k].push(n.terms.length);
+          }
+        }
+        localTypical = {};
+        for (const [k, arr] of Object.entries(sz)) {
+          const s = arr.slice().sort((a, b) => a - b);
+          localTypical[k] = s[Math.floor(s.length / 2)] || 1;
+        }
+        localIdf = (term, kind) => {
+          const total = Math.max(tot[kind] || 1, 1);
+          const seen = (pk[kind] && pk[kind][term]) || 0;
+          return Math.max(Math.log(total / (1 + seen)), 0.0);
+        };
+      }
+
+      const anchored = {};
+      const matchedSubs = [];
+      for (const sub of SUBS) {
+        const subTerms = new Set(sub.terms || []);
+        let hit = 0.0;
+        for (const t of qt) {
+          if (subTerms.has(t)) hit += localIdf(t, "module");
+        }
+        if (hit > 0) {
+          matchedSubs.push({ name: sub.name, score: hit, members: sub.members });
+          for (const member of sub.members) {
+            anchored[member] = Math.max(anchored[member] || 0.0, hit);
+          }
+        }
+      }
+      matchedSubs.sort((a, b) => b.score - a.score);
+
+      const matchedTerms = new Set();
+      let named = false;
+      const scored = [];
+      const rawIdent = new Set(
+        (String(query || "").match(/[A-Za-z0-9_]+/g) || [])
+          .filter(w => w.includes("_") || /[A-Z]/.test(w.slice(1)))
+          .map(w => w.toLowerCase())
+      );
+      const quals = Array.from(
+        String(query || "").toLowerCase().matchAll(/([a-z0-9_]+)::([a-z0-9_]+)/g),
+        m => [m[1], m[2]]
+      );
+      const rawset = new Set(raw.map(t => t.toLowerCase()));
+
+      for (const node of nodePool) {
+        const terms = new Set(node.terms || []);
+        const name = String(node.name || "").toLowerCase();
+        let hit = 0.0;
+        const nodeMatchedTerms = [];
+        for (const term of qt) {
+          if (terms.has(term)) {
+            hit += localIdf(term, node.kind);
+            matchedTerms.add(term);
+            nodeMatchedTerms.push(term);
+          }
+        }
+        if (hit > 0) {
+          const baseline = localTypical[node.kind] || 1;
+          hit /= Math.sqrt(Math.max(terms.size, 1) / baseline);
+        }
+        const exact = Boolean(name) && (rawset.has(name) || rawset.has(name.replace(/_/g, "-")));
+        const parts = name.split(/[_\-/]/).filter(p => p.length > 2);
+        const spelled = parts.length > 1 && parts.every(p => rawset.has(p));
+        let symHit = false;
+        let matchedSymName = null;
+        if (node.kind === "module" && (quals.length || rawIdent.size) && node.symbols) {
+          for (const s of node.symbols) {
+            const sname = s.name.toLowerCase();
+            const simpl = String(s.impl || "").toLowerCase();
+            if (quals.length && quals.some(([q, m]) => (q === simpl || q === name) && m === sname)) {
+              symHit = true;
+              matchedSymName = s.impl ? `${s.impl}::${s.name}` : s.name;
+              for (const t of tokens(s.name).concat(tokens(simpl))) matchedTerms.add(t);
+              break;
+            }
+            if (rawIdent.has(sname) && (sname.includes("_") || ["struct", "enum", "trait", "type", "const"].includes(s.kind))) {
+              symHit = true;
+              matchedSymName = s.impl ? `${s.impl}::${s.name}` : s.name;
+              for (const t of tokens(s.name)) matchedTerms.add(t);
+            }
+          }
+        }
+        let score = hit;
+        let boostLabel = null;
+        let boostVal = 0.0;
+        if (exact) {
+          score += 10.0;
+          boostLabel = "exact (+10.0)";
+          boostVal = 10.0;
+          named = true;
+          const nameToks = new Set(tokens(name));
+          for (const t of qt) if (nameToks.has(t)) matchedTerms.add(t);
+        } else if (symHit) {
+          score += 8.0;
+          boostLabel = `sym_hit (+8.0: ${matchedSymName})`;
+          boostVal = 8.0;
+          named = true;
+        } else if (spelled) {
+          score += 7.0;
+          boostLabel = "spelled (+7.0)";
+          boostVal = 7.0;
+          named = true;
+          const spToks = new Set(tokens(name.replace(/_/g, " ")));
+          for (const t of qt) if (spToks.has(t)) matchedTerms.add(t);
+        } else if (name && raw.some(r => r.length > 3 && name.split("/").includes(r))) {
+          score += 3.0;
+          boostLabel = "path (+3.0)";
+          boostVal = 3.0;
+        }
+        if (score <= 0) continue;
+        const anchor = anchored[node.id] || 0.0;
+        const anchorAdd = anchor * 0.5;
+        score += anchorAdd;
+        let dagMult = 1.0;
+        if (anchor > 0) {
+          dagMult = 1.0 + 0.12 * Math.log1p(loadBearing(node));
+          score *= dagMult;
+        }
+        scored.push({
+          score,
+          node,
+          breakdown: {
+            bm25: hit,
+            boostLabel,
+            boostVal,
+            anchorAdd,
+            dagMult,
+            matchedTerms: nodeMatchedTerms,
+          },
+        });
+      }
+
+      scored.sort((a, b) => (b.score - a.score) || a.node.id.localeCompare(b.node.id));
+      const cov = qt.length ? matchedTerms.size / qt.length : 0.0;
+      const missing = Array.from(new Set(qt)).filter(t =>
+        Object.keys(PER_KIND_DF).every(k => !(PER_KIND_DF[k] && PER_KIND_DF[k][t]))
+      );
+      return {
+        scored,
+        qt,
+        coverage: cov,
+        anchored: Object.keys(anchored).length > 0,
+        named,
+        wantKinds,
+        missing,
+        matchedSubs,
+      };
+    }
+
+    function confidence(cov, scored, anchored, named) {
+      if (!scored || !scored.length) return ["LOW", "nothing matched"];
+      if (named) return ["high", "exact name match"];
+      if (anchored && cov >= 0.6) {
+        return ["high", `${Math.round(cov * 100)}% of the query matched, inside a matched subsystem`];
+      }
+      if (!anchored) {
+        return ["LOW", `no subsystem matched; ${Math.round(cov * 100)}% term overlap only`];
+      }
+      return ["LOW", `only ${Math.round(cov * 100)}% of the query matched the index`];
+    }
+
+    // 4-Tier computeImpact (exact match with bbgraph.py)
+    function computeImpact(targets) {
+      const tset = new Set(targets);
+      const directProd = MODULES
+        .filter(m => !tset.has(m.name) && (m.deps || []).some(d => tset.has(d)))
+        .map(m => m.name)
+        .sort();
+      const directProdSet = new Set(directProd);
+      const directTestOnly = MODULES
+        .filter(m => !tset.has(m.name) && !directProdSet.has(m.name) && (m.test_deps || []).some(d => tset.has(d)))
+        .map(m => m.name)
+        .sort();
+
+      const revProd = {};
+      for (const [u, deps] of Object.entries(DAG.adjacency || {})) {
+        for (const dep of deps) {
+          if (!revProd[dep]) revProd[dep] = new Set();
+          revProd[dep].add(u);
+        }
+      }
+      const allTrans = new Set();
+      const stack = [];
+      for (const t of targets) {
+        for (const u of (revProd[t] || [])) stack.push(u);
+      }
+      while (stack.length) {
+        const cur = stack.pop();
+        if (allTrans.has(cur)) continue;
+        allTrans.add(cur);
+        for (const nxt of (revProd[cur] || [])) stack.push(nxt);
+      }
+      const trans2Plus = Array.from(allTrans)
+        .filter(m => !tset.has(m) && !directProdSet.has(m))
+        .sort();
+
+      function modVectors(mname) {
+        const mod = MOD_BY_NAME.get(mname);
+        if (!mod) return [];
+        const schemas = new Set((mod.declares || []).map(s => "schema:" + s));
+        const out = new Set();
+        for (const e of EDGES) {
+          if (e.kind === "vectors" && schemas.has(e.to) && e.from !== "tool:metric_registry") {
+            out.add(e.from.split(":")[1]);
+          }
+        }
+        return Array.from(out).sort();
+      }
+
+      const directVecs = Array.from(new Set(targets.flatMap(t => modVectors(t)))).sort();
+      const directVecSet = new Set(directVecs);
+      const hop1Vecs = Array.from(new Set(directProd.flatMap(d => modVectors(d))))
+        .filter(v => !directVecSet.has(v))
+        .sort();
+
+      const mutTargets = targets.filter(t => (MOD_BY_NAME.get(t)?.mutation_sites || 0) > 0);
+      const zeroTargets = new Set(targets.filter(t => (MOD_BY_NAME.get(t)?.mutation_sites || 0) === 0));
+      const mut1Hop = directProd.filter(d => {
+        const dm = MOD_BY_NAME.get(d);
+        return (dm?.mutation_sites || 0) > 0 && (dm?.deps || []).some(dep => zeroTargets.has(dep));
+      }).sort();
+
+      const targetIds = new Set(targets.map(t => "module:" + t));
+      const proofs = Array.from(new Set(
+        EDGES.filter(e => e.kind === "proves" && targetIds.has(e.to)).map(e => e.from.split(":")[1])
+      )).sort();
+
+      return {
+        targets,
+        direct_prod: directProd,
+        direct_test_only: directTestOnly,
+        trans_2plus: trans2Plus,
+        direct_vecs: directVecs,
+        hop1_vecs: hop1Vecs,
+        mut_targets: mutTargets,
+        mut_1hop: mut1Hop,
+        proofs,
+      };
+    }
+
+    // Parallel Subagent Wave Planner (exact match with bbgraph.py compute_waves)
+    function computeWaves(names) {
+      const target = new Set(names.filter(n => MOD_BY_NAME.has(n)));
+      const prereqs = {};
+      for (const name of target) {
+        const mod = MOD_BY_NAME.get(name);
+        const coupled = new Set([...(mod.deps || []), ...(mod.test_deps || [])]);
+        prereqs[name] = new Set([...coupled].filter(x => target.has(x) && x !== name));
+      }
+      const remaining = new Set(target);
+      const waves = [];
+      while (remaining.size > 0) {
+        const ready = [...remaining].filter(m => ![...prereqs[m]].some(p => remaining.has(p))).sort();
+        if (!ready.length) {
+          waves.push([...remaining].sort());
+          break;
+        }
+        waves.push(ready);
+        for (const r of ready) remaining.delete(r);
+      }
+      return waves;
+    }
+
+    // Universal Deep-Inspector Drawer
+    function inspectItem(spec) {
+      const box = document.getElementById("inspector-content");
+      if (!spec) return;
+
+      if (spec.type === "tag") {
+        const hit = resolveTag(spec.tag);
+        if (!hit || !hit.nodes.length) {
+          box.innerHTML = `<div class="muted">No node matched content tag <code>${esc(spec.tag)}</code></div>`;
+          return;
+        }
+        box.innerHTML = `
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="pill pill-high mono">CONTENT TAG TRIANGULATION</span>
+            <span class="muted text-xs mono">${hit.nodes.length} artifacts</span>
+          </div>
+          <div class="mono text-xs font-bold break-all mb-3 p-2 surface-subtle">${esc(hit.tags.join(", "))}</div>
+          <div class="text-xs muted mb-2">CLI: <code>python3 tools/bbgraph.py node "${esc(hit.tags[0])}"</code></div>
+          <div class="space-y-2">
+            ${hit.nodes.map(n => `
+              <div class="surface-subtle p-2.5 clickable-row" data-inspect-id="${esc(n.id)}">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-semibold mono text-xs">${esc(n.id)}</span>
+                  <span class="pill mono">${esc(n.kind)}</span>
+                </div>
+                <div class="muted text-xs mono mt-0.5">${esc(cite(n))}</div>
+                ${describe(n) ? `<div class="text-xs mt-1">${esc(describe(n))}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `;
+        bindInspectClicks(box);
+        return;
+      }
+
+      if (spec.type === "symbol") {
+        const m = MOD_BY_NAME.get(spec.mod);
+        const s = (m?.symbols || []).find(x => x.name === spec.name && x.line === spec.line) ||
+                  (m?.symbols || []).find(x => x.name === spec.name);
+        if (!m || !s) return;
+        const qual = s.impl ? `${s.impl}::${s.name}` : s.name;
+        box.innerHTML = `
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="pill ${gatePillClass(m.gate, m.crate)} mono">${esc(s.pub ? "pub " : "private ")}${esc(s.kind)}</span>
+            <button class="btn text-xs" data-inspect-id="module:${esc(m.name)}">Module: ${esc(m.name)}</button>
+          </div>
+          <h3 class="mono text-sm font-bold m-0 break-all">${esc(qual)}</h3>
+          <div class="muted text-xs mono mt-1 mb-2">${esc(m.path)}:${s.line}-${s.end} &bull; cfg(${esc(m.gate)})</div>
+          ${s.doc ? `<div class="p-2.5 surface-subtle text-xs mb-3">${esc(s.doc)}</div>` : ""}
+          ${s.sig ? `
+            <div class="text-xs font-semibold muted mb-1">SIGNATURE</div>
+            <pre class="p-2.5 surface-subtle mono text-xs overflow-x-auto whitespace-pre-wrap mb-3">${esc(s.sig)}</pre>
+          ` : ""}
+          ${(s.takes && s.takes.length) ? `
+            <div class="text-xs font-semibold muted mb-1">TAKES TYPES (${s.takes.length})</div>
+            <div class="flex flex-wrap gap-1 mb-3">
+              ${s.takes.map(t => `<button class="btn text-xs mono" data-jump-type="${esc(t)}">${esc(t)}</button>`).join("")}
+            </div>
+          ` : ""}
+          ${(s.returns && s.returns.length) ? `
+            <div class="text-xs font-semibold muted mb-1">RETURNS TYPES (${s.returns.length})</div>
+            <div class="flex flex-wrap gap-1 mb-3">
+              ${s.returns.map(t => `<button class="btn text-xs mono" data-jump-type="${esc(t)}">${esc(t)}</button>`).join("")}
+            </div>
+          ` : ""}
+          ${(s.calls && s.calls.length) ? `
+            <div class="text-xs font-semibold muted mb-1">OUTGOING CALLS IN SPAN (${s.calls.length})</div>
+            <div class="flex flex-wrap gap-1 mb-3">
+              ${s.calls.map(c => `<button class="btn text-xs mono" data-jump-caller="${esc(c)}">${esc(c)}</button>`).join("")}
+            </div>
+          ` : ""}
+          <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-[var(--border)]">
+            <button class="btn btn-active text-xs" data-jump-caller="${esc(qual)}">Trace Callers (${esc(qual)})</button>
+            <button class="btn text-xs" data-jump-impact="${esc(m.name)}">Simulate Impact (${esc(m.name)})</button>
+          </div>
+        `;
+        bindInspectClicks(box);
+        return;
+      }
+
+      const node = NODE_BY_ID.get(spec.id) || MOD_BY_NAME.get(spec.id);
+      if (!node) return;
+
+      if (node.kind === "module") {
+        const st = DAG.stratum[node.name] ?? 0;
+        const reach = loadBearing(node);
+        const pubCnt = node.pub_symbol_count || 0;
+        const pubDoc = node.pub_documented || 0;
+        const docPct = pubCnt > 0 ? Math.round((100 * pubDoc) / pubCnt) : null;
+        const parents = EDGES
+          .filter(e => e.kind === "depends_on" && e.to === node.id)
+          .map(e => e.from.split(":")[1])
+          .sort();
+        const proofs = EDGES
+          .filter(e => e.kind === "proves" && e.to === node.id)
+          .map(e => e.from);
+
+        box.innerHTML = `
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="pill ${gatePillClass(node.gate, node.crate)} mono">MODULE &bull; ${esc(node.crate)}</span>
+            <span class="pill mono">Stratum ${st} &bull; ${reach} dependents</span>
+          </div>
+          <h3 class="mono text-base font-bold m-0">${esc(node.name)}</h3>
+          <div class="muted text-xs mono mt-0.5 mb-2">${esc(node.path)} &bull; cfg(${esc(node.gate)})</div>
+          ${node.summary ? `<div class="p-2.5 surface-subtle text-xs mb-3">${esc(node.summary)}</div>` : ""}
+
+          <div class="grid grid-cols-2 gap-2 mb-3 text-xs">
+            <div class="surface-subtle p-2">
+              <div class="muted">Size &amp; Tests</div>
+              <div class="font-bold mono mt-0.5">${node.lines.toLocaleString()} LOC &bull; ${node.tests} #[test]</div>
+            </div>
+            <div class="surface-subtle p-2">
+              <div class="muted">Mutation &amp; Docs</div>
+              <div class="font-bold mono mt-0.5">${node.mutation_sites || 0} .to_be_bytes &bull; ${docPct !== null ? `${pubDoc}/${pubCnt} (${docPct}%)` : "n/a"}</div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 mb-3">
+            <button class="btn btn-active text-xs" data-jump-impact="${esc(node.name)}">Simulate Blast Radius (impact)</button>
+            <button class="btn text-xs" data-jump-dag="${esc(node.name)}">Highlight in 10-Stratum DAG</button>
+          </div>
+
+          ${(node.deps && node.deps.length) ? `
+            <div class="text-xs font-semibold muted mb-1">DEPENDS ON (${node.deps.length})</div>
+            <div class="space-y-1 mb-3">
+              ${node.deps.map(dep => {
+                const syms = (node.symbol_deps && node.symbol_deps[dep]) || [];
+                return `
+                  <div class="surface-subtle p-2 clickable-row text-xs" data-inspect-id="module:${esc(dep)}">
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold mono">${esc(dep)}</span>
+                      <span class="muted mono">${syms.length} syms</span>
+                    </div>
+                    ${syms.length ? `<div class="muted mono mt-0.5">[${esc(fmtSyms(syms, 8))}]</div>` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+
+          ${((node.test_deps && node.test_deps.length) || (node.test_symbol_deps && Object.keys(node.test_symbol_deps).length)) ? `
+            <div class="text-xs font-semibold muted mb-1">#[cfg(test)] TEST DEPS</div>
+            <div class="space-y-1 mb-3">
+              ${Array.from(new Set([...(node.test_deps || []), ...Object.keys(node.test_symbol_deps || {})])).sort().map(dep => {
+                const syms = (node.test_symbol_deps && node.test_symbol_deps[dep]) || [];
+                const extra = (node.deps || []).includes(dep) ? " (#[cfg(test)] extra)" : "";
+                return `
+                  <div class="surface-subtle p-2 clickable-row text-xs" data-inspect-id="module:${esc(dep)}">
+                    <span class="font-semibold mono">${esc(dep)}</span><span class="muted">${esc(extra)}</span>
+                    ${syms.length ? `<div class="muted mono mt-0.5">[${esc(fmtSyms(syms, 8))}]</div>` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+
+          ${parents.length ? `
+            <div class="text-xs font-semibold muted mb-1">DEPENDED ON BY (${parents.length})</div>
+            <div class="flex flex-wrap gap-1 mb-3">
+              ${parents.map(p => `<button class="btn text-xs mono" data-inspect-id="module:${esc(p)}">${esc(p)}</button>`).join("")}
+            </div>
+          ` : ""}
+
+          ${(node.declares && node.declares.length) ? `
+            <div class="text-xs font-semibold muted mb-1">DECLARES SCHEMAS (${node.declares.length})</div>
+            <div class="space-y-1 mb-3">
+              ${node.declares.map(sc => `
+                <div class="surface-subtle p-1.5 text-xs mono clickable-row" data-inspect-id="schema:${esc(sc)}">${esc(sc)}</div>
+              `).join("")}
+            </div>
+          ` : ""}
+
+          ${proofs.length ? `
+            <div class="text-xs font-semibold muted mb-1">FORMALLY PROVED BY (${proofs.length})</div>
+            <div class="flex flex-wrap gap-1 mb-3">
+              ${proofs.map(pid => `<button class="btn text-xs mono" data-inspect-id="${esc(pid)}">${esc(pid.split(":")[1])}</button>`).join("")}
+            </div>
+          ` : ""}
+
+          ${(node.pinned_tags && node.pinned_tags.length) ? `
+            <div class="text-xs font-semibold muted mb-1">PINNED CONTENT TAGS (${node.pinned_tags.length})</div>
+            <div class="space-y-1 mb-3 max-h-40 overflow-y-auto">
+              ${node.pinned_tags.slice(0, 15).map(t => `
+                <div class="surface-subtle p-1.5 text-xs mono break-all clickable-row" data-inspect-tag="${esc(t)}">${esc(t)}</div>
+              `).join("")}
+            </div>
+          ` : ""}
+
+          ${(node.symbols && node.symbols.length) ? `
+            <div class="text-xs font-semibold muted mb-1">SYMBOLS (${node.symbols.length})</div>
+            <div class="space-y-1 max-h-64 overflow-y-auto">
+              ${node.symbols.slice(0, 80).map(s => {
+                const qual = s.impl ? `${s.impl}::${s.name}` : s.name;
+                return `
+                  <div class="surface-subtle p-1.5 text-xs clickable-row" data-inspect-sym="${esc(node.name)}|${esc(s.name)}|${s.line}">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="mono font-semibold">${esc(qual)}</span>
+                      <span class="muted mono">${esc(s.kind)} :${s.line}-${s.end}</span>
+                    </div>
+                    ${s.doc ? `<div class="muted truncate mt-0.5">${esc(s.doc)}</div>` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+        `;
+        bindInspectClicks(box);
+        return;
+      }
+
+      // Generic node inspector (schema, tool, proof, doc, metric, example)
+      box.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <span class="pill mono">${esc(node.kind.toUpperCase())}</span>
+          <span class="muted text-xs mono">${esc(cite(node))}</span>
+        </div>
+        <h3 class="mono text-sm font-bold m-0 break-all">${esc(node.name)}</h3>
+        <div class="muted text-xs mono mt-1 mb-3">id: ${esc(node.id)}</div>
+        ${describe(node) ? `<div class="p-2.5 surface-subtle text-xs mb-3">${esc(describe(node))}</div>` : ""}
+        ${node.kind === "schema" ? `
+          <div class="space-y-2 text-xs">
+            <div><span class="muted">Namespace:</span> <code class="mono">${esc(node.namespace)}</code></div>
+            <div><span class="muted">Scope:</span> ${node.fixture ? `<span class="pill pill-low">#[cfg(test)] fixture</span>` : `<span class="pill pill-high">Production Protocol Surface</span>`}</div>
+            <div><span class="muted">Declared by:</span> ${(node.declared_by || []).map(m => `<button class="btn text-xs mono" data-inspect-id="${esc(m)}">${esc(m.split(":")[1])}</button>`).join(" ")}</div>
+            <div><span class="muted">Vectored by:</span> ${(node.vectored_by || []).length ? node.vectored_by.map(v => `<button class="btn text-xs mono" data-inspect-id="${esc(v)}">${esc(v.split(":")[1])}</button>`).join(" ") : `<span class="pill pill-danger">NONE</span>`}</div>
+          </div>
+        ` : ""}
+        ${node.kind === "proof" ? `
+          <div class="space-y-2 text-xs">
+            <div class="font-semibold muted">THEOREMS (${(node.theorems || []).length})</div>
+            <div class="space-y-1">${(node.theorems || []).map(t => `<div class="surface-subtle p-1.5 mono">${esc(t)}</div>`).join("")}</div>
+            <div class="font-semibold muted mt-2">PROVES MODULES</div>
+            <div class="flex flex-wrap gap-1">${(node.cites_src || []).map(m => `<button class="btn text-xs mono" data-inspect-id="module:${esc(m)}">${esc(m)}</button>`).join("")}</div>
+          </div>
+        ` : ""}
+        ${node.kind === "metric" ? `
+          <div class="space-y-2 text-xs">
+            <div><span class="muted">Owner:</span> <span class="pill mono">${esc(node.owner)}</span> (<code>docs/metrics/${esc(node.owner)}.md</code>)</div>
+            <div><span class="muted">Alias:</span> <code class="mono break-all">${esc(node.alias)}</code></div>
+            <div class="surface-subtle p-2 mono break-all clickable-row" data-inspect-tag="${esc(node.tag)}">${esc(node.tag)}</div>
+          </div>
+        ` : ""}
+        ${(node.schemas && node.schemas.length) ? `
+          <div class="text-xs font-semibold muted mt-3 mb-1">RECONSTRUCTS SCHEMAS (${node.schemas.length})</div>
+          <div class="space-y-1 max-h-48 overflow-y-auto">
+            ${node.schemas.map(s => `<div class="surface-subtle p-1.5 text-xs mono clickable-row" data-inspect-id="schema:${esc(s)}">${esc(s)}</div>`).join("")}
+          </div>
+        ` : ""}
+        ${(node.pinned_tags && node.pinned_tags.length) ? `
+          <div class="text-xs font-semibold muted mt-3 mb-1">PINNED CONTENT TAGS (${node.pinned_tags.length})</div>
+          <div class="space-y-1 max-h-48 overflow-y-auto">
+            ${node.pinned_tags.slice(0, 20).map(t => `<div class="surface-subtle p-1.5 text-xs mono break-all clickable-row" data-inspect-tag="${esc(t)}">${esc(t)}</div>`).join("")}
+          </div>
+        ` : ""}
+      `;
+      bindInspectClicks(box);
+    }
+
+    function bindInspectClicks(container) {
+      container.querySelectorAll("[data-inspect-id]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          inspectItem({ id: el.getAttribute("data-inspect-id") });
+        });
+      });
+      container.querySelectorAll("[data-inspect-tag]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          inspectItem({ type: "tag", tag: el.getAttribute("data-inspect-tag") });
+        });
+      });
+      container.querySelectorAll("[data-inspect-sym]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          const [mod, name, line] = el.getAttribute("data-inspect-sym").split("|");
+          inspectItem({ type: "symbol", mod, name, line: Number(line) });
+        });
+      });
+      container.querySelectorAll("[data-jump-impact]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          switchTab("impact");
+          document.getElementById("impact-input").value = el.getAttribute("data-jump-impact");
+          renderImpact();
+        });
+      });
+      container.querySelectorAll("[data-jump-dag]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          switchTab("dag");
+          selectedDagMod = el.getAttribute("data-jump-dag");
+          renderDag();
+        });
+      });
+      container.querySelectorAll("[data-jump-type]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          switchTab("symbols");
+          document.getElementById("type-input").value = el.getAttribute("data-jump-type");
+          renderTypeExplorer();
+        });
+      });
+      container.querySelectorAll("[data-jump-caller]").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          switchTab("symbols");
+          document.getElementById("caller-input").value = el.getAttribute("data-jump-caller");
+          renderCallerExplorer();
+        });
+      });
+    }
+
+    // KPI Ribbon
+    function renderKpiRibbon() {
+      const totSyms = MODULES.reduce((a, m) => a + (m.symbols ? m.symbols.length : 0), 0);
+      const totMut = MODULES.reduce((a, m) => a + (m.mutation_sites || 0), 0);
+      const kpis = [
+        { label: "Indexed Nodes", val: NODES.length.toLocaleString(), sub: `${EDGES.length.toLocaleString()} typed edges` },
+        { label: "Rust Modules", val: COVERAGE.modules, sub: `${COVERAGE.source_lines.toLocaleString()} LOC across 3 crates` },
+        { label: "DAG Topology", val: "10 Strata", sub: `${DAG.edges} intra-crate edges` },
+        { label: "Symbols & Tests", val: totSyms.toLocaleString(), sub: `${COVERAGE.tests} #[test] functions` },
+        { label: "Protocol Surface", val: `${COVERAGE.schemas_vectored}/${COVERAGE.schemas}`, sub: "100% Python vectored" },
+        { label: "Mutation Sites", val: totMut, sub: "29 modules (.to_be_bytes)" },
+        { label: "Metric Families", val: COVERAGE.metrics.toLocaleString(), sub: "world / view / system" },
+        { label: "Lean 4 Proofs", val: COVERAGE.proofs, sub: "formal proof modules" },
+      ];
+      document.getElementById("kpi-ribbon").innerHTML = kpis.map(k => `
+        <div class="surface-subtle p-2.5">
+          <div class="muted text-xs">${esc(k.label)}</div>
+          <div class="text-base font-bold mono mt-0.5">${esc(k.val)}</div>
+          <div class="muted text-xs mt-0.5 truncate">${esc(k.sub)}</div>
+        </div>
+      `).join("");
+    }
+
+    // Tab switching
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-tab") === tabId);
+      });
+      document.querySelectorAll(".tab-panel").forEach(p => {
+        p.style.display = p.id === `panel-${tabId}` ? "" : "none";
+      });
+      if (tabId === "dag") renderDag();
+    }
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => switchTab(btn.getAttribute("data-tab")));
+    });
+
+    // =========================================================================
+    // TAB 1: GRAPHRAG SEARCH (ask)
+    // =========================================================================
+    const ASK_PRESETS = [
+      { label: "Framebuffer bytes", q: "canonical framebuffer bytes" },
+      { label: "SparseOctreeV1::from_world", q: "SparseOctreeV1::from_world" },
+      { label: "Frustum AABB culling", q: "CameraProjection::aabb_definitely_outside_frustum" },
+      { label: "World::exposed_faces", q: "World::exposed_faces" },
+      { label: "Journal recovery", q: "append-only journal recovery" },
+      { label: "MortonKeyV1", q: "bitblock/commit-r1/morton-key/v1" },
+      { label: "Windows present", q: "windows present" },
+      { label: "Crosshair overlay", q: "crosshair overlay" },
+      { label: "Tag: receipt", q: "#bb.receipt.sha256.j3xacn27gfhq6f4wrxvn5upcvvufq5soltxncytvglb2recohp7a" },
+      { label: "Tag: octree-node", q: "#bb.octree-node.sha256.mpxk6r6w7mgephgbv3bhmhbwj3rkc3t7l3z3a7p5n7w4v4z4q2aa" },
+      { label: "Tag: multiline output-topology", q: "#bb.output-topology.sha256.fw2l66z7jd2eu6suedannr77x5yrugb6sot7y3ojduamdiuemtpq" },
+      { label: "Control: no_match", q: "kubernetes postgres oauth" },
+    ];
+
+    document.getElementById("ask-presets").innerHTML = ASK_PRESETS.map(p => `
+      <button class="btn text-xs mono" data-ask-preset="${esc(p.q)}">${esc(p.label)}</button>
+    `).join("");
+    document.querySelectorAll("[data-ask-preset]").forEach(b => {
+      b.addEventListener("click", () => {
+        document.getElementById("ask-input").value = b.getAttribute("data-ask-preset");
+        renderAsk();
+      });
+    });
+    document.getElementById("ask-run-btn").addEventListener("click", renderAsk);
+    document.getElementById("ask-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") renderAsk();
+    });
+
+    const GROUPS = [
+      ["CODE", ["module"], "read these"],
+      ["PROTOCOL", ["schema"], "the byte-level objects involved"],
+      ["DOCS", ["doc"], "what the tree says about it"],
+      ["EVIDENCE", ["proof", "tool", "example"], "what independently checks it"],
+      ["METRICS", ["metric"], "registry families that measure it"],
+    ];
+
+    function renderAsk() {
+      const query = document.getElementById("ask-input").value.trim();
+      document.getElementById("ask-cli-cmd").textContent = `python3 tools/bbgraph.py ask "${query}"`;
+      const pipeBox = document.getElementById("ask-pipeline-card");
+      const resBox = document.getElementById("ask-results");
+
+      // Step 0: Check ContentTag direct interception
+      const tagHit = resolveTag(query);
+      if (tagHit !== null) {
+        const found = tagHit.nodes.length > 0;
+        pipeBox.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <span class="font-bold text-sm">Glass-Box Pipeline: Direct ContentTag Interception (<code>resolve_tag</code>)</span>
+            <span class="pill ${found ? "pill-high" : "pill-low"} mono">CONFIDENCE ${found ? "high (exact content tag match)" : "LOW (nothing matched)"}</span>
+          </div>
+          <div class="text-xs muted">
+            Detected canonical <code>#bb.&lt;kind&gt;.sha256.&lt;digest&gt;</code> query. Bypassed BM25 and triangulated digest <code>${esc(tagHit.digest)}</code> directly across Rust modules, Python vector suites, Markdown docs, and Metric definitions (${tagHit.nodes.length} matches).
+          </div>
+        `;
+        if (!found) {
+          resBox.innerHTML = `<div class="surface-card p-4 text-xs mono muted">NOTHING IN THE INDEX MATCHED THIS CONTENT TAG.</div>`;
+          return;
+        }
+        resBox.innerHTML = `
+          <div class="surface-card p-4">
+            <div class="text-xs font-bold mono mb-2">MATCHED CONTENT TAG: ${esc(tagHit.tags.join(", "))}</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              ${tagHit.nodes.map(n => `
+                <div class="surface-subtle p-3 clickable-row" data-inspect-id="${esc(n.id)}">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold mono text-xs">${esc(n.name)}</span>
+                    <span class="pill mono">${esc(n.kind)}</span>
+                  </div>
+                  <div class="muted text-xs mono mt-0.5">${esc(cite(n))}</div>
+                  ${describe(n) ? `<div class="text-xs mt-1">${esc(describe(n))}</div>` : ""}
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `;
+        bindInspectClicks(resBox);
+        if (tagHit.nodes[0]) inspectItem({ id: tagHit.nodes[0].id });
+        return;
+      }
+
+      const r = rank(query);
+      const [confLevel, confWhy] = confidence(r.coverage, r.scored, r.anchored, r.named);
+      const leadMod = r.scored.find(x => x.node.kind === "module")?.node || null;
+
+      pipeBox.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-sm">5-Step Glass-Box Ranking Pipeline</span>
+            <span class="muted text-xs mono">${r.scored.length} nodes matched</span>
+          </div>
+          <span class="pill ${confLevel === "high" ? "pill-high" : "pill-low"} mono">CONFIDENCE ${esc(confLevel)} &mdash; ${esc(confWhy)}</span>
+        </div>
+        ${(r.missing.length && !r.named) ? `
+          <div class="p-2.5 mb-3 rounded-lg border border-amber-500/50 bg-amber-500/10 text-xs mono">
+            <strong>NOT IN THIS INDEX:</strong> ${esc(r.missing.join(", "))}
+          </div>
+        ` : ""}
+        ${(!r.anchored && !r.named && r.scored.length) ? `
+          <div class="p-2.5 mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-xs">
+            <strong>NO SUBSYSTEM MATCHED THIS WORDING</strong> &mdash; ranked on per-kind IDF term overlap alone. Treat as a hypothesis and verify.
+          </div>
+        ` : ""}
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs">
+          <div class="surface-subtle p-2.5">
+            <div class="font-semibold muted">1. Query Tokens</div>
+            <div class="mono mt-1">${r.qt.length ? r.qt.map(t => `<span class="pill mono mr-1 mb-1">${esc(t)}</span>`).join("") : "<span class='muted'>(none)</span>"}</div>
+            ${r.wantKinds.size ? `<div class="muted mt-1">Kind filter: <code>${esc([...r.wantKinds].join(", "))}</code></div>` : ""}
+          </div>
+          <div class="surface-subtle p-2.5">
+            <div class="font-semibold muted">2. Subsystem Anchor</div>
+            <div class="mt-1">
+              ${r.matchedSubs.length
+                ? r.matchedSubs.slice(0, 3).map(s => `<div class="mono text-xs">${esc(s.name)} <span class="muted">(+${(s.score * 0.5).toFixed(2)})</span></div>`).join("")
+                : `<span class="muted">0 of 46 subsystems matched</span>`}
+            </div>
+          </div>
+          <div class="surface-subtle p-2.5">
+            <div class="font-semibold muted">3. Per-Kind BM25 Norm</div>
+            <div class="muted mt-1">
+              Medians: <code>module=${KIND_TYPICAL.module}</code>, <code>doc=${KIND_TYPICAL.doc}</code>, <code>metric=${KIND_TYPICAL.metric}</code> terms
+            </div>
+          </div>
+          <div class="surface-subtle p-2.5">
+            <div class="font-semibold muted">4. Name / Symbol Lookup</div>
+            <div class="mt-1 mono">
+              ${r.named ? `<span class="pill pill-high">Named Match Active</span>` : `<span class="muted">No exact/sym/spelled hit</span>`}
+            </div>
+          </div>
+          <div class="surface-subtle p-2.5">
+            <div class="font-semibold muted">5. Load-Bearing Gate</div>
+            <div class="muted mt-1">
+              ${r.anchored ? `Active: <code>&times;(1 + 0.12 ln(1+reach))</code> inside anchored subsystems` : `Suppressed (unanchored query)`}
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (!r.scored.length) {
+        resBox.innerHTML = `<div class="surface-card p-4 text-xs mono muted">NOTHING IN THE INDEX MATCHED THIS WORDING.</div>`;
+        return;
+      }
+
+      const orderedGroups = GROUPS.slice().sort((a, b) => {
+        const aHit = a[1].some(k => r.wantKinds.has(k)) ? 0 : 1;
+        const bHit = b[1].some(k => r.wantKinds.has(k)) ? 0 : 1;
+        return aHit - bHit;
+      });
+
+      let html = "";
+      for (const [title, kinds, note] of orderedGroups) {
+        const picks = r.scored.filter(item => kinds.includes(item.node.kind));
+        if (!picks.length) continue;
+        const limit = title !== "METRICS" ? 4 : 3;
+        html += `
+          <div class="surface-card p-4">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <span class="font-bold text-sm mono">${esc(title)}</span>
+                <span class="muted text-xs ml-2">&mdash; ${esc(note)}</span>
+              </div>
+              <span class="muted text-xs mono">showing ${Math.min(picks.length, limit)} of ${picks.length}</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              ${picks.slice(0, limit).map(({ score, node, breakdown }) => `
+                <div class="surface-subtle p-3 clickable-row" data-inspect-id="${esc(node.id)}">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold mono text-xs truncate">${esc(node.name)}</span>
+                    <span class="pill mono">score ${score.toFixed(2)}</span>
+                  </div>
+                  <div class="muted text-xs mono mt-0.5">${esc(cite(node))}</div>
+                  ${describe(node) ? `<div class="text-xs mt-1.5">${esc(describe(node))}</div>` : ""}
+                  ${node.kind === "module" ? `
+                    <div class="flex flex-wrap gap-1 mt-2">
+                      <span class="pill ${gatePillClass(node.gate, node.crate)} mono">cfg(${esc(node.gate)})</span>
+                      <span class="pill mono">${node.tests} tests</span>
+                      <span class="pill mono">${loadBearing(node)} dependents</span>
+                    </div>
+                  ` : ""}
+                  <div class="flex flex-wrap gap-1 mt-2 pt-2 border-t border-[var(--border)] text-xs mono muted">
+                    <span>BM25: ${breakdown.bm25.toFixed(2)}</span>
+                    ${breakdown.boostLabel ? `<span>&bull; ${esc(breakdown.boostLabel)}</span>` : ""}
+                    ${breakdown.anchorAdd > 0 ? `<span>&bull; SubAnchor: +${breakdown.anchorAdd.toFixed(2)}</span>` : ""}
+                    ${breakdown.dagMult > 1 ? `<span>&bull; DAG: &times;${breakdown.dagMult.toFixed(2)}</span>` : ""}
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      if (leadMod && leadMod.deps && leadMod.deps.length) {
+        html += `
+          <div class="surface-card p-4">
+            <div class="font-bold text-xs mono muted mb-2">WHAT LEAD MODULE (${esc(leadMod.name.toUpperCase())}) PULLS IN (${leadMod.deps.length} DIRECT DEPENDENCIES)</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              ${leadMod.deps.map(dep => {
+                const child = MOD_BY_NAME.get(dep);
+                const syms = (leadMod.symbol_deps && leadMod.symbol_deps[dep]) || [];
+                return `
+                  <div class="surface-subtle p-2.5 clickable-row text-xs" data-inspect-id="module:${esc(dep)}">
+                    <div class="font-bold mono">${esc(dep)}</div>
+                    <div class="muted truncate mt-0.5">${esc(describe(child))}</div>
+                    ${syms.length ? `<div class="mono text-xs muted mt-1">[${esc(fmtSyms(syms, 5))}]</div>` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      resBox.innerHTML = html;
+      bindInspectClicks(resBox);
+      if (leadMod) inspectItem({ id: leadMod.id });
+      else if (r.scored[0]) inspectItem({ id: r.scored[0].node.id });
+    }
+
+    // =========================================================================
+    // TAB 2: 10-STRATUM ARCHITECTURE DAG & SUBSYSTEMS
+    // =========================================================================
+    let selectedDagMod = "octree_commit";
+    let highlightedSubMembers = new Set();
+
+    ["dag-crate-filter", "dag-gate-filter", "dag-show-prod", "dag-show-test"].forEach(id => {
+      document.getElementById(id).addEventListener("change", renderDag);
+    });
+    document.getElementById("sub-filter-input").addEventListener("input", renderSubsystems);
+
+    function renderDag() {
+      const crateFilter = document.getElementById("dag-crate-filter").value;
+      const gateFilter = document.getElementById("dag-gate-filter").value;
+      const showProd = document.getElementById("dag-show-prod").checked;
+      const showTest = document.getElementById("dag-show-test").checked;
+
+      const strata = {};
+      for (const m of MODULES) {
+        const st = DAG.stratum[m.name] ?? 0;
+        if (!strata[st]) strata[st] = [];
+        strata[st].push(m);
+      }
+      for (const st of Object.keys(strata)) {
+        strata[st].sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      const maxCols = Math.max(...Object.values(strata).map(arr => arr.length), 1);
+      const colW = 184;
+      const rowH = 64;
+      const padX = 95;
+      const padY = 28;
+      const width = padX + maxCols * colW + 40;
+      const height = padY * 2 + 10 * rowH;
+
+      // Position nodes: Stratum 9 at top (row 0), Stratum 0 at bottom (row 9)
+      const pos = {};
+      for (let st = 0; st <= 9; st++) {
+        const row = 9 - st;
+        const arr = strata[st] || [];
+        const y = padY + row * rowH;
+        arr.forEach((m, idx) => {
+          const x = padX + idx * colW;
+          pos[m.name] = { x, y, w: 168, h: 42, mod: m, st };
+        });
+      }
+
+      const selMod = MOD_BY_NAME.get(selectedDagMod);
+      const upstreamSet = new Set(selMod ? (selMod.deps || []) : []);
+      const testUpstreamSet = new Set(selMod ? (selMod.test_deps || []) : []);
+      const downstreamSet = new Set(
+        EDGES.filter(e => e.kind === "depends_on" && e.to === `module:${selectedDagMod}`)
+             .map(e => e.from.split(":")[1])
+      );
+
+      let edgesSvg = "";
+      if (showProd) {
+        for (const e of EDGES) {
+          if (e.kind !== "depends_on") continue;
+          const u = e.from.split(":")[1];
+          const v = e.to.split(":")[1];
+          const p1 = pos[u];
+          const p2 = pos[v];
+          if (!p1 || !p2) continue;
+          const isUp = u === selectedDagMod;
+          const isDown = v === selectedDagMod;
+          const active = isUp || isDown;
+          const stroke = isUp ? "#06b6d4" : isDown ? "#f59e0b" : "rgba(148,163,184,0.22)";
+          const sw = active ? 2.2 : 1.0;
+          const x1 = p1.x + p1.w / 2;
+          const y1 = p1.y + p1.h;
+          const x2 = p2.x + p2.w / 2;
+          const y2 = p2.y;
+          const cy = (y1 + y2) / 2;
+          edgesSvg += `<path d="M${x1},${y1} C${x1},${cy} ${x2},${cy} ${x2},${y2}" fill="none" stroke="${stroke}" stroke-width="${sw}" />`;
+        }
+      }
+      if (showTest) {
+        for (const e of EDGES) {
+          if (e.kind !== "tests_with") continue;
+          const u = e.from.split(":")[1];
+          const v = e.to.split(":")[1];
+          const p1 = pos[u];
+          const p2 = pos[v];
+          if (!p1 || !p2) continue;
+          const active = u === selectedDagMod || v === selectedDagMod;
+          const stroke = active ? "#a855f7" : "rgba(168,85,247,0.3)";
+          const sw = active ? 2.0 : 1.1;
+          const x1 = p1.x + p1.w / 2;
+          const y1 = p1.y + p1.h / 2;
+          const x2 = p2.x + p2.w / 2;
+          const y2 = p2.y + p2.h / 2;
+          edgesSvg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${sw}" stroke-dasharray="4,3" />`;
+        }
+      }
+
+      let strataLabels = "";
+      for (let st = 0; st <= 9; st++) {
+        const row = 9 - st;
+        const y = padY + row * rowH + 25;
+        strataLabels += `
+          <text x="14" y="${y}" fill="var(--muted-foreground)" font-size="12" font-family="monospace" font-weight="600">
+            Stratum ${st}
+          </text>
+        `;
+      }
+
+      let nodesSvg = "";
+      for (const [mname, p] of Object.entries(pos)) {
+        const m = p.mod;
+        const matchCrate = crateFilter === "all" || m.crate === crateFilter;
+        const matchGate = gateFilter === "all" || m.gate === gateFilter;
+        const inSub = highlightedSubMembers.size === 0 || highlightedSubMembers.has(`module:${mname}`);
+        const visible = matchCrate && matchGate && inSub;
+        const opacity = visible ? 1.0 : 0.2;
+
+        let fill = "rgba(30,41,59,0.9)";
+        let stroke = "#475569";
+        if (m.crate === "core") stroke = "#10b981";
+        else if (String(m.gate).includes("windows")) stroke = "#a855f7";
+        else if (m.crate === "research") stroke = "#3b82f6";
+        else stroke = "#f59e0b";
+
+        let sw = 1.4;
+        if (mname === selectedDagMod) {
+          stroke = "#ffffff";
+          sw = 2.8;
+          fill = "rgba(59,130,246,0.28)";
+        } else if (upstreamSet.has(mname)) {
+          stroke = "#06b6d4";
+          sw = 2.4;
+        } else if (downstreamSet.has(mname)) {
+          stroke = "#f59e0b";
+          sw = 2.4;
+        } else if (testUpstreamSet.has(mname)) {
+          stroke = "#a855f7";
+          sw = 2.0;
+        }
+
+        const reach = loadBearing(m);
+        nodesSvg += `
+          <g class="dag-node" data-dag-mod="${esc(mname)}" style="opacity:${opacity}">
+            <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" />
+            <text x="${p.x + 8}" y="${p.y + 17}" fill="#f8fafc" font-size="12" font-family="monospace" font-weight="700">
+              ${esc(mname.slice(0, 22))}
+            </text>
+            <text x="${p.x + 8}" y="${p.y + 33}" fill="#94a3b8" font-size="12" font-family="monospace">
+              ${esc(m.crate)} &bull; &uarr;${reach} &bull; ${m.mutation_sites || 0}m
+            </text>
+          </g>
+        `;
+      }
+
+      document.getElementById("dag-svg-wrap").innerHTML = `
+        <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+          ${strataLabels}
+          ${edgesSvg}
+          ${nodesSvg}
+        </svg>
+      `;
+
+      document.querySelectorAll("[data-dag-mod]").forEach(g => {
+        g.addEventListener("click", () => {
+          highlightedSubMembers.clear();
+          selectedDagMod = g.getAttribute("data-dag-mod");
+          renderDag();
+          inspectItem({ id: `module:${selectedDagMod}` });
+        });
+      });
+
+      if (selMod) {
+        const upCards = (selMod.deps || []).map(d => {
+          const syms = (selMod.symbol_deps && selMod.symbol_deps[d]) || [];
+          return `<span class="pill mono" style="border-color:#06b6d4;">${esc(d)}: ${esc(fmtSyms(syms, 5) || "(module)")}</span>`;
+        }).join(" ");
+        const downCards = Array.from(downstreamSet).sort().map(u => {
+          const um = MOD_BY_NAME.get(u);
+          const syms = (um?.symbol_deps && um.symbol_deps[selectedDagMod]) || [];
+          return `<span class="pill mono" style="border-color:#f59e0b;">${esc(u)} &larr; [${esc(fmtSyms(syms, 4) || "module")}]</span>`;
+        }).join(" ");
+        document.getElementById("dag-edge-detail").innerHTML = `
+          <div class="surface-subtle p-3 text-xs space-y-2">
+            <div class="font-bold mono">Selected in DAG: <code>${esc(selectedDagMod)}</code> (Stratum ${DAG.stratum[selectedDagMod] ?? 0}, ${loadBearing(selMod)} transitive dependents)</div>
+            <div><strong style="color:#06b6d4;">Upstream DEPENDS ON (${(selMod.deps || []).length}):</strong> ${upCards || "<span class='muted'>none (Stratum 0 root)</span>"}</div>
+            <div><strong style="color:#f59e0b;">Downstream DEPENDED ON BY (${downstreamSet.size}):</strong> ${downCards || "<span class='muted'>none (top leaf)</span>"}</div>
+          </div>
+        `;
+      }
+    }
+
+    function renderSubsystems() {
+      const q = document.getElementById("sub-filter-input").value.trim().toLowerCase();
+      const filtered = SUBS
+        .filter(s => !q || s.name.toLowerCase().includes(q) || s.members.some(m => m.toLowerCase().includes(q)))
+        .sort((a, b) => (b.members.length - a.members.length) || a.name.localeCompare(b.name));
+
+      document.getElementById("sub-grid").innerHTML = filtered.map(sub => `
+        <div class="surface-subtle p-2.5 clickable-row text-xs" data-sub-name="${esc(sub.name)}">
+          <div class="flex items-center justify-between">
+            <span class="font-bold mono">${esc(sub.name)}</span>
+            <span class="pill mono">${sub.members.length} modules</span>
+          </div>
+          <div class="muted mono mt-1">${esc(sub.members.map(m => m.split(":")[1]).join(", "))}</div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll("[data-sub-name]").forEach(el => {
+        el.addEventListener("click", () => {
+          const sname = el.getAttribute("data-sub-name");
+          const sub = SUBS.find(s => s.name === sname);
+          if (!sub) return;
+          highlightedSubMembers = new Set(sub.members);
+          if (sub.members[0]) selectedDagMod = sub.members[0].split(":")[1];
+          renderDag();
+        });
+      });
+    }
+
+    // =========================================================================
+    // TAB 3: 4-TIER BLAST-RADIUS (impact) & PARALLEL WAVES (wave)
+    // =========================================================================
+    const IMPACT_PRESETS = [
+      { label: "Octree & Scale Assay Wave (7 mods)", val: "world camera render commit_r1 octree_commit scale_assay optimization" },
+      { label: "Core Hub: world (0 mut sites -> 1-hop fallback)", val: "world" },
+      { label: "Core Hub: protocol (34 dependents)", val: "protocol" },
+      { label: "Render & Framebuffer", val: "frame render ui" },
+      { label: "Symbol Auto-Resolve: World::exposed_faces", val: "World::exposed_faces" },
+    ];
+
+    document.getElementById("impact-presets").innerHTML = IMPACT_PRESETS.map(p => `
+      <button class="btn text-xs mono" data-impact-preset="${esc(p.val)}">${esc(p.label)}</button>
+    `).join("");
+    document.querySelectorAll("[data-impact-preset]").forEach(b => {
+      b.addEventListener("click", () => {
+        document.getElementById("impact-input").value = b.getAttribute("data-impact-preset");
+        renderImpact();
+      });
+    });
+    document.getElementById("impact-run-btn").addEventListener("click", renderImpact);
+    document.getElementById("impact-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") renderImpact();
+    });
+
+    function resolveImpactTokens(rawStr) {
+      const rawTokens = rawStr.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+      const targets = [];
+      const resolvedNotes = [];
+      for (const tok of rawTokens) {
+        let clean = tok.startsWith("module:") ? tok.slice(7) : tok;
+        if (clean.endsWith(".rs")) clean = clean.slice(0, -3).split("/").pop();
+        if (MOD_BY_NAME.has(clean)) {
+          if (!targets.includes(clean)) targets.push(clean);
+          continue;
+        }
+        if (clean.includes("::")) {
+          const p0 = clean.split("::")[0];
+          if (MOD_BY_NAME.has(p0)) {
+            resolvedNotes.push(`Resolved symbol ${tok} -> module ${p0}`);
+            if (!targets.includes(p0)) targets.push(p0);
+            continue;
+          }
+        }
+        const low = clean.toLowerCase();
+        for (const m of MODULES) {
+          for (const s of (m.symbols || [])) {
+            const qual = s.impl ? `${s.impl}::${s.name}` : "";
+            if (s.name.toLowerCase() === low || qual.toLowerCase() === low) {
+              resolvedNotes.push(`Resolved symbol ${tok} -> module ${m.name}`);
+              if (!targets.includes(m.name)) targets.push(m.name);
+              break;
+            }
+          }
+        }
+      }
+      return { targets, resolvedNotes };
+    }
+
+    function renderImpact() {
+      const raw = document.getElementById("impact-input").value;
+      const { targets, resolvedNotes } = resolveImpactTokens(raw);
+      document.getElementById("impact-cli-cmd").textContent = `python3 tools/bbgraph.py impact ${targets.join(" ")}`;
+
+      // Render module toggle pills
+      const tset = new Set(targets);
+      document.getElementById("impact-mod-pills").innerHTML = MODULES.map(m => `
+        <button class="btn text-xs mono ${tset.has(m.name) ? "btn-active" : ""}" data-toggle-impact="${esc(m.name)}">
+          ${esc(m.name)}
+        </button>
+      `).join("");
+      document.querySelectorAll("[data-toggle-impact]").forEach(b => {
+        b.addEventListener("click", () => {
+          const mname = b.getAttribute("data-toggle-impact");
+          const next = new Set(targets);
+          if (next.has(mname)) next.delete(mname);
+          else next.add(mname);
+          document.getElementById("impact-input").value = [...next].join(" ");
+          renderImpact();
+        });
+      });
+
+      const outBox = document.getElementById("impact-output");
+      if (!targets.length) {
+        outBox.innerHTML = `<div class="surface-card p-4 muted text-xs">Select at least one module above to compute blast radius and parallel execution waves.</div>`;
+        return;
+      }
+
+      const imp = computeImpact(targets);
+      const waves = computeWaves(targets);
+      const scopeMods = new Set([...targets, ...imp.direct_prod, ...imp.direct_test_only]);
+      const needsResearch = [...scopeMods].some(mname => {
+        const m = MOD_BY_NAME.get(mname);
+        return m && (m.crate === "research" || String(m.gate).includes("protocol-research") || m.name === "main");
+      });
+      const cargoCmd = needsResearch
+        ? "cargo test --workspace --features protocol-research"
+        : "cargo test --workspace";
+
+      const byStratum = {};
+      for (const mname of imp.trans_2plus) {
+        const st = DAG.stratum[mname] ?? 0;
+        if (!byStratum[st]) byStratum[st] = [];
+        byStratum[st].push(mname);
+      }
+
+      outBox.innerHTML = `
+        ${resolvedNotes.length ? `
+          <div class="surface-card p-3 text-xs mono border-l-4 border-blue-500">
+            ${resolvedNotes.map(n => `<div>${esc(n)}</div>`).join("")}
+          </div>
+        ` : ""}
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- TIER 1: TARGET MODULES -->
+          <div class="surface-card p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-bold text-sm">TIER 1 &mdash; TARGET MODULES (${targets.length})</span>
+              <span class="pill pill-danger mono">Direct Edit Scope</span>
+            </div>
+            <div class="space-y-2">
+              ${targets.map(t => {
+                const m = MOD_BY_NAME.get(t);
+                const otherTargets = new Set(targets.filter(x => x !== t));
+                const intraProd = (m.deps || []).filter(d => otherTargets.has(d));
+                return `
+                  <div class="surface-subtle p-2.5 clickable-row text-xs" data-inspect-id="module:${esc(t)}">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold mono">${esc(t)}</span>
+                      <span class="pill ${gatePillClass(m.gate, m.crate)} mono">cfg(${esc(m.gate)}) &bull; S${DAG.stratum[t] ?? 0}</span>
+                    </div>
+                    <div class="muted mono mt-0.5">${esc(m.path)} &bull; ${m.mutation_sites || 0} mutation sites &bull; ${m.tests} tests</div>
+                    ${intraProd.length ? `<div class="mono text-xs mt-1">intra-target: ${esc(intraProd.map(d => `${d}[${fmtSyms((m.symbol_deps && m.symbol_deps[d]) || [], 4)}]`).join(", "))}</div>` : ""}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+
+          <!-- TIER 4: VERIFICATION RECIPE -->
+          <div class="surface-card p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-bold text-sm">TIER 4 &mdash; RUNNABLE VERIFICATION RECIPE</span>
+              <span class="pill pill-high mono">Minimal Gate Set</span>
+            </div>
+            <div class="space-y-2.5 text-xs mono">
+              <div class="surface-subtle p-2.5">
+                <div class="muted font-sans font-semibold mb-1">1. Rust Workspace Unit &amp; Integration Tests:</div>
+                <code>${esc(cargoCmd)}</code>
+              </div>
+              <div class="surface-subtle p-2.5">
+                <div class="muted font-sans font-semibold mb-1">2. Direct Independent Python Vector Suites (${imp.direct_vecs.length}):</div>
+                <code>${imp.direct_vecs.length
+                  ? (imp.direct_vecs.length <= 6 ? imp.direct_vecs.map(v => `python3 -B tools/${v}.py`).join(" && ") : `python3 tools/bbverify.py full  # (${imp.direct_vecs.length} suites: ${imp.direct_vecs.join(", ")})`)
+                  : "none"}</code>
+              </div>
+              <div class="surface-subtle p-2.5">
+                <div class="muted font-sans font-semibold mb-1">3. 1-Hop Dependent Vector Suites (${imp.hop1_vecs.length}):</div>
+                <code>${imp.hop1_vecs.length ? imp.hop1_vecs.join(", ") : "none"}</code>
+              </div>
+              <div class="surface-subtle p-2.5">
+                <div class="muted font-sans font-semibold mb-1">4. Canonical Byte-Order Mutation Gate (bbmutate.py):</div>
+                ${imp.mut_targets.length ? `<div><code>python3 tools/bbmutate.py ${esc(imp.mut_targets.join(" "))}</code></div>` : ""}
+                ${imp.mut_1hop.length ? `<div class="mt-1"><code>python3 tools/bbmutate.py ${esc(imp.mut_1hop.join(" "))}  # 1-hop encoders for 0-site target(s)</code></div>` : ""}
+                ${(!imp.mut_targets.length && !imp.mut_1hop.length) ? `<div><code>none (0 canonical encoder sites in target or 1-hop scope)</code></div>` : ""}
+              </div>
+              <div class="surface-subtle p-2.5">
+                <div class="muted font-sans font-semibold mb-1">5. Lean 4 Formal Proof Capsule:</div>
+                <code>${imp.proofs.length ? `${imp.proofs.join(", ")}  ((cd proof && lake build))` : "none"}</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- TIER 2: 1-HOP DEPENDENTS -->
+          <div class="surface-card p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-bold text-sm">TIER 2 &mdash; DIRECT 1-HOP DEPENDENTS (${imp.direct_prod.length} prod, ${imp.direct_test_only.length} #[cfg(test)])</span>
+              <span class="pill pill-low mono">Symbol Coupling</span>
+            </div>
+            <div class="space-y-1.5 max-h-80 overflow-y-auto">
+              ${imp.direct_prod.map(d => {
+                const dm = MOD_BY_NAME.get(d);
+                const parts = targets.filter(t => (dm.deps || []).includes(t)).map(t => {
+                  const syms = (dm.symbol_deps && dm.symbol_deps[t]) || [];
+                  const tsyms = (dm.test_symbol_deps && dm.test_symbol_deps[t]) || [];
+                  return `${t}: [${fmtSyms(syms, 5)}]${tsyms.length ? ` +#[cfg(test)]: [${fmtSyms(tsyms, 3)}]` : ""}`;
+                });
+                return `
+                  <div class="surface-subtle p-2 clickable-row text-xs" data-inspect-id="module:${esc(d)}">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold mono">${esc(d)}</span>
+                      <span class="muted mono">cfg(${esc(dm.gate)})</span>
+                    </div>
+                    <div class="muted mono mt-0.5">&larr; ${esc(parts.join("; "))}</div>
+                  </div>
+                `;
+              }).join("") || "<div class='muted text-xs'>(no production 1-hop dependents)</div>"}
+
+              ${imp.direct_test_only.map(d => {
+                const dm = MOD_BY_NAME.get(d);
+                const parts = targets.filter(t => (dm.test_deps || []).includes(t)).map(t => {
+                  const tsyms = (dm.test_symbol_deps && dm.test_symbol_deps[t]) || [];
+                  return `${t} (#[cfg(test)]): [${fmtSyms(tsyms, 5)}]`;
+                });
+                return `
+                  <div class="surface-subtle p-2 clickable-row text-xs" data-inspect-id="module:${esc(d)}">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold mono">${esc(d)}</span>
+                      <span class="pill pill-win mono">#[cfg(test)] only</span>
+                    </div>
+                    <div class="muted mono mt-0.5">&larr; ${esc(parts.join("; "))}</div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+
+          <!-- TIER 3 & PARALLEL SUBAGENT WAVES -->
+          <div class="space-y-4">
+            <div class="surface-card p-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-bold text-sm">TIER 3 &mdash; TRANSITIVE DEPENDENTS (2+ HOPS) (${imp.trans_2plus.length})</span>
+                <span class="pill mono">By Stratum</span>
+              </div>
+              <div class="space-y-1.5 text-xs">
+                ${Object.keys(byStratum).sort((a, b) => Number(a) - Number(b)).map(st => `
+                  <div class="surface-subtle p-2">
+                    <span class="font-bold mono muted">Stratum ${st}:</span>
+                    <span class="mono ml-2">${esc(byStratum[st].join(", "))}</span>
+                  </div>
+                `).join("") || "<div class='muted text-xs'>(none)</div>"}
+              </div>
+            </div>
+
+            <div class="surface-card p-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-bold text-sm">PARALLEL SUBAGENT WAVE SCHEDULE (${waves.length} Wave${waves.length === 1 ? "" : "s"})</span>
+                <span class="pill pill-core mono">deps &cup; test_deps</span>
+              </div>
+              <div class="space-y-2 text-xs">
+                ${waves.map((w, idx) => `
+                  <div class="surface-subtle p-2.5">
+                    <div class="font-bold mono mb-1">WAVE ${idx + 1} (${w.length} parallel subagent lock${w.length === 1 ? "" : "s"})</div>
+                    <div class="space-y-1">
+                      ${w.map(mname => {
+                        const mod = MOD_BY_NAME.get(mname);
+                        const prodWait = (mod.deps || []).filter(d => tset.has(d)).map(d => `${d}[${fmtSyms((mod.symbol_deps && mod.symbol_deps[d]) || [], 4)}]`);
+                        const testWait = (mod.test_deps || []).filter(d => tset.has(d)).map(d => `${d}[${fmtSyms((mod.test_symbol_deps && mod.test_symbol_deps[d]) || [], 4)}] (test)`);
+                        const allWait = [...prodWait, ...testWait];
+                        return `
+                          <div class="mono">
+                            <strong>${esc(mname)}</strong>
+                            <span class="muted"> &mdash; ${allWait.length ? `waits on: ${esc(allWait.join(", "))}` : "root in wave set"}</span>
+                          </div>
+                        `;
+                      }).join("")}
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      bindInspectClicks(outBox);
+    }
+
+    // =========================================================================
+    // TAB 4: SYMBOLS, SIGNATURE TYPES & 2-PASS CALLERS
+    // =========================================================================
+    const TYPE_PRESETS = [
+      "SparseOctreeV1", "ContentTag", "World", "Coord", "CameraProjection",
+      "Aabb", "JournalIo", "MortonKeyV1", "Frame", "Receipt", "TickOutcome",
+    ];
+    const CALLER_PRESETS = [
+      "CameraProjection::aabb_definitely_outside_frustum",
+      "World::exposed_faces",
+      "JournalIo::metadata_len",
+      "SparseOctreeV1::from_world",
+      "MortonKeyV1::from_coord",
+      "ray_aabb_entry_distance",
+      "bounds_aabb",
+      "hash_canonical",
+    ];
+
+    document.getElementById("type-presets").innerHTML = TYPE_PRESETS.map(t => `
+      <button class="btn text-xs mono" data-type-preset="${esc(t)}">${esc(t)}</button>
+    `).join("");
+    document.querySelectorAll("[data-type-preset]").forEach(b => {
+      b.addEventListener("click", () => {
+        document.getElementById("type-input").value = b.getAttribute("data-type-preset");
+        renderTypeExplorer();
+      });
+    });
+    document.getElementById("type-run-btn").addEventListener("click", renderTypeExplorer);
+    document.getElementById("type-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") renderTypeExplorer();
+    });
+
+    document.getElementById("caller-presets").innerHTML = CALLER_PRESETS.map(c => `
+      <button class="btn text-xs mono" data-caller-preset="${esc(c)}">${esc(c.split("::").pop())}</button>
+    `).join("");
+    document.querySelectorAll("[data-caller-preset]").forEach(b => {
+      b.addEventListener("click", () => {
+        document.getElementById("caller-input").value = b.getAttribute("data-caller-preset");
+        renderCallerExplorer();
+      });
+    });
+    document.getElementById("caller-run-btn").addEventListener("click", renderCallerExplorer);
+    document.getElementById("caller-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") renderCallerExplorer();
+    });
+
+    function resolveTypeName(query) {
+      let q = String(query || "").trim();
+      if (!q) return null;
+      const allTypes = new Set();
+      for (const m of MODULES) {
+        for (const s of (m.symbols || [])) {
+          if (["struct", "enum", "trait", "type"].includes(s.kind)) allTypes.add(s.name);
+          if (s.impl) allTypes.add(s.impl);
+          for (const t of (s.takes || [])) allTypes.add(t);
+          for (const t of (s.returns || [])) allTypes.add(t);
+        }
+      }
+      if (q.includes("::") && !allTypes.has(q)) q = q.split("::").pop();
+      if (allTypes.has(q)) return q;
+      const low = q.toLowerCase();
+      const ci = [...allTypes].filter(t => t.toLowerCase() === low).sort();
+      return ci[0] || null;
+    }
+
+    function renderTypeExplorer() {
+      const q = document.getElementById("type-input").value;
+      const tname = resolveTypeName(q);
+      const box = document.getElementById("type-output");
+      if (!tname) {
+        box.innerHTML = `<div class="muted text-xs">No type matched <code>${esc(q)}</code>.</div>`;
+        return;
+      }
+
+      const defs = [];
+      const returnedBy = [];
+      const methods = [];
+      const takenBy = [];
+      for (const m of MODULES) {
+        for (const s of (m.symbols || [])) {
+          if (s.name === tname && ["struct", "enum", "trait", "type"].includes(s.kind)) defs.push([m, s]);
+          if ((s.returns || []).includes(tname)) returnedBy.push([m, s]);
+          if (s.impl === tname) methods.push([m, s]);
+          if ((s.takes || []).includes(tname) && s.impl !== tname) takenBy.push([m, s]);
+        }
+      }
+      returnedBy.sort((a, b) => ((a[1].impl !== tname) - (b[1].impl !== tname)) || a[0].name.localeCompare(b[0].name) || (a[1].line - b[1].line));
+      methods.sort((a, b) => ((!a[1].pub) - (!b[1].pub)) || a[0].name.localeCompare(b[0].name) || (a[1].line - b[1].line));
+
+      box.innerHTML = `
+        <div class="surface-subtle p-2.5 text-xs">
+          <div class="font-bold mono mb-1">DEFINED AT (${defs.length})</div>
+          ${defs.map(([m, s]) => `
+            <div class="clickable-row p-1.5 rounded" data-inspect-sym="${esc(m.name)}|${esc(s.name)}|${s.line}">
+              <span class="mono font-bold">${esc(s.pub ? "pub " : "")}${esc(s.kind)} ${esc(s.name)}</span>
+              <span class="muted mono ml-2">${esc(m.path)}:${s.line}-${s.end}</span>
+              ${s.doc ? `<div class="muted mt-0.5">${esc(s.doc)}</div>` : ""}
+            </div>
+          `).join("") || "<div class='muted'>(external or built-in type)</div>"}
+        </div>
+
+        <div class="surface-subtle p-2.5 text-xs">
+          <div class="font-bold mono mb-1">RETURNED BY &mdash; CONSTRUCTORS &amp; PRODUCERS (${returnedBy.length})</div>
+          <div class="max-h-40 overflow-y-auto space-y-1">
+            ${returnedBy.slice(0, 40).map(([m, s]) => {
+              const qual = s.impl ? `${s.impl}::${s.name}` : `${m.name}::${s.name}`;
+              return `
+                <div class="clickable-row p-1.5 rounded" data-inspect-sym="${esc(m.name)}|${esc(s.name)}|${s.line}">
+                  <div class="flex items-center justify-between">
+                    <span class="mono font-semibold">${s.impl === tname ? `<span class="pill pill-core mr-1">[ctor]</span>` : ""}${esc(qual)}</span>
+                    <span class="muted mono">${esc(m.name)}:${s.line}</span>
+                  </div>
+                </div>
+              `;
+            }).join("") || "<div class='muted'>(none)</div>"}
+          </div>
+        </div>
+
+        <div class="surface-subtle p-2.5 text-xs">
+          <div class="font-bold mono mb-1">METHODS (impl ${esc(tname)}) (${methods.length})</div>
+          <div class="max-h-44 overflow-y-auto space-y-1">
+            ${methods.map(([m, s]) => `
+              <div class="clickable-row p-1.5 rounded" data-inspect-sym="${esc(m.name)}|${esc(s.name)}|${s.line}">
+                <div class="flex items-center justify-between">
+                  <span class="mono font-semibold">${esc(s.pub ? "pub " : "")}${esc(tname)}::${esc(s.name)}</span>
+                  <span class="muted mono">:${s.line}-${s.end}</span>
+                </div>
+                ${s.sig ? `<div class="muted mono truncate mt-0.5">${esc(s.sig)}</div>` : ""}
+              </div>
+            `).join("") || "<div class='muted'>(none)</div>"}
+          </div>
+        </div>
+
+        <div class="surface-subtle p-2.5 text-xs">
+          <div class="font-bold mono mb-1">TAKEN BY &mdash; EXTERNAL CONSUMERS (${takenBy.length})</div>
+          <div class="max-h-40 overflow-y-auto space-y-1">
+            ${takenBy.slice(0, 40).map(([m, s]) => {
+              const qual = s.impl ? `${s.impl}::${s.name}` : `${m.name}::${s.name}`;
+              return `
+                <div class="clickable-row p-1.5 rounded" data-inspect-sym="${esc(m.name)}|${esc(s.name)}|${s.line}">
+                  <span class="mono font-semibold">${esc(qual)}</span>
+                  <span class="muted mono ml-2">${esc(m.path)}:${s.line}</span>
+                </div>
+              `;
+            }).join("") || "<div class='muted'>(none)</div>"}
+          </div>
+        </div>
+      `;
+      bindInspectClicks(box);
+    }
+
+    function collectCallers(targetQuery) {
+      const q = String(targetQuery || "").trim();
+      let normQ = q;
+      let qualMod = null;
+      let qualFn = null;
+      const parts = q.split("::");
+      if (parts.length === 3 && MODULE_NAMES.has(parts[0])) {
+        normQ = `${parts[1]}::${parts[2]}`;
+      } else if (parts.length === 2 && MODULE_NAMES.has(parts[0])) {
+        qualMod = parts[0];
+        qualFn = parts[1];
+      }
+
+      function matchCall(c, callerMod, isTest, ci) {
+        if (qualMod && qualFn) {
+          const reach = new Set([callerMod.name, ...(callerMod.deps || []), ...(isTest ? (callerMod.test_deps || []) : [])]);
+          if (!reach.has(qualMod)) return false;
+          return ci
+            ? (c.toLowerCase() === normQ.toLowerCase() || c.toLowerCase() === qualFn.toLowerCase())
+            : (c === normQ || c === qualFn);
+        }
+        if (normQ.includes("::")) {
+          return ci ? c.toLowerCase() === normQ.toLowerCase() : c === normQ;
+        }
+        const cl = ci ? c.toLowerCase() : c;
+        const nl = ci ? normQ.toLowerCase() : normQ;
+        return cl === nl || cl.endsWith("::" + nl);
+      }
+
+      function runPass(ci) {
+        const prodHits = [];
+        const testHits = [];
+        for (const m of MODULES) {
+          for (const s of (m.symbols || [])) {
+            if (s.kind === "fn" && (s.calls || []).some(c => matchCall(c, m, false, ci))) {
+              prodHits.push([m, s]);
+            }
+          }
+          for (const tf of (m.test_fns || [])) {
+            if ((tf.calls || []).some(c => matchCall(c, m, true, ci))) {
+              testHits.push([m, tf]);
+            }
+          }
+        }
+        return { prodHits, testHits };
+      }
+
+      let { prodHits, testHits } = runPass(false);
+      if (!prodHits.length && !testHits.length) {
+        ({ prodHits, testHits } = runPass(true));
+      }
+      return { normQ, prodHits, testHits };
+    }
+
+    function renderCallerExplorer() {
+      const q = document.getElementById("caller-input").value.trim();
+      const { normQ, prodHits, testHits } = collectCallers(q);
+      const box = document.getElementById("caller-output");
+
+      const activeMods = (testHits.length ? testHits : prodHits).map(([m]) => m);
+      let cargoCmd = "cargo test --workspace";
+      if (activeMods.length) {
+        const crates = new Set(activeMods.map(m => m.crate));
+        if (crates.size === 1 && crates.has("core")) cargoCmd = "cargo test -p bitblock-core";
+        else if (crates.size === 1 && crates.has("research")) cargoCmd = "cargo test -p bitblock-research";
+        else if (crates.size === 1 && crates.has("binary")) cargoCmd = "cargo test --bin bitblock --features protocol-research";
+        else if (activeMods.some(m => m.crate !== "core" || m.gate !== "default")) {
+          cargoCmd = "cargo test --workspace --features protocol-research";
+        }
+        if (testHits.length === 1) cargoCmd += " " + testHits[0][1].name;
+      }
+
+      box.innerHTML = `
+        <div class="surface-subtle p-2.5 text-xs">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold mono">PRODUCTION CALLERS (${prodHits.length})</span>
+            <span class="pill mono">${esc(normQ)}</span>
+          </div>
+          <div class="space-y-1 max-h-44 overflow-y-auto">
+            ${prodHits.map(([m, s]) => {
+              const qual = s.impl ? `${m.name}::${s.impl}::${s.name}` : `${m.name}::${s.name}`;
+              return `
+                <div class="clickable-row p-1.5 rounded" data-inspect-sym="${esc(m.name)}|${esc(s.name)}|${s.line}">
+                  <div class="flex items-center justify-between">
+                    <span class="mono font-semibold">${esc(qual)}</span>
+                    <span class="muted mono">${esc(m.path)}:${s.line}-${s.end}</span>
+                  </div>
+                </div>
+              `;
+            }).join("") || "<div class='muted'>(none)</div>"}
+          </div>
+        </div>
+
+        <div class="surface-subtle p-2.5 text-xs">
+          <div class="font-bold mono mb-1">UNIT TEST CALLERS (#[test]) (${testHits.length})</div>
+          <div class="space-y-1 max-h-44 overflow-y-auto">
+            ${testHits.map(([m, tf]) => `
+              <div class="clickable-row p-1.5 rounded" data-inspect-id="module:${esc(m.name)}">
+                <div class="flex items-center justify-between">
+                  <span class="mono font-semibold">${esc(m.name)}::tests::${esc(tf.name)}</span>
+                  <span class="muted mono">${esc(m.path)}:${tf.line}-${tf.end}</span>
+                </div>
+              </div>
+            `).join("") || "<div class='muted'>(none)</div>"}
+          </div>
+        </div>
+
+        <div class="surface-subtle p-2.5 text-xs mono">
+          <span class="muted font-sans font-semibold">Run Crate-Aware Test Command:</span>
+          <div class="mt-1"><code>${esc(cargoCmd)}</code></div>
+        </div>
+      `;
+      bindInspectClicks(box);
+    }
+
+    // Populate symbol catalog module dropdown & table
+    {
+      const modSel = document.getElementById("sym-table-mod");
+      for (const m of MODULES.slice().sort((a, b) => a.name.localeCompare(b.name))) {
+        const opt = document.createElement("option");
+        opt.value = m.name;
+        opt.textContent = `${m.name} (${(m.symbols || []).length})`;
+        modSel.appendChild(opt);
+      }
+      ["sym-table-search", "sym-table-kind", "sym-table-mod"].forEach(id => {
+        document.getElementById(id).addEventListener("input", renderSymCatalog);
+        document.getElementById(id).addEventListener("change", renderSymCatalog);
+      });
+    }
+
+    function renderSymCatalog() {
+      const q = document.getElementById("sym-table-search").value.trim().toLowerCase();
+      const kindFilter = document.getElementById("sym-table-kind").value;
+      const modFilter = document.getElementById("sym-table-mod").value;
+
+      const rows = [];
+      for (const m of MODULES) {
+        if (modFilter !== "all" && m.name !== modFilter) continue;
+        for (const s of (m.symbols || [])) {
+          if (kindFilter !== "all" && s.kind !== kindFilter) continue;
+          const qual = s.impl ? `${s.impl}::${s.name}` : s.name;
+          if (q && !qual.toLowerCase().includes(q) && !String(s.sig || "").toLowerCase().includes(q) && !String(s.doc || "").toLowerCase().includes(q)) {
+            continue;
+          }
+          rows.push({ m, s, qual });
+          if (rows.length >= 150) break;
+        }
+        if (rows.length >= 150) break;
+      }
+
+      const wrap = document.getElementById("sym-table-wrap");
+      wrap.innerHTML = `
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Kind</th>
+              <th>Span</th>
+              <th>Signature / Types</th>
+              <th>Doc</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(({ m, s, qual }) => `
+              <tr class="clickable-row" data-inspect-sym="${esc(m.name)}|${esc(s.name)}|${s.line}">
+                <td class="mono font-semibold">${esc(qual)}</td>
+                <td class="mono">${esc(s.pub ? "pub " : "")}${esc(s.kind)}</td>
+                <td class="mono muted">${esc(m.path)}:${s.line}-${s.end}</td>
+                <td class="mono text-xs">${esc(String(s.sig || "").slice(0, 95))}</td>
+                <td class="muted text-xs">${esc(s.doc || "")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      bindInspectClicks(wrap);
+    }
+
+    // =========================================================================
+    // TAB 5: PROTOCOL SCHEMAS, #bb. TAG TRIANGULATOR, PROOFS & METRICS
+    // =========================================================================
+    let activeProtoSub = "tags";
+    document.querySelectorAll(".proto-sub-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        activeProtoSub = btn.getAttribute("data-sub");
+        document.querySelectorAll(".proto-sub-btn").forEach(b => {
+          b.classList.toggle("btn-active", b.getAttribute("data-sub") === activeProtoSub);
+        });
+        renderProtoTab();
+      });
+    });
+    document.getElementById("proto-search").addEventListener("input", renderProtoTab);
+
+    // Precompute tag triangulation index across all nodes
+    const TAG_INDEX = new Map();
+    for (const n of NODES) {
+      const tags = n.kind === "metric" ? (n.tag ? [n.tag] : []) : (n.pinned_tags || []);
+      for (const t of tags) {
+        if (!TAG_INDEX.has(t)) TAG_INDEX.set(t, []);
+        TAG_INDEX.get(t).push(n);
+      }
+    }
+
+    function renderProtoTab() {
+      const q = document.getElementById("proto-search").value.trim().toLowerCase();
+      const box = document.getElementById("proto-content");
+
+      if (activeProtoSub === "tags") {
+        const entries = Array.from(TAG_INDEX.entries())
+          .filter(([t, arr]) => (arr.length > 1 || !t.startsWith("#bb.metric-definition.")) && (!q || t.toLowerCase().includes(q) || arr.some(n => n.id.toLowerCase().includes(q))))
+          .sort((a, b) => (b[1].length - a[1].length) || a[0].localeCompare(b[0]));
+
+        box.innerHTML = `
+          <div class="muted text-xs mb-3">
+            Showing ${Math.min(entries.length, 120)} of ${entries.length} content-addressed <code>#bb.&lt;kind&gt;.sha256.&lt;digest&gt;</code> tags (sorted by cross-language artifact count: Rust modules + Python vector suites + Protocol Markdown docs).
+          </div>
+          <div class="max-h-[540px] overflow-y-auto surface-subtle">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Canonical ContentTag</th>
+                  <th>Peers</th>
+                  <th>Rust Modules</th>
+                  <th>Python Vector Suites</th>
+                  <th>Docs / Examples</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${entries.slice(0, 120).map(([tag, arr]) => {
+                  const mods = arr.filter(n => n.kind === "module").map(n => n.name);
+                  const tools = arr.filter(n => n.kind === "tool").map(n => n.name);
+                  const docs = arr.filter(n => n.kind === "doc" || n.kind === "example").map(n => n.id);
+                  return `
+                    <tr class="clickable-row" data-inspect-tag="${esc(tag)}">
+                      <td class="mono font-semibold break-all">${esc(tag)}</td>
+                      <td><span class="pill ${arr.length >= 2 ? "pill-high" : ""} mono">${arr.length}</span></td>
+                      <td class="mono">${esc(mods.join(", ") || "-")}</td>
+                      <td class="mono">${esc(tools.join(", ") || "-")}</td>
+                      <td class="mono muted">${esc(docs.join(", ") || "-")}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+        bindInspectClicks(box);
+        return;
+      }
+
+      if (activeProtoSub === "schemas") {
+        const schemas = NODES.filter(n => n.kind === "schema" && (!q || n.name.toLowerCase().includes(q) || (n.declared_by || []).some(m => m.toLowerCase().includes(q))));
+        box.innerHTML = `
+          <div class="muted text-xs mb-3">
+            ${COVERAGE.schemas} production protocol schemas (${COVERAGE.schemas_vectored}/${COVERAGE.schemas} = 100% independently vectored in Python) + ${COVERAGE.schemas_fixtures} <code>#[cfg(test)]</code> fixtures.
+          </div>
+          <div class="max-h-[540px] overflow-y-auto surface-subtle">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Schema String</th>
+                  <th>Scope</th>
+                  <th>Declared By (Rust)</th>
+                  <th>Independent Python Vector Suites</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${schemas.map(s => `
+                  <tr class="clickable-row" data-inspect-id="${esc(s.id)}">
+                    <td class="mono font-semibold">${esc(s.name)}</td>
+                    <td>${s.fixture ? `<span class="pill pill-low">fixture</span>` : `<span class="pill pill-high">protocol</span>`}</td>
+                    <td class="mono">${esc((s.declared_by || []).map(x => x.split(":")[1]).join(", "))} <span class="muted">(${esc((s.declared_at || [])[0] || "")})</span></td>
+                    <td class="mono">${esc((s.vectored_by || []).map(x => x.split(":")[1]).join(", ") || "NONE")}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+        bindInspectClicks(box);
+        return;
+      }
+
+      // Proofs & Metrics
+      const proofs = NODES.filter(n => n.kind === "proof" && (!q || n.name.toLowerCase().includes(q) || (n.theorems || []).some(t => t.toLowerCase().includes(q))));
+      const metrics = NODES.filter(n => n.kind === "metric" && (!q || n.name.toLowerCase().includes(q) || n.alias.toLowerCase().includes(q) || n.owner.toLowerCase().includes(q)));
+      box.innerHTML = `
+        <div class="mb-4">
+          <h3 class="text-sm font-bold mb-2">Lean 4 Formal Proof Capsule (${proofs.length} Modules)</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            ${proofs.map(p => `
+              <div class="surface-subtle p-3 clickable-row text-xs" data-inspect-id="${esc(p.id)}">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold mono">${esc(p.name)}</span>
+                  <span class="pill pill-core mono">${(p.theorems || []).length} theorems</span>
+                </div>
+                <div class="muted mono mt-0.5">${esc(p.path)} (${p.lines} lines)</div>
+                <div class="mt-1.5">${esc(describe(p))}</div>
+                <div class="mono muted mt-1.5">Proves: ${esc((p.cites_src || []).join(", "))}</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold mb-2">1,112-Family Metric Registry (showing ${Math.min(metrics.length, 80)} of ${metrics.length})</h3>
+          <div class="max-h-96 overflow-y-auto surface-subtle">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Owner</th>
+                  <th>Metric Family</th>
+                  <th>Canonical Alias</th>
+                  <th>Authority Definition Tag</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${metrics.slice(0, 80).map(m => `
+                  <tr class="clickable-row" data-inspect-id="${esc(m.id)}">
+                    <td><span class="pill mono">${esc(m.owner)}</span></td>
+                    <td class="font-semibold">${esc(m.name)}</td>
+                    <td class="mono text-xs">${esc(m.alias)}</td>
+                    <td class="mono text-xs muted">${esc(m.tag)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      bindInspectClicks(box);
+    }
+
+    // =========================================================================
+    // TAB 6: AUDITOR GATES, 90/90 IN-BROWSER SELFTEST, EVAL & COVERAGE
+    // =========================================================================
+    function runBrowserSelftests() {
+      const results = [];
+
+      // 1. queries (15)
+      for (const c of (SELFTEST.queries || [])) {
+        const r = rank(c.q);
+        const top = r.scored.find(x => x.node.kind === "module")?.node.name || null;
+        results.push({
+          cat: "queries",
+          name: `ask "${c.q}"`,
+          expected: c.top,
+          actual: top,
+          pass: top === c.top,
+          action: () => { switchTab("ask"); document.getElementById("ask-input").value = c.q; renderAsk(); },
+        });
+      }
+      // 2. no_match (2)
+      for (const c of (SELFTEST.no_match || [])) {
+        const r = rank(c.q);
+        const topScore = r.scored.length ? r.scored[0].score : 0.0;
+        const maxAllowed = c.max_score ?? 3.0;
+        results.push({
+          cat: "no_match",
+          name: `no_match "${c.q}"`,
+          expected: `<= ${maxAllowed.toFixed(1)}`,
+          actual: topScore.toFixed(2),
+          pass: topScore <= maxAllowed,
+          action: () => { switchTab("ask"); document.getElementById("ask-input").value = c.q; renderAsk(); },
+        });
+      }
+      // 3. confidence (6)
+      for (const c of (SELFTEST.confidence || [])) {
+        const r = rank(c.q);
+        const [lvl] = confidence(r.coverage, r.scored, r.anchored, r.named);
+        results.push({
+          cat: "confidence",
+          name: `confidence "${c.q}"`,
+          expected: c.expect,
+          actual: lvl,
+          pass: lvl.toLowerCase() === c.expect.toLowerCase(),
+          action: () => { switchTab("ask"); document.getElementById("ask-input").value = c.q; renderAsk(); },
+        });
+      }
+      // 4. reuse (3)
+      if (SELFTEST.reuse) {
+        const actualReuse = {
+          production_duplicated_lines: REUSE.duplication.production.duplicated_lines,
+          test_duplicated_lines: REUSE.duplication.test.duplicated_lines,
+          unreferenced_pub_items: REUSE.dead.unreferenced.length,
+        };
+        for (const [k, exp] of Object.entries(SELFTEST.reuse)) {
+          results.push({
+            cat: "reuse",
+            name: `reuse.${k}`,
+            expected: String(exp),
+            actual: String(actualReuse[k]),
+            pass: actualReuse[k] === exp,
+          });
+        }
+      }
+      // 5. counts (32)
+      for (const [k, exp] of Object.entries(SELFTEST.counts || {})) {
+        let act = COVERAGE[k];
+        let e = exp;
+        if (Array.isArray(exp)) {
+          act = (act || []).length;
+          e = exp.length;
+        }
+        results.push({
+          cat: "counts",
+          name: `counts.${k}`,
+          expected: String(e),
+          actual: String(act),
+          pass: act === e,
+        });
+      }
+      // 6. structure (3)
+      for (const c of (SELFTEST.structure || [])) {
+        const got = DAG.transitive_dependents[c.module];
+        results.push({
+          cat: "structure",
+          name: `dagdependents(${c.module})`,
+          expected: String(c.dependents),
+          actual: String(got),
+          pass: got === c.dependents,
+          action: () => { switchTab("dag"); selectedDagMod = c.module; renderDag(); },
+        });
+      }
+      // 7. waves (2)
+      for (const c of (SELFTEST.waves || [])) {
+        const got = computeWaves(c.modules);
+        results.push({
+          cat: "waves",
+          name: `wave(${c.modules.join(", ")})`,
+          expected: JSON.stringify(c.expect),
+          actual: JSON.stringify(got),
+          pass: JSON.stringify(got) === JSON.stringify(c.expect),
+          action: () => { switchTab("impact"); document.getElementById("impact-input").value = c.modules.join(" "); renderImpact(); },
+        });
+      }
+      // 8. schemas (3)
+      for (const c of (SELFTEST.schemas || [])) {
+        const node = NODES.find(n => n.kind === "schema" && n.name === c.schema);
+        const vectored = Boolean(node && node.vectored_by && node.vectored_by.length);
+        results.push({
+          cat: "schemas",
+          name: `schema ${c.schema}`,
+          expected: `vectored=${c.vectored}`,
+          actual: `vectored=${vectored}`,
+          pass: Boolean(node) && vectored === c.vectored,
+          action: () => node && inspectItem({ id: node.id }),
+        });
+      }
+      // 9. symbol_deps (3)
+      for (const c of (SELFTEST.symbol_deps || [])) {
+        const got = (MOD_BY_NAME.get(c.module)?.symbol_deps || {})[c.dep] || [];
+        results.push({
+          cat: "symbol_deps",
+          name: `symbol_deps ${c.module} -> ${c.dep}`,
+          expected: JSON.stringify(c.expect),
+          actual: JSON.stringify(got),
+          pass: JSON.stringify(got) === JSON.stringify(c.expect),
+          action: () => inspectItem({ id: `module:${c.module}` }),
+        });
+      }
+      // 10. test_symbol_deps (2)
+      for (const c of (SELFTEST.test_symbol_deps || [])) {
+        const mod = MOD_BY_NAME.get(c.module) || {};
+        const gotTest = (mod.test_symbol_deps || {})[c.dep] || [];
+        const gotProd = (mod.symbol_deps || {})[c.dep] || [];
+        let ok = true;
+        if (c.expect && JSON.stringify(gotTest) !== JSON.stringify(c.expect)) ok = false;
+        if (c.expect_include && !c.expect_include.every(s => gotTest.includes(s))) ok = false;
+        if (c.not_in_prod && c.not_in_prod.some(s => gotProd.includes(s))) ok = false;
+        results.push({
+          cat: "test_symbol_deps",
+          name: `test_symbol_deps ${c.module} -> ${c.dep}`,
+          expected: JSON.stringify(c.expect || c.expect_include),
+          actual: JSON.stringify(gotTest),
+          pass: ok,
+          action: () => inspectItem({ id: `module:${c.module}` }),
+        });
+      }
+      // 11. symbols (6)
+      const symSpec = SELFTEST.symbols || {};
+      if (symSpec.sig_type_consistency) {
+        let bad = 0;
+        for (const m of MODULES) {
+          for (const s of (m.symbols || [])) {
+            if (s.kind !== "fn") continue;
+            const sig = s.sig || "";
+            for (const t of [...(s.takes || []), ...(s.returns || [])]) {
+              if (!(sig.includes(t) || (t === s.impl && (sig.includes("Self") || sig.includes("self"))))) bad++;
+            }
+          }
+        }
+        results.push({
+          cat: "symbols",
+          name: "symbols.sig_type_consistency",
+          expected: "0 violations",
+          actual: `${bad} violations`,
+          pass: bad === 0,
+        });
+      }
+      if (symSpec.test_fns_match_coverage) {
+        const gotTests = MODULES.reduce((a, m) => a + (m.test_fns ? m.test_fns.length : 0), 0);
+        results.push({
+          cat: "symbols",
+          name: "symbols.test_fns_match_coverage",
+          expected: String(COVERAGE.tests),
+          actual: String(gotTests),
+          pass: gotTests === COVERAGE.tests,
+        });
+      }
+      if (symSpec.pub_counts) {
+        const gotTot = MODULES.reduce((a, m) => a + (m.pub_symbol_count || 0), 0);
+        const gotDoc = MODULES.reduce((a, m) => a + (m.pub_documented || 0), 0);
+        results.push({
+          cat: "symbols",
+          name: "symbols.pub_counts",
+          expected: `${symSpec.pub_counts.documented}/${symSpec.pub_counts.total}`,
+          actual: `${gotDoc}/${gotTot}`,
+          pass: gotTot === symSpec.pub_counts.total && gotDoc === symSpec.pub_counts.documented,
+        });
+      }
+      for (const tc of (symSpec.type_checks || [])) {
+        const tname = tc.type;
+        let ok = true;
+        let desc = "";
+        if (tc.returns_include) {
+          const retFns = new Set(
+            MODULES.flatMap(m => (m.symbols || []).filter(s => s.kind === "fn" && (s.returns || []).includes(tname)).map(s => s.name))
+          );
+          ok = tc.returns_include.every(fn => retFns.has(fn));
+          desc = `returns include ${tc.returns_include.join(", ")}`;
+        } else if (tc.method_count !== undefined) {
+          const mcnt = MODULES.reduce((a, m) => a + (m.symbols || []).filter(s => s.kind === "fn" && s.impl === tname).length, 0);
+          ok = mcnt === tc.method_count;
+          desc = `methods=${mcnt} (expect ${tc.method_count})`;
+        } else if (tc.min_returning_fns !== undefined) {
+          const rcnt = MODULES.reduce((a, m) => a + (m.symbols || []).filter(s => s.kind === "fn" && (s.returns || []).includes(tname)).length, 0);
+          ok = rcnt >= tc.min_returning_fns;
+          desc = `returning_fns=${rcnt} (>= ${tc.min_returning_fns})`;
+        }
+        results.push({
+          cat: "symbols",
+          name: `type_check(${tname})`,
+          expected: desc,
+          actual: ok ? "OK" : "FAIL",
+          pass: ok,
+          action: () => { switchTab("symbols"); document.getElementById("type-input").value = tname; renderTypeExplorer(); },
+        });
+      }
+      // 12. callers (3)
+      for (const c of (SELFTEST.callers || [])) {
+        const target = c.target;
+        const prodMods = Array.from(new Set(
+          MODULES.filter(m => (m.symbols || []).some(s => s.kind === "fn" && (s.calls || []).includes(target))).map(m => m.name)
+        )).sort();
+        const testMods = Array.from(new Set(
+          MODULES.filter(m => (m.test_fns || []).some(tf => (tf.calls || []).includes(target))).map(m => m.name)
+        )).sort();
+        const prodCallers = Array.from(new Set(
+          MODULES.flatMap(m => (m.symbols || []).filter(s => s.kind === "fn" && (s.calls || []).includes(target)).map(s => s.impl ? `${m.name}::${s.impl}::${s.name}` : `${m.name}::${s.name}`))
+        )).sort();
+        let ok = true;
+        if (c.prod_modules && JSON.stringify(prodMods) !== JSON.stringify(c.prod_modules)) ok = false;
+        if (c.test_modules && JSON.stringify(testMods) !== JSON.stringify(c.test_modules)) ok = false;
+        if (c.prod_callers && JSON.stringify(prodCallers) !== JSON.stringify(c.prod_callers)) ok = false;
+        results.push({
+          cat: "callers",
+          name: `callers ${target}`,
+          expected: JSON.stringify(c.prod_modules || c.prod_callers),
+          actual: JSON.stringify(c.prod_modules ? prodMods : prodCallers),
+          pass: ok,
+          action: () => { switchTab("symbols"); document.getElementById("caller-input").value = target; renderCallerExplorer(); },
+        });
+      }
+      // 13. impact (5)
+      for (const c of (SELFTEST.impact || [])) {
+        if (c.module) {
+          const imp = computeImpact([c.module]);
+          const proofSet = new Set([...imp.proofs, ...imp.proofs.map(p => p.replace(/\.lean$/i, "").split("/").pop().toLowerCase())]);
+          let ok = true;
+          if (c.direct_dependents_include && !c.direct_dependents_include.every(d => imp.direct_prod.includes(d))) ok = false;
+          if (c.proofs_include && !c.proofs_include.every(p => proofSet.has(p))) ok = false;
+          if (c.mutation_sites !== undefined && (MOD_BY_NAME.get(c.module)?.mutation_sites || 0) !== c.mutation_sites) ok = false;
+          results.push({
+            cat: "impact",
+            name: `impact ${c.module}`,
+            expected: JSON.stringify(c.direct_dependents_include || c.proofs_include || c.mutation_sites),
+            actual: ok ? "verified" : "mismatch",
+            pass: ok,
+            action: () => { switchTab("impact"); document.getElementById("impact-input").value = c.module; renderImpact(); },
+          });
+        } else if (c.total_mutation_sites !== undefined) {
+          const tot = MODULES.reduce((a, m) => a + (m.mutation_sites || 0), 0);
+          const mcnt = MODULES.filter(m => (m.mutation_sites || 0) > 0).length;
+          let ok = tot === c.total_mutation_sites && mcnt === c.modules_with_mutation_sites;
+          for (const [mname, expS] of Object.entries(c.module_sites || {})) {
+            if ((MOD_BY_NAME.get(mname)?.mutation_sites || 0) !== expS) ok = false;
+          }
+          results.push({
+            cat: "impact",
+            name: "impact.total_mutation_sites",
+            expected: `${c.total_mutation_sites} across ${c.modules_with_mutation_sites} mods`,
+            actual: `${tot} across ${mcnt} mods`,
+            pass: ok,
+          });
+        }
+      }
+      // 14. pinned_tags (5)
+      for (const c of (SELFTEST.pinned_tags || [])) {
+        const hit = resolveTag(c.tag);
+        const got = hit ? hit.ids : [];
+        results.push({
+          cat: "pinned_tags",
+          name: `tag ${c.tag.slice(0, 34)}...`,
+          expected: JSON.stringify(c.expect),
+          actual: JSON.stringify(got),
+          pass: JSON.stringify(got) === JSON.stringify(c.expect),
+          action: () => inspectItem({ type: "tag", tag: c.tag }),
+        });
+      }
+      return results;
+    }
+
+    let cachedSelftests = [];
+    function renderAuditTab() {
+      // 1. Gates card
+      const gates = COVERAGE.gates || {};
+      document.getElementById("audit-gates-card").innerHTML = `
+        <h3 class="text-sm font-bold m-0 mb-2">Three Accounting Gates (<code>bbindex.py audit</code>)</h3>
+        <p class="muted text-xs mb-3">
+          Enforced on every index regeneration: module declarations &amp; dependencies resolve, tool schemas match <code>src/</code> or <code>schema_local.json</code>, and all 1,112 metric families match <code>METRICS.md</code> and <code>registry.tsv</code>.
+        </p>
+        <div class="space-y-2 text-xs">
+          ${Object.entries(gates).map(([g, ok]) => `
+            <div class="surface-subtle p-2.5 flex items-center justify-between">
+              <span class="mono font-semibold">${esc(g)}</span>
+              <span class="pill ${ok ? "pill-high" : "pill-danger"} mono">${ok ? "PASS" : "FAIL"}</span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+
+      // 2. Eval benchmark card
+      document.getElementById("audit-eval-card").innerHTML = `
+        <h3 class="text-sm font-bold m-0 mb-2">Self-Supervised Holdout Retrieval Benchmark (<code>bbgraph.py eval</code>)</h3>
+        <p class="muted text-xs mb-3">
+          Measures whether <code>rank()</code> recovers the owning module (Strict) or its 1-hop dependency neighborhood (1-Hop) from held-out docstrings and test names.
+        </p>
+        <div class="space-y-2 text-xs">
+          ${EVAL_ROWS.map(r => `
+            <div class="surface-subtle p-2">
+              <div class="flex items-center justify-between mono">
+                <span class="font-semibold">${esc(r.label)} (N=${r.n})</span>
+                <span>Strict: <strong>${r.s1_pct}% / ${r.s3_pct}%</strong> &bull; 1-Hop: <strong style="color:#10b981;">${r.h1_pct}% / ${r.h3_pct}%</strong></span>
+              </div>
+              <div class="w-full h-2 bg-black/20 rounded overflow-hidden mt-1.5 flex">
+                <div style="width:${r.s3_pct}%;background:#3b82f6;" title="Strict Top-3: ${r.s3_pct}%"></div>
+                <div style="width:${Math.max(0, r.h3_pct - r.s3_pct)}%;background:#10b981;" title="1-Hop Top-3: ${r.h3_pct}%"></div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+
+      // 3. Selftests
+      cachedSelftests = runBrowserSelftests();
+      const passCnt = cachedSelftests.filter(r => r.pass).length;
+      const badge = document.getElementById("header-selftest-badge");
+      badge.textContent = `SELFTEST ${passCnt}/${cachedSelftests.length} PASS`;
+      badge.className = `pill ${passCnt === cachedSelftests.length ? "pill-high" : "pill-danger"} mono`;
+
+      const catSel = document.getElementById("selftest-cat-filter");
+      if (catSel.options.length <= 1) {
+        const cats = {};
+        for (const r of cachedSelftests) cats[r.cat] = (cats[r.cat] || 0) + 1;
+        for (const [c, cnt] of Object.entries(cats)) {
+          const opt = document.createElement("option");
+          opt.value = c;
+          opt.textContent = `${c} (${cnt})`;
+          catSel.appendChild(opt);
+        }
+      }
+      renderSelftestTable();
+
+      // 4. Coverage table
+      const sortedMods = MODULES.slice().sort((a, b) => {
+        const aZero = (a.pub_symbol_count || 0) === 0 ? 1 : 0;
+        const bZero = (b.pub_symbol_count || 0) === 0 ? 1 : 0;
+        if (aZero !== bZero) return aZero - bZero;
+        const aPct = (a.pub_documented || 0) / Math.max(a.pub_symbol_count || 1, 1);
+        const bPct = (b.pub_documented || 0) / Math.max(b.pub_symbol_count || 1, 1);
+        return (aPct - bPct) || a.name.localeCompare(b.name);
+      });
+      const covWrap = document.getElementById("coverage-table-wrap");
+      covWrap.innerHTML = `
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Module</th>
+              <th>Crate / Gate</th>
+              <th>Public Symbol /// Coverage</th>
+              <th>Mutation Sites (.to_be_bytes)</th>
+              <th>Tests</th>
+              <th>LOC</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedMods.map(m => {
+              const pc = m.pub_symbol_count || 0;
+              const pd = m.pub_documented || 0;
+              const pct = pc > 0 ? Math.round((100 * pd) / pc) : null;
+              return `
+                <tr class="clickable-row" data-inspect-id="module:${esc(m.name)}">
+                  <td class="mono font-bold">${esc(m.name)}</td>
+                  <td><span class="pill ${gatePillClass(m.gate, m.crate)} mono">cfg(${esc(m.gate)})</span></td>
+                  <td class="mono">${pct !== null ? `${pd} / ${pc} (${pct}%)` : "0 / 0 (n/a)"}</td>
+                  <td class="mono">${m.mutation_sites || 0}</td>
+                  <td class="mono">${m.tests}</td>
+                  <td class="mono muted">${m.lines.toLocaleString()}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
+      bindInspectClicks(covWrap);
+
+      // 5. Duplication & Dead surface
+      const prodDup = REUSE.duplication.production;
+      const testDup = REUSE.duplication.test;
+      document.getElementById("audit-reuse-card").innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div>
+            <h3 class="text-sm font-bold m-0 mb-2">Repeated Regions &amp; Legal DAG Helper Routing (<code>bbgraph.py dup</code>)</h3>
+            <div class="muted text-xs mb-2">
+              Production: ${prodDup.duplicated_lines} / ${prodDup.code_lines} lines (${((100 * prodDup.duplicated_lines) / prodDup.code_lines).toFixed(1)}%) &bull;
+              Test scope: ${testDup.duplicated_lines} / ${testDup.code_lines} lines (${((100 * testDup.duplicated_lines) / testDup.code_lines).toFixed(1)}%)
+            </div>
+            <div class="space-y-1.5 text-xs mono max-h-56 overflow-y-auto">
+              ${(prodDup.regions || []).slice(0, 10).map(r => `
+                <div class="surface-subtle p-2">
+                  <div><strong>${r.lines} lines:</strong> ${esc(r.left)} &harr; ${esc(r.right)}</div>
+                  <div class="muted">DAG legal home: ${esc((r.homes && r.homes.length) ? r.homes.join(", ") : "none shared")}</div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold m-0 mb-2">Public Dead-Surface Audit (<code>bbgraph.py dead</code>)</h3>
+            <div class="muted text-xs mb-2">
+              Unreferenced across workspace (${REUSE.dead.unreferenced.length}) &amp; Module-private candidates (${REUSE.dead.module_private_candidates.length})
+            </div>
+            <div class="space-y-1.5 text-xs mono max-h-56 overflow-y-auto">
+              ${REUSE.dead.unreferenced.map(u => `
+                <div class="surface-subtle p-2">
+                  <span class="pill pill-low mr-1">unreferenced</span>
+                  <strong>${esc(u.item)}</strong> in ${esc(u.modules.join(", "))}
+                </div>
+              `).join("")}
+              ${REUSE.dead.module_private_candidates.slice(0, 12).map(u => `
+                <div class="surface-subtle p-2">
+                  <span class="pill mr-1">module-only</span>
+                  <strong>${esc(u.item)}</strong> in ${esc(u.modules.join(", "))}
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSelftestTable() {
+      const cat = document.getElementById("selftest-cat-filter").value;
+      const rows = cachedSelftests.filter(r => cat === "all" || r.cat === cat);
+      const wrap = document.getElementById("selftest-table-wrap");
+      wrap.innerHTML = `
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Category</th>
+              <th>Check</th>
+              <th>Expected</th>
+              <th>Actual</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r, i) => `
+              <tr class="clickable-row" data-st-idx="${i}">
+                <td class="mono muted">${i + 1}</td>
+                <td><span class="pill mono">${esc(r.cat)}</span></td>
+                <td class="mono font-semibold">${esc(r.name)}</td>
+                <td class="mono text-xs muted">${esc(r.expected)}</td>
+                <td class="mono text-xs">${esc(r.actual)}</td>
+                <td><span class="pill ${r.pass ? "pill-high" : "pill-danger"} mono">${r.pass ? "PASS" : "FAIL"}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      wrap.querySelectorAll("[data-st-idx]").forEach(tr => {
+        tr.addEventListener("click", () => {
+          const item = rows[Number(tr.getAttribute("data-st-idx"))];
+          if (item && item.action) item.action();
+        });
+      });
+    }
+
+    document.getElementById("selftest-cat-filter").addEventListener("change", renderSelftestTable);
+    document.getElementById("selftest-rerun-btn").addEventListener("click", renderAuditTab);
+
+    // Initial render of all views
+    renderKpiRibbon();
+    renderAsk();
+    renderSubsystems();
+    renderImpact();
+    renderTypeExplorer();
+    renderCallerExplorer();
+    renderSymCatalog();
+    renderProtoTab();
+    renderAuditTab();
+  })();
+  </script>
+</body>
+</html>
+"""
+
+
+def cmd_html(out_arg: str) -> int:
+    out_path = (
+        Path(out_arg.strip())
+        if out_arg.strip()
+        else ROOT / "target" / "bitblock_graph.html"
+    )
+    if not out_path.is_absolute():
+        out_path = ROOT / out_path
+    payload = build_html_payload()
+    raw_json = json.dumps(payload, separators=(",", ":"), sort_keys=True).replace(
+        "</", "<\\/"
+    )
+    html_text = HTML_TEMPLATE.replace("__BB_GRAPH_PAYLOAD__", raw_json)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html_text, encoding="utf-8", newline="\n")
+    tot_syms = sum(
+        len(n.get("symbols", ())) for n in payload["nodes"] if n["kind"] == "module"
+    )
+    print(
+        "HTML COMPILER  %s  (%.1f KB)"
+        % (out_path, len(html_text.encode("utf-8")) / 1024.0)
+    )
+    print(
+        "  embedded: %d nodes, %d edges, %d DAG strata, %d subsystems, %d symbols, %d tests"
+        % (
+            len(payload["nodes"]),
+            len(payload["edges"]),
+            max(payload["dag"]["stratum"].values()) + 1,
+            len(payload["subs"]),
+            tot_syms,
+            payload["coverage"]["tests"],
+        )
+    )
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(__doc__)
@@ -2338,6 +5372,8 @@ def main(argv: list[str]) -> int:
         return cmd_coverage()
     if cmd == "eval":
         return cmd_eval()
+    if cmd == "html":
+        return cmd_html(joined)
     print(__doc__)
     return 1
 
