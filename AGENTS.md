@@ -20,11 +20,19 @@ python tools/bbgraph.py ask "canonical framebuffer bytes"
 
 Also: `bbverify` and `bbmutate` (see **Proving a change did not break anything**),
 `dup` and `dead` (see **How compressible is this tree**),
-`node <name>` (everything known about one module, tool, proof or doc),
-`schema [name]` (the protocol surface, and what independently checks each
-object), `metric <words>` (registry families), `dag` (dependency strata and
-which modules are load-bearing), `sub [name]` (modules that move together),
-`stats`, `gates`, `selftest`.
+`node <name>` (everything known about one module, tool, proof, doc, or
+`#bb.<kind>.sha256.<digest>` content tag; `ask` also resolves content tags
+directly), `sym <name>` (one symbol or `Type::method`: span, signature, doc,
+and types), `type <Type>` (where a type is defined, constructed, implemented,
+and consumed), `returns <Type>` and `takes <Type>` (signature type index),
+`callers <target>` (production and `#[test]` callers with crate-aware `cargo
+test` commands), `impact <modules...>` (4-tier blast radius and verification
+recipe), `wave <modules...>` (parallel subagent execution waves across `deps` +
+`test_deps`), `schema [name]` (the protocol surface, and what independently
+checks each object), `metric <words>` (registry families), `dag` (dependency
+strata and which modules are load-bearing), `sub [name]` (modules that move
+together), `coverage` (`//!` and public `///` documentation coverage), `eval`
+(self-supervised holdout retrieval benchmark), `stats`, `gates`, `selftest`.
 
 Every line of output cites a path, so any claim can be checked against the tree
 that produced it.

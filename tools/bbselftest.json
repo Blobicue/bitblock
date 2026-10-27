@@ -67,6 +67,11 @@
             "q": "morton gap stream",
             "top": "commit_r1",
             "note": "192-bit 3D Morton Z-order spatial keys and delta-prefix gap stream in commit_r1."
+        },
+        {
+            "q": "COMMIT-R1",
+            "top": "commit_r1",
+            "note": "Capability ID lookup via hyphen/underscore exact module name normalization."
         }
     ],
     "no_match": [
@@ -115,6 +120,10 @@
         {
             "q": "quantum flux capacitor",
             "expect": "LOW"
+        },
+        {
+            "q": "COMMIT-R1",
+            "expect": "high"
         }
     ],
     "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion. It moved 44 -> 51 when render_policy_vectors.py, frame_chain_vectors.py, display_receipt_v1_vectors.py and composite_frame_input_vectors.py closed the seven core-crate objects below. Six of the seven already had literal tag assertions in Rust and no second implementation, so those literals were a program agreeing with itself; every one of them reproduced from the Python side unchanged. It then moved again for the research-crate objects, two of them picked up transitively: the headless replay-rules policy names the renderer profile and the crosshair overlay by digest, so reconstructing the rules payload meant reconstructing both from their own constants. The count below is re-derived from the index rather than summed from the two branches, because the transitive pair would be double counted.",
@@ -343,5 +352,148 @@
         "production_duplicated_lines": 407,
         "test_duplicated_lines": 341,
         "unreferenced_pub_items": 3
-    }
+    },
+    "symbol_deps": [
+        {
+            "module": "octree_commit",
+            "dep": "world",
+            "expect": [
+                "CHUNK_WORDS",
+                "Coord",
+                "World"
+            ]
+        },
+        {
+            "module": "scale_assay",
+            "dep": "render",
+            "expect": [
+                "bounds_aabb",
+                "ray_aabb_entry_distance"
+            ]
+        }
+    ],
+    "test_symbol_deps": [
+        {
+            "module": "history",
+            "dep": "world",
+            "expect": [
+                "BEDROCK_COORD"
+            ],
+            "not_in_prod": [
+                "BEDROCK_COORD"
+            ]
+        },
+        {
+            "module": "main",
+            "dep": "tick",
+            "expect_include": [
+                "LANE_CLEAR_MOTION"
+            ],
+            "not_in_prod": [
+                "LANE_CLEAR_MOTION"
+            ]
+        }
+    ],
+    "symbols": {
+        "sig_type_consistency": true,
+        "test_fns_match_coverage": true,
+        "pub_counts": {
+            "total": 1306,
+            "documented": 462
+        },
+        "type_checks": [
+            {
+                "type": "SparseOctreeV1",
+                "returns_include": [
+                    "empty",
+                    "from_world"
+                ]
+            },
+            {
+                "type": "JournalIo",
+                "method_count": 6
+            },
+            {
+                "type": "ContentTag",
+                "min_returning_fns": 200
+            }
+        ]
+    },
+    "callers": [
+        {
+            "target": "CameraProjection::aabb_definitely_outside_frustum",
+            "prod_modules": [
+                "render",
+                "scale_assay"
+            ],
+            "test_modules": [
+                "camera"
+            ]
+        },
+        {
+            "target": "World::exposed_faces",
+            "prod_modules": [
+                "scale_assay"
+            ],
+            "test_modules": [
+                "world"
+            ]
+        },
+        {
+            "target": "JournalIo::metadata_len",
+            "prod_callers": [
+                "journal::append_synced_with_io",
+                "journal::discard_tail_with_io"
+            ]
+        }
+    ],
+    "impact": [
+        {
+            "module": "world",
+            "direct_dependents_include": [
+                "octree_commit",
+                "render",
+                "scale_assay"
+            ],
+            "proofs_include": [
+                "chunkrefinement",
+                "world"
+            ],
+            "mutation_sites": 0
+        },
+        {
+            "total_mutation_sites": 245,
+            "modules_with_mutation_sites": 29,
+            "module_sites": {
+                "render": 7,
+                "optimization": 3,
+                "world": 0,
+                "camera": 0
+            }
+        }
+    ],
+    "pinned_tags": [
+        {
+            "tag": "#bb.receipt.sha256.j3xacn27gfhq6f4wrxvn5upcvvufq5soltxncytvglb2recohp7a",
+            "expect": [
+                "module:octree_commit",
+                "tool:octree_commit_vectors"
+            ]
+        },
+        {
+            "tag": "#bb.output-topology.sha256.f575cglxnwk5tvgp3b5br5ptoudgh2eelaotxm2lnknlya2syvva",
+            "expect": [
+                "tool:output_topology_vectors"
+            ]
+        },
+        {
+            "tag": "#bb.output-topology.sha256.fw2l66z7jd2eu6suedannr77x5yrugb6sot7y3ojduamdiuemtpq",
+            "expect": [
+                "doc:docs/DISPLAY_AUDIT.md#powered-history",
+                "doc:docs/PROTOCOL.md#outputtopology-v1",
+                "tool:output_topology_vectors",
+                "tool:presentation_output_vectors"
+            ]
+        }
+    ]
 }

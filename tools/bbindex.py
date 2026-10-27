@@ -100,9 +100,65 @@ RE_PUB_ITEM = re.compile(
     r"^\s*pub (?:fn|struct|enum|const|trait|type) ([A-Za-z_][A-Za-z0-9_]*)", re.M
 )
 RE_TEST = re.compile(r"#\[test\]")
+RE_CHAR_LIT = re.compile(r"^'(?:\\.|[^'\\])'")
+RE_TYPE_TOKEN = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b(?!\s*::)")
+RE_ARRAY_LEN = re.compile(r";\s*[^;\]]+(?=\])")
+TYPE_SKIP = {
+    "Result", "Option", "Vec", "Box", "String", "Formatter", "Fn", "FnMut",
+    "FnOnce", "AsRef", "IntoIterator", "IntoIter", "Iterator", "Item", "Output",
+    "Err", "Default", "Clone", "Copy", "PartialEq", "Eq", "PartialOrd", "Ord",
+    "Hash", "Debug", "Display", "Error", "Read", "Write", "Seek", "SeekFrom",
+    "Send", "Sync", "Sized", "From", "Into", "TryFrom", "TryInto", "FromStr",
+    "FromIterator", "Drop", "Deref", "DerefMut", "Add", "AddAssign", "Sub",
+    "SubAssign", "Mul", "MulAssign", "Div", "Neg", "Ordering",
+}
+RE_IMPL_HEAD = re.compile(
+    r"^\s*(?:unsafe\s+)?impl(?:\s*<[^>]*>)?\s+(?:.+?\s+for\s+)?"
+    r"(?:&\s*(?:'[a-z_][A-Za-z0-9_]*\s+)?(?:mut\s+)?)?([A-Za-z_][A-Za-z0-9_]*)"
+)
+RE_TRAIT_HEAD = re.compile(
+    r"^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:unsafe\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
+RE_MOD_HEAD = re.compile(
+    r"^\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
+MODS = r"(?:pub(?:\s*\([^)]*\))?\s+)?(?:async\s+)?(?:const\s+)?(?:unsafe\s+)?"
+RE_DECL = re.compile(
+    r"^\s*" + MODS
+    + r"(fn|struct|enum|trait|type|const|static|macro_rules!)\s+"
+    + r"(?:<[^>]*>\s*)?(_?[A-Za-z0-9][A-Za-z0-9_]*)"
+)
+RE_STRICT_PUB = re.compile(r"^\s*pub(?!\s*\()\b")
+RE_TEST_ATTR = re.compile(r"#\[\s*(?:[\w:]+::)?test\b")
+RE_ROOT_USE = re.compile(
+    r"\buse\s+(?:crate|bitblock|bitblock_core|bitblock_research)::\{([^;]+)\};", re.S
+)
+RE_USE_BRACES = re.compile(
+    r"\b(?:crate|bitblock|bitblock_core|bitblock_research)::([a-z0-9_]+)::\{([^}]+)\}", re.S
+)
+RE_QUAL_SYM = re.compile(
+    r"\b(?:crate|bitblock|bitblock_core|bitblock_research)::([a-z0-9_]+)::(?:windows::)?([A-Za-z_][A-Za-z0-9_]*)"
+)
+RE_QUAL_CALL = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*)::(?:windows::)?([a-z_][A-Za-z0-9_]*)\b(?!\s*::[A-Za-z_])"
+)
+RE_DOT_CALL = re.compile(
+    r"(?:\b([A-Za-z_][A-Za-z0-9_]*)|[)\]])\s*\.\s*([a-z_][A-Za-z0-9_]*)\s*(?:::<[^>]*>)?\s*\("
+)
+RE_BARE_CALL = re.compile(
+    r"(?<![.\w:])([a-z_][A-Za-z0-9_]*)\s*(?:::<[^>]*>)?\s*\("
+)
+RUST_KW = {
+    "if", "for", "while", "match", "loop", "return", "sizeof", "alignof",
+    "drop", "some", "none", "ok", "err", "box", "in", "where", "type", "fn",
+}
 RE_HEADING = re.compile(r"^(#{1,6}) +(.+?)\s*$", re.M)
 RE_METRIC_REF = re.compile(r"#bb\.metric\.[a-z0-9-]+\.[a-z0-9-]+")
 RE_TAG_KIND = re.compile(r"#bb\.([a-z0-9-]+)\.")
+RE_CONTENT_TAG = re.compile(
+    r"#bb\.([a-z0-9-]+)\.sha256\.(?:[\"']\s*[\"'])?([a-z2-7]{52})"
+)
+RE_B32_DIGEST = re.compile(r"^[a-z2-7]{52}$")
 RE_SRC_CITE = re.compile(r"`?((?:crates/(?:core|research)/)?src/[a-z0-9_]+\.rs)`?")
 RE_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 RE_LEAN_DECL = re.compile(r"^(theorem|lemma|def|structure|inductive) ([^\s:]+)", re.M)
@@ -123,6 +179,10 @@ STOP = {
 def tokens(text: str) -> list[str]:
     words = re.findall(r"[a-z0-9]+", (text or "").lower())
     return [w for w in words if len(w) > 2 and w not in STOP]
+
+
+def extract_pinned_tags(text: str) -> list[str]:
+    return sorted({f"#bb.{k}.sha256.{d}" for k, d in RE_CONTENT_TAG.findall(text)})
 
 
 def read(path: Path) -> str:
@@ -237,13 +297,358 @@ def schema_declarations(text: str, path: Path) -> list[dict]:
     return out
 
 
+def strip_noise_lines(lines: list[str]) -> list[str]:
+    """Stateful line-preserving comment, string, and char-literal stripper.
+
+    Preserves line count (`len(clean_lines) == len(lines)`) across trailing `\\`
+    multiline string continuations while keeping Rust lifetimes (`'a`, `'static`)
+    intact and guaranteeing zero brace/paren drift.
+    """
+    clean: list[str] = []
+    in_str = False
+    for line in lines:
+        out: list[str] = []
+        i, n = 0, len(line)
+        while i < n:
+            ch = line[i]
+            if not in_str:
+                if line[i : i + 2] == "//":
+                    break
+                if ch == '"':
+                    in_str = True
+                    out.append(" ")
+                    i += 1
+                elif ch == "'":
+                    m = RE_CHAR_LIT.match(line[i:])
+                    if m:
+                        out.append(" " * len(m.group(0)))
+                        i += len(m.group(0))
+                    else:
+                        out.append("'")
+                        i += 1
+                else:
+                    out.append(ch)
+                    i += 1
+            else:
+                if ch == "\\":
+                    i += 2 if i + 1 < n else 1
+                    out.append("  ")
+                elif ch == '"':
+                    in_str = False
+                    out.append(" ")
+                    i += 1
+                else:
+                    out.append(" ")
+                    i += 1
+        clean.append("".join(out))
+    return clean
+
+
+def signature_types(sig: str, impl_type: str | None) -> tuple[list[str], list[str]]:
+    """Extract (takes, returns) type names from a function signature."""
+    open_paren = sig.find("(")
+    if open_paren < 0:
+        return [], []
+    paren_depth = 0
+    close_paren = -1
+    for idx in range(open_paren, len(sig)):
+        if sig[idx] == "(":
+            paren_depth += 1
+        elif sig[idx] == ")":
+            paren_depth -= 1
+            if paren_depth == 0:
+                close_paren = idx
+                break
+    if close_paren < 0:
+        return [], []
+    head = sig[:open_paren]
+    params_part = sig[open_paren : close_paren + 1]
+    tail = sig[close_paren + 1 :]
+    mw = re.search(r"\bwhere\b", tail)
+    if mw:
+        ret_zone = tail[: mw.start()]
+        where_part = tail[mw.end() :]
+    else:
+        ret_zone = tail
+        where_part = ""
+    ret_part = ret_zone.split("->", 1)[1] if "->" in ret_zone else ""
+    declared: set[str] = set()
+    head_bounds_parts: list[str] = []
+    if "<" in head and ">" in head:
+        gen_inner = head[head.find("<") + 1 : head.rfind(">")]
+        items: list[str] = []
+        buf: list[str] = []
+        angle_depth = 0
+        for ch in gen_inner:
+            if ch == "<":
+                angle_depth += 1
+                buf.append(ch)
+            elif ch == ">":
+                angle_depth = max(angle_depth - 1, 0)
+                buf.append(ch)
+            elif ch == "," and angle_depth == 0:
+                items.append("".join(buf))
+                buf = []
+            else:
+                buf.append(ch)
+        if buf:
+            items.append("".join(buf))
+        for item in items:
+            s = re.sub(r"^(?:'[A-Za-z0-9_]+\s*)+", "", item.strip()).strip()
+            if not s:
+                continue
+            if ":" in s:
+                left, right = s.split(":", 1)
+                head_bounds_parts.append(right)
+            else:
+                left = s.split("=", 1)[0]
+            for tok in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", left):
+                if tok != "const":
+                    declared.add(tok)
+    head_bounds = RE_ARRAY_LEN.sub("", " ".join(head_bounds_parts))
+    params_clean = RE_ARRAY_LEN.sub("", params_part)
+    where_clean = RE_ARRAY_LEN.sub("", where_part)
+    ret_clean = RE_ARRAY_LEN.sub("", ret_part)
+
+    def collect(zone: str) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for t in RE_TYPE_TOKEN.findall(zone):
+            if t == "Self":
+                if not impl_type:
+                    continue
+                t = impl_type
+            if t in TYPE_SKIP or t in declared or len(t) == 1:
+                continue
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
+
+    takes = collect(f"{head_bounds} {params_clean} {where_clean}")
+    if impl_type and re.search(r"\bself\b", params_part) and impl_type not in takes:
+        takes = [impl_type] + takes
+    returns = collect(ret_clean)
+    return takes, returns
+
+
+def _scan_end_and_sig(
+    clean_lines: list[str], start: int, stop: int, entry_depth: int
+) -> tuple[int, list[str]]:
+    brace_depth = entry_depth
+    paren_depth = 0
+    bracket_depth = 0
+    seen_open = False
+    sig_buf: list[str] = []
+    sig_done = False
+    end_line = start + 1
+    for k in range(start, stop):
+        line_k = clean_lines[k]
+        stop_k = False
+        for ch in line_k:
+            if ch == "(":
+                paren_depth += 1
+                if not sig_done:
+                    sig_buf.append(ch)
+            elif ch == ")":
+                paren_depth = max(paren_depth - 1, 0)
+                if not sig_done:
+                    sig_buf.append(ch)
+            elif ch == "[":
+                bracket_depth += 1
+                if not sig_done:
+                    sig_buf.append(ch)
+            elif ch == "]":
+                bracket_depth = max(bracket_depth - 1, 0)
+                if not sig_done:
+                    sig_buf.append(ch)
+            elif ch == "{":
+                if paren_depth == 0 and bracket_depth == 0 and not seen_open:
+                    seen_open = True
+                    sig_done = True
+                    brace_depth += 1
+                else:
+                    brace_depth += 1
+                    if not sig_done:
+                        sig_buf.append(ch)
+            elif ch == "}":
+                brace_depth -= 1
+                if not sig_done:
+                    sig_buf.append(ch)
+            elif (
+                ch == ";"
+                and not seen_open
+                and brace_depth == entry_depth
+                and paren_depth == 0
+                and bracket_depth == 0
+            ):
+                sig_done = True
+                end_line = k + 1
+                stop_k = True
+                break
+            else:
+                if not sig_done:
+                    sig_buf.append(ch)
+        if stop_k:
+            break
+        if not sig_done:
+            sig_buf.append(" ")
+        if seen_open and brace_depth <= entry_depth:
+            end_line = k + 1
+            break
+    return end_line, sig_buf
+
+
+def extract_symbols_and_tests(
+    lines: list[str], clean_lines: list[str], edge: int
+) -> tuple[list[dict], list[dict], int, int]:
+    """Extract production symbols, #[test] spans, and pub symbol/doc counts."""
+    symbols: list[dict] = []
+    depth = 0
+    scope_stack: list[tuple[int, str | None]] = []
+    pending_scope: tuple[int, str | None] | None = None
+    for i in range(edge):
+        cline = clean_lines[i]
+        entry_depth = depth
+        expected_depth = scope_stack[-1][0] if scope_stack else 0
+        m = RE_DECL.match(cline) if entry_depth == expected_depth else None
+        if m and m.group(2) != "_":
+            kind, name = m.group(1), m.group(2)
+            impl_type = scope_stack[-1][1] if scope_stack else None
+            is_pub = bool(RE_STRICT_PUB.match(cline))
+            doc_lines: list[str] = []
+            attr_bracket_depth = 0
+            for j in range(i - 1, -1, -1):
+                s = lines[j].strip()
+                cs = clean_lines[j].strip()
+                if attr_bracket_depth > 0:
+                    attr_bracket_depth += (
+                        clean_lines[j].count("]") - clean_lines[j].count("[")
+                    )
+                    continue
+                if s.startswith("///") and not s.startswith("////"):
+                    doc_lines.append(s[3:].strip())
+                elif cs.startswith("#[") or cs.endswith("]"):
+                    attr_bracket_depth += (
+                        clean_lines[j].count("]") - clean_lines[j].count("[")
+                    )
+                else:
+                    break
+            body = " ".join(x for x in reversed(doc_lines) if x).strip()
+            first = body.split(". ")[0].strip()
+            if first and not first.endswith("."):
+                first += "."
+            doc = first[:140]
+            end_line, sig_buf = _scan_end_and_sig(clean_lines, i, edge, entry_depth)
+            if kind == "fn":
+                sig = " ".join("".join(sig_buf).split())
+                takes, returns = signature_types(sig, impl_type)
+            else:
+                sig = " ".join(
+                    cline.split("{", 1)[0].split("=", 1)[0].rstrip(";").strip().split()
+                )
+                takes, returns = [], []
+            sym: dict = {
+                "name": name,
+                "kind": kind,
+                "line": i + 1,
+                "end": end_line,
+                "pub": is_pub,
+            }
+            if doc:
+                sym["doc"] = doc
+            if impl_type:
+                sym["impl"] = impl_type
+            if sig:
+                sym["sig"] = sig
+            if takes:
+                sym["takes"] = takes
+            if returns:
+                sym["returns"] = returns
+            symbols.append(sym)
+        if entry_depth == expected_depth:
+            mh = RE_IMPL_HEAD.match(cline) or RE_TRAIT_HEAD.match(cline)
+            if mh:
+                pending_scope = (entry_depth + 1, mh.group(1))
+            elif (mh := RE_MOD_HEAD.match(cline)) and ";" not in cline:
+                pending_scope = (entry_depth + 1, None)
+        if pending_scope is not None and "{" in cline:
+            scope_stack.append(pending_scope)
+            pending_scope = None
+        elif pending_scope is not None and ";" in cline:
+            pending_scope = None
+        depth += cline.count("{") - cline.count("}")
+        while scope_stack and depth < scope_stack[-1][0]:
+            scope_stack.pop()
+
+    test_fns: list[dict] = []
+    for i in range(edge, len(lines)):
+        cline = clean_lines[i]
+        entry_depth = depth
+        m = RE_DECL.match(cline)
+        if m and m.group(1) == "fn" and m.group(2) != "_":
+            is_test = False
+            attr_bracket_depth = 0
+            for j in range(i - 1, -1, -1):
+                s = lines[j].strip()
+                cs = clean_lines[j].strip()
+                if attr_bracket_depth > 0:
+                    if RE_TEST_ATTR.search(clean_lines[j]):
+                        is_test = True
+                    attr_bracket_depth += (
+                        clean_lines[j].count("]") - clean_lines[j].count("[")
+                    )
+                    continue
+                if s.startswith("///"):
+                    continue
+                if cs.startswith("#[") or cs.endswith("]"):
+                    if RE_TEST_ATTR.search(clean_lines[j]):
+                        is_test = True
+                    attr_bracket_depth += (
+                        clean_lines[j].count("]") - clean_lines[j].count("[")
+                    )
+                else:
+                    break
+            if is_test:
+                end_line, _ = _scan_end_and_sig(
+                    clean_lines, i, len(lines), entry_depth
+                )
+                test_fns.append({"name": m.group(2), "line": i + 1, "end": end_line})
+        depth += cline.count("{") - cline.count("}")
+
+    pub_symbol_count = sum(1 for s in symbols if s["pub"])
+    pub_documented = sum(1 for s in symbols if s["pub"] and s.get("doc"))
+    return symbols, test_fns, pub_symbol_count, pub_documented
+
+
+def _split_top_comma(s: str) -> list[str]:
+    out: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for ch in s:
+        if ch == "{":
+            depth += 1
+            buf.append(ch)
+        elif ch == "}":
+            depth = max(depth - 1, 0)
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            out.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    if buf:
+        out.append("".join(buf))
+    return out
+
+
 def extract_modules() -> list[dict]:
     gates = {}
     for _crate, directory in SRC_DIRS:
         lib = directory / "lib.rs"
         if lib.exists():
             gates.update(module_gate(read(lib)))
-    nodes = []
+    pass1_records: list[tuple[dict, list[str], list[str], int]] = []
     for crate, path in module_paths():
         name = path.stem
         text = read(path)
@@ -255,6 +660,10 @@ def extract_modules() -> list[dict]:
         # storage.rs's tests moved `world` from 23 transitive dependents to 25.
         lines = text.splitlines()
         edge = min(test_scope_line(text), len(lines))
+        clean_lines = strip_noise_lines(lines)
+        symbols, test_fns, pub_symbol_count, pub_documented = (
+            extract_symbols_and_tests(lines, clean_lines, edge)
+        )
         production = "\n".join(lines[:edge])
         behind_tests = "\n".join(lines[edge:])
         deps = sorted({d for d in RE_CRATE_DEP.findall(production) if d != name})
@@ -280,28 +689,216 @@ def extract_modules() -> list[dict]:
                 + tokens(" ".join(s["schema"].replace("/", " ").replace("-", " ") for s in schemas))
             )
         )
-        nodes.append(
-            {
-                "id": "module:" + name,
-                "kind": "module",
-                "name": name,
-                "path": rel(path),
-                "crate": crate,
-                "summary": summary,
-                "doc": doc,
-                "lines": text.count("\n") + 1,
-                "pub_items": pub_items,
-                "tests": len(RE_TEST.findall(text)),
-                "gate": gate,
-                "deps": deps,
-                "test_deps": test_deps,
-                "declares": [s["schema"] for s in schemas],
-                "declared_at": {s["schema"]: s["at"] for s in schemas},
-                "test_scope": sorted(s["schema"] for s in schemas if s["in_tests"]),
-                "schema_consts": {s["schema"]: s["const"] for s in schemas if s["const"]},
-                "terms": terms,
-            }
+        node = {
+            "id": "module:" + name,
+            "kind": "module",
+            "name": name,
+            "path": rel(path),
+            "crate": crate,
+            "summary": summary,
+            "doc": doc,
+            "lines": text.count("\n") + 1,
+            "pub_items": pub_items,
+            "pub_symbol_count": pub_symbol_count,
+            "pub_documented": pub_documented,
+            "symbols": symbols,
+            "test_fns": test_fns,
+            "tests": len(RE_TEST.findall(text)),
+            "mutation_sites": production.count(".to_be_bytes()"),
+            "gate": gate,
+            "deps": deps,
+            "test_deps": test_deps,
+            "declares": [s["schema"] for s in schemas],
+            "declared_at": {s["schema"]: s["at"] for s in schemas},
+            "test_scope": sorted(s["schema"] for s in schemas if s["in_tests"]),
+            "schema_consts": {s["schema"]: s["const"] for s in schemas if s["const"]},
+            "terms": terms,
+        }
+        pinned = extract_pinned_tags(behind_tests)
+        if pinned:
+            node["pinned_tags"] = pinned
+        pass1_records.append((node, lines, clean_lines, edge))
+
+    # Build workspace-wide lookup tables across all 37 modules.
+    mod_by_name: dict[str, dict] = {n["name"]: n for n, _, _, _ in pass1_records}
+    module_names: set[str] = set(mod_by_name.keys())
+    impl_methods: dict[str, set[str]] = {}
+    method_owners: dict[str, set[tuple[str, str]]] = {}
+    top_fn_owners: dict[str, set[str]] = {}
+    for n, _lines, _clean_lines, _edge in pass1_records:
+        mname = n["name"]
+        for s in n["symbols"]:
+            if s["kind"] != "fn":
+                continue
+            impl_t = s.get("impl")
+            if impl_t:
+                impl_methods.setdefault(impl_t, set()).add(s["name"])
+                method_owners.setdefault(s["name"], set()).add((mname, impl_t))
+            else:
+                top_fn_owners.setdefault(s["name"], set()).add(mname)
+
+    def valid_syms(dep: str) -> set[str]:
+        dm = mod_by_name.get(dep)
+        if not dm:
+            return set()
+        return {
+            s["name"] for s in dm["symbols"] if not s.get("impl")
+        } | (set(dm["pub_items"]) - {"fn"})
+
+    def extract_dep_syms(scope_text: str, allowed_deps: set[str]) -> dict[str, set[str]]:
+        extra: list[str] = []
+        for m in RE_ROOT_USE.finditer(scope_text):
+            for item in _split_top_comma(m.group(1)):
+                it = item.strip()
+                if it:
+                    extra.append("use crate::" + it + ";")
+        if extra:
+            scope_text = scope_text + "\n" + "\n".join(extra)
+        raw_map: dict[str, set[str]] = {d: set() for d in allowed_deps}
+        for dep, body in RE_USE_BRACES.findall(scope_text):
+            if dep in allowed_deps:
+                for item in body.split(","):
+                    sym = item.split(" as ")[0].strip()
+                    if sym and sym not in ("self", "windows"):
+                        raw_map[dep].add(sym)
+        for dep, sym in RE_QUAL_SYM.findall(scope_text):
+            if dep in allowed_deps and sym not in ("self", "windows"):
+                raw_map[dep].add(sym)
+        for dep in allowed_deps:
+            for sym in re.findall(
+                r"\b" + re.escape(dep) + r"::(?:windows::)?([A-Za-z_][A-Za-z0-9_]*)",
+                scope_text,
+            ):
+                if sym not in ("self", "windows"):
+                    raw_map[dep].add(sym)
+        out: dict[str, set[str]] = {}
+        for dep in allowed_deps:
+            v = valid_syms(dep)
+            out[dep] = {s for s in raw_map[dep] if s in v}
+        return out
+
+    def scan_span_calls(
+        span_lines: list[str],
+        fn_name: str,
+        self_impl: str | None,
+        allowed_mods: set[str],
+    ) -> list[str]:
+        if not span_lines:
+            return []
+        span_lines = list(span_lines)
+        span_lines[0] = re.sub(
+            r"\bfn\s+(?:<[^>]*>\s*)?" + re.escape(fn_name) + r"\b",
+            "fn ",
+            span_lines[0],
+            count=1,
         )
+        body = "\n".join(span_lines)
+        self_target = f"{self_impl}::{fn_name}" if self_impl else fn_name
+        calls: set[str] = set()
+        for q, mname in RE_QUAL_CALL.findall(body):
+            resolved_q = self_impl if (q == "Self" and self_impl) else q
+            if resolved_q in impl_methods and mname in impl_methods[resolved_q]:
+                cand = f"{resolved_q}::{mname}"
+                if cand != self_target:
+                    calls.add(cand)
+            elif resolved_q in module_names and resolved_q in top_fn_owners.get(
+                mname, set()
+            ):
+                if mname != self_target:
+                    calls.add(mname)
+        for recv, mname in RE_DOT_CALL.findall(body):
+            if (
+                recv == "self"
+                and self_impl
+                and mname in impl_methods.get(self_impl, set())
+            ):
+                cand = f"{self_impl}::{mname}"
+                if cand != self_target:
+                    calls.add(cand)
+            else:
+                owners = method_owners.get(mname, set())
+                if 1 <= len(owners) <= 3:
+                    cands = [(om, ot) for om, ot in owners if om in allowed_mods]
+                    if len(cands) > 1:
+                        mentioned = [
+                            (om, ot)
+                            for om, ot in cands
+                            if re.search(r"\b" + re.escape(ot) + r"\b", body)
+                        ]
+                        if mentioned:
+                            cands = mentioned
+                    for _om, ot in cands:
+                        cand = f"{ot}::{mname}"
+                        if cand != self_target:
+                            calls.add(cand)
+        for bname in RE_BARE_CALL.findall(body):
+            if bname in RUST_KW:
+                continue
+            owners = top_fn_owners.get(bname, set())
+            if 1 <= len(owners) <= 3 and (owners & allowed_mods):
+                if bname != self_target:
+                    calls.add(bname)
+        return sorted(calls)
+
+    nodes: list[dict] = []
+    for node, lines, clean_lines, edge in pass1_records:
+        # Pass 2A: symbol_deps and test_symbol_deps
+        prod_lines: list[str] = []
+        extra_test_lines: list[str] = []
+        i = 0
+        while i < edge:
+            if lines[i].strip() == "#[cfg(test)]":
+                j = i + 1
+                while j < edge and not lines[j].strip():
+                    j += 1
+                if j < edge and lines[j].lstrip().startswith("use "):
+                    k = j
+                    while k < edge and ";" not in lines[k]:
+                        k += 1
+                    extra_test_lines.extend(lines[j : k + 1])
+                    i = k + 1
+                    continue
+            prod_lines.append(lines[i])
+            i += 1
+        prod_text = "\n".join(prod_lines)
+        test_text = "\n".join(extra_test_lines + lines[edge:])
+        prod_deps = set(node["deps"])
+        all_deps = prod_deps | set(node["test_deps"])
+        prod_map = extract_dep_syms(prod_text, prod_deps)
+        test_map = extract_dep_syms(test_text, all_deps)
+        node["symbol_deps"] = {
+            d: sorted(prod_map.get(d, set())) for d in node["deps"]
+        }
+        test_symbol_deps: dict[str, list[str]] = {}
+        for d in sorted(all_deps):
+            diff = sorted(test_map.get(d, set()) - prod_map.get(d, set()))
+            if diff or d in node["test_deps"]:
+                test_symbol_deps[d] = diff
+        node["test_symbol_deps"] = test_symbol_deps
+
+        # Pass 2B: 3-Rule Caller Graph
+        prod_allowed = {node["name"]} | prod_deps
+        test_allowed = {node["name"]} | all_deps
+        for s in node["symbols"]:
+            if s["kind"] == "fn":
+                calls = scan_span_calls(
+                    clean_lines[s["line"] - 1 : s["end"]],
+                    s["name"],
+                    s.get("impl"),
+                    prod_allowed,
+                )
+                if calls:
+                    s["calls"] = calls
+        for tf in node["test_fns"]:
+            calls = scan_span_calls(
+                clean_lines[tf["line"] - 1 : tf["end"]],
+                tf["name"],
+                None,
+                test_allowed,
+            )
+            if calls:
+                tf["calls"] = calls
+        nodes.append(node)
     return nodes
 
 
@@ -312,28 +909,33 @@ def extract_tools() -> list[dict]:
             continue
         text = read(path)
         doc = ""
-        match = re.match(r'^#!.*\n"""(.*?)"""', text, re.S)
+        match = re.match(r'^#![^\n]*\n"""(.*?)"""', text, re.S)
         if match:
             doc = " ".join(match.group(1).split())
         schemas = sorted({m.group(1) for m in RE_SCHEMA_LIT.finditer(text)})
         first = doc.split(". ")[0].strip()
         if first and not first.endswith("."):
             first += "."
-        nodes.append(
-            {
-                "id": "tool:" + path.stem,
-                "kind": "tool",
-                "name": path.stem,
-                "path": rel(path),
-                "summary": first,
-                "doc": doc,
-                "lines": text.count("\n") + 1,
-                "schemas": schemas,
-                "terms": sorted(
-                    set(tokens(path.stem.replace("_", " ")) + tokens(doc))
-                ),
-            }
-        )
+        terms = [
+            t
+            for t in sorted(set(tokens(path.stem.replace("_", " ")) + tokens(doc)))
+            if not RE_B32_DIGEST.match(t)
+        ]
+        node = {
+            "id": "tool:" + path.stem,
+            "kind": "tool",
+            "name": path.stem,
+            "path": rel(path),
+            "summary": first,
+            "doc": doc,
+            "lines": text.count("\n") + 1,
+            "schemas": schemas,
+            "terms": terms,
+        }
+        pinned = extract_pinned_tags(text)
+        if pinned:
+            node["pinned_tags"] = pinned
+        nodes.append(node)
     return nodes
 
 
@@ -357,22 +959,29 @@ def extract_docs() -> list[dict]:
             end = marks[pos + 1][0] - 1 if pos + 1 < len(marks) else len(lines)
             body = "\n".join(lines[num:end])
             slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-            nodes.append(
-                {
-                    "id": "doc:%s#%s" % (rel(path), slug),
-                    "kind": "doc",
-                    "name": title,
-                    "path": rel(path),
-                    "line": num,
-                    "depth": depth,
-                    "document": path.stem,
-                    "summary": " ".join(body.split())[:220],
-                    "cites_src": sorted(set(RE_SRC_CITE.findall(body))),
-                    "metric_refs": sorted(set(RE_METRIC_REF.findall(body))),
-                    "tag_kinds": sorted(set(RE_TAG_KIND.findall(body))),
-                    "terms": sorted(set(tokens(title) + tokens(body))),
-                }
-            )
+            terms = [
+                t
+                for t in sorted(set(tokens(title) + tokens(body)))
+                if not RE_B32_DIGEST.match(t)
+            ]
+            node = {
+                "id": "doc:%s#%s" % (rel(path), slug),
+                "kind": "doc",
+                "name": title,
+                "path": rel(path),
+                "line": num,
+                "depth": depth,
+                "document": path.stem,
+                "summary": " ".join(body.split())[:220],
+                "cites_src": sorted(set(RE_SRC_CITE.findall(body))),
+                "metric_refs": sorted(set(RE_METRIC_REF.findall(body))),
+                "tag_kinds": sorted(set(RE_TAG_KIND.findall(body))),
+                "terms": terms,
+            }
+            pinned = extract_pinned_tags(body)
+            if pinned:
+                node["pinned_tags"] = pinned
+            nodes.append(node)
     return nodes
 
 
