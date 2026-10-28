@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import re
@@ -1307,6 +1308,11 @@ _SIMPLE_TOP_LEVEL_SCHEMA_BOUNDARY = re.compile(
     r"#{1,6}[ \t]+|```)",
     flags=re.MULTILINE,
 )
+_SCHEMA_BOUNDARY_CANDIDATE = re.compile(
+    r"^(?:[A-Za-z_][A-Za-z0-9_]*(?:\([^\r\n)]*\))?[ \t]*=(?!>)|"
+    r"#{1,6}[ \t]+|```|\()",
+    flags=re.MULTILINE,
+)
 _LINE_START = re.compile(r"^", flags=re.MULTILINE)
 _LINE_IDENTIFIER = re.compile(
     r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)",
@@ -1361,20 +1367,25 @@ def _is_parenthesized_top_level_schema_boundary(text: str, start: int) -> bool:
 
 
 def _next_top_level_schema_boundary(text: str, search_start: int) -> int:
-    for line_start in _LINE_START.finditer(text, search_start):
-        start = line_start.start()
-        if _SIMPLE_TOP_LEVEL_SCHEMA_BOUNDARY.match(text, start) is not None:
+    for cand in _SCHEMA_BOUNDARY_CANDIDATE.finditer(text, search_start):
+        start = cand.start()
+        if text[start] != "(":
             return start
         if _is_parenthesized_top_level_schema_boundary(text, start):
             return start
     return len(text)
 
 
-def _schema_assignment_bounds(text: str, schema_name: str) -> tuple[int, int]:
-    assignment_pattern = re.compile(
+@functools.lru_cache(maxsize=None)
+def _schema_assignment_pattern(schema_name: str) -> re.Pattern[str]:
+    return re.compile(
         rf"^[ \t]*{re.escape(schema_name)}[ \t]*=",
         flags=re.MULTILINE,
     )
+
+
+def _schema_assignment_bounds(text: str, schema_name: str) -> tuple[int, int]:
+    assignment_pattern = _schema_assignment_pattern(schema_name)
     assignments = list(assignment_pattern.finditer(text))
     if len(assignments) != 1:
         raise PlanningError(
@@ -1411,15 +1422,11 @@ def _compact_schema_whitespace(text: str, label: str) -> str:
     return "".join(compact)
 
 
-def _parse_exact_schema_assignment(
-    text: str,
+@functools.lru_cache(maxsize=512)
+def _parse_exact_schema_rhs(
+    rhs: str,
     schema_name: str,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    start, end = _schema_assignment_bounds(text, schema_name)
-    block = text[start:end]
-    if "=" not in block:
-        raise PlanningError(f"LAYER1_DESIGN_PAPER.md: {schema_name} assignment has no RHS")
-    rhs = block.split("=", 1)[1].strip()
     alternatives = _split_schema_top_level(rhs, "|", schema_name)
     parsed: list[tuple[str, tuple[str, ...]]] = []
     for alternative in alternatives:
@@ -1481,6 +1488,18 @@ def _parse_exact_schema_assignment(
             )
         )
     return tuple(parsed)
+
+
+def _parse_exact_schema_assignment(
+    text: str,
+    schema_name: str,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    start, end = _schema_assignment_bounds(text, schema_name)
+    block = text[start:end]
+    if "=" not in block:
+        raise PlanningError(f"LAYER1_DESIGN_PAPER.md: {schema_name} assignment has no RHS")
+    rhs = block.split("=", 1)[1].strip()
+    return _parse_exact_schema_rhs(rhs, schema_name)
 
 
 def check_loop8_exact_schemas(
@@ -2887,6 +2906,7 @@ def _is_explicit_markerless_successor_finding_claim(
     )
 
 
+@functools.lru_cache(maxsize=1)
 def _summary_prose_count_patterns(
 ) -> tuple[tuple[str, re.Pattern[str]], ...]:
     count = _ANY_COUNT_TOKEN
@@ -3042,6 +3062,22 @@ def _summary_prose_count_patterns(
             r"(?:frozen[- ])?JSON[- ]source[- ]receipts?"
         ),
     }
+    required_keywords = {
+        "capability_node_count_u32": ("capability",),
+        "foundation_node_count_u32": ("foundation",),
+        "detailed_node_count_u32": ("detailed",),
+        "phase_status_count_u32": ("phase",),
+        "ready_frontier_count_u32": ("ready",),
+        "base_dependency_edge_count_u32": ("base",),
+        "phase_dependency_edge_count_u32": ("phase",),
+        "conditional_edge_count_u32": ("conditional",),
+        "total_declared_edge_count_u32": ("declared", "combined", "dependency"),
+        "predicate_entailment_count_u32": ("predicate",),
+        "planning_markdown_count_u32": ("inventory", "markdown"),
+        "frozen_text_artifact_count_u32": ("frozen",),
+        "frozen_markdown_audit_count_u32": ("audit",),
+        "frozen_json_receipt_count_u32": ("receipt",),
+    }
     if set(reverse_nouns) != set(PLANNING_SUMMARY_FIELD_ORDER):
         raise PlanningError("reverse planning-count semantic manifest is incomplete")
     return tuple(
@@ -3052,41 +3088,21 @@ def _summary_prose_count_patterns(
                 rf"(?:\s+count)?\s*(?:is|=|:)\s*\b{count}\b)",
                 re.IGNORECASE,
             ),
+            required_keywords[field],
         )
         for field, pattern in forward
     )
 
 
-def check_no_duplicate_exact_projections(
-    texts: dict[str, str],
-    planning_summary: dict[str, int],
-) -> None:
-    expected_mutable_paths = EXPECTED_PLANNING_PATHS - EXPECTED_FROZEN_TEXT_PATHS
-    actual_mutable_paths = frozenset(texts)
-    if actual_mutable_paths != expected_mutable_paths:
-        missing = sorted(expected_mutable_paths - actual_mutable_paths)
-        extra = sorted(actual_mutable_paths - expected_mutable_paths)
-        raise PlanningError(
-            "sole-projection scan must cover every non-frozen mutable planning authority: "
-            f"missing={missing}, extra={extra}"
+@functools.lru_cache(maxsize=1)
+def _duplicate_projection_compiled_specs():
+    field_tokens = tuple(
+        (
+            field,
+            re.compile(rf"(?<![A-Za-z0-9_]){re.escape(field)}(?![A-Za-z0-9_])"),
         )
-
-    for field in PLANNING_SUMMARY_FIELD_ORDER:
-        field_token = re.compile(
-            rf"(?<![A-Za-z0-9_]){re.escape(field)}(?![A-Za-z0-9_])"
-        )
-        occurrences = [
-            (path, match.group(0))
-            for path, text in texts.items()
-            for match in field_token.finditer(text)
-        ]
-        if len(occurrences) != 1:
-            raise PlanningError(
-                f"exact PlanningCheckerSummaryV1 field {field} must occur exactly once "
-                "in its canonical CAPABILITY_TREE table cell; "
-                f"occurrences={occurrences}"
-            )
-
+        for field in PLANNING_SUMMARY_FIELD_ORDER
+    )
     audit_markers = {
         "Loop7ProvenanceV1": (
             (
@@ -3169,7 +3185,71 @@ def check_no_duplicate_exact_projections(
             ),
         ),
     }
-    for schema_name, (_markers, _expected_count, object_ids) in audit_markers.items():
+    object_tokens = []
+    marker_specs = []
+    count_pattern = re.compile(
+        rf"(?<![A-Za-z0-9])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    finding_noun = r"(?:material[\s_-]+)?(?:findings?|gaps?)"
+    finding_label = rf"{finding_noun}(?:\s+(?:count|total))?"
+    finding_count_field = (
+        r"(?:material[ _-]+)?(?:finding|gap)[ _-]+count"
+        r"(?:[ _-]+u32)?"
+    )
+    count_finding_barrier = (
+        r"(?:and|or|but|with|without|from|for|in|of|by|after|before|"
+        r"because|while|whereas|that|which|who|whose|"
+        r"has|have|had|is|are|was|were|found|contains?|records?|"
+        r"reports?|shows?|showed|yields?|yielded|produces?|produced|"
+        r"returns?|returned|identifies?|identified|exposes?|exposed|"
+        r"audits?|reviews?|reviewers?|sweeps?|pass(?:es)?|(?:re-?)?audits?|"
+        r"entries?|items?|members?|rows?|nodes?|schemas?|parameters?|fields?|"
+        r"files?|commits?|trees?|proofs?|tests?)"
+    )
+    count_then_finding = (
+        rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})"
+        rf"(?:[\s_-]+(?!(?:findings?|gaps?)(?![A-Za-z0-9_]))"
+        rf"(?!(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_]))"
+        rf"(?!(?:{count_finding_barrier})(?![A-Za-z0-9]))"
+        rf"[A-Za-z][A-Za-z0-9_-]*)*[\s_-]+"
+        rf"(?:findings?|gaps?)(?![A-Za-z0-9_])"
+    )
+    finding_then_count = (
+        rf"(?<![A-Za-z0-9_]){finding_label}\s*[\])]?\s*"
+        rf"(?:is|are|was|were|=|:)\s*"
+        rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
+    )
+    field_then_count = (
+        rf"(?<![A-Za-z0-9_]){finding_count_field}(?![A-Za-z0-9_])\s*"
+        rf"(?:is|are|was|were|=|:)\s*"
+        rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
+    )
+    direct_successor_modifier = (
+        r"(?:new|newly|discovered|material|open|unresolved|remaining|"
+        r"residual|additional|further|finite|exact|distinct|unique|"
+        r"reported|recorded|falsely|closed|false-closure|false-closed|"
+        r"(?:P|L|v)[0-9]+)"
+    )
+    direct_successor_count_then_finding = (
+        rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})"
+        rf"(?:[\s_-]+{direct_successor_modifier})*[\s_-]+"
+        rf"(?:findings?|gaps?)(?![A-Za-z0-9_])"
+    )
+    direct_successor_finding_claim_pattern = re.compile(
+        rf"(?:{direct_successor_count_then_finding}|"
+        rf"{finding_then_count}|{field_then_count})",
+        re.IGNORECASE,
+    )
+    object_field_separator = r"[ _-]+"
+    object_field_pattern = (
+        rf"(?:audited{object_field_separator}input{object_field_separator}"
+        rf"(?:commit|tree)|addition{object_field_separator}(?:commit|tree)|"
+        rf"first{object_field_separator}addition{object_field_separator}commit|"
+        rf"audit(?:{object_field_separator}git)?{object_field_separator}blob)"
+    )
+
+    for schema_name, (markers, _expected_count, object_ids) in audit_markers.items():
         for object_id in object_ids:
             recognized_forms = tuple(
                 object_id[:length] for length in range(len(object_id), 6, -1)
@@ -3179,207 +3259,266 @@ def check_no_duplicate_exact_projections(
                 r"(?![0-9a-f])",
                 re.IGNORECASE,
             )
-            occurrences = [
-                (path, match.group(0))
-                for path, text in texts.items()
-                for match in object_token.finditer(text)
-            ]
-            if len(occurrences) != 1:
-                raise PlanningError(
-                    f"exact Git object for {schema_name} must occur exactly once in its "
-                    "canonical HANDOFF table cell; "
-                    f"object={object_id}, occurrences={occurrences}"
-                )
+            object_tokens.append((schema_name, object_id, object_token))
 
-    for path, text in texts.items():
-        for raw_paragraph in re.split(r"\n\s*\n", text):
-            paragraph = re.sub(r"[ \t\r\n]+", " ", raw_paragraph).strip()
-            lowered = paragraph.lower()
-            for schema_name, (markers, _expected_count, _object_ids) in audit_markers.items():
-                if not any(marker in lowered for marker in markers):
+        marker_pattern = (
+            r"(?<![A-Za-z0-9_])(?:"
+            + "|".join(map(re.escape, markers))
+            + r")(?![A-Za-z0-9_])"
+        )
+        marker_token = re.compile(marker_pattern, re.IGNORECASE)
+        marker_suffix = (
+            rf"{marker_pattern}(?:['’]s)?"
+            r"(?:\s+(?:audit|sweep|review|pass|results?|finding\s+set|"
+            r"duplicate|corrections?)){0,2}"
+        )
+        reverse_marker_count = (
+            rf"(?<![A-Za-z0-9_])(?:{finding_label}|{finding_count_field})\s+"
+            rf"(?:for|in|of)\s+{marker_suffix}\s*"
+            rf"(?:is|are|was|were|=|:)\s*"
+            rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
+        )
+        finding_claim_pattern = re.compile(
+            rf"(?:{count_then_finding}|{finding_then_count}|"
+            rf"{field_then_count}|{reverse_marker_count})",
+            re.IGNORECASE,
+        )
+        forward_full_claim_pattern = re.compile(
+            rf"{marker_pattern}[^.\n]{{0,100}}{object_field_pattern}"
+            r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])",
+            flags=re.IGNORECASE,
+        )
+        reverse_full_claim_pattern = re.compile(
+            rf"{object_field_pattern}[^.\n]{{0,60}}"
+            r"(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])"
+            rf"[^.\n]{{0,100}}{marker_pattern}",
+            flags=re.IGNORECASE,
+        )
+        forward_abbreviated_claim_pattern = re.compile(
+            rf"{marker_pattern}[^.\n]{{0,100}}{object_field_pattern}"
+            r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{7,39})(?![0-9a-f])",
+            flags=re.IGNORECASE,
+        )
+        reverse_abbreviated_claim_pattern = re.compile(
+            rf"{object_field_pattern}[^.\n]{{0,60}}"
+            r"(?<![0-9a-f])([0-9a-f]{7,39})(?![0-9a-f])"
+            rf"[^.\n]{{0,100}}{marker_pattern}",
+            flags=re.IGNORECASE,
+        )
+        marker_specs.append(
+            (
+                schema_name,
+                markers,
+                marker_pattern,
+                marker_token,
+                finding_claim_pattern,
+                forward_full_claim_pattern,
+                reverse_full_claim_pattern,
+                forward_abbreviated_claim_pattern,
+                reverse_abbreviated_claim_pattern,
+            )
+        )
+    return (
+        field_tokens,
+        tuple(object_tokens),
+        tuple(marker_specs),
+        count_pattern,
+        direct_successor_finding_claim_pattern,
+    )
+
+
+@functools.lru_cache(maxsize=4096)
+def _scan_single_paragraph_projection(raw_paragraph: str) -> tuple[str | None, str | None]:
+    _, _, marker_specs, count_pattern, direct_successor_finding_claim_pattern = (
+        _duplicate_projection_compiled_specs()
+    )
+    prose_patterns = _summary_prose_count_patterns()
+    paragraph = re.sub(r"[ \t\r\n]+", " ", raw_paragraph).strip()
+    lowered = paragraph.lower()
+    marker_err: str | None = None
+    prose_err: str | None = None
+
+    for (
+        schema_name,
+        markers,
+        marker_pattern,
+        marker_token,
+        finding_claim_pattern,
+        forward_full_claim_pattern,
+        reverse_full_claim_pattern,
+        forward_abbreviated_claim_pattern,
+        reverse_abbreviated_claim_pattern,
+    ) in marker_specs:
+        if not any(marker in lowered for marker in markers):
+            continue
+        unsupported_claim = None
+        for raw_sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+            sentence = re.sub(r"[.!?]+\s*$", "", raw_sentence).strip()
+            sentence_has_marker = marker_token.search(sentence) is not None
+            inherits_marker = False
+            for clause in sentence.split(";"):
+                marker_matches = tuple(marker_token.finditer(clause))
+                claim_match = finding_claim_pattern.search(clause)
+                external_count_exists = any(
+                    not any(
+                        count_match.start() < marker_match.end()
+                        and marker_match.start() < count_match.end()
+                        for marker_match in marker_matches
+                    )
+                    for count_match in count_pattern.finditer(clause)
+                )
+                if marker_matches:
+                    inherits_marker = True
+                if claim_match is None:
                     continue
-                marker_pattern = (
-                    r"(?<![A-Za-z0-9_])(?:"
-                    + "|".join(map(re.escape, markers))
-                    + r")(?![A-Za-z0-9_])"
-                )
-                marker_token = re.compile(marker_pattern, re.IGNORECASE)
-                count_pattern = re.compile(
-                    rf"(?<![A-Za-z0-9])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9])",
-                    re.IGNORECASE,
-                )
-                finding_noun = r"(?:material[\s_-]+)?(?:findings?|gaps?)"
-                finding_label = rf"{finding_noun}(?:\s+(?:count|total))?"
-                finding_count_field = (
-                    r"(?:material[ _-]+)?(?:finding|gap)[ _-]+count"
-                    r"(?:[ _-]+u32)?"
-                )
-                count_finding_barrier = (
-                    r"(?:and|or|but|with|without|from|for|in|of|by|after|before|"
-                    r"because|while|whereas|that|which|who|whose|"
-                    r"has|have|had|is|are|was|were|found|contains?|records?|"
-                    r"reports?|shows?|showed|yields?|yielded|produces?|produced|"
-                    r"returns?|returned|identifies?|identified|exposes?|exposed|"
-                    r"audits?|reviews?|reviewers?|sweeps?|pass(?:es)?|(?:re-?)?audits?|"
-                    r"entries?|items?|members?|rows?|nodes?|schemas?|parameters?|fields?|"
-                    r"files?|commits?|trees?|proofs?|tests?)"
-                )
-                count_then_finding = (
-                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})"
-                    rf"(?:[\s_-]+(?!(?:findings?|gaps?)(?![A-Za-z0-9_]))"
-                    rf"(?!(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_]))"
-                    rf"(?!(?:{count_finding_barrier})(?![A-Za-z0-9]))"
-                    rf"[A-Za-z][A-Za-z0-9_-]*)*[\s_-]+"
-                    rf"(?:findings?|gaps?)(?![A-Za-z0-9_])"
-                )
-                finding_then_count = (
-                    rf"(?<![A-Za-z0-9_]){finding_label}\s*[\])]?\s*"
-                    rf"(?:is|are|was|were|=|:)\s*"
-                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
-                )
-                field_then_count = (
-                    rf"(?<![A-Za-z0-9_]){finding_count_field}(?![A-Za-z0-9_])\s*"
-                    rf"(?:is|are|was|were|=|:)\s*"
-                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
-                )
-                marker_suffix = (
-                    rf"{marker_pattern}(?:['’]s)?"
-                    r"(?:\s+(?:audit|sweep|review|pass|results?|finding\s+set|"
-                    r"duplicate|corrections?)){0,2}"
-                )
-                reverse_marker_count = (
-                    rf"(?<![A-Za-z0-9_])(?:{finding_label}|{finding_count_field})\s+"
-                    rf"(?:for|in|of)\s+{marker_suffix}\s*"
-                    rf"(?:is|are|was|were|=|:)\s*"
-                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})(?![A-Za-z0-9_])"
-                )
-                finding_claim_pattern = re.compile(
-                    rf"(?:{count_then_finding}|{finding_then_count}|"
-                    rf"{field_then_count}|{reverse_marker_count})",
-                    re.IGNORECASE,
-                )
-                direct_successor_modifier = (
-                    r"(?:new|newly|discovered|material|open|unresolved|remaining|"
-                    r"residual|additional|further|finite|exact|distinct|unique|"
-                    r"reported|recorded|falsely|closed|false-closure|false-closed|"
-                    r"(?:P|L|v)[0-9]+)"
-                )
-                direct_successor_count_then_finding = (
-                    rf"(?<![A-Za-z0-9_])(?:{_ANY_COUNT_TOKEN})"
-                    rf"(?:[\s_-]+{direct_successor_modifier})*[\s_-]+"
-                    rf"(?:findings?|gaps?)(?![A-Za-z0-9_])"
-                )
-                direct_successor_finding_claim_pattern = re.compile(
-                    rf"(?:{direct_successor_count_then_finding}|"
-                    rf"{finding_then_count}|{field_then_count})",
-                    re.IGNORECASE,
-                )
-                unsupported_claim = None
-                for raw_sentence in re.split(r"(?<=[.!?])\s+", paragraph):
-                    sentence = re.sub(r"[.!?]+\s*$", "", raw_sentence).strip()
-                    sentence_has_marker = marker_token.search(sentence) is not None
-                    inherits_marker = False
-                    for clause in sentence.split(";"):
-                        marker_matches = tuple(marker_token.finditer(clause))
-                        claim_match = finding_claim_pattern.search(clause)
-                        external_count_exists = any(
-                            not any(
-                                count_match.start() < marker_match.end()
-                                and marker_match.start() < count_match.end()
-                                for marker_match in marker_matches
-                            )
-                            for count_match in count_pattern.finditer(clause)
+                if marker_matches and not external_count_exists:
+                    continue
+                if marker_matches:
+                    supported = _is_explicit_distinct_successor_finding_claim(
+                        clause,
+                        marker_pattern,
+                        direct_successor_finding_claim_pattern,
+                    )
+                elif sentence_has_marker:
+                    supported = (
+                        inherits_marker
+                        and _is_explicit_markerless_successor_finding_claim(
+                            clause,
+                            direct_successor_finding_claim_pattern,
                         )
-                        if marker_matches:
-                            inherits_marker = True
-                        if claim_match is None:
-                            continue
-                        if marker_matches and not external_count_exists:
-                            continue
-                        if marker_matches:
-                            supported = _is_explicit_distinct_successor_finding_claim(
-                                clause,
-                                marker_pattern,
-                                direct_successor_finding_claim_pattern,
-                            )
-                        elif sentence_has_marker:
-                            supported = (
-                                inherits_marker
-                                and _is_explicit_markerless_successor_finding_claim(
-                                    clause,
-                                    direct_successor_finding_claim_pattern,
-                                )
-                            )
-                        else:
-                            continue
-                        if not supported:
-                            unsupported_claim = clause
-                            break
-                    if unsupported_claim is not None:
-                        break
-                if unsupported_claim is not None:
-                    raise PlanningError(
-                        f"{path}: exact finding count for {schema_name} must live only in its "
-                        "canonical HANDOFF projection"
                     )
+                else:
+                    continue
+                if not supported:
+                    unsupported_claim = clause
+                    break
+            if unsupported_claim is not None:
+                break
+        if unsupported_claim is not None:
+            marker_err = (
+                f"exact finding count for {schema_name} must live only in its "
+                "canonical HANDOFF projection"
+            )
+            break
 
-                object_field_separator = r"[ _-]+"
-                object_field_pattern = (
-                    rf"(?:audited{object_field_separator}input{object_field_separator}"
-                    rf"(?:commit|tree)|addition{object_field_separator}(?:commit|tree)|"
-                    rf"first{object_field_separator}addition{object_field_separator}commit|"
-                    rf"audit(?:{object_field_separator}git)?{object_field_separator}blob)"
-                )
-                forward_full_claim_pattern = re.compile(
-                    rf"{marker_pattern}[^.\n]{{0,100}}{object_field_pattern}"
-                    r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])",
-                    flags=re.IGNORECASE,
-                )
-                reverse_full_claim_pattern = re.compile(
-                    rf"{object_field_pattern}[^.\n]{{0,60}}"
-                    r"(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])"
-                    rf"[^.\n]{{0,100}}{marker_pattern}",
-                    flags=re.IGNORECASE,
-                )
-                wrong_claim = forward_full_claim_pattern.search(paragraph)
-                if wrong_claim is None:
-                    wrong_claim = reverse_full_claim_pattern.search(paragraph)
-                if wrong_claim is not None:
-                    raise PlanningError(
-                        f"{path}: non-canonical Git object claim for {schema_name}: "
-                        f"{wrong_claim.group(1)}"
-                    )
+        wrong_claim = forward_full_claim_pattern.search(paragraph)
+        if wrong_claim is None:
+            wrong_claim = reverse_full_claim_pattern.search(paragraph)
+        if wrong_claim is not None:
+            marker_err = (
+                f"non-canonical Git object claim for {schema_name}: "
+                f"{wrong_claim.group(1)}"
+            )
+            break
 
-                forward_abbreviated_claim_pattern = re.compile(
-                    rf"{marker_pattern}[^.\n]{{0,100}}{object_field_pattern}"
-                    r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{7,39})(?![0-9a-f])",
-                    flags=re.IGNORECASE,
-                )
-                reverse_abbreviated_claim_pattern = re.compile(
-                    rf"{object_field_pattern}[^.\n]{{0,60}}"
-                    r"(?<![0-9a-f])([0-9a-f]{7,39})(?![0-9a-f])"
-                    rf"[^.\n]{{0,100}}{marker_pattern}",
-                    flags=re.IGNORECASE,
-                )
-                abbreviated_claim = forward_abbreviated_claim_pattern.search(paragraph)
-                if abbreviated_claim is None:
-                    abbreviated_claim = reverse_abbreviated_claim_pattern.search(paragraph)
-                if abbreviated_claim is not None:
-                    raise PlanningError(
-                        f"{path}: abbreviated Git object claim for {schema_name} is disallowed: "
-                        f"{abbreviated_claim.group(1)}"
-                    )
+        abbreviated_claim = forward_abbreviated_claim_pattern.search(paragraph)
+        if abbreviated_claim is None:
+            abbreviated_claim = reverse_abbreviated_claim_pattern.search(paragraph)
+        if abbreviated_claim is not None:
+            marker_err = (
+                f"abbreviated Git object claim for {schema_name} is disallowed: "
+                f"{abbreviated_claim.group(1)}"
+            )
+            break
 
-    for path, text in texts.items():
-        for raw_paragraph in re.split(r"\n\s*\n", text):
-            paragraph = re.sub(r"[ \t\r\n]+", " ", raw_paragraph).strip()
-            for field, pattern in _summary_prose_count_patterns():
-                match = pattern.search(paragraph)
-                if match is not None:
-                    raise PlanningError(
-                        f"{path}: exact planning count must project only through "
-                        f"PlanningCheckerSummaryV1: field={field}, text={match.group(0)}"
-                    )
+    for field, pattern, kws in prose_patterns:
+        if not any(kw in lowered for kw in kws):
+            continue
+        match = pattern.search(paragraph)
+        if match is not None:
+            prose_err = (
+                f"exact planning count must project only through "
+                f"PlanningCheckerSummaryV1: field={field}, text={match.group(0)}"
+            )
+            break
+
+    return marker_err, prose_err
+
+
+@functools.lru_cache(maxsize=256)
+def _scan_doc_projection_tokens_and_paragraphs(path: str, text: str):
+    field_tokens, object_tokens, _, _, _ = _duplicate_projection_compiled_specs()
+
+    field_hits = {
+        field: tuple((path, match.group(0)) for match in field_token.finditer(text))
+        for field, field_token in field_tokens
+    }
+    object_hits = {
+        (schema_name, object_id): tuple(
+            (path, match.group(0)) for match in object_token.finditer(text)
+        )
+        for schema_name, object_id, object_token in object_tokens
+    }
+
+    marker_err: str | None = None
+    prose_err: str | None = None
+    for raw_paragraph in re.split(r"\n\s*\n", text):
+        m_err, p_err = _scan_single_paragraph_projection(raw_paragraph)
+        if marker_err is None and m_err is not None:
+            marker_err = f"{path}: {m_err}"
+        if prose_err is None and p_err is not None:
+            prose_err = f"{path}: {p_err}"
+        if marker_err is not None and prose_err is not None:
+            break
+
+    return field_hits, object_hits, marker_err, prose_err
+
+
+def check_no_duplicate_exact_projections(
+    texts: dict[str, str],
+    planning_summary: dict[str, int],
+) -> None:
+    expected_mutable_paths = EXPECTED_PLANNING_PATHS - EXPECTED_FROZEN_TEXT_PATHS
+    actual_mutable_paths = frozenset(texts)
+    if actual_mutable_paths != expected_mutable_paths:
+        missing = sorted(expected_mutable_paths - actual_mutable_paths)
+        extra = sorted(actual_mutable_paths - expected_mutable_paths)
+        raise PlanningError(
+            "sole-projection scan must cover every non-frozen mutable planning authority: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    field_tokens, object_tokens, _, _, _ = _duplicate_projection_compiled_specs()
+    per_doc = {
+        path: _scan_doc_projection_tokens_and_paragraphs(path, text)
+        for path, text in texts.items()
+    }
+
+    for field, _field_token in field_tokens:
+        occurrences = [
+            hit
+            for path in texts
+            for hit in per_doc[path][0][field]
+        ]
+        if len(occurrences) != 1:
+            raise PlanningError(
+                f"exact PlanningCheckerSummaryV1 field {field} must occur exactly once "
+                "in its canonical CAPABILITY_TREE table cell; "
+                f"occurrences={occurrences}"
+            )
+
+    for schema_name, object_id, _object_token in object_tokens:
+        occurrences = [
+            hit
+            for path in texts
+            for hit in per_doc[path][1][(schema_name, object_id)]
+        ]
+        if len(occurrences) != 1:
+            raise PlanningError(
+                f"exact Git object for {schema_name} must occur exactly once in its "
+                "canonical HANDOFF table cell; "
+                f"object={object_id}, occurrences={occurrences}"
+            )
+
+    for path in texts:
+        err = per_doc[path][2]
+        if err is not None:
+            raise PlanningError(err)
+
+    for path in texts:
+        err = per_doc[path][3]
+        if err is not None:
+            raise PlanningError(err)
 
 
 def git_effective_eol_policy(paths: tuple[Path, ...]) -> dict[str, dict[str, str]]:

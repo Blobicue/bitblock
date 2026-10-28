@@ -100,16 +100,31 @@ def main(argv: list[str]) -> int:
     try:
         for path in targets:
             sites = mutate(path)
-            result = subprocess.run(
-                # --features protocol-research, and every target rather than --lib.
-                # Without the feature the gated code is not compiled at all, so a
-                # mutation inside it cannot fail anything and reports as survived --
-                # main.rs's 18 canonical sites are all behind that flag and were
-                # never built. Without every target, main.rs is skipped entirely,
-                # because it is the binary rather than the library.
-                ["cargo", "test", "-q", "--workspace", "--features", "protocol-research"], cwd=ROOT,
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-            )
+            result = None
+            crate_dir = path.parent.parent.name
+            if crate_dir in ("core", "research"):
+                pkg = "bitblock-core" if crate_dir == "core" else "bitblock-research"
+                # Fast-screen the owning crate's unit tests for this module first
+                # so a killed library module avoids relinking all 5 workspace test
+                # binaries; fall back to the full workspace suite only if it survives.
+                fast = subprocess.run(
+                    ["cargo", "test", "-q", "-p", pkg, "--lib", path.stem],
+                    cwd=ROOT, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace",
+                )
+                if fast.returncode != 0:
+                    result = fast
+            if result is None:
+                result = subprocess.run(
+                    # --features protocol-research, and every target rather than --lib.
+                    # Without the feature the gated code is not compiled at all, so a
+                    # mutation inside it cannot fail anything and reports as survived --
+                    # main.rs's 18 canonical sites are all behind that flag and were
+                    # never built. Without every target, main.rs is skipped entirely,
+                    # because it is the binary rather than the library.
+                    ["cargo", "test", "-q", "--workspace", "--features", "protocol-research"], cwd=ROOT,
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                )
             output = result.stdout + result.stderr
             if "error[" in output or "error:" in output and "test failed" not in output:
                 verdict, bucket = "uncompilable", broken

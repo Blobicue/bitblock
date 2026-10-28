@@ -100,14 +100,14 @@ def vector_suites() -> list[Path]:
 RUST_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tests/**/*.rs",
                "examples/**/*.rs", "Cargo.toml", "crates/*/Cargo.toml",
                "Cargo.lock", "rust-toolchain.toml")
-VECTOR_INPUTS = ("tools/*.py",)
+VECTOR_INPUTS = ("tools/*.py", "docs/*.md")
 REGISTRY_INPUTS = ("tools/metric_registry.py", "docs/metrics/*", "docs/*.md",
                    "README.md", "METRICS.md")
 INDEX_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tools/*.py", "tools/*.json", "docs/**/*.md",
                 "docs/metrics/*", "examples/*", "tests/*.rs",
                 "README.md", "METRICS.md", "proof/**/*.lean", "proof/README.md")
 
-CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q", "--", "-D", "warnings"]
+CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 
 # A floor on how many tests must actually execute.
 #
@@ -316,7 +316,8 @@ def tier(name: str, features: list[str], extras: dict, force: bool) -> int:
         # the two overlap instead of queueing on cargo's lock: 7.1s to 4.7s.
         clippy_pool = ThreadPoolExecutor(max_workers=1)
         clippy_started = time.time()
-        clippy_future = clippy_pool.submit(lambda: run(CLIPPY, CLIPPY_ENV))
+        clippy_cmd = [*CLIPPY, *features, "--", "-D", "warnings"]
+        clippy_future = clippy_pool.submit(lambda: run(clippy_cmd, CLIPPY_ENV))
 
         mark = time.time()
         ok, binaries, detail = build_tests(features)

@@ -36,6 +36,7 @@ Run:  python -B tools/key_profile_vectors.py
 from __future__ import annotations
 
 import bisect
+import functools
 from dataclasses import dataclass
 
 
@@ -73,12 +74,17 @@ def _spread64(value: int) -> int:
     return out
 
 
+@functools.lru_cache(maxsize=None)
+def _spread_biased(value: int) -> int:
+    return _spread64(bias64(value))
+
+
 def key_morton(x: int, y: int, z: int) -> int:
     """The alternative profile: the same biased coordinates, bit-interleaved."""
     return (
-        (_spread64(bias64(x)) << 2)
-        | (_spread64(bias64(y)) << 1)
-        | _spread64(bias64(z))
+        (_spread_biased(x) << 2)
+        | (_spread_biased(y) << 1)
+        | _spread_biased(z)
     )
 
 
@@ -101,18 +107,21 @@ def multiproof_material(
     """Carried sibling material for `query_keys` against sorted `world_sorted`.
 
     Subtree occupancy is a range test against the sorted world, so the cost is one
-    binary search per candidate sibling rather than a scan.
+    binary search per candidate sibling rather than a scan. Walking bottom-up from
+    the unique leaf prefixes shifts only the active prefixes at each level rather
+    than re-shifting all query keys on every level.
     """
     levels = KEY_BITS // arity_bits
     arity = 1 << arity_bits
     non_empty = 0
     empty = 0
-    for level in range(levels):
-        shift_parent = KEY_BITS - level * arity_bits
-        shift_child = shift_parent - arity_bits
-        on_path_parents = {key >> shift_parent for key in query_keys}
-        on_path_children = {key >> shift_child for key in query_keys}
+    on_path_children = set(query_keys)
+    n_world = len(world_sorted)
+    bisect_left = bisect.bisect_left
+    for level in range(levels - 1, -1, -1):
+        shift_child = KEY_BITS - (level + 1) * arity_bits
         span = 1 << shift_child
+        on_path_parents = {child >> arity_bits for child in on_path_children}
         for parent in on_path_parents:
             base = parent << arity_bits
             for digit in range(arity):
@@ -120,11 +129,12 @@ def multiproof_material(
                 if child in on_path_children:
                     continue
                 low = child << shift_child
-                index = bisect.bisect_left(world_sorted, low)
-                if index < len(world_sorted) and world_sorted[index] < low + span:
+                index = bisect_left(world_sorted, low)
+                if index < n_world and world_sorted[index] < low + span:
                     non_empty += 1
                 else:
                     empty += 1
+        on_path_children = on_path_parents
     return Material(non_empty=non_empty, empty=empty)
 
 
@@ -248,13 +258,20 @@ def main() -> None:
     print("=== 1. THE LIVE DECISION: key order for a BINARY hash tree ===")
     print("    Candidates A and B are both binary, so this is the metric that applies.\n")
     print("    world     query              x||y||z      morton     carried KiB   ratio")
+    encoded_queries = [
+        (query_name, {order_name: [fn(*c) for c in query] for order_name, fn in KEY_ORDERS})
+        for query_name, query in queries
+    ]
+    dense_keys: dict[str, list[int]] = {}
     for world_name, world in worlds:
         keys = {name: sorted(fn(*c) for c in world) for name, fn in KEY_ORDERS}
-        for query_name, query in queries:
-            row = {}
-            for order_name, fn in KEY_ORDERS:
-                q = [fn(*c) for c in query]
-                row[order_name] = multiproof_material(keys[order_name], q, 1)
+        if world_name == "dense":
+            dense_keys = keys
+        for query_name, q_by_order in encoded_queries:
+            row = {
+                order_name: multiproof_material(keys[order_name], q_by_order[order_name], 1)
+                for order_name, _fn in KEY_ORDERS
+            }
             a, b = row["x||y||z"], row["morton"]
             pin = EXPECTED_BINARY.get((world_name, query_name))
             if pin is not None and (a.non_empty, b.non_empty) != pin:
@@ -290,8 +307,8 @@ def main() -> None:
     print("\n=== 3. THE COST MORTON DOES CARRY, AT WIDE ARITY ===")
     print("    Morton puts a coordinate's spatial neighbours inside its own node.")
     print("    That is why a chunk is cheap; it is also why a LONE POINT is not.\n")
-    dense = sorted(key_morton(*c) for c in worlds[0][1])
-    dense_xyz = sorted(key_xyz(*c) for c in worlds[0][1])
+    dense = dense_keys["morton"]
+    dense_xyz = dense_keys["x||y||z"]
     point = [(-13, -11, -9)]
     print("    arity   x||y||z point   morton point   morton penalty")
     for arity_bits, arity in ((1, 2), (3, 8), (6, 64), (8, 256)):

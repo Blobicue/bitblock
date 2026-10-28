@@ -307,6 +307,10 @@ def strip_noise_lines(lines: list[str]) -> list[str]:
     clean: list[str] = []
     in_str = False
     for line in lines:
+        if not in_str and '"' not in line and "'" not in line:
+            c_idx = line.find("//")
+            clean.append(line if c_idx < 0 else line[:c_idx])
+            continue
         out: list[str] = []
         i, n = 0, len(line)
         while i < n:
@@ -444,6 +448,12 @@ def _scan_end_and_sig(
     end_line = start + 1
     for k in range(start, stop):
         line_k = clean_lines[k]
+        if seen_open:
+            brace_depth += line_k.count("{") - line_k.count("}")
+            if brace_depth <= entry_depth:
+                end_line = k + 1
+                break
+            continue
         stop_k = False
         for ch in line_k:
             if ch == "(":
@@ -737,13 +747,16 @@ def extract_modules() -> list[dict]:
             else:
                 top_fn_owners.setdefault(s["name"], set()).add(mname)
 
-    def valid_syms(dep: str) -> set[str]:
-        dm = mod_by_name.get(dep)
-        if not dm:
-            return set()
-        return {
+    valid_syms_map: dict[str, set[str]] = {
+        dep: {
             s["name"] for s in dm["symbols"] if not s.get("impl")
         } | (set(dm["pub_items"]) - {"fn"})
+        for dep, dm in mod_by_name.items()
+    }
+    dep_qual_re: dict[str, re.Pattern[str]] = {
+        dep: re.compile(r"\b" + re.escape(dep) + r"::(?:windows::)?([A-Za-z_][A-Za-z0-9_]*)")
+        for dep in mod_by_name
+    }
 
     def extract_dep_syms(scope_text: str, allowed_deps: set[str]) -> dict[str, set[str]]:
         extra: list[str] = []
@@ -765,17 +778,18 @@ def extract_modules() -> list[dict]:
             if dep in allowed_deps and sym not in ("self", "windows"):
                 raw_map[dep].add(sym)
         for dep in allowed_deps:
-            for sym in re.findall(
-                r"\b" + re.escape(dep) + r"::(?:windows::)?([A-Za-z_][A-Za-z0-9_]*)",
-                scope_text,
-            ):
-                if sym not in ("self", "windows"):
-                    raw_map[dep].add(sym)
+            pat = dep_qual_re.get(dep)
+            if pat is not None:
+                for sym in pat.findall(scope_text):
+                    if sym not in ("self", "windows"):
+                        raw_map[dep].add(sym)
         out: dict[str, set[str]] = {}
         for dep in allowed_deps:
-            v = valid_syms(dep)
+            v = valid_syms_map.get(dep, set())
             out[dep] = {s for s in raw_map[dep] if s in v}
         return out
+
+    RE_FN_HEADER = re.compile(r"\bfn\s+(?:<[^>]*>\s*)?[A-Za-z0-9_]+\b")
 
     def scan_span_calls(
         span_lines: list[str],
@@ -786,12 +800,7 @@ def extract_modules() -> list[dict]:
         if not span_lines:
             return []
         span_lines = list(span_lines)
-        span_lines[0] = re.sub(
-            r"\bfn\s+(?:<[^>]*>\s*)?" + re.escape(fn_name) + r"\b",
-            "fn ",
-            span_lines[0],
-            count=1,
-        )
+        span_lines[0] = RE_FN_HEADER.sub("fn ", span_lines[0], count=1)
         body = "\n".join(span_lines)
         self_target = f"{self_impl}::{fn_name}" if self_impl else fn_name
         calls: set[str] = set()
