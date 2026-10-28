@@ -7,20 +7,50 @@ For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md). The broader
 [`docs/CAPABILITY_TREE.md`](docs/CAPABILITY_TREE.md). Read [`docs/SEMANTICS.md`](docs/SEMANTICS.md)
 and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md) before changing the simulation boundary.
 
-Rather than reading 52,000 lines of Rust, query the generated index:
+Rather than reading 61,000 lines of Rust across 37 modules, query the generated index or compile the standalone interactive HTML observatory:
 
 ```powershell
 python tools/bbgraph.py ask "canonical framebuffer bytes"
 python tools/bbgraph.py node frame
+python tools/bbgraph.py sym CameraProjection::aabb_definitely_outside_frustum
+python tools/bbgraph.py type SparseOctreeV1
+python tools/bbgraph.py callers World::exposed_faces
+python tools/bbgraph.py impact world render
 python tools/bbgraph.py dag
+python tools/bbgraph.py schema
+python tools/bbgraph.py coverage
+python tools/bbgraph.py html
 ```
 
 Stdlib Python only, no network and no build. Every line of output cites a path, so
-any claim it makes can be checked against the source that produced it. It reports two
-things the tree cannot state about itself: which modules are load-bearing (`protocol`
-is reached by 29 of 33; `world` by 23), and which protocol objects have no independent
-reimplementation checking them (16 of 58). Both are derived rather than authored.
-[`AGENTS.md`](AGENTS.md) documents the index, its three gates, and its limits.
+any claim it makes can be checked against the source that produced it. It reports
+what the tree cannot state about itself: which modules are load-bearing (`protocol`
+is reached by 34 of 37; `world` by 26), whether every protocol object has an independent
+Python vector reconstruction (74 of 74 schemas covered, 0 uncovered), and public symbol
+documentation coverage (1,306 of 1,306 public symbols documented with `///`). All three
+are derived rather than authored. Running `python tools/bbgraph.py html` compiles a
+zero-server, self-contained interactive browser dashboard at `target/bitblock_graph.html`
+with a live BM25 query trace, 10-stratum DAG map, 4-tier blast-radius simulator, symbol
+and caller explorer, 74-schema coverage matrix, and audit gates. [`AGENTS.md`](AGENTS.md)
+documents the index, its three gates, and its limits.
+
+#### Quick start and prerequisites
+
+| Tool | Requirement | Notes |
+| --- | --- | --- |
+| Rust | `1.96.0` (`edition = "2024"`) | Pinned automatically by [`rust-toolchain.toml`](rust-toolchain.toml) (`rustfmt` + `clippy` components) |
+| Python | Python `3.10+` (stdlib only) | Zero `pip` dependencies; drives `bbverify.py`, `bbgraph.py`, `bbindex.py`, and all 32 vector suites |
+| Lean 4 | `leanprover/lean4:v4.33.0` (optional) | Pinned by [`proof/lean-toolchain`](proof/lean-toolchain); required only when building [`proof/`](proof/) via `elan` / `lake` |
+
+| Surface | Crate / Path | Platform Support | Command |
+| --- | --- | --- | --- |
+| Full verification gauntlet | [`tools/bbverify.py`](tools/bbverify.py) | Linux, macOS, Windows | `python tools/bbverify.py full` |
+| Fast edit-loop check | [`tools/bbverify.py`](tools/bbverify.py) | Linux, macOS, Windows | `python tools/bbverify.py quick` |
+| Interactive HTML observatory | [`tools/bbgraph.py`](tools/bbgraph.py) | Any browser (offline HTML) | `python tools/bbgraph.py html` |
+| Core + research library suites | `bitblock-core`, `bitblock-research`, `bitblock` | Linux, macOS, Windows | `cargo test --workspace --features protocol-research` |
+| Headless deterministic tape replay | [`src/main.rs`](src/main.rs) (`--simulate-actions`) | Linux, macOS, Windows | `cargo run --release -- --simulate-actions examples/observer_walk.tape` |
+| Live interactive observer window | [`src/main.rs`](src/main.rs) + GDI/DWM audit (`F4`/`F5`) | Windows desktop | `cargo run --release` |
+| Formal Lean 4 proof capsules | [`proof/`](proof/) | Linux, macOS, Windows | `cd proof && lake build` |
 
 The forward-looking security architecture is documented in
 [`docs/LAYER1_DESIGN_PAPER.md`](docs/LAYER1_DESIGN_PAPER.md). It separates the implemented
@@ -668,6 +698,20 @@ cargo run --release --features protocol-research,headless-console -- --verify-di
 # This writes content-tagged observations to stderr; the cheap default does not link it.
 $env:BITBLOCK_PRESENTATION_AUDIT = "1"
 cargo run --features protocol-research
+```
+
+#### Cross-platform verification and headless CLI (Linux, macOS, Windows)
+
+```bash
+python3 tools/bbverify.py quick
+python3 tools/bbverify.py full
+python3 tools/bbgraph.py gates
+python3 tools/bbgraph.py selftest
+python3 tools/bbgraph.py html
+python3 tools/bbmutate.py frame
+cargo test --workspace --features protocol-research
+cargo run --release -- --simulate-actions examples/observer_walk.tape
+cargo run --release -- --simulate-actions examples/observer_place_delete.tape
 ```
 
 The audit compares every visible client pixel after the checked Windows
