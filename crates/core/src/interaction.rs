@@ -74,6 +74,7 @@ impl MoveControl {
         }
     }
 
+    /// Returns the canonical lowercase token for this movement control.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Forward => "forward",
@@ -255,10 +256,12 @@ impl TickRecord {
         &self.actions
     }
 
+    /// Returns the number of accepted actions recorded for this tick.
     pub const fn len(&self) -> usize {
         self.actions.len()
     }
 
+    /// Returns whether no actions were accepted for this tick.
     pub const fn is_empty(&self) -> bool {
         self.actions.is_empty()
     }
@@ -272,6 +275,7 @@ pub struct InteractionTape {
 }
 
 impl InteractionTape {
+    /// Creates an empty `InteractionTape` with no tick records.
     pub const fn new() -> Self {
         Self {
             records: Vec::new(),
@@ -284,6 +288,7 @@ impl InteractionTape {
         source.parse()
     }
 
+    /// Returns the contiguous slice of `TickRecord` entries in this tape.
     pub fn records(&self) -> &[TickRecord] {
         &self.records
     }
@@ -293,10 +298,12 @@ impl InteractionTape {
         self.records.len()
     }
 
+    /// Returns whether this tape contains no tick records.
     pub const fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
 
+    /// Returns the total number of `AcceptedAction` items across all ticks.
     pub const fn total_actions(&self) -> usize {
         self.total_actions
     }
@@ -1036,10 +1043,12 @@ impl InteractionTapeParseError {
         Self { line, kind }
     }
 
+    /// Returns the one-based source line number where tape parsing failed.
     pub const fn line(&self) -> usize {
         self.line
     }
 
+    /// Returns the `InteractionTapeParseErrorKind` describing why parsing failed.
     pub const fn kind(&self) -> &InteractionTapeParseErrorKind {
         &self.kind
     }

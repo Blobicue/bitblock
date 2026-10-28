@@ -33,18 +33,22 @@ pub struct ReplayedHistory {
 }
 
 impl ReplayedHistory {
+    /// Returns the final `World` reconstructed by semantic replay.
     pub const fn world(&self) -> &World {
         &self.world
     }
 
+    /// Returns the provenance `History` reconstructed by semantic replay.
     pub const fn history(&self) -> &History {
         &self.history
     }
 
+    /// Consumes the replay result and returns the reconstructed `World` and `History`.
     pub fn into_parts(self) -> (World, History) {
         (self.world, self.history)
     }
 
+    /// Returns the cumulative semantic replay work metrics.
     pub const fn usage(&self) -> HistoryReplayUsage {
         self.usage
     }
@@ -66,6 +70,7 @@ pub struct HistoryReplayLimits {
 }
 
 impl HistoryReplayLimits {
+    /// Default local work and memory limits for semantic coordinate-history replay.
     pub const DEFAULT: Self = Self {
         max_receipts: 16_384,
         max_edits_per_receipt: 65_536,
@@ -75,6 +80,7 @@ impl HistoryReplayLimits {
         max_world_tag_coordinate_visits: 4_194_304,
     };
 
+    /// Constructs custom local semantic-replay admission limits.
     pub const fn new(
         max_receipts: usize,
         max_edits_per_receipt: usize,
@@ -93,26 +99,32 @@ impl HistoryReplayLimits {
         }
     }
 
+    /// Returns the maximum number of post-genesis receipts admitted during replay.
     pub const fn max_receipts(self) -> usize {
         self.max_receipts
     }
 
+    /// Returns the maximum number of edits allowed within a single receipt.
     pub const fn max_edits_per_receipt(self) -> usize {
         self.max_edits_per_receipt
     }
 
+    /// Returns the maximum cumulative number of edits allowed across all replayed receipts.
     pub const fn max_total_edits(self) -> usize {
         self.max_total_edits
     }
 
+    /// Returns the maximum number of simultaneously occupied coordinates allowed.
     pub const fn max_occupied_bits(self) -> usize {
         self.max_occupied_bits
     }
 
+    /// Returns the maximum number of allocated world chunks allowed during replay.
     pub const fn max_allocated_chunks(self) -> usize {
         self.max_allocated_chunks
     }
 
+    /// Returns the maximum cumulative coordinate visits allowed when hashing world tags.
     pub const fn max_world_tag_coordinate_visits(self) -> usize {
         self.max_world_tag_coordinate_visits
     }
@@ -146,19 +158,23 @@ pub struct VerifiedInMemoryHistory<'a> {
 }
 
 impl<'a> VerifiedInMemoryHistory<'a> {
+    /// Returns the borrowed `History` that passed bounded semantic replay.
     pub const fn history(&self) -> &'a History {
         self.history
     }
 
+    /// Returns the final `World` state reconstructed during verification.
     pub const fn final_world(&self) -> &World {
         &self.final_world
     }
 
+    /// Returns the semantic replay work accumulated during verification.
     pub const fn usage(&self) -> HistoryReplayUsage {
         self.usage
     }
 }
 
+/// Failure modes when verifying an in-memory `History` under replay limits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InMemoryHistoryVerificationError {
     Semantic(HistoryError),
@@ -244,6 +260,7 @@ pub struct HistoryAppendReceipt {
     pub state_changes: usize,
 }
 
+/// Semantic validation failure while replaying coordinate-history storage records.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HistorySemanticError {
     MissingGenesis,
@@ -435,6 +452,7 @@ impl fmt::Display for HistorySemanticError {
 
 impl std::error::Error for HistorySemanticError {}
 
+/// Refusal when semantic history replay exceeds a configured local resource bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryReplayLimitError {
     ReceiptCount {
@@ -529,6 +547,7 @@ impl fmt::Display for HistoryReplayLimitError {
 
 impl std::error::Error for HistoryReplayLimitError {}
 
+/// Combined semantic or resource-limit failure during coordinate-history replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HistoryReplayError {
     Semantic(HistorySemanticError),
@@ -565,6 +584,7 @@ impl From<HistoryReplayLimitError> for HistoryReplayError {
     }
 }
 
+/// Error returned by persistent coordinate-history journal operations.
 #[derive(Debug)]
 pub enum HistoryStoreError {
     Journal(JournalError),
@@ -879,6 +899,7 @@ pub fn replay_history_records(
     replay_history_records_with_limits(initial_world, records, HistoryReplayLimits::DEFAULT)
 }
 
+/// Replays canonical storage records into a `ReplayedHistory` under explicit replay limits.
 pub fn replay_history_records_with_limits(
     initial_world: &World,
     records: &[StorageRecord],
@@ -1127,6 +1148,7 @@ impl HistoryJournal {
         )
     }
 
+    /// Creates a new coordinate-history journal with explicit storage and semantic replay limits.
     pub fn create_new_with_replay_limits<P: AsRef<Path>>(
         path: P,
         limits: StorageLimits,
@@ -1216,6 +1238,7 @@ impl HistoryJournal {
         )
     }
 
+    /// Opens an existing coordinate-history journal under explicit storage and replay limits.
     pub fn open_existing_with_replay_limits<P: AsRef<Path>>(
         path: P,
         limits: StorageLimits,
@@ -1263,30 +1286,37 @@ impl HistoryJournal {
         }
     }
 
+    /// Returns the current committed `World` state.
     pub const fn world(&self) -> &World {
         &self.state.world
     }
 
+    /// Returns the current committed coordinate `History`.
     pub const fn history(&self) -> &History {
         &self.state.history
     }
 
+    /// Returns the cumulative semantic replay usage for the admitted journal state.
     pub const fn replay_usage(&self) -> HistoryReplayUsage {
         self.state.usage
     }
 
+    /// Returns the semantic replay limits enforced by this journal.
     pub const fn replay_limits(&self) -> HistoryReplayLimits {
         self.replay_limits
     }
 
+    /// Returns the `ContentTag` of the latest storage record in the underlying carrier.
     pub fn carrier_head(&self) -> Option<ContentTag> {
         self.carrier.head()
     }
 
+    /// Returns the verified byte length of the underlying physical journal.
     pub const fn carrier_valid_bytes(&self) -> u64 {
         self.carrier.valid_bytes()
     }
 
+    /// Returns `true` if the carrier or semantic state is poisoned and requires reopening.
     pub const fn carrier_is_poisoned(&self) -> bool {
         self.carrier.is_poisoned() || self.semantic_poisoned
     }
@@ -1447,18 +1477,22 @@ impl HistoryJournal {
 }
 
 impl HistoryRecoveryJournal {
+    /// Returns the physical recovery report describing the verified prefix and rejected tail.
     pub const fn report(&self) -> &RecoveryReport {
         self.carrier.report()
     }
 
+    /// Returns the `World` state reconstructed from the verified physical prefix.
     pub const fn world(&self) -> &World {
         &self.state.world
     }
 
+    /// Returns the coordinate `History` reconstructed from the verified physical prefix.
     pub const fn history(&self) -> &History {
         &self.state.history
     }
 
+    /// Reads and returns the unverified trailing bytes from the underlying recovery journal.
     pub fn export_rejected_tail(&mut self) -> Result<Vec<u8>, HistoryStoreError> {
         self.carrier.export_rejected_tail().map_err(Into::into)
     }

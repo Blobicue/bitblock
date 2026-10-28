@@ -15,9 +15,12 @@ use crate::history_store::{
 use crate::protocol::{ContentTag, TagError, TagKind, hash_canonical};
 use crate::world::{Coord, World};
 
+/// Canonical schema for `CoordinateEpisodeEvidence` receipt payloads.
 pub const COORDINATE_EPISODE_EVIDENCE_SCHEMA: &[u8] = b"bitblock/coordinate-episode-evidence/v1";
+/// Canonical schema for the tag-only coordinate-episode derivation policy.
 pub const COORDINATE_EPISODE_DERIVATION_POLICY_SCHEMA: &[u8] =
     b"bitblock/coordinate-episode-derivation-policy/v1";
+/// Hard upper bound on episodes admitted in a single `CoordinateEpisodeEvidence` payload.
 pub const MAX_COORDINATE_EPISODES: usize = 262_144;
 
 const HEADER_BYTES: usize = 32 + 32 + 32 + 32 + 8;
@@ -35,18 +38,22 @@ pub struct CoordinateEpisode {
 }
 
 impl CoordinateEpisode {
+    /// Returns the world `Coord` where this mint-to-burn episode occurred.
     pub const fn coord(self) -> Coord {
         self.coord
     }
 
+    /// Returns the `ContentTag` of the off-to-on mint event that opened this episode.
     pub const fn mint(self) -> ContentTag {
         self.mint
     }
 
+    /// Returns the `ContentTag` of the on-to-off burn event that closed this episode, if any.
     pub const fn consuming_burn(self) -> Option<ContentTag> {
         self.consuming_burn
     }
 
+    /// Returns `true` if this episode has not yet been closed by a burn event.
     pub const fn is_active(self) -> bool {
         self.consuming_burn.is_none()
     }
@@ -124,34 +131,42 @@ impl CoordinateEpisodeEvidence {
         )
     }
 
+    /// Returns the receipt-kind `ContentTag` of this episode evidence payload.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the `ContentTag` of the derivation policy bound to this evidence.
     pub const fn policy(&self) -> ContentTag {
         self.policy
     }
 
+    /// Returns the genesis `ContentTag` of the source coordinate history.
     pub const fn history_genesis(&self) -> ContentTag {
         self.history_genesis
     }
 
+    /// Returns the head receipt `ContentTag` of the source coordinate history.
     pub const fn history_head(&self) -> ContentTag {
         self.history_head
     }
 
+    /// Returns the `ContentTag` of the final world state after replaying the history.
     pub const fn final_world(&self) -> ContentTag {
         self.final_world
     }
 
+    /// Returns the ordered slice of post-genesis `CoordinateEpisode` entries.
     pub fn episodes(&self) -> &[CoordinateEpisode] {
         &self.episodes
     }
 
+    /// Computes the canonical serialized byte length of this evidence payload.
     pub fn encoded_len(&self) -> Result<usize, CoordinateEpisodeError> {
         encoded_len(&self.episodes)
     }
 
+    /// Validates and encodes this evidence into its canonical byte representation.
     pub fn try_encode_canonical(&self) -> Result<Vec<u8>, CoordinateEpisodeError> {
         validate_fields(
             self.policy,
@@ -177,6 +192,7 @@ impl CoordinateEpisodeEvidence {
         Ok(bytes)
     }
 
+    /// Decodes and validates a `CoordinateEpisodeEvidence` from canonical bytes.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, CoordinateEpisodeError> {
         let mut reader = Reader::new(bytes);
         let policy = reader.tag(TagKind::Policy, "derivation policy")?;
@@ -243,6 +259,7 @@ impl CoordinateEpisodeEvidence {
         Ok(())
     }
 
+    /// Verifies field invariants, event uniqueness, and the outer receipt `ContentTag`.
     pub fn verify(&self) -> Result<(), CoordinateEpisodeError> {
         validate_fields(
             self.policy,
@@ -437,34 +454,42 @@ impl OccupancyEpisodeLedger {
         Ok(())
     }
 
+    /// Returns the currently active `CoordinateEpisode` at `coord`, if any.
     pub fn get_active(&self, coord: Coord) -> Option<&CoordinateEpisode> {
         self.active_by_coord.get(&coord)
     }
 
+    /// Returns `true` if `mint` identifies an open episode in the ledger.
     pub fn is_active_mint(&self, mint: ContentTag) -> bool {
         self.active_by_mint.contains_key(&mint)
     }
 
+    /// Returns the map of all currently open episodes indexed by `Coord`.
     pub fn active_episodes(&self) -> &HashMap<Coord, CoordinateEpisode> {
         &self.active_by_coord
     }
 
+    /// Returns the number of currently active mutable coordinate episodes.
     pub fn active_count(&self) -> usize {
         self.active_by_coord.len()
     }
 
+    /// Returns the cumulative count of post-genesis mint events applied to the ledger.
     pub fn total_mints(&self) -> usize {
         self.total_mints
     }
 
+    /// Returns the cumulative count of post-genesis burn events applied to the ledger.
     pub fn total_burns(&self) -> usize {
         self.total_burns
     }
 
+    /// Returns the genesis `ContentTag` bound to this ledger.
     pub fn history_genesis(&self) -> ContentTag {
         self.history_genesis
     }
 
+    /// Returns the latest receipt `ContentTag` applied to this ledger.
     pub fn history_head(&self) -> ContentTag {
         self.history_head
     }
@@ -749,6 +774,7 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// Error returned when deriving, encoding, decoding, or verifying coordinate episodes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoordinateEpisodeError {
     History(InMemoryHistoryVerificationError),

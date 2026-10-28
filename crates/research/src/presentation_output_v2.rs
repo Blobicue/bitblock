@@ -17,6 +17,7 @@ use crate::storage::MAX_STORAGE_PAYLOAD_BYTES;
 /// Schema of the additive v2 wrapper. The tag kind deliberately remains presentation-output.
 pub const PRESENTATION_OUTPUT_ARTIFACT_V2_SCHEMA: &[u8] =
     b"bitblock/presentation-output-artifact/v2";
+/// Maximum canonical payload size in bytes for a `PresentationOutputArtifactV2`.
 pub const MAX_PRESENTATION_OUTPUT_ARTIFACT_V2_BYTES: usize = MAX_STORAGE_PAYLOAD_BYTES;
 
 const LENGTH_BYTES: usize = 8;
@@ -43,6 +44,7 @@ pub struct PresentationOutputArtifactV2 {
 }
 
 impl PresentationOutputArtifactV2 {
+    /// Constructs and validates a v2 artifact from v1 and pre/post color observations.
     pub fn new(
         v1: PresentationOutputArtifact,
         pre_color: OutputColorObservation,
@@ -61,6 +63,7 @@ impl PresentationOutputArtifactV2 {
         Ok(artifact)
     }
 
+    /// Returns the canonical content tag of this v2 presentation-output artifact.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
@@ -70,14 +73,17 @@ impl PresentationOutputArtifactV2 {
         &self.v1
     }
 
+    /// Borrows the raw pre-capture `OutputColorObservation`.
     pub const fn pre_color(&self) -> &OutputColorObservation {
         &self.pre_color
     }
 
+    /// Borrows the raw post-capture `OutputColorObservation`.
     pub const fn post_color(&self) -> &OutputColorObservation {
         &self.post_color
     }
 
+    /// Returns the canonical payload byte length of this v2 artifact.
     pub const fn encoded_len(&self) -> usize {
         self.encoded_len
     }
@@ -113,6 +119,7 @@ impl PresentationOutputArtifactV2 {
         }
     }
 
+    /// Encodes this v2 presentation-output artifact into its canonical payload byte sequence.
     pub fn encode_canonical(&self) -> Result<Vec<u8>, PresentationOutputArtifactV2Error> {
         let parts = self.prepare_parts()?;
         let mut bytes = Vec::new();
@@ -126,6 +133,7 @@ impl PresentationOutputArtifactV2 {
         Ok(bytes)
     }
 
+    /// Decodes and validates a canonical `PresentationOutputArtifactV2` payload.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, PresentationOutputArtifactV2Error> {
         if bytes.len() > MAX_PRESENTATION_OUTPUT_ARTIFACT_V2_BYTES {
             return Err(PresentationOutputArtifactV2Error::PayloadTooLarge {
@@ -156,6 +164,7 @@ impl PresentationOutputArtifactV2 {
         Ok(artifact)
     }
 
+    /// Re-verifies nested v1/color carriers, canonical payload length, and content tag.
     pub fn verify(&self) -> Result<(), PresentationOutputArtifactV2Error> {
         let parts = self.prepare_parts()?;
         if self.tag.kind() != TagKind::PresentationOutputArtifact {
@@ -324,6 +333,7 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// Error returned when constructing, coding, or verifying a `PresentationOutputArtifactV2`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PresentationOutputArtifactV2Error {
     InvalidV1(PresentationOutputArtifactError),

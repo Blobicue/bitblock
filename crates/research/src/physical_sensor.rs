@@ -165,6 +165,7 @@ pub struct DeclaredSensorProfile {
 }
 
 impl DeclaredSensorProfile {
+    /// Constructs a `DeclaredSensorProfile` for the given sensor kind and per-channel tolerances.
     pub const fn new(
         kind: DeclaredSensorKind,
         red_tolerance: u16,
@@ -180,14 +181,17 @@ impl DeclaredSensorProfile {
         }
     }
 
+    /// Returns the declared `DeclaredSensorKind`.
     pub const fn kind(self) -> DeclaredSensorKind {
         self.kind
     }
 
+    /// Returns the `SensorCodeSpace` used for sample comparisons.
     pub const fn code_space(self) -> SensorCodeSpace {
         self.code_space
     }
 
+    /// Returns the `[red, green, blue]` per-channel tolerance limits.
     pub const fn tolerances(self) -> [u16; 3] {
         [
             self.red_tolerance,
@@ -252,6 +256,7 @@ pub struct SensorChallengePoint {
 }
 
 impl SensorChallengePoint {
+    /// Constructs a `SensorChallengePoint` at `(x, y)` with its expected `expected_xrgb` word.
     pub const fn new(x: u32, y: u32, expected_xrgb: u32) -> Self {
         Self {
             x,
@@ -260,14 +265,17 @@ impl SensorChallengePoint {
         }
     }
 
+    /// Returns the zero-based horizontal pixel coordinate.
     pub const fn x(self) -> u32 {
         self.x
     }
 
+    /// Returns the zero-based vertical pixel coordinate.
     pub const fn y(self) -> u32 {
         self.y
     }
 
+    /// Returns the expected `0x00RRGGBB` pixel word at this challenge coordinate.
     pub const fn expected_xrgb(self) -> u32 {
         self.expected_xrgb
     }
@@ -281,16 +289,19 @@ pub struct SensorChallenge {
 }
 
 impl SensorChallenge {
+    /// Constructs and validates a row-major ordered `SensorChallenge`.
     pub fn new(points: Vec<SensorChallengePoint>) -> Result<Self, PhysicalSensorObservationError> {
         let challenge = Self { points };
         challenge.validate()?;
         Ok(challenge)
     }
 
+    /// Borrows the ordered slice of `SensorChallengePoint` entries.
     pub fn points(&self) -> &[SensorChallengePoint] {
         &self.points
     }
 
+    /// Computes the canonical `TagKind::Policy` content tag for this challenge.
     pub fn tag(&self) -> ContentTag {
         let payload_len = U16_BYTES + self.points.len() * CHALLENGE_POINT_BYTES;
         hash_canonical(
@@ -355,30 +366,37 @@ pub struct RgbGradientFacts {
 }
 
 impl RgbGradientFacts {
+    /// Returns the total number of expected pixels inspected.
     pub const fn inspected_pixels(self) -> u64 {
         self.inspected_pixels
     }
 
+    /// Returns the number of right-neighbour pixel pairs evaluated.
     pub const fn horizontal_adjacencies(self) -> u64 {
         self.horizontal_adjacencies
     }
 
+    /// Returns the number of lower-neighbour pixel pairs evaluated.
     pub const fn vertical_adjacencies(self) -> u64 {
         self.vertical_adjacencies
     }
 
+    /// Returns the number of adjacent pixel pairs with a non-zero RGB delta.
     pub const fn nonzero_adjacencies(self) -> u64 {
         self.nonzero_adjacencies
     }
 
+    /// Returns the summed RGB8 Manhattan delta across all evaluated adjacencies.
     pub const fn total_rgb_delta(self) -> u64 {
         self.total_rgb_delta
     }
 
+    /// Returns the largest RGB8 Manhattan delta observed across a single adjacency.
     pub const fn maximum_adjacency_delta(self) -> u16 {
         self.maximum_adjacency_delta
     }
 
+    /// Returns the highest combined right-and-lower RGB delta score for any single pixel.
     pub const fn maximum_point_score(self) -> u16 {
         self.maximum_point_score
     }
@@ -520,26 +538,32 @@ impl RgbGradientChallenge {
         })
     }
 
+    /// Returns the content tag of the parent `PresentationOutputArtifact`.
     pub const fn parent_tag(&self) -> ContentTag {
         self.parent
     }
 
+    /// Returns the content tag of the RGB-gradient challenge selection policy.
     pub fn policy_tag(&self) -> ContentTag {
         rgb_gradient_challenge_policy_tag()
     }
 
+    /// Returns the maximum number of challenge points requested.
     pub const fn point_budget(&self) -> usize {
         self.point_budget
     }
 
+    /// Borrows the derived row-major `SensorChallenge`.
     pub fn challenge(&self) -> &SensorChallenge {
         &self.challenge
     }
 
+    /// Consumes this gradient derivation and returns the underlying `SensorChallenge`.
     pub fn into_challenge(self) -> SensorChallenge {
         self.challenge
     }
 
+    /// Returns the `RgbGradientFacts` collected while scanning the expected frame.
     pub const fn facts(&self) -> RgbGradientFacts {
         self.facts
     }
@@ -638,10 +662,12 @@ pub struct SensorRgbSample {
 }
 
 impl SensorRgbSample {
+    /// Constructs a 16-bit per-channel `SensorRgbSample`.
     pub const fn new(red: u16, green: u16, blue: u16) -> Self {
         Self { red, green, blue }
     }
 
+    /// Returns the sample channels as `[red, green, blue]`.
     pub const fn channels(self) -> [u16; 3] {
         [self.red, self.green, self.blue]
     }
@@ -738,34 +764,42 @@ impl PhysicalSensorObservation {
         Ok(observation)
     }
 
+    /// Returns the canonical content tag of this physical-sensor observation.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
 
+    /// Returns the `SensorEvidenceState` of this observation.
     pub const fn state(&self) -> SensorEvidenceState {
         self.state
     }
 
+    /// Returns the optional parent presentation-output `ContentTag`.
     pub const fn parent_presentation_tag(&self) -> Option<ContentTag> {
         self.parent_presentation
     }
 
+    /// Returns the optional `DeclaredSensorProfile` bound into this observation.
     pub const fn profile(&self) -> Option<DeclaredSensorProfile> {
         self.profile
     }
 
+    /// Returns the content tag of the declared sensor profile, if present.
     pub fn profile_tag(&self) -> Option<ContentTag> {
         self.profile.map(DeclaredSensorProfile::tag)
     }
 
+    /// Borrows the optional `SensorChallenge` bound into this observation.
     pub fn challenge(&self) -> Option<&SensorChallenge> {
         self.challenge.as_ref()
     }
 
+    /// Returns the content tag of the sensor challenge, if present.
     pub fn challenge_tag(&self) -> Option<ContentTag> {
         self.challenge.as_ref().map(SensorChallenge::tag)
     }
 
+    /// Borrows the reported `SensorRgbSample` slice.
     pub fn samples(&self) -> &[SensorRgbSample] {
         &self.samples
     }
@@ -775,10 +809,12 @@ impl PhysicalSensorObservation {
         &self.raw_measurement
     }
 
+    /// Returns the canonical payload byte length of this observation.
     pub const fn encoded_len(&self) -> usize {
         self.encoded_len
     }
 
+    /// Encodes this observation into its canonical payload byte sequence.
     pub fn encode_canonical(&self) -> Result<Vec<u8>, PhysicalSensorObservationError> {
         let encoded_len = self.validate_and_len()?;
         let mut bytes = Vec::new();
@@ -1308,22 +1344,27 @@ pub struct BoundSampleMatch {
 }
 
 impl BoundSampleMatch {
+    /// Returns the content tag of the verified `PhysicalSensorObservation`.
     pub const fn observation_tag(self) -> ContentTag {
         self.observation
     }
 
+    /// Returns the content tag of the verified parent `PresentationOutputArtifact`.
     pub const fn presentation_tag(self) -> ContentTag {
         self.presentation
     }
 
+    /// Returns the content tag of the `DeclaredSensorProfile` that admitted the match.
     pub const fn profile_tag(self) -> ContentTag {
         self.profile
     }
 
+    /// Returns the content tag of the matched `SensorChallenge`.
     pub const fn challenge_tag(self) -> ContentTag {
         self.challenge
     }
 
+    /// Returns the number of challenge points whose samples matched within tolerance.
     pub const fn sample_count(self) -> usize {
         self.sample_count
     }

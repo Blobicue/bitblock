@@ -12,6 +12,7 @@ const TAG_DOMAIN: &[u8] = b"bitblock/content-tag/v1";
 const HASH_SUITE: &[u8] = b"sha256";
 const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 
+/// Semantic domain kind bound into a `ContentTag` prefix and hash preimage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagKind {
     #[cfg(any(test, feature = "protocol-research"))]
@@ -57,6 +58,7 @@ pub enum TagKind {
 }
 
 impl TagKind {
+    /// Returns the canonical lowercase ASCII name for this `TagKind`.
     pub const fn name(self) -> &'static str {
         match self {
             #[cfg(any(test, feature = "protocol-research"))]
@@ -173,10 +175,12 @@ impl ContentTag {
         Self { kind, digest }
     }
 
+    /// Returns the semantic `TagKind` committed to by this tag.
     pub const fn kind(self) -> TagKind {
         self.kind
     }
 
+    /// Returns the raw 32-byte SHA-256 digest of this tag.
     pub const fn digest(self) -> [u8; 32] {
         self.digest
     }
@@ -271,6 +275,7 @@ impl fmt::Display for ContentTag {
     }
 }
 
+/// Error returned when canonical tag hashing fails length or allocation bounds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TagError {
     SchemaTooLong(usize),

@@ -94,38 +94,47 @@ pub struct ReplayedDisplayArtifacts {
 }
 
 impl ReplayedDisplayArtifacts {
+    /// Returns the ordered slice of verified `DisplayArtifactInventoryEntry` records.
     pub fn entries(&self) -> &[DisplayArtifactInventoryEntry] {
         &self.entries
     }
 
+    /// Returns the number of replayed display-artifact inventory entries.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Returns `true` if no display-artifact entries have been replayed.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// Returns the `ContentTag` of the latest replayed `DisplayCaptureArtifact`.
     pub fn artifact_head(&self) -> Option<ContentTag> {
         self.entries.last().map(|entry| entry.artifact)
     }
 
+    /// Returns the outer stored-object `ContentTag` of the latest replayed record.
     pub fn stored_object_head(&self) -> Option<ContentTag> {
         self.entries.last().map(|entry| entry.stored_object)
     }
 
+    /// Returns the embedded `DisplayReceiptV2` `ContentTag` of the latest entry.
     pub fn display_receipt_head(&self) -> Option<ContentTag> {
         self.entries.last().map(|entry| entry.display_receipt)
     }
 
+    /// Returns the physical `StorageRecord` `ContentTag` of the latest entry.
     pub fn storage_head(&self) -> Option<ContentTag> {
         self.entries.last().map(|entry| entry.storage_record)
     }
 
+    /// Returns the cumulative logical payload byte count across all replayed entries.
     pub const fn logical_payload_bytes(&self) -> u64 {
         self.logical_payload_bytes
     }
 
+    /// Returns the cumulative physical storage-record byte count across all entries.
     pub const fn physical_record_bytes(&self) -> u64 {
         self.physical_record_bytes
     }
@@ -176,12 +185,14 @@ pub enum ReadOnlyDisplayArtifactInspection {
 }
 
 impl ReadOnlyDisplayArtifactInspection {
+    /// Borrows the `ReplayedDisplayArtifacts` inventory for the verified prefix.
     pub const fn state(&self) -> &ReplayedDisplayArtifacts {
         match self {
             Self::Clean { state, .. } | Self::NeedsRecovery { state, .. } => state,
         }
     }
 
+    /// Returns `true` when the entire inspected byte slice replayed cleanly.
     pub const fn is_clean(&self) -> bool {
         matches!(self, Self::Clean { .. })
     }
@@ -225,6 +236,7 @@ pub struct PresentationOutputAppendReceipt {
     pub artifact_count: usize,
 }
 
+/// Semantic replay or parent-chain validation failure for a display-artifact record.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DisplayArtifactSemanticError {
     StorageParentMismatch {
@@ -383,6 +395,7 @@ impl std::error::Error for DisplayArtifactSemanticError {
     }
 }
 
+/// Error returned when opening, inspecting, replaying, or appending a display journal.
 #[derive(Debug)]
 pub enum DisplayArtifactStoreError {
     Journal(JournalError),
@@ -626,18 +639,22 @@ impl DisplayArtifactJournal {
         }
     }
 
+    /// Borrows the currently published `ReplayedDisplayArtifacts` inventory.
     pub const fn state(&self) -> &ReplayedDisplayArtifacts {
         &self.state
     }
 
+    /// Returns the head `StorageRecord` `ContentTag` of the underlying carrier.
     pub fn carrier_head(&self) -> Option<ContentTag> {
         self.carrier.head()
     }
 
+    /// Returns the verified physical byte length of the underlying carrier.
     pub const fn carrier_valid_bytes(&self) -> u64 {
         self.carrier.valid_bytes()
     }
 
+    /// Returns `true` if the carrier or semantic state is poisoned and requires reopen.
     pub const fn is_poisoned(&self) -> bool {
         self.carrier.is_poisoned() || self.semantic_poisoned
     }
@@ -1176,14 +1193,17 @@ fn persisted_but_unpublished(
 }
 
 impl DisplayArtifactRecoveryJournal {
+    /// Borrows the underlying physical carrier `RecoveryReport`.
     pub const fn report(&self) -> &RecoveryReport {
         self.carrier.report()
     }
 
+    /// Borrows the `ReplayedDisplayArtifacts` reconstructed from the verified prefix.
     pub const fn state(&self) -> &ReplayedDisplayArtifacts {
         &self.state
     }
 
+    /// Reads and returns the unverified trailing carrier bytes rejected during scan.
     pub fn export_rejected_tail(&mut self) -> Result<Vec<u8>, DisplayArtifactStoreError> {
         self.carrier.export_rejected_tail().map_err(Into::into)
     }

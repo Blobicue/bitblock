@@ -232,6 +232,7 @@ impl OutputColorObservation {
         Ok(observation)
     }
 
+    /// Returns the canonical content tag of this color observation.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }
@@ -241,10 +242,12 @@ impl OutputColorObservation {
         self.parent_topology
     }
 
+    /// Borrows the captured or unavailable Advanced Color facts.
     pub fn facts(&self) -> &OutputColorFacts {
         &self.facts
     }
 
+    /// Returns the per-route Advanced Color facts when the observation is available.
     pub fn routes(&self) -> Option<&[AdvancedColorRouteFacts]> {
         match &self.facts {
             OutputColorFacts::Available { routes } => Some(routes),
@@ -252,6 +255,7 @@ impl OutputColorObservation {
         }
     }
 
+    /// Encodes this observation into its canonical payload byte sequence.
     pub fn encode_canonical(&self) -> Result<Vec<u8>, OutputColorObservationError> {
         self.facts.validate()?;
         let length = self.facts.encoded_len()?;
@@ -264,6 +268,7 @@ impl OutputColorObservation {
         Ok(bytes)
     }
 
+    /// Decodes and validates a canonical `OutputColorObservation` payload.
     pub fn decode_canonical(bytes: &[u8]) -> Result<Self, OutputColorObservationError> {
         if bytes.is_empty() || bytes.len() > MAX_OUTPUT_COLOR_PAYLOAD_BYTES {
             return Err(OutputColorObservationError::WrongPayloadLength {
@@ -383,6 +388,7 @@ impl OutputColorObservation {
     }
 }
 
+/// Error returned when constructing, encoding, decoding, or verifying an `OutputColorObservation`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OutputColorObservationError {
     WrongPayloadLength {

@@ -17,6 +17,7 @@ use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::render::{bounds_aabb, ray_aabb_entry_distance};
 use crate::world::{Coord, World};
 
+/// Canonical schema string for v1 `SCALE-1` comparative workload assay reports.
 pub const SCALE_WORKLOAD_REPORT_V1_SCHEMA: &[u8] = b"bitblock/scale-assay/workload-report/v1";
 
 const WORKLOAD_COUNT: usize = 5;
@@ -35,6 +36,7 @@ pub enum ScaleWorkloadId {
     SparseFarExtrema = 4,
 }
 
+/// Ordered array of all five canonical `ScaleWorkloadId` variants evaluated by `SCALE-1`.
 pub const ALL_SCALE_WORKLOADS: [ScaleWorkloadId; 5] = [
     ScaleWorkloadId::SingleOrigin,
     ScaleWorkloadId::DenseCube16,
@@ -229,6 +231,7 @@ pub struct ScaleWorkloadEntryV1 {
 }
 
 impl ScaleWorkloadEntryV1 {
+    /// Validates occupancy bounds, face-sum identities, chunk splits, and non-zero digests.
     pub fn validate(&self, expected_index: usize) -> Result<(), ScaleAssayError> {
         if usize::from(self.workload_id_u8) != expected_index {
             return Err(ScaleAssayError::InvalidWorkloadId {
@@ -305,6 +308,7 @@ impl ScaleWorkloadEntryV1 {
         Ok(())
     }
 
+    /// Encodes this workload entry into its canonical 185-byte big-endian binary record.
     pub fn encode(&self) -> [u8; WORKLOAD_ENTRY_LEN] {
         let mut out = [0u8; WORKLOAD_ENTRY_LEN];
         out[0] = self.workload_id_u8;
@@ -331,6 +335,7 @@ impl ScaleWorkloadEntryV1 {
         out
     }
 
+    /// Decodes and validates a 185-byte canonical record for the workload at `expected_index`.
     pub fn decode(bytes: &[u8], expected_index: usize) -> Result<Self, ScaleAssayError> {
         if bytes.len() != WORKLOAD_ENTRY_LEN {
             return Err(ScaleAssayError::InvalidPayloadLength {
@@ -446,12 +451,14 @@ pub struct ScaleWorkloadReportV1 {
 }
 
 impl ScaleWorkloadReportV1 {
+    /// Evaluates all five `ALL_SCALE_WORKLOADS` reference worlds into a canonical report.
     pub fn canonical() -> Self {
         Self {
             entries: ALL_SCALE_WORKLOADS.map(assay_workload),
         }
     }
 
+    /// Validates all five workload entries against their expected ordinal indices.
     pub fn validate(&self) -> Result<(), ScaleAssayError> {
         for (idx, entry) in self.entries.iter().enumerate() {
             entry.validate(idx)?;
@@ -459,6 +466,7 @@ impl ScaleWorkloadReportV1 {
         Ok(())
     }
 
+    /// Encodes this report into its canonical 929-byte big-endian payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(WORKLOAD_REPORT_PAYLOAD_LEN);
         out.extend_from_slice(&(WORKLOAD_COUNT as u32).to_be_bytes());
@@ -468,6 +476,7 @@ impl ScaleWorkloadReportV1 {
         out
     }
 
+    /// Decodes and validates a 929-byte canonical `ScaleWorkloadReportV1` payload.
     pub fn decode(bytes: &[u8]) -> Result<Self, ScaleAssayError> {
         if bytes.len() != WORKLOAD_REPORT_PAYLOAD_LEN {
             return Err(ScaleAssayError::InvalidPayloadLength {
@@ -488,6 +497,7 @@ impl ScaleWorkloadReportV1 {
         })
     }
 
+    /// Computes the canonical `Receipt` `ContentTag` for this workload assay report.
     pub fn tag(&self) -> ContentTag {
         let bytes = self.encode();
         debug_assert_eq!(bytes.len(), WORKLOAD_REPORT_PAYLOAD_LEN);

@@ -40,6 +40,7 @@ pub fn windows_present_policy_tag() -> ContentTag {
     .expect("Windows presentation policy encoding has a fixed length")
 }
 
+/// Checked Win32 GDI scanline submission and DC release facts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowsPresentFacts {
     pub policy: ContentTag,
@@ -51,11 +52,13 @@ pub struct WindowsPresentFacts {
 }
 
 impl WindowsPresentFacts {
+    /// Returns whether the post-submission `ReleaseDC` call succeeded.
     pub const fn release_succeeded(self) -> bool {
         self.release_result != 0
     }
 }
 
+/// Error returned when a Win32 GDI pixel buffer submission fails.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowsPresentError {
     Uninitialized,
@@ -94,6 +97,7 @@ impl fmt::Display for WindowsPresentError {
 
 impl std::error::Error for WindowsPresentError {}
 
+/// Error returned when constructing, resizing, or borrowing a `WindowsPixelSurface`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowsSurfaceError {
     NullWindowHandle,
@@ -180,6 +184,7 @@ impl WindowsPixelSurface {
         Ok(())
     }
 
+    /// Borrows the mutable top-down XRGB8888 pixel slice when the surface is sized.
     pub fn pixels_mut(&mut self) -> Result<&mut [u32], WindowsSurfaceError> {
         if self.width == 0 || self.height == 0 {
             return Err(WindowsSurfaceError::Uninitialized);
@@ -187,10 +192,12 @@ impl WindowsPixelSurface {
         Ok(&mut self.pixels)
     }
 
+    /// Returns the surface width in pixels.
     pub const fn width(&self) -> u32 {
         self.width
     }
 
+    /// Returns the surface height in pixels.
     pub const fn height(&self) -> u32 {
         self.height
     }

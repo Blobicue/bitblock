@@ -39,23 +39,31 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
+    /// Zero vector at the world origin.
     pub const ZERO: Self = Self::new(0.0, 0.0, 0.0);
+    /// Unit vector along the positive X axis.
     pub const X: Self = Self::new(1.0, 0.0, 0.0);
+    /// Unit vector along the positive Y axis.
     pub const Y: Self = Self::new(0.0, 1.0, 0.0);
+    /// Unit vector along the positive Z axis.
     pub const Z: Self = Self::new(0.0, 0.0, 1.0);
 
+    /// Constructs a vector from explicit `x`, `y`, and `z` coordinates.
     pub const fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
 
+    /// Constructs a vector with all three components set to `value`.
     pub const fn splat(value: f64) -> Self {
         Self::new(value, value, value)
     }
 
+    /// Computes the Euclidean dot product of `self` and `rhs`.
     pub fn dot(self, rhs: Self) -> f64 {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 
+    /// Computes the 3D cross product of `self` and `rhs`.
     pub fn cross(self, rhs: Self) -> Self {
         Self::new(
             self.y * rhs.z - self.z * rhs.y,
@@ -64,24 +72,29 @@ impl Vec3 {
         )
     }
 
+    /// Returns the squared Euclidean length of the vector.
     pub fn length_squared(self) -> f64 {
         self.dot(self)
     }
 
+    /// Returns the Euclidean length of the vector.
     pub fn length(self) -> f64 {
         self.length_squared().sqrt()
     }
 
+    /// Returns the unit-length direction vector, or `None` if zero or non-finite.
     pub fn try_normalized(self) -> Option<Self> {
         let length = self.length();
         (length.is_finite() && length > 0.0).then(|| self / length)
     }
 
+    /// Returns the unit-length direction vector, panicking if zero or non-finite.
     pub fn normalized(self) -> Self {
         self.try_normalized()
             .expect("cannot normalize a zero-length or non-finite vector")
     }
 
+    /// Returns whether all three coordinate components are finite.
     pub fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
     }
@@ -382,30 +395,37 @@ impl Camera {
         camera
     }
 
+    /// Returns the observer's current world-space eye position.
     pub fn position(&self) -> Vec3 {
         self.position
     }
 
+    /// Returns the world-space observation anchor point.
     pub fn observation_anchor(&self) -> Vec3 {
         self.observation_anchor
     }
 
+    /// Returns the distance from the eye position to the observation anchor.
     pub fn observation_distance(&self) -> f64 {
         self.observation_distance
     }
 
+    /// Returns the horizontal yaw angle in radians.
     pub fn yaw_radians(&self) -> f64 {
         self.yaw_radians
     }
 
+    /// Returns the clamped vertical pitch angle in radians.
     pub fn pitch_radians(&self) -> f64 {
         self.pitch_radians
     }
 
+    /// Returns the vertical field-of-view angle in radians.
     pub fn vertical_fov_radians(&self) -> f64 {
         self.vertical_fov_radians
     }
 
+    /// Computes the orthonormal `CameraBasis` from current yaw and pitch.
     pub fn basis(&self) -> CameraBasis {
         let (sin_yaw, cos_yaw) = self.yaw_radians.sin_cos();
         let (sin_pitch, cos_pitch) = self.pitch_radians.sin_cos();
@@ -417,14 +437,17 @@ impl Camera {
         CameraBasis { forward, right, up }
     }
 
+    /// Returns the unit forward viewing direction vector.
     pub fn forward(&self) -> Vec3 {
         self.basis().forward
     }
 
+    /// Returns the unit right camera basis vector.
     pub fn right(&self) -> Vec3 {
         self.basis().right
     }
 
+    /// Returns the unit up camera basis vector.
     pub fn up(&self) -> Vec3 {
         self.basis().up
     }
@@ -565,6 +588,7 @@ impl Camera {
         })
     }
 
+    /// Returns the world-space `Ray` originating at the eye along the forward axis.
     pub fn center_ray(&self) -> Ray {
         Ray {
             origin: self.position,

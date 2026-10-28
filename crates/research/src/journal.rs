@@ -130,17 +130,20 @@ pub enum SyncEvidence {
     OsSyncAllReturnedOk,
 }
 
+/// Evidence that appended journal bytes were re-read and verified against memory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppendedBytesEvidence {
     OsVisibleBytesRereadEqual,
 }
 
+/// Receipt emitted after creating and synchronizing a new empty journal file.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateReceipt {
     pub file_bytes: u64,
     pub sync_evidence: SyncEvidence,
 }
 
+/// Receipt emitted after appending, synchronizing, and verifying a storage record.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppendSyncReceipt {
     pub parent: Option<ContentTag>,
@@ -153,6 +156,7 @@ pub struct AppendSyncReceipt {
     pub appended_bytes_evidence: AppendedBytesEvidence,
 }
 
+/// Receipt emitted after truncating and synchronizing a rejected journal suffix.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TailDiscardReceipt {
     pub prior_file_bytes: u64,
@@ -164,6 +168,7 @@ pub struct TailDiscardReceipt {
     pub sync_evidence: SyncEvidence,
 }
 
+/// Operational stage of `Journal::append_synced` where an uncertain I/O failure occurred.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppendPhase {
     Write,
@@ -172,6 +177,7 @@ pub enum AppendPhase {
     VerifyContent,
 }
 
+/// Diagnostic state recorded when an append fails before durability is confirmed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UncertainAppend {
     pub phase: AppendPhase,
@@ -181,6 +187,7 @@ pub struct UncertainAppend {
     pub accepted_bytes: u64,
 }
 
+/// Operational stage of tail truncation where an I/O failure occurred.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TailDiscardPhase {
     SetLength,
@@ -188,6 +195,7 @@ pub enum TailDiscardPhase {
     VerifyPrefix,
 }
 
+/// File I/O phase during which a journal operation encountered an OS error.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JournalIoPhase {
     CreateNew,
@@ -198,6 +206,7 @@ pub enum JournalIoPhase {
     SyncNewFile,
 }
 
+/// Error returned when journal creation, opening, appending, or recovery fails.
 #[derive(Debug)]
 pub enum JournalError {
     Storage(StorageError),
@@ -319,18 +328,22 @@ impl Journal {
         }
     }
 
+    /// Returns the `ContentTag` of the most recently admitted storage record, if any.
     pub fn head(&self) -> Option<ContentTag> {
         self.chain.head()
     }
 
+    /// Returns the ordered slice of verified `StorageRecord` entries in the journal.
     pub fn records(&self) -> &[StorageRecord] {
         self.chain.records()
     }
 
+    /// Returns the byte length of the verified canonical prefix on disk.
     pub const fn valid_bytes(&self) -> u64 {
         self.valid_bytes
     }
 
+    /// Returns whether an uncertain write or publication failure has poisoned this handle.
     pub const fn is_poisoned(&self) -> bool {
         self.poisoned
     }
@@ -589,6 +602,7 @@ fn append_synced_with_io<I: JournalIo>(
 }
 
 impl RecoveryJournal {
+    /// Returns the `RecoveryReport` describing the valid prefix and rejected tail.
     pub const fn report(&self) -> &RecoveryReport {
         &self.report
     }

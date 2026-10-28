@@ -602,27 +602,27 @@
     {
      "left": "presentation_output:391",
      "lines": 27,
-     "right": "presentation_output_v2:332"
+     "right": "presentation_output_v2:342"
     },
     {
-     "left": "output_color:438",
+     "left": "output_color:444",
      "lines": 22,
      "right": "output_topology:1241"
     },
     {
      "left": "presentation_output:255",
      "lines": 21,
-     "right": "presentation_output_v2:211"
+     "right": "presentation_output_v2:220"
     },
     {
-     "left": "output_color:388",
+     "left": "output_color:394",
      "lines": 19,
      "right": "output_topology:1173"
     },
     {
      "left": "presentation_output:464",
      "lines": 17,
-     "right": "presentation_output_v2:384"
+     "right": "presentation_output_v2:394"
     },
     {
      "left": "display:1146",
@@ -635,7 +635,7 @@
      "right": "tick:503"
     },
     {
-     "left": "physical_sensor:1562",
+     "left": "physical_sensor:1603",
      "lines": 14,
      "right": "presentation_output:467"
     },
@@ -650,19 +650,19 @@
      "right": "presentation_output:259"
     },
     {
-     "left": "interaction:1313",
+     "left": "interaction:1322",
      "lines": 13,
-     "right": "physical_sensor:1566"
+     "right": "physical_sensor:1607"
     },
     {
-     "left": "history_store:517",
+     "left": "history_store:535",
      "lines": 12,
      "right": "sequential:1397"
     },
     {
-     "left": "interaction:1208",
+     "left": "interaction:1217",
      "lines": 12,
-     "right": "replay_evidence:864"
+     "right": "replay_evidence:892"
     },
     {
      "left": "frame:504",
@@ -672,7 +672,7 @@
     {
      "left": "presentation_output:506",
      "lines": 11,
-     "right": "presentation_output_v2:425"
+     "right": "presentation_output_v2:435"
     },
     {
      "left": "frame:459",
@@ -682,15 +682,15 @@
     {
      "left": "history:369",
      "lines": 10,
-     "right": "interaction:1319"
+     "right": "interaction:1328"
     },
     {
-     "left": "coordinate_episode:671",
+     "left": "coordinate_episode:696",
      "lines": 9,
-     "right": "physical_sensor:1343"
+     "right": "physical_sensor:1384"
     },
     {
-     "left": "coordinate_episode:867",
+     "left": "coordinate_episode:893",
      "lines": 9,
      "right": "display:1149"
     },
@@ -700,24 +700,24 @@
      "right": "frame:590"
     },
     {
-     "left": "history_store:426",
+     "left": "history_store:443",
      "lines": 9,
      "right": "sequential:1320"
     },
     {
-     "left": "interaction:838",
+     "left": "interaction:845",
      "lines": 9,
-     "right": "replay_evidence:650"
+     "right": "replay_evidence:678"
     },
     {
      "left": "presentation_output:65",
      "lines": 9,
-     "right": "presentation_output_v2:57"
+     "right": "presentation_output_v2:59"
     },
     {
      "left": "sequential:1208",
      "lines": 9,
-     "right": "storage:751"
+     "right": "storage:783"
     },
     {
      "left": "display:1192",
@@ -730,14 +730,14 @@
      "right": "frame:633"
     },
     {
-     "left": "display_store:286",
+     "left": "display_store:298",
      "lines": 8,
-     "right": "history_store:323"
+     "right": "history_store:340"
     },
     {
-     "left": "interaction:1122",
+     "left": "interaction:1131",
      "lines": 8,
-     "right": "replay_evidence:799"
+     "right": "replay_evidence:827"
     },
     {
      "left": "ladder_bridge:24",
@@ -750,29 +750,29 @@
      "right": "output_topology:955"
     },
     {
-     "left": "output_color:409",
+     "left": "output_color:415",
      "lines": 8,
      "right": "output_topology:1225"
     },
     {
-     "left": "output_color:492",
+     "left": "output_color:498",
      "lines": 8,
      "right": "presentation_output:449"
     },
     {
-     "left": "physical_sensor:1391",
+     "left": "physical_sensor:1432",
      "lines": 8,
      "right": "presentation_output:348"
     },
     {
-     "left": "physical_sensor:1475",
+     "left": "physical_sensor:1516",
      "lines": 8,
      "right": "presentation_output:403"
     },
     {
-     "left": "program:90",
+     "left": "program:91",
      "lines": 8,
-     "right": "windows_present:122"
+     "right": "windows_present:126"
     }
    ]
   },
@@ -783,25 +783,25 @@
     {
      "left": "presentation_output:615",
      "lines": 56,
-     "right": "presentation_output_v2:498"
+     "right": "presentation_output_v2:508"
     },
     {
      "left": "display_artifact:846",
      "lines": 32,
-     "right": "display_store:1526"
+     "right": "display_store:1546"
     },
     {
-     "left": "output_color:627",
+     "left": "output_color:633",
      "lines": 27,
-     "right": "presentation_output_v2:596"
+     "right": "presentation_output_v2:606"
     },
     {
-     "left": "physical_sensor:1660",
+     "left": "physical_sensor:1701",
      "lines": 20,
      "right": "presentation_output:642"
     },
     {
-     "left": "display_store:1685",
+     "left": "display_store:1705",
      "lines": 19,
      "right": "main:4141"
     },
@@ -818,22 +818,22 @@
     {
      "left": "presentation_output:708",
      "lines": 13,
-     "right": "presentation_output_v2:587"
+     "right": "presentation_output_v2:597"
     },
     {
-     "left": "display_store:1649",
+     "left": "display_store:1669",
      "lines": 12,
      "right": "main:4100"
     },
     {
      "left": "history:980",
      "lines": 12,
-     "right": "history_store:1539"
+     "right": "history_store:1573"
     },
     {
-     "left": "physical_sensor:1613",
+     "left": "physical_sensor:1654",
      "lines": 12,
-     "right": "presentation_output_v2:464"
+     "right": "presentation_output_v2:474"
     },
     {
      "left": "frame_v2:1009",
@@ -841,9 +841,9 @@
      "right": "optimization:1699"
     },
     {
-     "left": "journal:1264",
+     "left": "journal:1278",
      "lines": 10,
-     "right": "storage:962"
+     "right": "storage:994"
     },
     {
      "left": "presentation:1115",
@@ -856,14 +856,14 @@
      "right": "display_artifact:805"
     },
     {
-     "left": "display_store:1489",
+     "left": "display_store:1509",
      "lines": 8,
-     "right": "journal:1817"
+     "right": "journal:1831"
     },
     {
-     "left": "display_store:1627",
+     "left": "display_store:1647",
      "lines": 8,
-     "right": "physical_sensor:1625"
+     "right": "physical_sensor:1666"
     },
     {
      "left": "frame_v2:997",
@@ -871,29 +871,29 @@
      "right": "main:4917"
     },
     {
-     "left": "history_store:1635",
+     "left": "history_store:1669",
      "lines": 8,
-     "right": "history_store:1714"
+     "right": "history_store:1748"
     },
     {
-     "left": "history_store:2099",
+     "left": "history_store:2133",
      "lines": 8,
-     "right": "journal:1815"
+     "right": "journal:1829"
     },
     {
-     "left": "physical_sensor:1652",
+     "left": "physical_sensor:1693",
      "lines": 8,
      "right": "presentation:1234"
     },
     {
-     "left": "physical_sensor:1683",
+     "left": "physical_sensor:1724",
      "lines": 8,
      "right": "presentation_output:664"
     },
     {
      "left": "presentation_output:759",
      "lines": 8,
-     "right": "presentation_output_v2:665"
+     "right": "presentation_output_v2:675"
     }
    ]
   }

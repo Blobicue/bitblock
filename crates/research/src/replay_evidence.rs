@@ -57,6 +57,7 @@ pub struct LocalReplayBuild {
 }
 
 impl LocalReplayBuild {
+    /// Constructs a `LocalReplayBuild` from a byte length and SHA-256 digest.
     pub const fn from_parts(artifact_len: u64, sha256: [u8; TAG_BYTES]) -> Self {
         Self {
             artifact_len,
@@ -114,10 +115,12 @@ impl LocalReplayBuild {
         Ok(Self::from_parts(expected_len, hasher.finalize().into()))
     }
 
+    /// Returns the declared byte length of the fingerprinted executable artifact.
     pub const fn artifact_len(self) -> u64 {
         self.artifact_len
     }
 
+    /// Returns the 32-byte SHA-256 digest of the executable artifact.
     pub const fn sha256(self) -> [u8; TAG_BYTES] {
         self.sha256
     }
@@ -185,6 +188,7 @@ pub struct LocalReplayContext {
 }
 
 impl LocalReplayContext {
+    /// Constructs and validates a `LocalReplayContext` from build and policy tags.
     pub fn new(
         build: LocalReplayBuild,
         genesis_policy: ContentTag,
@@ -201,22 +205,27 @@ impl LocalReplayContext {
         Ok(context)
     }
 
+    /// Returns the `LocalReplayBuild` executable fingerprint.
     pub const fn build(self) -> LocalReplayBuild {
         self.build
     }
 
+    /// Returns the declared genesis policy content tag.
     pub const fn genesis_policy(self) -> ContentTag {
         self.genesis_policy
     }
 
+    /// Returns the declared simulation rules policy content tag.
     pub const fn rules_policy(self) -> ContentTag {
         self.rules_policy
     }
 
+    /// Returns the declared action admission policy content tag.
     pub const fn admission_policy(self) -> ContentTag {
         self.admission_policy
     }
 
+    /// Verifies that all three context policy tags have `TagKind::Policy`.
     pub fn verify(self) -> Result<(), LocalReplayEvidenceError> {
         require_kind("genesis policy", self.genesis_policy, TagKind::Policy)?;
         require_kind("rules policy", self.rules_policy, TagKind::Policy)?;
@@ -232,20 +241,24 @@ pub struct ReplayFrameCommitment {
 }
 
 impl ReplayFrameCommitment {
+    /// Constructs and validates a `ReplayFrameCommitment` from frame-input and frame tags.
     pub fn new(input: ContentTag, frame: ContentTag) -> Result<Self, LocalReplayEvidenceError> {
         let commitment = Self { input, frame };
         commitment.verify()?;
         Ok(commitment)
     }
 
+    /// Returns the `TagKind::FrameInput` content tag.
     pub const fn input(self) -> ContentTag {
         self.input
     }
 
+    /// Returns the `TagKind::Frame` content tag.
     pub const fn frame(self) -> ContentTag {
         self.frame
     }
 
+    /// Verifies the tag kinds of the frame input and rendered frame.
     pub fn verify(self) -> Result<(), LocalReplayEvidenceError> {
         require_kind("replay frame input", self.input, TagKind::FrameInput)?;
         require_kind("replay frame", self.frame, TagKind::Frame)
@@ -269,6 +282,7 @@ pub struct LocalReplayEndpoint {
 }
 
 impl LocalReplayEndpoint {
+    /// Constructs and validates a `LocalReplayEndpoint` from final replay state commitments.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         outcome: Option<ContentTag>,
@@ -300,38 +314,47 @@ impl LocalReplayEndpoint {
         Ok(endpoint)
     }
 
+    /// Returns the optional final `TagKind::TickOutcome` content tag.
     pub const fn outcome(self) -> Option<ContentTag> {
         self.outcome
     }
 
+    /// Returns the final `TagKind::World` content tag.
     pub const fn world(self) -> ContentTag {
         self.world
     }
 
+    /// Returns the final `TagKind::Receipt` history content tag.
     pub const fn history(self) -> ContentTag {
         self.history
     }
 
+    /// Returns the ten canonical IEEE-754 `u64` camera state lanes.
     pub const fn camera_bits(self) -> [u64; CAMERA_BITS_LEN] {
         self.camera_bits
     }
 
+    /// Returns the simulation viewport dimensions `(width, height)` in pixels.
     pub const fn simulation_dimensions(self) -> (u32, u32) {
         (self.simulation_width, self.simulation_height)
     }
 
+    /// Returns the output surface dimensions `(width, height)` in pixels.
     pub const fn output_dimensions(self) -> (u32, u32) {
         (self.output_width, self.output_height)
     }
 
+    /// Returns whether the inspector sidebar was visible at the replay endpoint.
     pub const fn sidebar_visible(self) -> bool {
         self.sidebar_visible
     }
 
+    /// Returns the optional latest game-only `ReplayFrameCommitment`.
     pub const fn game(self) -> Option<ReplayFrameCommitment> {
         self.game
     }
 
+    /// Returns the optional latest composite `ReplayFrameCommitment`.
     pub const fn composite(self) -> Option<ReplayFrameCommitment> {
         self.composite
     }
@@ -378,6 +401,7 @@ pub struct LocalReplayEvidence {
 }
 
 impl LocalReplayEvidence {
+    /// Constructs and hashes a validated `LocalReplayEvidence` carrier.
     pub fn new(
         context: LocalReplayContext,
         tape: InteractionTape,
@@ -495,18 +519,22 @@ impl LocalReplayEvidence {
         Ok(())
     }
 
+    /// Returns the `LocalReplayContext` bound into this carrier.
     pub const fn context(&self) -> LocalReplayContext {
         self.context
     }
 
+    /// Borrows the embedded `InteractionTape` bound into this carrier.
     pub fn tape(&self) -> &InteractionTape {
         &self.tape
     }
 
+    /// Returns the `LocalReplayEndpoint` bound into this carrier.
     pub const fn endpoint(&self) -> LocalReplayEndpoint {
         self.endpoint
     }
 
+    /// Returns the canonical content tag of this replay-evidence carrier.
     pub const fn tag(&self) -> ContentTag {
         self.tag
     }

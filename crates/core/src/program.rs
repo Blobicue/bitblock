@@ -46,6 +46,7 @@ impl Operation {
         }
     }
 
+    /// Returns the canonical lowercase keyword for this operation.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::On => "on",
@@ -112,6 +113,7 @@ pub struct Edit {
 }
 
 impl Edit {
+    /// Constructs an `Edit` pairing `operation` with target `coord`.
     pub const fn new(operation: Operation, coord: Coord) -> Self {
         Self { operation, coord }
     }
@@ -191,36 +193,44 @@ pub struct Program {
 }
 
 impl Program {
+    /// Creates an empty `Program` with no edits.
     pub const fn new() -> Self {
         Self { edits: Vec::new() }
     }
 
+    /// Collects an iterator of `Edit` instructions into a `Program`.
     pub fn from_edits(edits: impl IntoIterator<Item = Edit>) -> Self {
         Self {
             edits: edits.into_iter().collect(),
         }
     }
 
+    /// Parses a line-oriented edit program from `source`.
     pub fn parse(source: &str) -> Result<Self, ParseError> {
         source.parse()
     }
 
+    /// Appends one `Edit` instruction to the end of the program.
     pub fn push(&mut self, edit: Edit) {
         self.edits.push(edit);
     }
 
+    /// Returns the ordered slice of `Edit` instructions in this program.
     pub fn edits(&self) -> &[Edit] {
         &self.edits
     }
 
+    /// Returns an iterator over the `Edit` instructions in source order.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &Edit> {
         self.edits.iter()
     }
 
+    /// Returns the total number of `Edit` instructions in this program.
     pub const fn len(&self) -> usize {
         self.edits.len()
     }
 
+    /// Returns whether this program contains no `Edit` instructions.
     pub const fn is_empty(&self) -> bool {
         self.edits.is_empty()
     }
@@ -375,10 +385,12 @@ impl ParseError {
         Self { line, kind }
     }
 
+    /// Returns the one-based source line number where parsing failed.
     pub const fn line(&self) -> usize {
         self.line
     }
 
+    /// Returns the specific `ParseErrorKind` describing the syntax error.
     pub const fn kind(&self) -> &ParseErrorKind {
         &self.kind
     }
@@ -419,6 +431,7 @@ pub struct TickBatch {
 }
 
 impl TickBatch {
+    /// Constructs a `TickBatch` for `tick` from `attempts` and resolved `edits`.
     pub fn new(tick: u64, attempts: usize, edits: impl IntoIterator<Item = Edit>) -> Self {
         let program = Program::from_edits(edits);
         assert!(
@@ -432,18 +445,22 @@ impl TickBatch {
         }
     }
 
+    /// Returns the zero-based simulation tick ordinal for this batch.
     pub const fn tick(&self) -> u64 {
         self.tick
     }
 
+    /// Returns the total number of edit attempts submitted during this tick.
     pub const fn attempts(&self) -> usize {
         self.attempts
     }
 
+    /// Returns the slice of `Edit` instructions that resolved to valid coordinates.
     pub fn resolved_edits(&self) -> &[Edit] {
         self.program.edits()
     }
 
+    /// Returns the count of attempted edits that did not resolve to an executed `Edit`.
     pub const fn misses(&self) -> usize {
         self.attempts - self.program.len()
     }

@@ -18,14 +18,22 @@ use crate::storage::{MAX_STORAGE_PAYLOAD_BYTES, MAX_STORAGE_SCHEMA_BYTES, Storag
 /// Schema for the canonical local bounds profile.
 pub const LOCAL_BOUNDS_PROFILE_SCHEMA: &[u8] = b"bitblock/local-bounds-profile/v1";
 
+/// Default maximum byte length of a single canonical storage record (16 MiB).
 pub const DEFAULT_MAX_RECORD_BYTES: u64 = 16 * 1024 * 1024;
+/// Default maximum number of records admitted in a single commit batch.
 pub const DEFAULT_MAX_RECORDS_PER_COMMIT: u64 = 65_536;
+/// Default maximum total byte budget for staged write allocations (64 MiB).
 pub const DEFAULT_MAX_STAGED_WRITE_BYTES: u64 = 64 * 1024 * 1024;
+/// Default maximum number of retained local history records.
 pub const DEFAULT_MAX_RETAINED_HISTORY_RECORDS: u64 = 262_144;
+/// Default maximum byte budget scanned during unanchored restart recovery (512 MiB).
 pub const DEFAULT_MAX_RESTART_SCAN_BYTES: u64 = 512 * 1024 * 1024;
+/// Default maximum byte budget allowed for local backup or restore work (1 GiB).
 pub const DEFAULT_MAX_BACKUP_RESTORE_BYTES: u64 = 1024 * 1024 * 1024;
+/// Default maximum number of records removed in a single local pruning batch.
 pub const DEFAULT_MAX_PRUNING_BATCH_RECORDS: u64 = 4_096;
 
+/// Byte length of the canonical `LocalStorageProfile` payload (56 bytes).
 pub const LOCAL_BOUNDS_PROFILE_PAYLOAD_LEN: usize = 7 * size_of::<u64>();
 
 /// Local storage profile defining exact operational and recovery bounds.
@@ -47,6 +55,7 @@ impl Default for LocalStorageProfile {
 }
 
 impl LocalStorageProfile {
+    /// Default `LocalStorageProfile` populated with the standard local bound constants.
     pub const DEFAULT: Self = Self {
         max_record_bytes: DEFAULT_MAX_RECORD_BYTES,
         max_records_per_commit: DEFAULT_MAX_RECORDS_PER_COMMIT,
@@ -203,6 +212,7 @@ pub struct BoundedRecoveryScanner {
 }
 
 impl BoundedRecoveryScanner {
+    /// Creates a `BoundedRecoveryScanner` enforcing the limits in `profile`.
     pub const fn new(profile: LocalStorageProfile) -> Self {
         Self {
             profile,
@@ -211,10 +221,12 @@ impl BoundedRecoveryScanner {
         }
     }
 
+    /// Returns the cumulative number of bytes scanned so far.
     pub const fn scanned_bytes(&self) -> u64 {
         self.scanned_bytes
     }
 
+    /// Returns the cumulative number of records scanned so far.
     pub const fn scanned_records(&self) -> u64 {
         self.scanned_records
     }

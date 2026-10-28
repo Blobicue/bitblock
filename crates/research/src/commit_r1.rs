@@ -15,15 +15,24 @@ use bitblock_core::protocol::{ContentTag, TagKind, hash_canonical};
 use bitblock_core::world::{Coord, World};
 use sha2::{Digest, Sha256};
 
+/// Canonical schema string for `COMMIT-R1` binary Merkle Patricia Trie world roots.
 pub const COMMIT_R1_WORLD_PATRICIA_SCHEMA: &[u8] = b"bitblock/commit-r1/world-patricia/v1";
+/// Canonical schema string for `COMMIT-R1` 192-level Sparse Merkle Tree world roots.
 pub const COMMIT_R1_WORLD_SMT_SCHEMA: &[u8] = b"bitblock/commit-r1/world-smt/v1";
+/// Canonical schema string for `COMMIT-R1` `PatriciaPointProof` witnesses.
 pub const COMMIT_R1_PATRICIA_PROOF_SCHEMA: &[u8] = b"bitblock/commit-r1/patricia-proof/v1";
+/// Canonical schema string for `COMMIT-R1` `SmtPointProof` witnesses.
 pub const COMMIT_R1_SMT_PROOF_SCHEMA: &[u8] = b"bitblock/commit-r1/smt-proof/v1";
+/// Canonical schema string for `COMMIT-R1` `CommitAssayReport` comparative receipts.
 pub const COMMIT_R1_ASSAY_REPORT_SCHEMA: &[u8] = b"bitblock/commit-r1/assay-report/v1";
+/// Canonical schema string for v1 192-bit 3D Morton coordinate keys.
 pub const MORTON_KEY_V1_SCHEMA: &[u8] = b"bitblock/commit-r1/morton-key/v1";
+/// Canonical schema string for v1 prefix-compressed `MortonGapStreamV1` streams.
 pub const MORTON_GAP_STREAM_V1_SCHEMA: &[u8] = b"bitblock/commit-r1/morton-gap-stream/v1";
 
+/// Bit width (`192`) of a `CoordinateKeyV1` or `MortonKeyV1` key across three 64-bit axes.
 pub const KEY_BITS: usize = 192;
+/// Byte length (`24`) of a 192-bit `CoordinateKeyV1` or `MortonKeyV1` key.
 pub const KEY_BYTES: usize = 24;
 
 const TREE_DOMAIN: &[u8] = b"bitblock/world-root/v1";
@@ -39,7 +48,9 @@ const CODEC_VERSION: u16 = 1;
 pub struct CoordinateKeyV1([u8; KEY_BYTES]);
 
 impl CoordinateKeyV1 {
+    /// Lexicographically smallest 192-bit `CoordinateKeyV1` (all `0x00` bytes).
     pub const MIN: Self = Self([0x00; KEY_BYTES]);
+    /// Lexicographically largest 192-bit `CoordinateKeyV1` (all `0xff` bytes).
     pub const MAX: Self = Self([0xff; KEY_BYTES]);
 
     /// Encodes signed (x, y, z) into a 192-bit CoordinateKeyV1.
@@ -79,10 +90,12 @@ impl CoordinateKeyV1 {
         Coord::new(x, y, z)
     }
 
+    /// Wraps raw 24-byte big-endian key bytes as a `CoordinateKeyV1`.
     pub const fn from_bytes(bytes: [u8; KEY_BYTES]) -> Self {
         Self(bytes)
     }
 
+    /// Borrows the underlying 24-byte big-endian key representation.
     pub const fn as_bytes(&self) -> &[u8; KEY_BYTES] {
         &self.0
     }
@@ -126,6 +139,7 @@ impl fmt::Debug for CoordinateKeyV1 {
 pub struct MortonKeyV1([u8; KEY_BYTES]);
 
 impl MortonKeyV1 {
+    /// Encodes a signed 3D `Coord` into a 192-bit Morton-interleaved `MortonKeyV1`.
     pub fn from_coord(coord: Coord) -> Self {
         let ux = (coord.x as u64) ^ 0x8000_0000_0000_0000;
         let uy = (coord.y as u64) ^ 0x8000_0000_0000_0000;
@@ -141,10 +155,12 @@ impl MortonKeyV1 {
         Self(bytes)
     }
 
+    /// Wraps a 24-byte big-endian Morton-interleaved array as a `MortonKeyV1`.
     pub const fn from_bytes(bytes: [u8; KEY_BYTES]) -> Self {
         Self(bytes)
     }
 
+    /// Decodes this 192-bit `MortonKeyV1` back into its signed 3D `Coord`.
     pub fn to_coord(self) -> Coord {
         let mut axes = [0u64; 3];
         for level in 0..64usize {
@@ -161,10 +177,12 @@ impl MortonKeyV1 {
         Coord::new(x, y, z)
     }
 
+    /// Borrows the underlying 24-byte big-endian Morton key array.
     pub const fn as_bytes(&self) -> &[u8; KEY_BYTES] {
         &self.0
     }
 
+    /// Extracts the 3-bit octant index (`0..8`) at subdivision `level` (`0..64`).
     pub fn octant_at(&self, level: u8) -> u8 {
         if level >= 64 {
             return 0;
@@ -174,6 +192,7 @@ impl MortonKeyV1 {
         (bit(base) << 2) | (bit(base + 1) << 1) | bit(base + 2)
     }
 
+    /// Returns the top 180 bits (23 bytes, low nibble masked) identifying the `16x16x16` chunk.
     pub fn chunk_prefix_180b(&self) -> [u8; 23] {
         let mut out = [0u8; 23];
         out[0..22].copy_from_slice(&self.0[0..22]);
@@ -181,6 +200,7 @@ impl MortonKeyV1 {
         out
     }
 
+    /// Computes the canonical `World` `ContentTag` for this 24-byte `MortonKeyV1`.
     pub fn tag(&self) -> ContentTag {
         hash_canonical(
             TagKind::World,
@@ -194,6 +214,7 @@ impl MortonKeyV1 {
     }
 }
 
+/// Error returned when constructing or decoding a `MortonGapStreamV1`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MortonGapStreamError {
     DuplicateCoordinate(Coord),
@@ -270,6 +291,7 @@ pub struct MortonGapStreamV1 {
 }
 
 impl MortonGapStreamV1 {
+    /// Sorts `coords` by `MortonKeyV1` and builds a duplicate-free `MortonGapStreamV1`.
     pub fn from_coords(coords: &[Coord]) -> Result<Self, MortonGapStreamError> {
         if coords.len() > u32::MAX as usize {
             return Err(MortonGapStreamError::CountOverflow(coords.len()));
@@ -290,10 +312,12 @@ impl MortonGapStreamV1 {
         Ok(Self { keys })
     }
 
+    /// Borrows the strictly ascending slice of `MortonKeyV1` keys in this stream.
     pub fn keys(&self) -> &[MortonKeyV1] {
         &self.keys
     }
 
+    /// Decodes and returns all `MortonKeyV1` entries in this stream as `Coord` values.
     pub fn coords(&self) -> Vec<Coord> {
         self.keys
             .iter()
@@ -302,14 +326,17 @@ impl MortonGapStreamV1 {
             .collect()
     }
 
+    /// Returns `true` if this `MortonGapStreamV1` contains zero keys.
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
     }
 
+    /// Returns the number of `MortonKeyV1` keys in this stream.
     pub fn len(&self) -> usize {
         self.keys.len()
     }
 
+    /// Computes the exact byte length of this stream's prefix-compressed wire encoding.
     pub fn encoded_len(&self) -> usize {
         if self.keys.is_empty() {
             return 4;
@@ -327,6 +354,7 @@ impl MortonGapStreamV1 {
         total
     }
 
+    /// Encodes this stream into canonical shared-prefix-compressed wire bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.encoded_len());
         out.extend_from_slice(&(self.keys.len() as u32).to_be_bytes());
@@ -348,6 +376,7 @@ impl MortonGapStreamV1 {
         out
     }
 
+    /// Decodes and validates a canonical `MortonGapStreamV1` from wire `bytes`.
     pub fn decode(bytes: &[u8]) -> Result<Self, MortonGapStreamError> {
         if bytes.len() < 4 {
             return Err(MortonGapStreamError::TruncatedHeader {
@@ -416,6 +445,7 @@ impl MortonGapStreamV1 {
         Ok(Self { keys })
     }
 
+    /// Computes the canonical `Receipt` `ContentTag` for this `MortonGapStreamV1`.
     pub fn tag(&self) -> ContentTag {
         let bytes = self.encode();
         let len = self.encoded_len();
@@ -503,6 +533,7 @@ const PRESENT_VALUE_ON: &[u8] = &[1];
 /// D[d] = NodeHash(SmtBranch, d, D[d+1] || D[d+1])
 static SMT_DEFAULTS: OnceLock<[[u8; 32]; KEY_BITS + 1]> = OnceLock::new();
 
+/// Returns the precomputed table of 193 default empty-subtree hashes for depths `0..=192`.
 pub fn smt_default_hashes() -> &'static [[u8; 32]; KEY_BITS + 1] {
     SMT_DEFAULTS.get_or_init(|| {
         let mut d = [[0u8; 32]; KEY_BITS + 1];
@@ -519,10 +550,12 @@ pub fn smt_default_hashes() -> &'static [[u8; 32]; KEY_BITS + 1] {
     })
 }
 
+/// Returns the canonical 32-byte root digest of an empty 192-level `SparseMerkleTree`.
 pub fn smt_empty_root() -> [u8; 32] {
     smt_default_hashes()[0]
 }
 
+/// Returns the canonical 32-byte digest of a present leaf at depth `192` in the SMT.
 pub fn smt_present_leaf_hash() -> [u8; 32] {
     node_hash(SMT_PRESENT_LEAF_TYPE, KEY_BITS as u8, PRESENT_VALUE_ON)
 }
@@ -543,6 +576,7 @@ pub enum SmtNode {
 }
 
 impl SmtNode {
+    /// Returns the 32-byte `node_hash` digest of this `SmtNode`.
     pub fn hash(&self) -> [u8; 32] {
         match self {
             Self::Empty { depth } => smt_default_hashes()[*depth],
@@ -551,10 +585,12 @@ impl SmtNode {
         }
     }
 
+    /// Returns `true` if this node is `SmtNode::Empty`.
     pub fn is_empty(&self) -> bool {
         matches!(self, Self::Empty { .. })
     }
 
+    /// Counts the number of allocated non-default `SmtNode::Branch` nodes in this subtree.
     pub fn non_default_branch_count(&self) -> usize {
         match self {
             Self::Empty { .. } | Self::PresentLeaf => 0,
@@ -686,6 +722,7 @@ pub struct SmtPointProof {
 }
 
 impl SmtPointProof {
+    /// Returns the exact byte length of this SMT point proof's canonical wire encoding.
     pub fn encoded_len(&self) -> usize {
         KEY_BYTES + 1 + 2 + self.non_default_siblings.len() * 32
     }
@@ -739,6 +776,7 @@ impl SmtPointProof {
         })
     }
 
+    /// Computes the canonical `Receipt` `ContentTag` for this `SmtPointProof`.
     pub fn proof_tag(&self) -> ContentTag {
         let bytes = self.to_canonical_bytes();
         hash_canonical(
@@ -789,18 +827,22 @@ impl SparseMerkleTree {
         }
     }
 
+    /// Returns the 32-byte root digest of this `SparseMerkleTree`.
     pub fn root(&self) -> [u8; 32] {
         self.root_node.hash()
     }
 
+    /// Borrows the root `SmtNode` of this `SparseMerkleTree`.
     pub fn root_node(&self) -> &SmtNode {
         &self.root_node
     }
 
+    /// Returns the total count of non-default branch nodes in this `SparseMerkleTree`.
     pub fn non_default_branch_count(&self) -> usize {
         self.root_node.non_default_branch_count()
     }
 
+    /// Computes the canonical `World` `ContentTag` for this SMT's 32-byte root digest.
     pub fn root_tag(&self) -> ContentTag {
         let root = self.root();
         hash_canonical(TagKind::World, COMMIT_R1_WORLD_SMT_SCHEMA, 32, |sink| {
@@ -809,6 +851,7 @@ impl SparseMerkleTree {
         .expect("SMT root tag encoding is canonical")
     }
 
+    /// Returns `true` if `key` is present in this `SparseMerkleTree`.
     pub fn is_occupied(&self, key: &CoordinateKeyV1) -> bool {
         self.occupied.binary_search(key).is_ok()
     }
@@ -984,6 +1027,7 @@ const MPT_LEAF_TYPE: u8 = 1;
 const MPT_EXTENSION_TYPE: u8 = 2;
 const MPT_BRANCH_TYPE: u8 = 3;
 
+/// Node in the 192-bit binary `MerklePatriciaTrie` (`Empty`, `Leaf`, `Extension`, or `Branch`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatriciaNode {
     Empty,
@@ -1004,6 +1048,7 @@ pub enum PatriciaNode {
 }
 
 impl PatriciaNode {
+    /// Computes the canonical 32-byte `node_hash` digest for this `PatriciaNode`.
     pub fn hash(&self) -> [u8; 32] {
         match self {
             Self::Empty => node_hash(MPT_EMPTY_TYPE, 0, &[]),
@@ -1379,6 +1424,7 @@ pub struct MerklePatriciaTrie {
     occupied: Vec<CoordinateKeyV1>,
 }
 
+/// Non-terminal traversal step (`Branch` or `Extension`) in a `PatriciaPointProof`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatriciaProofStep {
     Branch {
@@ -1392,6 +1438,7 @@ pub enum PatriciaProofStep {
     },
 }
 
+/// Terminal witness node concluding a `PatriciaPointProof` path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatriciaTerminal {
     EmptyRoot,
@@ -1406,6 +1453,7 @@ pub enum PatriciaTerminal {
     },
 }
 
+/// Canonical inclusion or non-inclusion witness for a 192-bit `MerklePatriciaTrie`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatriciaPointProof {
     pub steps: Vec<PatriciaProofStep>,
@@ -1419,6 +1467,7 @@ const TERM_TAG_LEAF: u8 = 1;
 const TERM_TAG_DIVERGENT_EXT: u8 = 2;
 
 impl PatriciaPointProof {
+    /// Returns the exact byte length of this Patricia point proof's canonical wire encoding.
     pub fn encoded_len(&self) -> usize {
         let mut len = 2 + 1; // steps_count_u16 + terminal tag
         match &self.terminal {
@@ -1613,6 +1662,7 @@ impl PatriciaPointProof {
         Some(Self { steps, terminal })
     }
 
+    /// Computes the canonical `Receipt` `ContentTag` for this `PatriciaPointProof`.
     pub fn proof_tag(&self) -> ContentTag {
         let bytes = self.to_canonical_bytes();
         hash_canonical(
@@ -1628,6 +1678,7 @@ impl PatriciaPointProof {
 }
 
 impl MerklePatriciaTrie {
+    /// Builds a canonical `MerklePatriciaTrie` from all active coordinates in `world`.
     pub fn from_world(world: &World) -> Self {
         let mut keys: Vec<CoordinateKeyV1> =
             world.iter_on().map(CoordinateKeyV1::from_coord).collect();
@@ -1636,6 +1687,7 @@ impl MerklePatriciaTrie {
         Self::from_sorted_keys(keys)
     }
 
+    /// Builds a canonical `MerklePatriciaTrie` from pre-sorted unique `CoordinateKeyV1` keys.
     pub fn from_sorted_keys(keys: Vec<CoordinateKeyV1>) -> Self {
         if keys.is_empty() {
             return Self {
@@ -1650,18 +1702,22 @@ impl MerklePatriciaTrie {
         }
     }
 
+    /// Computes the 32-byte root digest of this `MerklePatriciaTrie`.
     pub fn root(&self) -> [u8; 32] {
         self.root_node.hash()
     }
 
+    /// Borrows the root `PatriciaNode` of this `MerklePatriciaTrie`.
     pub fn root_node(&self) -> &PatriciaNode {
         &self.root_node
     }
 
+    /// Returns `(leaf_count, extension_count, branch_count)` across this trie.
     pub fn node_counts(&self) -> (usize, usize, usize) {
         self.root_node.node_counts()
     }
 
+    /// Computes the canonical `World` `ContentTag` for this trie's 32-byte root digest.
     pub fn root_tag(&self) -> ContentTag {
         let r = self.root();
         hash_canonical(
@@ -1675,6 +1731,7 @@ impl MerklePatriciaTrie {
         .expect("Patricia root tag encoding is canonical")
     }
 
+    /// Returns `true` if `key` is present in this `MerklePatriciaTrie`.
     pub fn is_occupied(&self, key: &CoordinateKeyV1) -> bool {
         self.occupied.binary_search(key).is_ok()
     }
@@ -2051,6 +2108,7 @@ fn build_patricia_subtree(keys: &[CoordinateKeyV1], depth: usize) -> PatriciaNod
 // ASSAY & BENCHMARK SUITE
 // =========================================================================
 
+/// Comparative structural and proof-size assay report for `MerklePatriciaTrie` and `SparseMerkleTree`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommitAssayReport {
     pub key_count: usize,
@@ -2098,6 +2156,7 @@ impl CommitAssayReport {
         out
     }
 
+    /// Computes the canonical `Receipt` `ContentTag` over the deterministic report fields.
     pub fn assay_tag(&self) -> ContentTag {
         let bytes = self.to_canonical_bytes();
         hash_canonical(

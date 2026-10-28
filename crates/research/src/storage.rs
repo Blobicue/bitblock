@@ -50,6 +50,7 @@ pub struct StorageLimits {
 }
 
 impl StorageLimits {
+    /// Default storage envelope and stream admission limits at the hard protocol caps.
     pub const DEFAULT: Self = Self {
         max_record_bytes: MAX_STORAGE_RECORD_BYTES,
         max_schema_bytes: MAX_STORAGE_SCHEMA_BYTES,
@@ -58,6 +59,7 @@ impl StorageLimits {
         max_stream_bytes: MAX_STORAGE_STREAM_BYTES,
     };
 
+    /// Constructs custom storage admission limits if none exceed the hard protocol caps.
     pub fn new(
         max_record_bytes: usize,
         max_schema_bytes: usize,
@@ -82,22 +84,27 @@ impl StorageLimits {
         })
     }
 
+    /// Returns the maximum byte length allowed for one serialized storage record.
     pub const fn max_record_bytes(self) -> usize {
         self.max_record_bytes
     }
 
+    /// Returns the maximum byte length allowed for an inner object schema.
     pub const fn max_schema_bytes(self) -> usize {
         self.max_schema_bytes
     }
 
+    /// Returns the maximum byte length allowed for an inner canonical payload.
     pub const fn max_payload_bytes(self) -> usize {
         self.max_payload_bytes
     }
 
+    /// Returns the maximum number of storage records admitted by a scanner or chain.
     pub const fn max_records(self) -> usize {
         self.max_records
     }
 
+    /// Returns the maximum total byte length admitted by a scanner or chain.
     pub const fn max_stream_bytes(self) -> usize {
         self.max_stream_bytes
     }
@@ -136,6 +143,7 @@ impl StorageRecord {
         )
     }
 
+    /// Builds a storage record and derives the inner object tag under explicit `StorageLimits`.
     pub fn new_with_limits(
         parent: Option<ContentTag>,
         object_kind: TagKind,
@@ -174,6 +182,7 @@ impl StorageRecord {
         )
     }
 
+    /// Builds a storage record from a pre-verified object tag under explicit `StorageLimits`.
     pub fn from_tagged_payload_with_limits(
         parent: Option<ContentTag>,
         object_tag: ContentTag,
@@ -212,6 +221,7 @@ impl StorageRecord {
         Self::decode_with_limits(encoded, expected_parent, StorageLimits::DEFAULT)
     }
 
+    /// Decodes one complete storage record at `expected_parent` under explicit `StorageLimits`.
     pub fn decode_with_limits(
         encoded: &[u8],
         expected_parent: Option<ContentTag>,
@@ -227,26 +237,32 @@ impl StorageRecord {
         Ok(record)
     }
 
+    /// Returns the canonical `ContentTag` of this storage envelope.
     pub const fn record_tag(&self) -> ContentTag {
         self.record_tag
     }
 
+    /// Returns the optional parent storage-record `ContentTag`.
     pub const fn parent(&self) -> Option<ContentTag> {
         self.parent
     }
 
+    /// Returns the `ContentTag` of the inner canonical object.
     pub const fn object_tag(&self) -> ContentTag {
         self.object_tag
     }
 
+    /// Returns the schema byte string of the inner canonical object.
     pub fn object_schema(&self) -> &[u8] {
         &self.object_schema
     }
 
+    /// Returns the canonical payload bytes of the stored object.
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
 
+    /// Returns the total serialized byte length of this storage record.
     pub fn encoded_len(&self) -> usize {
         encoded_len(
             self.parent,
@@ -420,10 +436,12 @@ pub struct StorageChain {
 }
 
 impl StorageChain {
+    /// Creates an empty in-memory `StorageChain` with default `StorageLimits`.
     pub fn new() -> Self {
         Self::with_limits(StorageLimits::DEFAULT)
     }
 
+    /// Creates an empty in-memory `StorageChain` enforcing explicit `StorageLimits`.
     pub fn with_limits(limits: StorageLimits) -> Self {
         Self {
             limits,
@@ -432,10 +450,12 @@ impl StorageChain {
         }
     }
 
+    /// Decodes a concatenated byte stream into a verified `StorageChain` with default limits.
     pub fn decode(encoded: &[u8]) -> Result<Self, StorageError> {
         Self::decode_with_limits(encoded, StorageLimits::DEFAULT)
     }
 
+    /// Decodes a concatenated byte stream into a verified `StorageChain` under explicit limits.
     pub fn decode_with_limits(encoded: &[u8], limits: StorageLimits) -> Result<Self, StorageError> {
         let mut chain = Self::with_limits(limits);
         for result in StorageScanner::with_limits(encoded, None, limits) {
@@ -444,22 +464,27 @@ impl StorageChain {
         Ok(chain)
     }
 
+    /// Returns the `StorageLimits` enforced by this chain.
     pub const fn limits(&self) -> StorageLimits {
         self.limits
     }
 
+    /// Returns the slice of admitted `StorageRecord` items in parent-chain order.
     pub fn records(&self) -> &[StorageRecord] {
         &self.records
     }
 
+    /// Returns the `ContentTag` of the most recently admitted `StorageRecord`.
     pub fn head(&self) -> Option<ContentTag> {
         self.records.last().map(StorageRecord::record_tag)
     }
 
+    /// Returns the cumulative serialized byte length of all records in the chain.
     pub const fn encoded_bytes(&self) -> usize {
         self.encoded_bytes
     }
 
+    /// Encodes and appends a new payload linked to the current chain head.
     pub fn append(
         &mut self,
         object_kind: TagKind,
@@ -481,6 +506,7 @@ impl StorageChain {
         self.admit(record)
     }
 
+    /// Verifies and appends an already constructed `StorageRecord` linked to the current head.
     pub fn admit(&mut self, record: StorageRecord) -> Result<&StorageRecord, StorageError> {
         if record.parent() != self.head() {
             return Err(StorageError::ParentMismatch {
@@ -525,6 +551,7 @@ impl StorageChain {
             .expect("a just-pushed storage record is present"))
     }
 
+    /// Serializes all admitted records into a contiguous canonical byte stream.
     pub fn encode(&self) -> Vec<u8> {
         let mut encoded = Vec::with_capacity(self.encoded_bytes);
         for record in &self.records {
@@ -555,6 +582,7 @@ pub struct StorageScanner<'a> {
 }
 
 impl<'a> StorageScanner<'a> {
+    /// Creates a fail-closed scanner starting from genesis (`None` parent) with default limits.
     pub fn new(encoded: &'a [u8]) -> Self {
         Self::with_limits(encoded, None, StorageLimits::DEFAULT)
     }
@@ -564,6 +592,7 @@ impl<'a> StorageScanner<'a> {
         Self::with_limits(encoded, Some(parent), StorageLimits::DEFAULT)
     }
 
+    /// Creates a fail-closed scanner starting at `expected_parent` under explicit `StorageLimits`.
     pub fn with_limits(
         encoded: &'a [u8],
         expected_parent: Option<ContentTag>,
@@ -579,10 +608,12 @@ impl<'a> StorageScanner<'a> {
         }
     }
 
+    /// Returns the current byte offset reached in the input slice.
     pub const fn offset(&self) -> usize {
         self.offset
     }
 
+    /// Returns `true` if the scanner permanently halted after encountering an error.
     pub const fn is_halted(&self) -> bool {
         self.halted
     }
@@ -637,6 +668,7 @@ impl Iterator for StorageScanner<'_> {
     }
 }
 
+/// Error returned when constructing, encoding, decoding, or chaining storage envelopes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StorageError {
     Tag(TagError),
