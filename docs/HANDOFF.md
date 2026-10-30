@@ -6,8 +6,8 @@ semantic history.
 
 ## Current line of work (2026-10-29), read before the history below
 
-- Active remote and branch: `Blobicue/bitblock`, branch `chem/emergent-scale-2026-10` (HEAD `3c37db8` at
-  indexing time). The `Gaia-0-0-1-1` remote and `main` branch described below are history. They are kept unchanged.
+- Active remote and branch: `Blobicue/bitblock`, branch `chem/emergent-scale-2026-10` (see branch tip;
+  do not pin a SHA here). The `Gaia-0-0-1-1` remote and `main` branch described below are history. They are kept unchanged.
 - Current work is the chem emergent-scale wave: `docs/BITBLOCK_SCALE_EMERGENT.md` §5w–§5y (coreward gravity,
   σ_h driver study, bigger scale + gas planet). Self-playtest at http://127.0.0.1:8765/play.html before Desktop.
 - Agent onboarding / knowledge graph: `docs/AGENT_ONBOARDING.md`. It explains bbgraph `index/`
