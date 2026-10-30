@@ -1,0 +1,16 @@
+[package]
+name = "bitblock-wasm"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Browser-facing cdylib slice of bitblock-core (no windowing)."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+bitblock-core = { path = "../core" }
+bitblock-research = { path = "../research" }
+sha2 = { version = "=0.10.9", default-features = false }

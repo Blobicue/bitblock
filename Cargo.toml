@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/core", "crates/research"]
+members = ["crates/core", "crates/research", "crates/wasm"]
 
 [package]
 name = "bitblock"
