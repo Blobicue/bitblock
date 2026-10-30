@@ -175,7 +175,6 @@ impl DisplayCapture {
 /// Keeping the pixels and their observation together prevents successful capture finalization
 /// from normalizing and hashing the same framebuffer a second time. Later failure stages retain
 /// this exact observation alongside the canonical pixels they already produced.
-#[cfg_attr(not(windows), allow(dead_code))] // used by the cfg(windows) GDI capture path
 struct CanonicalCapture {
     pixels: Vec<u32>,
     observation: FrameObservation,

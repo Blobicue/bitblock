@@ -3025,13 +3025,13 @@ mod tests {
         assert!(spans > 4000, "span path exercised {spans} times");
     }
 
+    // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
     /// The closed-form run boundary in `RowEdge::accepted` against a linear scan of the exact
     /// per-pixel predicate, on rows built to put the real crossing within a few ulps (or
     /// exactly on) a pixel column, with slopes down to `CROSSING_MIN_SLOPE`, huge offsets, both
     /// windings and tiny or huge areas. A wrong closed-form answer fails here even where the
     /// search fallback would have been taken by a looser bound.
     #[test]
-    // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
     #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn closed_form_edge_boundary_matches_exact_scan() {
         let mut rng = Rng(0xc105_edf0_4a11);

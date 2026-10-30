@@ -1,5 +1,5 @@
 {
- "docs": 250,
+ "docs": 251,
  "examples": 13,
  "gates": {
   "metric_accounting": true,
@@ -14,10 +14,10 @@
   "world": 284
  },
  "metrics_claimed_by_doc": 1112,
- "modules": 37,
+ "modules": 38,
  "modules_by_gate": {
   "binary": 1,
-  "default": 13,
+  "default": 14,
   "protocol-research": 20,
   "windows": 3
  },
@@ -38,7 +38,7 @@
  ],
  "schemas_uncovered": [],
  "schemas_vectored": 74,
- "source_lines": 61242,
- "tests": 448,
+ "source_lines": 64598,
+ "tests": 472,
  "tools": 44
 }

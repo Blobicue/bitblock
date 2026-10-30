@@ -1304,6 +1304,7 @@
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/test-object/v1"}
 {"from": "module:tick", "kind": "declares", "to": "schema:bitblock/tick-outcome/v3"}
 {"from": "module:windows_present", "kind": "declares", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}
+{"from": "module:chem", "kind": "depends_on", "to": "module:world"}
 {"from": "module:commit_r1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:commit_r1", "kind": "depends_on", "to": "module:world"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history"}
