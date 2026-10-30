@@ -14,6 +14,17 @@ semantic history.
   for protocol, metrics, and gates, and GitNexus `.gitnexus/` (local only; MCP repo `bitblock`) for symbols, calls,
   flows, and blast radius.
 
+## Chem session checklist (standing)
+
+1. One active chem branch `chem/<topic>-YYYY-MM` off current main. Rebase often; never sit CONFLICTING.
+2. Desktop = playtest artifact only (wasm/play/lab hashes + short receipt). Git is source of truth.
+3. Two indexes: bbgraph for protocol/gates/metrics; GitNexus for call graph/blast radius. Cold start: HANDOFF → `docs/AGENT_ONBOARDING.md` → `AGENTS.md`.
+4. Wave log lives on the emergent-scale Page (§5…). PR description links the latest § only.
+5. Hard fence: soft DDA / bcc-voxel-demo / abi16 never go on a chem branch.
+6. Merge when CI green + a named checkpoint (§5y-level), then cut the next chem branch. No unbounded PRs.
+7. Self-playtest chem at http://127.0.0.1:8765 before Desktop sync.
+8. Split commits: land-the-world vs docs/tooling separate when practical.
+
 ## Current repository state
 
 - Remote: `https://github.com/Gaia-0-0-1-1/bitblock`
