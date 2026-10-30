@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BitBlock</title>
+<style>
+  /* Chrome-less client: the page is only the BitBlock canvas. Live telemetry (pos/yaw/pitch/tick/world/
+     frame/...) is the native sidebar rasterized into the game pixels (F3 toggles it), not HTML. */
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; color: #e8e8e8;
+               font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  #playStage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #playCanvas { background: #000; display: block; outline: none; image-rendering: auto; }
+  body.locked #playCanvas { cursor: none; }
+  /* Slim pause menu: only while the mouse is NOT locked (on load, after Esc). Hidden during play. */
+  #playMenu { position: fixed; top: 8px; left: 8px; z-index: 2; max-width: calc(100vw - 32px);
+              display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.4rem 0.6rem;
+              background: rgba(14, 14, 18, 0.86); border: 1px solid #2a2a30; border-radius: 6px; }
+  body.locked #playMenu { display: none; }
+  #playMenu b { letter-spacing: 0.08em; }
+  #playMenu button, #playMenu select { font: inherit; padding: 0.15rem 0.45rem; }
+  #playMenu .hint { color: #9ab; }
+  #playMenu details { flex-basis: 100%; color: #889; }
+  #playMenu details[open] { max-height: 40vh; overflow: auto; }
+  #playMenu input[type=number] { font: inherit; padding: 0.1rem 0.25rem; }
+  #playFps, #playCap, #playChem { margin: 0; white-space: pre; color: #9ab; font-size: 11px; line-height: 1.25; }
+  #playChemBudget { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; color: #cbd; }
+  #playChemBudget[hidden] { display: none; }
+  #playChemBudget label { white-space: nowrap; }
+  #playChemBudget input { width: 6.5em; }
+  #playChemBudgetInfo { color: #9ab; }
+  #play { display: block; white-space: normal; word-break: break-all; margin: 0.25rem 0 0; }
+  .ok { color: #7dffa0; }
+  .err { color: #ff8080; }
+</style>
+</head>
+<body>
+<div id="playStage"><canvas id="playCanvas" width="2000" height="900" tabindex="0"></canvas></div>
+<div id="playMenu" role="menu">
+  <b>BITBLOCK</b>
+  <label>world <select id="playWorld">
+    <option value="4">empty spawn</option>
+    <option value="0">symbol</option>
+    <option value="1">recognition</option>
+    <option value="2" selected>architecture</option>
+    <option value="3">recursion · heavy</option>
+    <optgroup label="chem · genesis budget + planet6 tick">
+      <option value="chem:0">chem · ash planet</option>
+      <option value="chem:1">chem · rocky planet</option>
+      <option value="chem:2">chem · ocean planet</option>
+      <option value="chem:4" title="Metal core under a thick CH4 / NH3 / H2S envelope (no crust, no terrain noise). Loads with energy sun8 + driven cycle; gas convection (warmer / lighter gas swaps outward) makes the envelope churn. Try radius 24–32 and the x-half cross-section.">chem · gas planet</option>
+      <option value="chem:custom">chem · custom budget</option>
+    </optgroup>
+  </select></label>
+  <span id="playChemOpts" hidden title="Chem world: genesis spends the preset's element budget into a sphere; the planet6 tick (heat, phase, reactions, water cycle, surface laws) runs while you play. LMB digs (needs heat ≥ bond energy; atoms go to the bag), RMB places the last dug material paid from the bag.">seed <input id="playChemSeed" type="number" value="7" min="0" max="4294967295" style="width:6em">
+    radius <input id="playChemRadius" type="number" value="12" min="2" max="32" title="sphere radius 2–32 (§5y: was 20). Bigger = slower: in Chrome at Low, gas r20 ~50 fps, r24 ~30 fps, r32 ~6 fps (the CPU renderer is the cap)" style="width:3.5em">
+    chem step every <input id="playChemEvery" type="number" value="4" min="0" max="600" style="width:3.5em"> ticks (0 = paused)
+    <button type="button" id="playChemStep">step chem</button>
+    <span id="playChemCutOpts" title="Cross-section (view only — atoms, books and the chem tick are untouched): hides the camera-facing octant (wedge) or the camera-facing half beyond an x / y / z plane through the core, so metal core, mantle, crust and ocean bands show on the cut faces. LMB/RMB act on what you see. Keys while playing: C cycles the mode, [ / ] move the plane.">· <b>cross-section</b> <select id="playChemCut">
+      <option value="0">off</option>
+      <option value="1">wedge (octant)</option>
+      <option value="2">x half</option>
+      <option value="3">y half</option>
+      <option value="4">z half</option>
+    </select>
+    offset <input id="playChemCutOffset" type="range" value="0" min="-12" max="12" step="1" style="width:7em"> <span id="playChemCutVal">0</span>
+    <span class="hint">(C · [ ])</span></span>
+    <span id="playChemDynOpts" title="Tick dynamics (BitBlock-only, opt-in; defaults are planet6). Energy M1 books a rotating sun on space-facing faces (600-tick day, 16/face at noon) plus weak core heat (40/tick) as inbound heat, so the planet stops cooling to heat death; books stay closed. Water cycle 'driven' removes the 240-tick season calendar: evaporation from water heat, rain from vapor onto cold open ground, erosion / dissolution / sediment transport where water actually moves. Applies live and sticks across reseed / radius / budget rebuilds.">· <b>dynamics</b>
+    <label title="Inbound energy: off = planet6 (cools down); M1 = sun + core heat, booked; sun8 = sun 8/face, 600-tick day, core 40, sun sweeps the whole sphere (gas planet default)">energy <select id="playChemEnergy">
+      <option value="0" selected>off</option>
+      <option value="1">M1 sun+core</option>
+      <option value="2">sun8 matched (full sweep)</option>
+    </select></label>
+    <label title="Water cycle: classic = planet6 season calendar; driven = unscripted (heat / vapor / moving water)">water cycle <select id="playChemCycle">
+      <option value="0" selected>classic</option>
+      <option value="1">driven</option>
+    </select></label>
+    <span class="hint">(live)</span></span></span>
+  <div id="playChemBudget" hidden title="Element budget (atoms per lane) that genesis spends exactly: picking ash / rocky / ocean fills these with that preset's numbers for the current radius. Edit any lane and press apply (or Enter) to genesis a 'chem · custom budget' world from it; seed / radius changes then keep your lanes. Atoms the sphere cannot hold wait in the bag.">
+    <b>budget</b>
+    <label>H <input id="playChemLane0" type="number" min="0" step="1"></label>
+    <label>O <input id="playChemLane1" type="number" min="0" step="1"></label>
+    <label>C <input id="playChemLane2" type="number" min="0" step="1"></label>
+    <label>N <input id="playChemLane3" type="number" min="0" step="1"></label>
+    <label>S <input id="playChemLane4" type="number" min="0" step="1"></label>
+    <label>Ca <input id="playChemLane5" type="number" min="0" step="1"></label>
+    <label>Fe <input id="playChemLane6" type="number" min="0" step="1"></label>
+    <label>Ni <input id="playChemLane7" type="number" min="0" step="1"></label>
+    <label>Si <input id="playChemLane8" type="number" min="0" step="1"></label>
+    <label>Mg <input id="playChemLane9" type="number" min="0" step="1"></label>
+    <label>Na <input id="playChemLane10" type="number" min="0" step="1"></label>
+    <label>K <input id="playChemLane11" type="number" min="0" step="1"></label>
+    <button type="button" id="playChemApply">apply budget</button>
+    <span id="playChemBudgetInfo"></span>
+  </div>
+  <label>quality <select id="playQuality">
+    <option value="801,801">Native 801×801 · tape layout · 60 fps</option>
+    <option value="960,540">Low 960×540 · 60 fps</option>
+    <option value="1280,720">Medium 1280×720 · 60 fps</option>
+    <option value="1600,900" selected>High 1600×900 · ~55–60 fps</option>
+    <option value="1920,1080">Ultra 1920×1080 · ~35–45 fps</option>
+  </select></label>
+  <label title="Full-bleed game without the in-frame telemetry sidebar (F3 has nothing to show)"><input type="checkbox" id="playGameOnly"> game only (no telemetry)</label>
+  <button type="button" id="playReset">reset</button>
+  <button type="button" id="playFullscreen">fullscreen</button>
+  <button type="button" id="playQuit">quit</button>
+  <span class="hint" title="WASD move · Space/Shift up/down · LMB/RMB delete/place · wheel · F fit · F3 telemetry sidebar · chem worlds: C cross-section mode, [ / ] cut offset · Esc release mouse / menu">click to play · Esc menu · F3 telemetry</span>
+  <details id="playDebug"><summary>debug</summary><pre id="playFps">loading…</pre><pre id="playCap">…</pre><pre id="playChem">chem: off</pre><pre id="play">idle</pre></details>
+</div>
+<script>
+(async function () {
+  const playErrEl = document.getElementById("play");
+  const WASM_B64 =
+__WASM_B64__;
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  function readUtf8(instance, lenOrExport, ptrExport) {
+    const len = typeof lenOrExport === "number" ? lenOrExport : instance.exports[lenOrExport]();
+    const ptr = instance.exports[ptrExport]();
+    return new TextDecoder("utf-8").decode(new Uint8Array(instance.exports.memory.buffer, ptr, len));
+  }
+  function canvasPixelFromEvent(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.floor((event.clientX - rect.left) / rect.width * canvas.width);
+    const py = Math.floor((event.clientY - rect.top) / rect.height * canvas.height);
+    return {
+      px: Math.max(0, Math.min(canvas.width - 1, px)),
+      py: Math.max(0, Math.min(canvas.height - 1, py))
+    };
+  }
+  // Quit: close the launched client window, or go back to the launcher if this was a plain navigation.
+  document.getElementById("playQuit").addEventListener("click", function () {
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (window.opener && !window.opener.closed) { window.close(); }
+    if (!window.closed) location.href = "bitblock.html";
+  });
+  // Optional Fullscreen API (works on file://); F11 / the browser's own fullscreen works too.
+  const playFsBtn = document.getElementById("playFullscreen");
+  function playFsLabel() { playFsBtn.textContent = document.fullscreenElement ? "exit fullscreen" : "fullscreen"; }
+  playFsBtn.addEventListener("click", function () {
+    const root = document.documentElement;
+    if (document.fullscreenElement) { if (document.exitFullscreen) document.exitFullscreen(); }
+    else if (root && root.requestFullscreen) { root.requestFullscreen().catch(function () {}); }
+    const c = document.getElementById("playCanvas");
+    if (c && c.focus) c.focus({ preventScroll: true });
+  });
+  document.addEventListener("fullscreenchange", playFsLabel);
+  try {
+    // Embedded bytes (file:// safe: no fetch). Identical to the sibling bitblock_wasm.wasm sidecar.
+    const bytes = b64ToBytes(WASM_B64);
+    const instance = await WebAssembly.instantiate(await WebAssembly.compile(bytes));
+    const abi = instance.exports.bitblock_wasm_abi();
+    if (abi !== 17) throw new Error("play client expects bitblock_wasm_abi=17, got " + abi);
+
+__PLAY_CLIENT_JS__
+    playFitCanvas();
+    playCanvas.focus({ preventScroll: true }); // keys work immediately; click to lock the mouse
+  } catch (err) {
+    playErrEl.className = "err";
+    playErrEl.textContent = "error: " + (err && err.stack ? err.stack : err);
+    playErrEl.parentElement.open = true; // #playDebug inside the (visible) menu
+    document.getElementById("playFps").textContent = "failed to start — see status";
+  }
+})();
+</script>
+</body>
+</html>

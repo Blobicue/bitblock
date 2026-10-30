@@ -156,6 +156,105 @@ pub struct SweepHit {
     pub distance: f64,
 }
 
+/// Optional per-bit base colour override for the world pass (e.g. chem materials).
+///
+/// The callback returns the lit (top-face) RGB for a bit, or `None` to keep the declared
+/// ordinary / bedrock colours. Faces are shaded from that base by [`tinted_face_color`] with the
+/// same top / back / side / front ordering as the ordinary palette. Called at most once per drawn
+/// bit per frame, never per pixel. [`Renderer::render`] passes no tint, so every untinted frame is
+/// bit-identical to the declared renderer profile.
+pub type BitTint<'a> = &'a dyn Fn(Coord) -> Option<u32>;
+
+/// Face-shade multipliers (out of 256) applied to a tint base: top, back (+z), side (x), front (-z).
+/// They follow the ordinary palette's ratios (255 / 216 / 189 / 152 of white).
+const TINT_SHADES: [u32; 4] = [256, 217, 190, 153];
+
+/// Shades a tint base RGB for one face normal (top / back / side / front, as `face_color`).
+pub fn tinted_face_color(base: u32, normal: Vec3) -> u32 {
+    let k = if normal.y > 0.5 {
+        TINT_SHADES[0]
+    } else if normal.x.abs() > 0.5 {
+        TINT_SHADES[2]
+    } else if normal.z > 0.5 {
+        TINT_SHADES[1]
+    } else {
+        TINT_SHADES[3]
+    };
+    shade_rgb(base, k)
+}
+
+/// Every RGB a tint base can produce in the world pass (the pixel-sized colour plus the four
+/// face shades), for palette audits of tinted frames.
+pub fn tinted_shades(base: u32) -> [u32; 5] {
+    let base = base & RGB_MASK;
+    [
+        base,
+        shade_rgb(base, TINT_SHADES[0]),
+        shade_rgb(base, TINT_SHADES[1]),
+        shade_rgb(base, TINT_SHADES[2]),
+        shade_rgb(base, TINT_SHADES[3]),
+    ]
+}
+
+/// Bit offset of the optional lit-face mask in a [`BitTint`] result. Bits `24..30` name faces
+/// (one bit per [`TINT_LIT_DIRS`] entry) drawn with [`lit_face_color`] instead of the directional
+/// shade: flat (no falloff) and lifted slightly toward white, so a highlighted face reads as
+/// distinct from the shaded surface while keeping its hue. A zero mask (every plain RGB) is
+/// exactly the ordinary tinted path.
+pub const TINT_LIT_SHIFT: u32 = 24;
+
+/// Face directions of the lit-face mask bits: +x, -x, +y, -y, +z, -z.
+pub const TINT_LIT_DIRS: [[i64; 3]; 6] = [
+    [1, 0, 0],
+    [-1, 0, 0],
+    [0, 1, 0],
+    [0, -1, 0],
+    [0, 0, 1],
+    [0, 0, -1],
+];
+
+/// Lift toward white (out of 256) for lit faces.
+const TINT_LIT_LIFT: u32 = 48;
+
+/// Lit-mask bit for an axis-aligned face normal (see [`TINT_LIT_DIRS`]).
+pub fn tint_lit_bit(normal: Vec3) -> u32 {
+    let i = if normal.x > 0.5 {
+        0
+    } else if normal.x < -0.5 {
+        1
+    } else if normal.y > 0.5 {
+        2
+    } else if normal.y < -0.5 {
+        3
+    } else if normal.z > 0.5 {
+        4
+    } else {
+        5
+    };
+    1 << i
+}
+
+/// A tint base with its lit-face mask packed into the high byte (`mask` uses the low 6 bits).
+pub const fn tint_with_lit_faces(base: u32, mask: u32) -> u32 {
+    (base & RGB_MASK) | ((mask & 0x3f) << TINT_LIT_SHIFT)
+}
+
+/// Colour of a lit face for a tint base: unshaded base lifted `TINT_LIT_LIFT`/256 toward white.
+pub fn lit_face_color(base: u32) -> u32 {
+    let lift = |c: u32| c + (255 - c) * TINT_LIT_LIFT / 256;
+    let r = lift((base >> 16) & 0xff);
+    let g = lift((base >> 8) & 0xff);
+    let b = lift(base & 0xff);
+    (r << 16) | (g << 8) | b
+}
+
+const fn shade_rgb(base: u32, k: u32) -> u32 {
+    let r = ((base >> 16) & 0xff) * k / 256;
+    let g = ((base >> 8) & 0xff) * k / 256;
+    let b = (base & 0xff) * k / 256;
+    (r << 16) | (g << 8) | b
+}
+
 /// Software voxel rasterizer maintaining XRGB pixel and `f64` depth framebuffers.
 pub struct Renderer {
     width: u32,
@@ -167,6 +266,41 @@ pub struct Renderer {
     keyed: Vec<(f64, Coord)>,
     /// The same bits in front-to-back traversal order.
     order: Vec<Coord>,
+    /// Per-row scratch for the span rasteriser: interpolated inverse depth and its reciprocal.
+    span_inverse: Vec<f64>,
+    span_depth: Vec<f64>,
+    /// Lower bound on every depth the bit being drawn can write (`nearest_possible_depth`), or
+    /// negative infinity when none applies. Never compared with `<=`, so a `NaN` disables it.
+    occlusion_bound: f64,
+    /// While `occlusion_bound` applies: for each pixel row of the bit's clamped raster box
+    /// (from `open_top`), the half-open range from its first to one past its last pixel *not*
+    /// strictly nearer than the bound. Empty when the whole row is. The set of such pixels
+    /// cannot change while the bit is drawn (it only writes depths `>= bound`, and only over
+    /// farther ones), so one scan per bit serves all six triangles.
+    open_rows: Vec<(i64, i64)>,
+    open_top: i64,
+    /// Per `COVER_TILE`-square pixel tile, an upper bound on every depth in it (or `NaN`, which
+    /// never passes a `<` test). Reset to infinity with the depth buffer; depths only ever
+    /// decrease within a frame, so a bound stays valid until refreshed by an exact scan.
+    tile_max: Vec<f64>,
+    tiles_wide: usize,
+    /// Per `COVER_COARSE`-square block of tiles, an upper bound on every depth in it: the
+    /// largest of its tiles' bounds when last recomputed (`NaN` if any was). Every tile bound is
+    /// an upper bound that stays valid while depths only decrease, so their maximum does too.
+    coarse_max: Vec<f64>,
+    coarse_wide: usize,
+    /// Per pixel row, a half-open column range covering every pixel or depth written since the
+    /// last clear (`lo >= hi` when none was). Lets the next frame restore the background and
+    /// infinite depth over just those ranges instead of the whole framebuffer.
+    dirty_rows: Vec<(u32, u32)>,
+    /// Set when the dirty ranges do not describe the buffers (resize, whole-frame fill).
+    all_dirty: bool,
+    /// The previous frame's `dirty_rows`, kept by the partial clear (`prev_dirty_valid`), so
+    /// `changed_rows` can bound what differs from that frame.
+    prev_dirty_rows: Vec<(u32, u32)>,
+    prev_dirty_valid: bool,
+    /// Frames rendered so far; identifies which frame `changed_rows` is relative to.
+    frame_serial: u64,
     /// Switch back to unordered traversal with no hidden-bit test or chunk frustum culling, so a
     /// fixture can compare the two traversals rather than compare the optimized one against itself.
     reference_traversal: bool,
@@ -178,6 +312,12 @@ pub struct Renderer {
     /// requires that nothing moved. See `assert_hidden_bit_writes_nothing`.
     #[cfg(test)]
     verify_hidden_bits: bool,
+    /// Test-only switch that bypasses the coarse level of `covering_depth`, and the count of
+    /// bits that level alone proved hidden, so a fixture can compare with and without it.
+    #[cfg(test)]
+    skip_coarse_cover: bool,
+    #[cfg(test)]
+    coarse_hidden: u64,
 }
 
 /// First witness for a post-overlay game pixel outside the declared discrete RGB palette.
@@ -266,11 +406,29 @@ impl Renderer {
             world_pixels: 0,
             keyed: Vec::new(),
             order: Vec::new(),
+            span_inverse: Vec::new(),
+            span_depth: Vec::new(),
+            occlusion_bound: f64::NEG_INFINITY,
+            open_rows: Vec::new(),
+            open_top: 0,
+            tile_max: Vec::new(),
+            tiles_wide: 0,
+            coarse_max: Vec::new(),
+            coarse_wide: 0,
+            dirty_rows: Vec::new(),
+            all_dirty: true,
+            prev_dirty_rows: Vec::new(),
+            prev_dirty_valid: false,
+            frame_serial: 0,
             reference_traversal: false,
             #[cfg(test)]
             hidden_bits: 0,
             #[cfg(test)]
             verify_hidden_bits: false,
+            #[cfg(test)]
+            skip_coarse_cover: false,
+            #[cfg(test)]
+            coarse_hidden: 0,
         };
         renderer.resize(width, height);
         renderer
@@ -285,6 +443,73 @@ impl Renderer {
             .expect("framebuffer dimensions overflow usize");
         self.pixels.resize(len, BACKGROUND);
         self.depth.resize(len, f64::INFINITY);
+        self.all_dirty = true;
+    }
+
+    /// Restores every pixel to `BACKGROUND` and every depth to infinity: the whole buffers
+    /// after a resize or whole-frame fill, otherwise only the recorded dirty ranges (every
+    /// pixel outside them already holds exactly those values).
+    fn clear_frame(&mut self) {
+        let width = self.width as usize;
+        let height = self.height as usize;
+        if self.all_dirty || self.dirty_rows.len() != height {
+            self.pixels.fill(BACKGROUND);
+            self.depth.fill(f64::INFINITY);
+            self.dirty_rows.clear();
+            self.dirty_rows.resize(height, (u32::MAX, 0));
+            self.all_dirty = false;
+            self.prev_dirty_valid = false;
+            return;
+        }
+        self.prev_dirty_rows.clear();
+        self.prev_dirty_rows.extend_from_slice(&self.dirty_rows);
+        self.prev_dirty_valid = true;
+        for (y, range) in self.dirty_rows.iter_mut().enumerate() {
+            let (lo, hi) = *range;
+            if lo < hi {
+                let row = y * width;
+                self.pixels[row + lo as usize..row + hi as usize].fill(BACKGROUND);
+                self.depth[row + lo as usize..row + hi as usize].fill(f64::INFINITY);
+                *range = (u32::MAX, 0);
+            }
+        }
+    }
+
+    /// Serial number of the frame now in the buffers (counts `render` calls).
+    pub const fn frame_serial(&self) -> u64 {
+        self.frame_serial
+    }
+
+    /// Per pixel row, a half-open column range outside which the current frame (including any
+    /// crosshair drawn since) is identical to frame `frame_serial() - 1`; `lo >= hi` means the
+    /// row is identical. `None` when no such bound is known (first frame, resize, or a
+    /// whole-frame fill in either frame), in which case every pixel may differ.
+    pub fn changed_rows(&self) -> Option<impl Iterator<Item = (usize, usize)> + '_> {
+        if self.all_dirty || !self.prev_dirty_valid || self.dirty_rows.len() != self.height as usize
+        {
+            return None;
+        }
+        Some(
+            self.dirty_rows
+                .iter()
+                .zip(&self.prev_dirty_rows)
+                .map(|(&now, &before)| {
+                    let lo = now.0.min(before.0) as usize;
+                    let hi = now.1.max(before.1) as usize;
+                    (lo, hi)
+                }),
+        )
+    }
+
+    /// Records that columns `[lo, hi)` of row `y` may have been written.
+    #[inline]
+    fn mark_dirty(&mut self, y: usize, lo: usize, hi: usize) {
+        if let Some(range) = self.dirty_rows.get_mut(y) {
+            range.0 = range.0.min(lo as u32);
+            range.1 = range.1.max(hi as u32);
+        } else {
+            self.all_dirty = true;
+        }
     }
 
     /// Returns the current game framebuffer width in physical pixels.
@@ -314,6 +539,26 @@ impl Renderer {
         (observation, palette)
     }
 
+    /// [`Self::observe_final_game_frame`] for a tinted frame: an RGB (or its crosshair inversion)
+    /// is also legal when `extra_legal` accepts it. Untinted frames should use the strict form.
+    pub fn observe_final_game_frame_tinted(
+        &self,
+        extra_legal: &dyn Fn(u32) -> bool,
+    ) -> (FrameObservation, FinalGamePaletteAudit) {
+        let frame = FrameRef::new(self.width, self.height, &self.pixels)
+            .expect("renderer must retain a dimension-consistent game framebuffer");
+        let mut palette = FinalGamePaletteAudit::default();
+        let observation = frame.observe_with(|index, word| {
+            let rgb = word & RGB_MASK;
+            if extra_legal(rgb) || extra_legal(rgb ^ RGB_MASK) {
+                palette.pixel_count += 1;
+            } else {
+                palette.inspect(index, word);
+            }
+        });
+        (observation, palette)
+    }
+
     /// Number of non-background pixels written by the world pass, before overlays.
     pub const fn world_pixel_count(&self) -> u64 {
         self.world_pixels
@@ -331,12 +576,19 @@ impl Renderer {
 
     /// Projects and rasterizes all visible occupied voxels of `world` from `camera` into the framebuffer.
     pub fn render(&mut self, world: &World, camera: &Camera) {
-        self.pixels.fill(BACKGROUND);
-        self.depth.fill(f64::INFINITY);
+        self.render_tinted(world, camera, None);
+    }
+
+    /// [`Self::render`] with an optional per-bit base colour override ([`BitTint`]).
+    /// With `None` the frame is exactly what [`Self::render`] produces.
+    pub fn render_tinted(&mut self, world: &World, camera: &Camera, tint: Option<BitTint<'_>>) {
+        self.clear_frame();
+        self.frame_serial += 1;
         self.world_pixels = 0;
         #[cfg(test)]
         {
             self.hidden_bits = 0;
+            self.coarse_hidden = 0;
         }
 
         if self.width == 0 || self.height == 0 || world.is_empty() {
@@ -346,8 +598,12 @@ impl Renderer {
         if let Some(camera_coord) = coord_containing(camera.position())
             && world.is_on(camera_coord)
         {
-            self.pixels.fill(bit_pixel_color(camera_coord));
+            let color = tint
+                .and_then(|t| t(camera_coord))
+                .map_or_else(|| bit_pixel_color(camera_coord), |c| c & RGB_MASK);
+            self.pixels.fill(color);
             self.depth.fill(0.0);
+            self.all_dirty = true;
             self.world_pixels = self.pixels.len() as u64;
             return;
         }
@@ -373,7 +629,7 @@ impl Renderer {
 
         if !self.optimized_traversal() {
             for coord in world.iter_on() {
-                self.draw_bit(projection, coord);
+                self.draw_bit_with(projection, coord, tint);
             }
             return;
         }
@@ -382,6 +638,18 @@ impl Renderer {
         // makes the hidden-bit test in `draw_bit` succeed often enough to pay for itself.
         // Traversal order is free to change: `plot` resolves equal depths by the lower RGB word,
         // so the frame is a per-pixel minimum over the bits and does not depend on their order.
+        self.tiles_wide = (self.width as usize).div_ceil(COVER_TILE);
+        let tiles = self.tiles_wide * (self.height as usize).div_ceil(COVER_TILE);
+        self.tile_max.clear();
+        self.tile_max.resize(tiles, f64::INFINITY);
+        self.coarse_wide = self.tiles_wide.div_ceil(COVER_COARSE);
+        let tiles_high = (self.height as usize).div_ceil(COVER_TILE);
+        self.coarse_max.clear();
+        self.coarse_max.resize(
+            self.coarse_wide * tiles_high.div_ceil(COVER_COARSE),
+            f64::INFINITY,
+        );
+
         let mut keyed = std::mem::take(&mut self.keyed);
         keyed.clear();
         let mut nearest = f64::INFINITY;
@@ -459,7 +727,7 @@ impl Renderer {
         }
 
         for &coord in &order {
-            self.draw_bit(projection, coord);
+            self.draw_bit_with(projection, coord, tint);
         }
         self.keyed = keyed;
         self.order = order;
@@ -499,10 +767,21 @@ impl Renderer {
             return;
         }
         let index = y as usize * self.width as usize + x as usize;
+        self.mark_dirty(y as usize, x as usize, x as usize + 1);
         self.pixels[index] ^= RGB_MASK;
     }
 
+    #[cfg(test)]
     fn draw_bit(&mut self, projection: CameraProjection, coord: Coord) {
+        self.draw_bit_with(projection, coord, None);
+    }
+
+    fn draw_bit_with(
+        &mut self,
+        projection: CameraProjection,
+        coord: Coord,
+        tint: Option<BitTint<'_>>,
+    ) {
         let center = coord_center(coord);
         let vertices = cube_vertices(center);
         let projected = vertices.map(|vertex| projection.project(vertex));
@@ -536,7 +815,8 @@ impl Renderer {
                     point.x.floor() as i64,
                     point.y.floor() as i64,
                     nearest_depth,
-                    bit_pixel_color(coord),
+                    tint.and_then(|t| t(coord))
+                        .map_or_else(|| bit_pixel_color(coord), |c| c & RGB_MASK),
                 );
             }
             return;
@@ -559,27 +839,49 @@ impl Renderer {
             // nearer at every pixel the bit could touch. Rasterising it would then lose every
             // depth comparison in `plot` and write nothing, so skipping it writes nothing
             // different.
-            if let Some(covering) = self.covering_depth(left, right, top, bottom, nearest_vertex)
-                && covering
-                    < nearest_possible_depth(
-                        projection,
-                        center,
-                        &projected,
-                        nearest_vertex,
-                        max_x - min_x,
-                        max_y - min_y,
-                    )
+            //
+            // The bound is needed first: the coarse level of `covering_depth` answers against it.
+            let nearest_possible = nearest_possible_depth(
+                projection,
+                center,
+                &projected,
+                nearest_vertex,
+                max_x - min_x,
+                max_y - min_y,
+            );
+            let covering =
+                self.covering_depth(left, right, top, bottom, nearest_vertex, nearest_possible);
+            let trims =
+                max_x - min_x > OCCLUSION_TRIM_EXTENT || max_y - min_y > OCCLUSION_TRIM_EXTENT;
+            if let Some(covering) = covering
+                && covering < nearest_possible
             {
                 #[cfg(test)]
                 {
                     self.hidden_bits += 1;
-                    self.assert_hidden_bit_writes_nothing(projection, coord, center, &projected);
+                    self.assert_hidden_bit_writes_nothing(
+                        projection, coord, center, &projected, tint,
+                    );
                 }
                 return;
             }
+            // The same bound, applied per pixel run by the span rasteriser: a pixel already
+            // holding something strictly nearer than anything this bit can write is skipped.
+            self.occlusion_bound = if trims {
+                nearest_possible
+            } else {
+                f64::NEG_INFINITY
+            };
+            if trims {
+                self.scan_open_rows(left, right, top, bottom, nearest_possible);
+            }
+            self.draw_faces(projection, coord, center, &projected, tint);
+            self.occlusion_bound = f64::NEG_INFINITY;
+            self.open_rows.clear();
+            return;
         }
 
-        self.draw_faces(projection, coord, center, &projected);
+        self.draw_faces(projection, coord, center, &projected, tint);
     }
 
     fn draw_faces(
@@ -588,7 +890,12 @@ impl Renderer {
         coord: Coord,
         center: Vec3,
         projected: &[Option<ProjectedPoint>; 8],
+        tint: Option<BitTint<'_>>,
     ) {
+        // Looked up once per drawn bit (never per pixel or per face).
+        let tinted = tint.and_then(|t| t(coord));
+        let lit = tinted.map_or(0, |t| (t >> TINT_LIT_SHIFT) & 0x3f);
+        let base = tinted.map(|t| t & RGB_MASK);
         for face in FACES {
             if face.normal.dot(projection.position() - center) <= 0.0 {
                 continue;
@@ -605,7 +912,11 @@ impl Renderer {
             let Some(d) = projected[face.corners[3]] else {
                 continue;
             };
-            let color = face_color(coord, face.normal);
+            let color = match base {
+                Some(base) if lit & tint_lit_bit(face.normal) != 0 => lit_face_color(base),
+                Some(base) => tinted_face_color(base, face.normal),
+                None => face_color(coord, face.normal),
+            };
             self.raster_triangle(a, b, c, color);
             self.raster_triangle(a, c, d, color);
         }
@@ -624,6 +935,7 @@ impl Renderer {
         coord: Coord,
         center: Vec3,
         projected: &[Option<ProjectedPoint>; 8],
+        tint: Option<BitTint<'_>>,
     ) {
         if !self.verify_hidden_bits {
             return;
@@ -632,7 +944,7 @@ impl Renderer {
         let depth = self.depth.clone();
         let world_pixels = self.world_pixels;
 
-        self.draw_faces(projection, coord, center, projected);
+        self.draw_faces(projection, coord, center, projected, tint);
 
         let pixel = self
             .pixels
@@ -655,36 +967,173 @@ impl Renderer {
         assert_eq!(self.world_pixels, world_pixels);
     }
 
-    /// The farthest retained depth over a half-open pixel box, or `None` if any pixel there is
-    /// already at or beyond `limit`.
+    /// An upper bound on the farthest retained depth over a half-open pixel box, or `None` if
+    /// any pixel there is already at or beyond `limit`.
     ///
-    /// The early return is what keeps the test cheap for the bits that are actually visible:
-    /// an untouched pixel holds `f64::INFINITY`, so a bit over open background usually stops
-    /// after one word. A `NaN` would also stop it, which is the conservative direction.
+    /// The caller skips the bit only when the bound is strictly nearer than anything it can
+    /// write, so returning a bound above the exact maximum can only make it draw a bit it could
+    /// have skipped -- which writes nothing anyway -- never skip one it must draw. The `None`
+    /// answer stays exact.
+    ///
+    /// Works over `COVER_TILE`-square tiles: a tile whose recorded bound is already below
+    /// `limit` contributes that bound with no scan. Otherwise the tile is rescanned exactly
+    /// (refreshing its bound) and, if it still is not below `limit`, the pixels it shares with
+    /// the box decide. Front-to-back traversal makes the interior bits of a solid the ones that
+    /// reach this test over pixels already settled, so most of their tiles are answered from
+    /// the record. An untouched pixel holds `f64::INFINITY`, so a bit over open background
+    /// still stops at its first tile. A `NaN` fails the `<` tests, the conservative direction.
+    ///
+    /// Before any tile is read, the coarse blocks (`coarse_max`) meeting the box are tried
+    /// against `skip_below`, the caller's skip threshold: if every one is bounded strictly below
+    /// it (recomputing a failing block from its tile bounds once), their largest bound is
+    /// returned. It covers every pixel of the box and is below `skip_below`, so the caller's
+    /// skip is proven by it alone. Otherwise the tile walk runs exactly as without the coarse
+    /// level. When `skip_below <= limit`, a coarse success implies every tile bound in the box
+    /// is below `limit` and `skip_below`, so the tile walk would have skipped too, without
+    /// refreshing a tile: the skip decisions and the tile record are unchanged.
+    // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn covering_depth(
-        &self,
+        &mut self,
         left: i64,
         right: i64,
         top: i64,
         bottom: i64,
         limit: f64,
+        skip_below: f64,
     ) -> Option<f64> {
         let width = self.width as usize;
-        let mut covering = f64::NEG_INFINITY;
-        for y in top..bottom {
-            let row = y as usize * width;
-            for &depth in &self.depth[row + left as usize..row + right as usize] {
-                // Written as a `<` test rather than a `>=` one so that a `NaN` stops the scan.
-                // The depth buffer cannot hold one, but `plot` would treat it as farther than
-                // anything under `total_cmp`, so it must not be swallowed by `f64::max` below.
-                let below = depth < limit;
-                if !below {
-                    return None;
+        let height = self.height as usize;
+        let (left, right, top, bottom) =
+            (left as usize, right as usize, top as usize, bottom as usize);
+
+        let (tile_left, tile_right) = (left / COVER_TILE, (right - 1) / COVER_TILE);
+        let (tile_top, tile_bottom) = (top / COVER_TILE, (bottom - 1) / COVER_TILE);
+        let mut coarse = f64::NEG_INFINITY;
+        let mut coarse_covers = true;
+        #[cfg(test)]
+        #[allow(clippy::reversed_empty_ranges)] // `1..=0` is the intended empty range
+        let coarse_range = if self.skip_coarse_cover {
+            coarse_covers = false;
+            1..=0
+        } else {
+            tile_top / COVER_COARSE..=tile_bottom / COVER_COARSE
+        };
+        #[cfg(not(test))]
+        let coarse_range = tile_top / COVER_COARSE..=tile_bottom / COVER_COARSE;
+        'coarse: for cy in coarse_range {
+            for cx in tile_left / COVER_COARSE..=tile_right / COVER_COARSE {
+                let block = cy * self.coarse_wide + cx;
+                let mut bound = self.coarse_max[block];
+                if !(bound < skip_below) {
+                    bound = self.coarse_bound(cx, cy);
+                    self.coarse_max[block] = bound;
+                    if !(bound < skip_below) {
+                        coarse_covers = false;
+                        break 'coarse;
+                    }
                 }
-                covering = f64::max(covering, depth);
+                if bound > coarse {
+                    coarse = bound;
+                }
+            }
+        }
+        if coarse_covers {
+            #[cfg(test)]
+            {
+                self.coarse_hidden += 1;
+            }
+            return Some(coarse);
+        }
+
+        let mut covering = f64::NEG_INFINITY;
+        for ty in top / COVER_TILE..=(bottom - 1) / COVER_TILE {
+            let y0 = ty * COVER_TILE;
+            let y1 = (y0 + COVER_TILE).min(height);
+            for tx in left / COVER_TILE..=(right - 1) / COVER_TILE {
+                let tile = ty * self.tiles_wide + tx;
+                let bound = self.tile_max[tile];
+                if bound < limit {
+                    if bound > covering {
+                        covering = bound;
+                    }
+                    continue;
+                }
+                let x0 = tx * COVER_TILE;
+                let x1 = (x0 + COVER_TILE).min(width);
+                let mut exact = f64::NEG_INFINITY;
+                for y in y0..y1 {
+                    let row = tile_row_max(&self.depth[y * width + x0..y * width + x1]);
+                    // `NaN` poisons the tile bound so it is never trusted.
+                    exact = if row.is_nan() || exact.is_nan() {
+                        f64::NAN
+                    } else if row > exact {
+                        row
+                    } else {
+                        exact
+                    };
+                }
+                self.tile_max[tile] = exact;
+                if exact < limit {
+                    if exact > covering {
+                        covering = exact;
+                    }
+                    continue;
+                }
+                let (cx0, cx1) = (x0.max(left), x1.min(right));
+                for y in y0.max(top)..y1.min(bottom) {
+                    let row_max =
+                        covering_row(&self.depth[y * width + cx0..y * width + cx1], limit)?;
+                    if row_max > covering {
+                        covering = row_max;
+                    }
+                }
             }
         }
         Some(covering)
+    }
+
+    /// The largest recorded tile bound over coarse block `(cx, cy)`, or `NaN` if any is one.
+    fn coarse_bound(&self, cx: usize, cy: usize) -> f64 {
+        let tiles_high = (self.height as usize).div_ceil(COVER_TILE);
+        let x0 = cx * COVER_COARSE;
+        let x1 = (x0 + COVER_COARSE).min(self.tiles_wide);
+        let mut nan = false;
+        let mut max = f64::NEG_INFINITY;
+        for ty in cy * COVER_COARSE..(cy * COVER_COARSE + COVER_COARSE).min(tiles_high) {
+            for &bound in &self.tile_max[ty * self.tiles_wide + x0..ty * self.tiles_wide + x1] {
+                nan |= bound.is_nan();
+                max = if bound > max { bound } else { max };
+            }
+        }
+        if nan { f64::NAN } else { max }
+    }
+
+    /// Fills `open_rows` for the box `[left, right) x [top, bottom)` against `bound`, with the
+    /// same `depth < bound` predicate the span trimming uses.
+    // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    fn scan_open_rows(&mut self, left: i64, right: i64, top: i64, bottom: i64, bound: f64) {
+        let width = self.width as usize;
+        let mut rows = std::mem::take(&mut self.open_rows);
+        rows.clear();
+        for y in top..bottom {
+            let row = &self.depth
+                [y as usize * width + left as usize..y as usize * width + right as usize];
+            let range = match row.iter().position(|&depth| !(depth < bound)) {
+                None => (right, right),
+                Some(first) => {
+                    let last = row
+                        .iter()
+                        .rposition(|&depth| !(depth < bound))
+                        .unwrap_or(first);
+                    (left + first as i64, left + last as i64 + 1)
+                }
+            };
+            rows.push(range);
+        }
+        self.open_rows = rows;
+        self.open_top = top;
     }
 
     fn raster_triangle(
@@ -707,6 +1156,14 @@ impl Renderer {
         let max_x = a.x.max(b.x).max(c.x).ceil().min(self.width as f64) as i64;
         let min_y = a.y.min(b.y).min(c.y).floor().max(0.0) as i64;
         let max_y = a.y.max(b.y).max(c.y).ceil().min(self.height as f64) as i64;
+        if min_x >= max_x || min_y >= max_y {
+            return;
+        }
+
+        if span_raster_applies(a, b, c) && self.span_raster_enabled() {
+            self.raster_triangle_spans(a, b, c, color, area, min_x, max_x, min_y, max_y);
+            return;
+        }
 
         for y in min_y..max_y {
             for x in min_x..max_x {
@@ -729,6 +1186,135 @@ impl Renderer {
         }
     }
 
+    const fn span_raster_enabled(&self) -> bool {
+        !self.reference_traversal
+    }
+
+    /// The per-pixel loop above, restricted to the pixels it would accept, bit for bit.
+    ///
+    /// Along one row each barycentric weight is `((px - ax) * k - r) / area` with `k`, `r` and
+    /// `area` fixed. Every operation in that chain is a correctly rounded, monotone function of
+    /// its varying operand, so the weight is monotone in `px` and the set of pixels passing its
+    /// `!(w < BARYCENTRIC_EPSILON)` test is a prefix or a suffix of the row. The three tests
+    /// therefore accept one contiguous run, which a binary search over the *same* predicate
+    /// locates exactly. `span_raster_applies` keeps every operand small enough that no product
+    /// overflows, so no weight is NaN and the monotonicity argument holds.
+    ///
+    /// Inside the run the weights, the interpolated inverse depth and its reciprocal are
+    /// evaluated with the identical expressions and operation order (no fused or reassociated
+    /// arithmetic), first into row scratch with no branches so the compiler can vectorise the
+    /// divisions, then resolved against the depth buffer exactly as `plot` would.
+    #[allow(clippy::too_many_arguments)]
+    fn raster_triangle_spans(
+        &mut self,
+        a: ProjectedPoint,
+        b: ProjectedPoint,
+        c: ProjectedPoint,
+        color: u32,
+        area: f64,
+        min_x: i64,
+        max_x: i64,
+        min_y: i64,
+        max_y: i64,
+    ) {
+        // edge(p, q, px, py) = (px - p.x) * (q.y - p.y) - (py - p.y) * (q.x - p.x)
+        let width = self.width as usize;
+        let width_f = width as f64;
+        let edges = [
+            RowEdge::new(b, c, area, width_f),
+            RowEdge::new(c, a, area, width_f),
+            RowEdge::new(a, b, area, width_f),
+        ];
+        let span_len = (max_x - min_x) as usize;
+        let mut inverse = std::mem::take(&mut self.span_inverse);
+        let mut depths = std::mem::take(&mut self.span_depth);
+        if inverse.len() < span_len {
+            inverse.resize(span_len, 0.0);
+            depths.resize(span_len, 0.0);
+        }
+        let (ad, bd, cd) = (a.depth, b.depth, c.depth);
+
+        for y in min_y..max_y {
+            let py = y as f64 + PIXEL_CENTER_OFFSET;
+            let mut lo = min_x;
+            let mut hi = max_x;
+            // Every pixel outside the row's open range is strictly nearer than the bound, so the
+            // trimming below would remove it anyway; and each edge's accepted set is a prefix or
+            // suffix, so narrowing first and searching after finds the same run.
+            if let Some(&(open_lo, open_hi)) = self.open_rows.get((y - self.open_top) as usize) {
+                lo = lo.max(open_lo);
+                hi = hi.min(open_hi);
+                if lo >= hi {
+                    continue;
+                }
+            }
+            let rows = edges.map(|e| e.row(py));
+            for row in &rows {
+                (lo, hi) = row.accepted(lo, hi);
+                if lo >= hi {
+                    break;
+                }
+            }
+            if lo >= hi {
+                continue;
+            }
+            // Trim pixels that already hold a strictly nearer depth than this bit can produce;
+            // `plot` would reject every one of them. `NaN` bounds compare false and trim nothing.
+            let row_base = y as usize * width;
+            let bound = self.occlusion_bound;
+            while lo < hi && self.depth[row_base + lo as usize] < bound {
+                lo += 1;
+            }
+            while lo < hi && self.depth[row_base + hi as usize - 1] < bound {
+                hi -= 1;
+            }
+            if lo >= hi {
+                continue;
+            }
+
+            let n = (hi - lo) as usize;
+            let inverse = &mut inverse[..n];
+            let depths = &mut depths[..n];
+            let [ra, rb, rc] = rows;
+            for (i, (inv, dep)) in inverse.iter_mut().zip(depths.iter_mut()).enumerate() {
+                let px = (lo + i as i64) as f64 + PIXEL_CENTER_OFFSET;
+                let wa = ra.value(px) / area;
+                let wb = rb.value(px) / area;
+                let wc = rc.value(px) / area;
+                let inverse_depth = wa / ad + wb / bd + wc / cd;
+                *inv = inverse_depth;
+                *dep = 1.0 / inverse_depth;
+            }
+
+            self.mark_dirty(y as usize, lo as usize, hi as usize);
+            let base = y as usize * width + lo as usize;
+            let pixels = &mut self.pixels[base..base + n];
+            let buffer = &mut self.depth[base..base + n];
+            let mut written = 0_u64;
+            for (((&inverse_depth, &depth), pixel), stored) in inverse
+                .iter()
+                .zip(depths.iter())
+                .zip(pixels.iter_mut())
+                .zip(buffer.iter_mut())
+            {
+                if inverse_depth <= 0.0 || !inverse_depth.is_finite() {
+                    continue;
+                }
+                let depth_order = depth.total_cmp(stored);
+                if depth_order.is_lt() || (depth_order.is_eq() && color < *pixel) {
+                    if *pixel == BACKGROUND && color != BACKGROUND {
+                        written += 1;
+                    }
+                    *stored = depth;
+                    *pixel = color;
+                }
+            }
+            self.world_pixels += written;
+        }
+        self.span_inverse = inverse;
+        self.span_depth = depths;
+    }
+
     fn plot(&mut self, x: i64, y: i64, depth: f64, color: u32) {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             return;
@@ -738,6 +1324,7 @@ impl Renderer {
         // Equal-depth fragments choose the lower RGB word so unspecified world iteration order
         // cannot change the final frame.
         if depth_order.is_lt() || (depth_order.is_eq() && color < self.pixels[index]) {
+            self.mark_dirty(y as usize, x as usize, x as usize + 1);
             if self.pixels[index] == BACKGROUND && color != BACKGROUND {
                 self.world_pixels += 1;
             }
@@ -745,6 +1332,53 @@ impl Renderer {
             self.pixels[index] = color;
         }
     }
+}
+
+/// The largest depth in a short row, or `NaN` if the row holds one (`>`-select max, so the
+/// sign of a zero is unspecified, as for `f64::max`).
+#[inline]
+fn tile_row_max(row: &[f64]) -> f64 {
+    let mut max = f64::NEG_INFINITY;
+    let mut nan = false;
+    for &depth in row {
+        nan |= depth.is_nan();
+        max = if depth > max { depth } else { max };
+    }
+    if nan { f64::NAN } else { max }
+}
+
+/// One row of [`Renderer::covering_depth`]: `None` unless every depth is `< limit`, else the
+/// row's largest depth. Branch-free over the row (four independent lanes) so it vectorises; the
+/// early exit is per row instead of per pixel, which changes only how much is scanned.
+///
+/// Written as a `<` test rather than a `>=` one so that a `NaN` fails the row. The depth buffer
+/// cannot hold one, but `plot` would treat it as farther than anything under `total_cmp`, so it
+/// must not be swallowed by the max. With every depth `< limit` there is no `NaN`, so the
+/// `>`-select max equals `f64::max` up to the sign of a zero, which no caller can observe (the
+/// result is only compared).
+#[inline]
+fn covering_row(row: &[f64], limit: f64) -> Option<f64> {
+    let mut max = [f64::NEG_INFINITY; 4];
+    let mut below = [true; 4];
+    let chunks = row.chunks_exact(4);
+    let rest = chunks.remainder();
+    for chunk in chunks {
+        for lane in 0..4 {
+            let depth = chunk[lane];
+            below[lane] &= depth < limit;
+            max[lane] = if depth > max[lane] { depth } else { max[lane] };
+        }
+    }
+    for &depth in rest {
+        below[0] &= depth < limit;
+        max[0] = if depth > max[0] { depth } else { max[0] };
+    }
+    if !(below[0] & below[1] & below[2] & below[3]) {
+        return None;
+    }
+    let a = if max[1] > max[0] { max[1] } else { max[0] };
+    let b = if max[3] > max[2] { max[3] } else { max[2] };
+    Some(if b > a { b } else { a })
 }
 
 fn select_raycast_hit(best: Option<Hit>, candidate: Hit) -> Option<Hit> {
@@ -1169,6 +1803,255 @@ fn nearest_possible_depth(
     // `edge` evaluation exceeds the span plus two.
     let conditioning = OCCLUSION_EDGE_SLACK * (span_x + 2.0) * (span_y + 2.0) / smallest_area;
     nearest * (1.0 - OCCLUSION_ROUNDING_SLACK) / (1.0 + OCCLUSION_WEIGHT_SLACK + conditioning)
+}
+
+/// Projected extent, in pixels, above which a drawn bit carries its depth bound into the span
+/// rasteriser to trim already-occluded pixels. Smaller bits are not worth the bound.
+const OCCLUSION_TRIM_EXTENT: f64 = 8.0;
+
+/// Side, in pixels, of the tiles whose depth bounds `covering_depth` records.
+const COVER_TILE: usize = 4;
+
+/// Side, in tiles, of the coarse blocks whose depth bounds `covering_depth` tries first.
+const COVER_COARSE: usize = 4;
+
+/// Largest vertex coordinate for which the span rasteriser's products provably stay finite.
+/// Pixel centres are below 2^32, so every factor is below 2^101 and every product below 2^202.
+const SPAN_COORDINATE_LIMIT: f64 = 1.0e30;
+
+fn span_raster_applies(a: ProjectedPoint, b: ProjectedPoint, c: ProjectedPoint) -> bool {
+    [a.x, a.y, b.x, b.y, c.x, c.y]
+        .iter()
+        .all(|v| v.abs() < SPAN_COORDINATE_LIMIT)
+}
+
+/// Relative margin around `BARYCENTRIC_EPSILON` outside which [`RowEdge::passes`] decides from
+/// the multiplied weight without the exact division. It only has to exceed the few-ulp
+/// disagreement between `v * (1 / area)` and `v / area` (see `passes`); anything wider merely
+/// sends more pixels down the exact path.
+const WEIGHT_FILTER_MARGIN: f64 = 1.0e-9;
+/// A multiplied weight above this is certainly accepted, below [`WEIGHT_REJECT_BELOW`]
+/// certainly rejected (`BARYCENTRIC_EPSILON` is negative).
+const WEIGHT_ACCEPT_ABOVE: f64 = BARYCENTRIC_EPSILON * (1.0 - WEIGHT_FILTER_MARGIN);
+const WEIGHT_REJECT_BELOW: f64 = BARYCENTRIC_EPSILON * (1.0 + WEIGHT_FILTER_MARGIN);
+
+/// Relative slack, against the magnitudes entering it, of the closed-form crossing bound in
+/// [`RowEdge::accepted`]. The rounding it must cover is below `16 * 2^-53` of those magnitudes;
+/// 2^-40 is 512 times that, so the bound stays valid with room for its own rounding and that of
+/// `crossing - bound` / `crossing + bound`. On screen-sized coordinates the bound is a few
+/// 1e-9 px, so a crossing falls back to the search only that close to a pixel column.
+const CROSSING_SLACK: f64 = 1.0 / (1u64 << 40) as f64;
+/// Smallest `|k|` for which the closed form is used: with `|px - ax| >= 2^-53` (or zero) and
+/// `|area| >= f64::EPSILON`, every product near the threshold is then a normal number.
+const CROSSING_MIN_SLOPE: f64 = 1.0 / (1u64 << 30) as f64;
+
+/// One `edge` term with its per-triangle and per-row factors split out. The split is exact: it
+/// stores the same intermediate values `edge` computes and combines them in the same order.
+#[derive(Clone, Copy, Debug)]
+struct RowEdge {
+    ax: f64,
+    ay: f64,
+    /// `by - ay`
+    k: f64,
+    /// `bx - ax`
+    dx: f64,
+    /// `(py - ay) * (bx - ax)` for the current row.
+    r: f64,
+    /// The triangle's signed `area`, the exact weight denominator.
+    area: f64,
+    /// `1 / area`, for the division-free filter in `passes` only.
+    inv_area: f64,
+    /// `1 / k`, for the crossing estimate only (never decides acceptance alone).
+    inv_k: f64,
+    /// `BARYCENTRIC_EPSILON * area`, rounded: shifts the crossing estimate onto the threshold.
+    eps_area: f64,
+    /// Row-independent part of the crossing estimate's error bound (see `accepted`), or
+    /// infinity when the closed form is not used for this edge.
+    bound_base: f64,
+}
+
+impl RowEdge {
+    /// `width` bounds every pixel column the edge will be asked about (`hi <= width`).
+    fn new(p: ProjectedPoint, q: ProjectedPoint, area: f64, width: f64) -> Self {
+        let k = q.y - p.y;
+        let inv_k = 1.0 / k;
+        let eps_area = BARYCENTRIC_EPSILON * area;
+        let bound_base = if k.abs() >= CROSSING_MIN_SLOPE {
+            CROSSING_SLACK * (p.x.abs() + (eps_area * inv_k).abs() + width + 2.0)
+        } else {
+            f64::INFINITY
+        };
+        Self {
+            ax: p.x,
+            ay: p.y,
+            k,
+            dx: q.x - p.x,
+            r: 0.0,
+            area,
+            inv_area: 1.0 / area,
+            inv_k,
+            eps_area,
+            bound_base,
+        }
+    }
+
+    fn row(self, py: f64) -> Self {
+        Self {
+            r: (py - self.ay) * self.dx,
+            ..self
+        }
+    }
+
+    #[inline(always)]
+    fn value(self, px: f64) -> f64 {
+        (px - self.ax) * self.k - self.r
+    }
+
+    /// Exactly `!(self.value(px) / area < BARYCENTRIC_EPSILON)`, the per-pixel loop's test.
+    ///
+    /// The division is only evaluated near the threshold. `t = v * fl(1 / area)` differs from
+    /// the real quotient `z = v / area` by a relative `(1 + d1)(1 + d2)` with `|d| <= 2^-53`
+    /// (`area` is finite with `|area| >= f64::EPSILON` and the operands are bounded by
+    /// `SPAN_COORDINATE_LIMIT`, so `1 / area` is a normal number and the product cannot
+    /// overflow), and `t` has the sign of `z`. So:
+    /// * `t > E (1 - m)` (with `E < 0`): either `t >= 0`, hence `z >= 0 > E`, or `|z| <= |t| /
+    ///   (1 - 2^-53)^2 < |E|`, hence `z > E`; rounding is monotone and `E` is a double, so
+    ///   `fl(z) >= E` and the pixel passes. An underflowed `t` lands here too, and then `|z|`
+    ///   is just as far below `|E|`.
+    /// * `t < E (1 + m)`: `z < E` by a relative gap of about `m`, far more than one ulp, so
+    ///   `fl(z) < E` and the pixel fails.
+    /// * Otherwise, or if `t` is `NaN`, the exact expression decides.
+    #[inline(always)]
+    // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    fn passes(self, x: i64) -> bool {
+        let px = x as f64 + PIXEL_CENTER_OFFSET;
+        let v = self.value(px);
+        let t = v * self.inv_area;
+        if t > WEIGHT_ACCEPT_ABOVE {
+            return true;
+        }
+        if t < WEIGHT_REJECT_BELOW {
+            return false;
+        }
+        !(v / self.area < BARYCENTRIC_EPSILON)
+    }
+
+    /// Narrows `[lo, hi)` to the pixels this edge accepts. The weight is monotone in `x`
+    /// (non-decreasing when `k / area > 0`), so acceptance is a suffix or a prefix.
+    fn accepted(self, lo: i64, hi: i64) -> (i64, i64) {
+        if lo >= hi {
+            return (lo, hi);
+        }
+        if self.k == 0.0 {
+            // Constant along the row.
+            return if self.passes(lo) { (lo, hi) } else { (lo, lo) };
+        }
+        let increasing = (self.k > 0.0) == (self.area > 0.0);
+        // Closed form. In real arithmetic the weight reaches `BARYCENTRIC_EPSILON` at the pixel
+        // column `X = ax + (r + E * area) / k - 1/2`; pixels on the accepted side of `X` pass
+        // and the others fail. Every rounding in `passes` (four operations, plus the threshold
+        // comparison) and in `crossing` below (five operations) moves either point by a relative
+        // few `2^-53` of the magnitudes summed in `bound`, so the computed predicate agrees with
+        // the side of `crossing` at every column farther than `bound` from it. `bound` carries a
+        // slack of 2^-40, thousands of times that error (see `CROSSING_SLACK`), and
+        // `CROSSING_MIN_SLOPE` keeps every intermediate a normal number near the threshold, so
+        // the relative-error model holds. When no integer column lies within `bound` of the
+        // crossing, the run boundary is therefore exact without evaluating the predicate;
+        // otherwise (or on any non-finite value) the search below decides.
+        let crossing = (self.ax + (self.r + self.eps_area) * self.inv_k) - PIXEL_CENTER_OFFSET;
+        let bound =
+            self.bound_base + CROSSING_SLACK * ((self.r + self.eps_area) * self.inv_k).abs();
+        let below = crossing - bound;
+        let first = below.ceil();
+        if first > crossing + bound {
+            let found = first.clamp(lo as f64, hi as f64) as i64;
+            #[cfg(test)]
+            assert_eq!(
+                found,
+                if increasing {
+                    self.first_where(lo, hi, lo, true)
+                } else {
+                    self.first_where(lo, hi, lo, false)
+                },
+                "closed-form edge boundary disagrees with the exact predicate"
+            );
+            return if increasing { (found, hi) } else { (lo, found) };
+        }
+        // Where the weight crosses zero, from the real-valued line: only a starting guess. The
+        // exact boundary is then found by evaluating the exact predicate, so the guess cannot
+        // change which pixels are accepted, only how many evaluations that takes. (Ties to even:
+        // one native instruction on wasm, where `round` is a libm call; and `1 / k` is multiplied
+        // in, since a guess needs no exact quotient.)
+        let guess = if crossing.is_finite() {
+            (crossing.round_ties_even().clamp(lo as f64, hi as f64)) as i64
+        } else {
+            lo
+        };
+        if increasing {
+            // First accepted pixel in [lo, hi]; the predicate runs false..true.
+            let found = self.first_where(lo, hi, guess, true);
+            (found, hi)
+        } else {
+            // One past the last accepted pixel; the predicate runs true..false.
+            let found = self.first_where(lo, hi, guess, false);
+            (lo, found)
+        }
+    }
+
+    /// The first `x` in `[lo, hi)` whose predicate equals `want`, or `hi`, given that the
+    /// predicate is monotone over the range and flips (at most once) to `want`. Steps outward
+    /// from `guess` a few pixels, then falls back to bisection of what is left.
+    fn first_where(self, lo: i64, hi: i64, guess: i64, want: bool) -> i64 {
+        const STEPS: u32 = 3;
+        let at = |x: i64| self.passes(x) == want;
+        let mut l = lo;
+        let mut h = hi;
+        let g = guess.clamp(lo, hi);
+        if g < hi && at(g) {
+            // Answer is at or before g: walk left while the predecessor still holds.
+            h = g;
+            let mut x = g;
+            for _ in 0..STEPS {
+                if x == lo || !at(x - 1) {
+                    return x;
+                }
+                x -= 1;
+                h = x;
+            }
+        } else if g >= hi {
+            // Nothing past the range is known: walk left from `hi` exactly as above. (Taking
+            // `hi` on trust here would accept a whole row whenever the guess lands past it.)
+            let mut x = hi;
+            for _ in 0..STEPS {
+                if x == lo || !at(x - 1) {
+                    return x;
+                }
+                x -= 1;
+                h = x;
+            }
+        } else {
+            // Answer is after g.
+            l = g + 1;
+            let mut x = l;
+            for _ in 0..STEPS {
+                if x >= hi || at(x) {
+                    return x;
+                }
+                x += 1;
+                l = x;
+            }
+        }
+        while l < h {
+            let m = l + (h - l) / 2;
+            if at(m) {
+                h = m;
+            } else {
+                l = m + 1;
+            }
+        }
+        l
+    }
 }
 
 fn edge(ax: f64, ay: f64, bx: f64, by: f64, px: f64, py: f64) -> f64 {
@@ -1843,6 +2726,135 @@ mod tests {
     /// Whole-frame agreement is the weaker half. `verify_hidden_bits` also rasterises every bit
     /// the test skips and requires that it moved nothing at the moment it was skipped, which a
     /// later bit covering the same pixel cannot hide.
+    /// The tinted world pass: `None` is bit-identical to `render`, a per-bit tint keeps the
+    /// ordered traversal (hidden-bit test included) identical to the unordered reference, and
+    /// every emitted world colour is one of the tint shades.
+    #[test]
+    fn tinted_render_matches_reference_and_untinted_is_unchanged() {
+        let size = 161;
+        let world = solid_world(9);
+        let palette = [0x002f6fd6_u32, 0x00b04020, 0x00e8dcc0];
+        let tint = |c: Coord| -> Option<u32> {
+            if c.y > 2 {
+                None
+            } else {
+                Some(palette[(c.x + c.z).rem_euclid(3) as usize])
+            }
+        };
+        let mut legal: Vec<u32> = palette.iter().flat_map(|&b| tinted_shades(b)).collect();
+        legal.sort_unstable();
+        for (index, camera) in views(&world).iter().enumerate() {
+            let mut plain = Renderer::new(size, size);
+            plain.render(&world, camera);
+            let mut none = Renderer::new(size, size);
+            none.render_tinted(&world, camera, None);
+            assert_eq!(plain.pixels, none.pixels, "camera {index} untinted pixels");
+
+            let mut reference = Renderer::new(size, size);
+            reference.reference_traversal = true;
+            reference.render_tinted(&world, camera, Some(&tint));
+            let mut ordered = Renderer::new(size, size);
+            ordered.verify_hidden_bits = true;
+            ordered.render_tinted(&world, camera, Some(&tint));
+            assert_eq!(
+                ordered.pixels, reference.pixels,
+                "camera {index} tinted pixels"
+            );
+
+            ordered.draw_crosshair(crosshair_overlay_input());
+            let (_, strict) = ordered.observe_final_game_frame();
+            let (_, audit) =
+                ordered.observe_final_game_frame_tinted(&|rgb| legal.binary_search(&rgb).is_ok());
+            assert!(audit.is_valid(), "camera {index} tinted audit {audit:?}");
+            if index < 3 {
+                assert!(
+                    !strict.is_valid(),
+                    "camera {index} should show tinted colours"
+                );
+                let distinct: std::collections::BTreeSet<u32> =
+                    ordered.pixels.iter().map(|p| p & RGB_MASK).collect();
+                assert!(
+                    distinct.len() >= 6,
+                    "camera {index} distinct {}",
+                    distinct.len()
+                );
+            }
+        }
+        assert_eq!(tinted_face_color(0x00ffffff, Vec3::Y), 0x00ffffff);
+        assert_eq!(
+            tinted_face_color(0x00808080, -Vec3::Z),
+            shade_rgb(0x00808080, 153)
+        );
+    }
+
+    /// Lit-face masks: a zero mask is the plain tinted frame; a nonzero mask recolours exactly the
+    /// masked faces to `lit_face_color` (hue kept, never equal to a directional shade), traversal
+    /// order stays irrelevant, and the hidden-bit test still writes nothing.
+    #[test]
+    fn tinted_lit_faces_recolour_only_masked_faces() {
+        let size = 161;
+        let world = solid_world(9);
+        let palette = [0x002f6fd6_u32, 0x00b04020, 0x00e8dcc0];
+        let plain = |c: Coord| -> Option<u32> {
+            if c.y > 2 {
+                None
+            } else {
+                Some(palette[(c.x + c.z).rem_euclid(3) as usize])
+            }
+        };
+        let zero = |c: Coord| plain(c).map(|b| tint_with_lit_faces(b, 0));
+        let lit =
+            |c: Coord| plain(c).map(|b| tint_with_lit_faces(b, if c.x >= 0 { 0x3f } else { 0 }));
+        let mut legal: Vec<u32> = palette
+            .iter()
+            .flat_map(|&b| tinted_shades(b).into_iter().chain([lit_face_color(b)]))
+            .collect();
+        legal.sort_unstable();
+        let lit_colors: Vec<u32> = palette.iter().map(|&b| lit_face_color(b)).collect();
+        for &b in &palette {
+            assert!(!tinted_shades(b).contains(&lit_face_color(b)), "{b:06x}");
+        }
+        let mut any_lit = false;
+        for (index, camera) in views(&world).iter().enumerate() {
+            let mut a = Renderer::new(size, size);
+            a.render_tinted(&world, camera, Some(&plain));
+            let mut z = Renderer::new(size, size);
+            z.render_tinted(&world, camera, Some(&zero));
+            assert_eq!(a.pixels, z.pixels, "camera {index} zero mask");
+
+            let mut reference = Renderer::new(size, size);
+            reference.reference_traversal = true;
+            reference.render_tinted(&world, camera, Some(&lit));
+            let mut ordered = Renderer::new(size, size);
+            ordered.verify_hidden_bits = true;
+            ordered.render_tinted(&world, camera, Some(&lit));
+            assert_eq!(
+                ordered.pixels, reference.pixels,
+                "camera {index} lit pixels"
+            );
+            for (p, q) in ordered.pixels.iter().zip(&a.pixels) {
+                if p != q {
+                    assert!(
+                        lit_colors.contains(p),
+                        "camera {index} changed pixel {p:06x}"
+                    );
+                    any_lit = true;
+                }
+            }
+            ordered.draw_crosshair(crosshair_overlay_input());
+            let (_, audit) =
+                ordered.observe_final_game_frame_tinted(&|rgb| legal.binary_search(&rgb).is_ok());
+            assert!(audit.is_valid(), "camera {index} lit audit {audit:?}");
+        }
+        assert!(any_lit, "some view shows a lit face");
+        assert_eq!(lit_face_color(0x00ffffff), 0x00ffffff);
+        assert_eq!(lit_face_color(0), 0x002f2f2f);
+        for (i, d) in TINT_LIT_DIRS.iter().enumerate() {
+            let n = Vec3::new(d[0] as f64, d[1] as f64, d[2] as f64);
+            assert_eq!(tint_lit_bit(n), 1 << i);
+        }
+    }
+
     #[test]
     fn hidden_bit_test_leaves_dense_worlds_identical_to_unordered_traversal() {
         let size = 201;
@@ -1887,6 +2899,224 @@ mod tests {
                 world.len()
             );
         }
+    }
+
+    /// The coarse level of `covering_depth` must change nothing but the work done: the same
+    /// pixels, depths, skipped bits and tile record as the tile walk alone, while answering for
+    /// many bits by itself. Odd sizes leave partial tiles and coarse blocks on the right and
+    /// bottom edges.
+    #[test]
+    fn coarse_cover_level_changes_no_decision() {
+        let mut coarse_total = 0;
+        for (width, height) in [(201_u32, 201_u32), (203, 131), (97, 150)] {
+            for (name, world) in [("shell", shell_world(14)), ("solid", solid_world(9))] {
+                for (index, camera) in views(&world).iter().enumerate() {
+                    let mut tiles_only = Renderer::new(width, height);
+                    tiles_only.skip_coarse_cover = true;
+                    tiles_only.render(&world, camera);
+
+                    let mut coarse = Renderer::new(width, height);
+                    coarse.verify_hidden_bits = true;
+                    coarse.render(&world, camera);
+
+                    let at = format!("{name} {width}x{height} camera {index}");
+                    assert_eq!(tiles_only.coarse_hidden, 0);
+                    assert!(coarse.pixels == tiles_only.pixels, "{at} pixels");
+                    let bits = |v: &[f64]| v.iter().map(|d| d.to_bits()).collect::<Vec<_>>();
+                    assert_eq!(bits(&coarse.depth), bits(&tiles_only.depth), "{at} depth");
+                    assert_eq!(
+                        bits(&coarse.tile_max),
+                        bits(&tiles_only.tile_max),
+                        "{at} tiles"
+                    );
+                    assert_eq!(coarse.hidden_bits, tiles_only.hidden_bits, "{at} hidden");
+                    assert_eq!(coarse.world_pixel_count(), tiles_only.world_pixel_count());
+                    assert!(coarse.coarse_hidden <= coarse.hidden_bits);
+                    coarse_total += coarse.coarse_hidden;
+                }
+            }
+        }
+        assert!(
+            coarse_total > 1000,
+            "the coarse level proved only {coarse_total} bits hidden"
+        );
+    }
+
+    /// The span rasteriser must accept exactly the pixels the per-pixel loop accepts and write
+    /// bit-identical depths. Triangles are drawn on top of a pseudo-random depth buffer so the
+    /// equal-depth tie-break and partial occlusion are exercised, and include slivers, both
+    /// windings, vertices on pixel centres and edges, near-plane depths and coordinates far
+    /// outside the viewport.
+    #[test]
+    fn span_raster_matches_per_pixel_raster_bit_for_bit() {
+        let mut rng = Rng(0x005e_ed5a_110f_b17b);
+        let (width, height) = (61_u32, 37_u32);
+        let mut spans = 0_u64;
+        for case in 0..6000 {
+            let point = |rng: &mut Rng| {
+                let scale = match rng.below(5) {
+                    0 => 4.0,
+                    1 => 80.0,
+                    2 => 1.0e6,
+                    _ => 30.0,
+                };
+                let mut x = rng.range(-scale, scale) + 30.0;
+                let mut y = rng.range(-scale, scale) + 18.0;
+                if rng.below(4) == 0 {
+                    x = x.round() + 0.5;
+                    y = y.round();
+                }
+                let depth = match rng.below(6) {
+                    0 => NEAR_PLANE * 2.0,
+                    1 => rng.range(1.0e3, 1.0e6),
+                    _ => rng.range(0.05, 20.0),
+                };
+                ProjectedPoint { x, y, depth }
+            };
+            let a = point(&mut rng);
+            let mut b = point(&mut rng);
+            let mut c = point(&mut rng);
+            if case % 7 == 0 {
+                // Sliver: c nearly on the line ab.
+                let t = rng.range(-0.5, 1.5);
+                c.x = a.x + (b.x - a.x) * t + rng.range(-1.0e-6, 1.0e-6);
+                c.y = a.y + (b.y - a.y) * t;
+            }
+            if case % 11 == 0 {
+                b.y = a.y; // horizontal edge: constant weight along a row
+            }
+            let color = [ORDINARY_TOP, ORDINARY_SIDE, BEDROCK_TOP][rng.below(3) as usize];
+
+            let mut reference = Renderer::new(width, height);
+            for (index, (pixel, depth)) in reference
+                .pixels
+                .iter_mut()
+                .zip(reference.depth.iter_mut())
+                .enumerate()
+            {
+                if (index as u64 + case).is_multiple_of(3) {
+                    *depth = [0.5, 2.0, 7.0, f64::INFINITY][index % 4];
+                    *pixel = [ORDINARY_BACK, ORDINARY_FRONT, BACKGROUND, BEDROCK_SIDE][index % 4];
+                }
+            }
+            let mut fast = Renderer::new(width, height);
+            fast.pixels.clone_from(&reference.pixels);
+            fast.depth.clone_from(&reference.depth);
+            reference.reference_traversal = true;
+
+            reference.raster_triangle(a, b, c, color);
+            fast.raster_triangle(a, b, c, color);
+            if span_raster_applies(a, b, c) {
+                spans += 1;
+            }
+            assert_eq!(
+                fast.pixels, reference.pixels,
+                "case {case}: {a:?} {b:?} {c:?}"
+            );
+            assert!(
+                fast.depth
+                    .iter()
+                    .zip(&reference.depth)
+                    .all(|(x, y)| x.to_bits() == y.to_bits()),
+                "case {case}: depth differs"
+            );
+            assert_eq!(fast.world_pixels, reference.world_pixels, "case {case}");
+        }
+        assert!(spans > 4000, "span path exercised {spans} times");
+    }
+
+    // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
+    /// The closed-form run boundary in `RowEdge::accepted` against a linear scan of the exact
+    /// per-pixel predicate, on rows built to put the real crossing within a few ulps (or
+    /// exactly on) a pixel column, with slopes down to `CROSSING_MIN_SLOPE`, huge offsets, both
+    /// windings and tiny or huge areas. A wrong closed-form answer fails here even where the
+    /// search fallback would have been taken by a looser bound.
+    #[test]
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    fn closed_form_edge_boundary_matches_exact_scan() {
+        let mut rng = Rng(0xc105_edf0_4a11);
+        let width = 64_i64;
+        let mut closed = 0_u64;
+        for case in 0..200_000_u64 {
+            let ax = match rng.below(5) {
+                0 => rng.range(-40.0, 100.0),
+                1 => rng.range(-1.0e6, 1.0e6),
+                2 => rng.range(-1.0e15, 1.0e15),
+                3 => (rng.range(-40.0, 100.0)).round() + 0.5,
+                _ => rng.range(0.0, 64.0),
+            };
+            let k = match rng.below(5) {
+                0 => rng.range(-2.0, 2.0),
+                1 => rng.range(-1.0e3, 1.0e3),
+                2 => {
+                    CROSSING_MIN_SLOPE
+                        * rng.range(1.0, 1.5)
+                        * if rng.below(2) == 0 { 1.0 } else { -1.0 }
+                }
+                3 => rng.range(-1.0e-6, 1.0e-6),
+                _ => (rng.range(-8.0, 8.0)).round(),
+            };
+            if k == 0.0 {
+                continue;
+            }
+            let area = match rng.below(4) {
+                0 => rng.range(-1.0e4, 1.0e4),
+                1 => {
+                    f64::EPSILON * rng.range(1.0, 4.0) * if rng.below(2) == 0 { 1.0 } else { -1.0 }
+                }
+                2 => rng.range(-1.0e20, 1.0e20),
+                _ => rng.range(-1.0, 1.0),
+            };
+            if !area.is_finite() || area.abs() < f64::EPSILON {
+                continue;
+            }
+            let p = ProjectedPoint {
+                x: ax,
+                y: 3.0,
+                depth: 1.0,
+            };
+            let q = ProjectedPoint {
+                x: ax + 1.0,
+                y: 3.0 + k,
+                depth: 1.0,
+            };
+            let mut edge = RowEdge::new(p, q, area, width as f64);
+            // Aim the real crossing at a column, then nudge it by a few ulps or a hair.
+            let column = rng.below(width as u64 + 8) as f64 - 4.0;
+            let nudge = match rng.below(5) {
+                0 => 0.0,
+                1 => rng.range(-1.0e-12, 1.0e-12),
+                2 => rng.range(-1.0e-8, 1.0e-8),
+                3 => rng.range(-1.0e-15, 1.0e-15) * (column - ax).abs().max(1.0),
+                _ => rng.range(-0.5, 0.5),
+            };
+            let target = column + PIXEL_CENTER_OFFSET + nudge;
+            let mut r = (target - ax) * k - BARYCENTRIC_EPSILON * area;
+            for _ in 0..rng.below(3) {
+                r = f64::from_bits(r.to_bits().wrapping_add(rng.below(5)).wrapping_sub(2));
+            }
+            if !r.is_finite() {
+                continue;
+            }
+            edge.r = r;
+            let lo = rng.below(8) as i64;
+            let hi = width - rng.below(8) as i64;
+            let exact =
+                |x: i64| !(edge.value(x as f64 + PIXEL_CENTER_OFFSET) / area < BARYCENTRIC_EPSILON);
+            let increasing = (k > 0.0) == (area > 0.0);
+            let expected = if increasing {
+                ((lo..hi).find(|&x| exact(x)).unwrap_or(hi), hi)
+            } else {
+                (lo, (lo..hi).find(|&x| !exact(x)).unwrap_or(hi))
+            };
+            assert_eq!(edge.accepted(lo, hi), expected, "case {case}: {edge:?}");
+            let crossing = (ax + (r + edge.eps_area) * edge.inv_k) - PIXEL_CENTER_OFFSET;
+            let bound = edge.bound_base + CROSSING_SLACK * ((r + edge.eps_area) * edge.inv_k).abs();
+            if (crossing - bound).ceil() > crossing + bound {
+                closed += 1;
+            }
+        }
+        assert!(closed > 50_000, "closed form exercised {closed} times");
     }
 
     /// xorshift64*, so the corpus below is a fixed sequence rather than a fresh one per run.
