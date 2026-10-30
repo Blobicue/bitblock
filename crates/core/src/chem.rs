@@ -60,14 +60,22 @@ use crate::world::{Coord, World, is_bedrock};
 mod net;
 mod p6;
 mod p6_rest;
-mod vapor;
 #[cfg(test)]
 mod tests_p6;
+mod vapor;
 
 pub use net::{ChemNet, ChemNetError, NetReaction, NetRow, NetSpecies, NetTable, PackedRow};
-pub use p6::{albedo, albedo_at, water_albedo, WaterAlbedo, cloud_reflect, CloudAlbedo, CLOUD_DEN, CLOUD_HALF, CLOUD_MAX, WATER_ALBEDO_GRAZE, WATER_ALBEDO_NADIR, WATER_ALBEDO_POW, vapor_trap, GH_VAPOR_DEN, GH_VAPOR_HALF, GH_VAPOR_MAX, ALBEDO_DEN, ALBEDO_ICE, ALBEDO_WATER, EnergyInput, FIRE_MAX_ROUNDS, Greenhouse, P6Params, StepError, StepReport, SunSweep, WaterCycle, lattice, wide_roll};
-pub use vapor::{vapor_patch, EvapTop, Gravity, RainFall, VaporLocality, VAPOR_MIX_TAU, VAPOR_PATCH_N};
-pub use p6_rest::{LATENT_PAIR, STORM_LEN, RAIN_END, RAIN_START, SEASON};
+pub use p6::{
+    ALBEDO_DEN, ALBEDO_ICE, ALBEDO_WATER, CLOUD_DEN, CLOUD_HALF, CLOUD_MAX, CloudAlbedo,
+    EnergyInput, FIRE_MAX_ROUNDS, GH_VAPOR_DEN, GH_VAPOR_HALF, GH_VAPOR_MAX, Greenhouse, P6Params,
+    StepError, StepReport, SunSweep, WATER_ALBEDO_GRAZE, WATER_ALBEDO_NADIR, WATER_ALBEDO_POW,
+    WaterAlbedo, WaterCycle, albedo, albedo_at, cloud_reflect, lattice, vapor_trap, water_albedo,
+    wide_roll,
+};
+pub use p6_rest::{LATENT_PAIR, RAIN_END, RAIN_START, SEASON, STORM_LEN};
+pub use vapor::{
+    EvapTop, Gravity, RainFall, VAPOR_MIX_TAU, VAPOR_PATCH_N, VaporLocality, vapor_patch,
+};
 
 /// Element lane symbols, in planet6 lane order.
 pub const SYM: [&str; NE] = [
@@ -137,13 +145,33 @@ const COMPOUNDS: [(MatId, &str, Lanes, i32); 41] = [
     (MatId(2), "water", [4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 36),
     (MatId(3), "ice", [4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 52),
     (MatId(4), "gypsum", [4, 6, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 72),
-    (MatId(5), "mineral", [0, 4, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 36),
-    (MatId(6), "sediment", [0, 4, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 36),
+    (
+        MatId(5),
+        "mineral",
+        [0, 4, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+        36,
+    ),
+    (
+        MatId(6),
+        "sediment",
+        [0, 4, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+        36,
+    ),
     (MatId(7), "co2", [0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 30),
     (MatId(8), "nh3", [3, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], 12),
-    (MatId(9), "limestone", [0, 3, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0], 30),
+    (
+        MatId(9),
+        "limestone",
+        [0, 3, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        30,
+    ),
     (MatId(10), "o2", [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 6),
-    (MatId(11), "quicklime", [0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], 7),
+    (
+        MatId(11),
+        "quicklime",
+        [0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        7,
+    ),
     (MatId(12), "steam", [2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 18),
     (MatId(13), "h2s", [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], 8),
     (MatId(14), "so", [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], 12),
@@ -156,9 +184,19 @@ const COMPOUNDS: [(MatId, &str, Lanes, i32); 41] = [
     (MatId(21), "h2s2o", [2, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0], 20),
     (MatId(22), "caso2", [0, 2, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 28),
     (MatId(23), "caso", [0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 20),
-    (MatId(24), "cah2so", [2, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 24),
+    (
+        MatId(24),
+        "cah2so",
+        [2, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+        24,
+    ),
     (MatId(25), "cah2o", [2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], 18),
-    (MatId(26), "slakelime", [2, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], 28),
+    (
+        MatId(26),
+        "slakelime",
+        [2, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        28,
+    ),
     (MatId(27), "cah2s", [2, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], 14),
     (MatId(28), "cos", [0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], 23),
     (MatId(29), "cso2", [0, 2, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], 32),
@@ -168,10 +206,25 @@ const COMPOUNDS: [(MatId, &str, Lanes, i32); 41] = [
     (MatId(33), "cs3o", [0, 1, 1, 0, 3, 0, 0, 0, 0, 0, 0, 0], 31),
     (MatId(34), "ch2so", [2, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], 27),
     (MatId(35), "ch2s", [2, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], 18),
-    (MatId(36), "formaldehyde", [2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 21),
-    (MatId(37), "formicacid", [2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 30),
+    (
+        MatId(36),
+        "formaldehyde",
+        [2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        21,
+    ),
+    (
+        MatId(37),
+        "formicacid",
+        [2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        30,
+    ),
     (MatId(38), "ch2s2", [2, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0], 22),
-    (MatId(39), "methane", [4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 14),
+    (
+        MatId(39),
+        "methane",
+        [4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        14,
+    ),
     (MatId(40), "caco", [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0], 26),
 ];
 
@@ -917,9 +970,12 @@ impl ChemWorld {
         if self.q[i] < u {
             return None; // bonds must break: heat-limited
         }
-        let c = self.table.comp(m).expect("domain holds only rows with chemistry");
-        for k in 0..NE {
-            self.inv[k] += c[k];
+        let c = self
+            .table
+            .comp(m)
+            .expect("domain holds only rows with chemistry");
+        for (inv, &v) in self.inv.iter_mut().zip(&c[..NE]) {
+            *inv += v;
         }
         self.q[i] = self.q[i].wrapping_sub(u);
         self.set_mat(i, MatId::AIR);
@@ -942,12 +998,14 @@ impl ChemWorld {
         if self.world.is_on(coord) && !is_bedrock(coord) {
             return false; // an occupied non-chem bit: do not overwrite
         }
-        let Some(c) = self.table.comp(mat) else { return false };
+        let Some(c) = self.table.comp(mat) else {
+            return false;
+        };
         if (0..NE).any(|k| self.inv[k] < c[k]) {
             return false;
         }
-        for k in 0..NE {
-            self.inv[k] -= c[k];
+        for (inv, &v) in self.inv.iter_mut().zip(&c[..NE]) {
+            *inv -= v;
         }
         let i = match at {
             Some(i) => i,
@@ -1008,9 +1066,11 @@ impl ChemWorld {
                 }
                 let top = isqrt((ri * ri - rho2) as u64) as i64;
                 for k in 1..=i64::from(height) {
-                    let (Some(x), Some(y), Some(z)) =
-                        (c.x.checked_add(dx), c.y.checked_add(top + k), c.z.checked_add(dz))
-                    else {
+                    let (Some(x), Some(y), Some(z)) = (
+                        c.x.checked_add(dx),
+                        c.y.checked_add(top + k),
+                        c.z.checked_add(dz),
+                    ) else {
                         continue;
                     };
                     let at = Coord::new(x, y, z);
@@ -1076,7 +1136,11 @@ impl ChemWorld {
                     if d2 <= ri * ri || d2 > ro * ro {
                         continue;
                     }
-                    let (Some(x), Some(y), Some(z)) = (c.x.checked_add(dx), c.y.checked_add(dy), c.z.checked_add(dz)) else {
+                    let (Some(x), Some(y), Some(z)) = (
+                        c.x.checked_add(dx),
+                        c.y.checked_add(dy),
+                        c.z.checked_add(dz),
+                    ) else {
                         continue;
                     };
                     let at = Coord::new(x, y, z);
@@ -1126,7 +1190,9 @@ impl ChemWorld {
     /// without an active guard, so the full ball and polar shell are unchanged.
     #[inline]
     pub(crate) fn shell_blocked(&self, t: usize) -> bool {
-        let Some((c, r, h)) = self.radial_shell else { return false };
+        let Some((c, r, h)) = self.radial_shell else {
+            return false;
+        };
         if !self.outward_guard() {
             return false;
         }
@@ -1166,7 +1232,10 @@ impl ChemWorld {
                     let at = Coord::new(c.x + dx, c.y + dy, c.z + dz);
                     let Some(i) = self.index_of(at) else { continue };
                     let m = self.mat[i];
-                    let land = m != MatId::AIR && m != MatId::WATER && m != MatId::ICE && !self.is_rising(m);
+                    let land = m != MatId::AIR
+                        && m != MatId::WATER
+                        && m != MatId::ICE
+                        && !self.is_rising(m);
                     if !land {
                         continue;
                     }
@@ -1511,7 +1580,8 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
 
     // Candidate offsets ordered by a blurred radius (fixed-point radius plus a
     // seeded jitter), hash then offset breaking ties.
-    let mut cand: Vec<(u64, u64, i64, (i64, i64, i64))> = Vec::new();
+    type Offset = (i64, i64, i64);
+    let mut cand: Vec<(u64, u64, i64, Offset)> = Vec::new();
     let mut air: Vec<(i64, (i64, i64, i64))> = Vec::new();
     for dx in -ri..=ri {
         for dy in -ri..=ri {
@@ -1580,7 +1650,11 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
 /// [`genesis_p6`] plus an air headroom shell `sky` cells deep above the ball
 /// ([`ChemWorld::add_sky_shell`]). Books and t0 are the unpadded genesis'
 /// exactly; `sky = 0` is [`genesis_p6`].
-pub fn genesis_sky(cfg: &GenesisConfig, params: &P6Params, sky: u32) -> Result<ChemWorld, GenesisError> {
+pub fn genesis_sky(
+    cfg: &GenesisConfig,
+    params: &P6Params,
+    sky: u32,
+) -> Result<ChemWorld, GenesisError> {
     let mut w = genesis_p6(cfg, params)?;
     w.add_sky_shell(&cfg.shape, sky);
     debug_assert_eq!(w.check_books(), Ok(()));
@@ -1590,7 +1664,11 @@ pub fn genesis_sky(cfg: &GenesisConfig, params: &P6Params, sky: u32) -> Result<C
 /// [`genesis_p6`] plus a full radial air shell `sky` cells deep
 /// ([`ChemWorld::add_radial_sky_shell`], §5u). Books and t0 are the unpadded
 /// genesis' exactly; `sky = 0` is [`genesis_p6`].
-pub fn genesis_sky_radial(cfg: &GenesisConfig, params: &P6Params, sky: u32) -> Result<ChemWorld, GenesisError> {
+pub fn genesis_sky_radial(
+    cfg: &GenesisConfig,
+    params: &P6Params,
+    sky: u32,
+) -> Result<ChemWorld, GenesisError> {
     let mut w = genesis_p6(cfg, params)?;
     w.add_radial_sky_shell(&cfg.shape, sky);
     debug_assert_eq!(w.check_books(), Ok(()));
@@ -1851,7 +1929,9 @@ mod band_tests {
             e.0 += d2(c);
             e.1 += 1;
         }
-        acc.into_iter().map(|(m, (s, n))| (m, s as f64 / n as f64)).collect()
+        acc.into_iter()
+            .map(|(m, (s, n))| (m, s as f64 / n as f64))
+            .collect()
     }
 
     fn count(w: &ChemWorld, m: MatId) -> usize {
@@ -1871,11 +1951,20 @@ mod band_tests {
             // The innermost 400 cells are (almost) all iron.
             let mut cells: Vec<(i64, MatId)> = w.materials().map(|(c, m)| (d2(c), m)).collect();
             cells.sort();
-            let fe_inner =
-                cells[..400].iter().filter(|(_, m)| *m == MatId::element(6)).count();
-            assert!(fe_inner >= 360, "seed {seed}: {fe_inner}/400 inner cells are Fe");
+            let fe_inner = cells[..400]
+                .iter()
+                .filter(|(_, m)| *m == MatId::element(6))
+                .count();
+            assert!(
+                fe_inner >= 360,
+                "seed {seed}: {fe_inner}/400 inner cells are Fe"
+            );
             // And no iron sits in the outer half of the radius.
-            let max_fe = cells.iter().filter(|(_, m)| *m == MatId::element(6)).map(|x| x.0).max();
+            let max_fe = cells
+                .iter()
+                .filter(|(_, m)| *m == MatId::element(6))
+                .map(|x| x.0)
+                .max();
             assert!(max_fe.unwrap() <= 36, "seed {seed}: Fe at d2 {max_fe:?}");
         }
     }
@@ -1887,12 +1976,19 @@ mod band_tests {
         let w = world(budget, 7, 10);
         // Condensed cells only (leftover O becomes an O2 skin outside the ocean).
         let gas = |m: MatId| LAYERS.iter().position(|&l| l == m).unwrap() > 13;
-        let mut solid: Vec<(i64, MatId)> =
-            w.materials().filter(|(_, m)| !gas(*m)).map(|(c, m)| (d2(c), m)).collect();
+        let mut solid: Vec<(i64, MatId)> = w
+            .materials()
+            .filter(|(_, m)| !gas(*m))
+            .map(|(c, m)| (d2(c), m))
+            .collect();
         solid.sort();
         let outer = &solid[solid.len() - 400..];
         let water = outer.iter().filter(|(_, m)| *m == MatId::WATER).count();
-        assert!(water * 10 >= outer.len() * 9, "outer condensed water {water}/{}", outer.len());
+        assert!(
+            water * 10 >= outer.len() * 9,
+            "outer condensed water {water}/{}",
+            outer.len()
+        );
         assert!(count(&w, MatId::WATER) > 1500);
         let means = mean_d2(&w);
         assert!(means[&MatId::element(6)] < means[&MatId::ROCK]);
@@ -1908,10 +2004,19 @@ mod band_tests {
             count(&w, MatId::GYP),
             count(&w, MatId::CARB),
         );
-        assert!(rock > 0 && min > 0 && gyp > 0 && carb > 0, "{rock} {min} {gyp} {carb}");
-        assert!(rock.abs_diff(min) <= 1 && rock.abs_diff(gyp) <= 1, "{rock} {min} {gyp}");
+        assert!(
+            rock > 0 && min > 0 && gyp > 0 && carb > 0,
+            "{rock} {min} {gyp} {carb}"
+        );
+        assert!(
+            rock.abs_diff(min) <= 1 && rock.abs_diff(gyp) <= 1,
+            "{rock} {min} {gyp}"
+        );
         // The old weak spot: gypsum fallback cells inside the metal core.
-        let core_gyp = w.materials().filter(|(c, m)| *m == MatId::GYP && d2(*c) <= 16).count();
+        let core_gyp = w
+            .materials()
+            .filter(|(c, m)| *m == MatId::GYP && d2(*c) <= 16)
+            .count();
         assert_eq!(core_gyp, 0);
     }
 
@@ -1920,9 +2025,16 @@ mod band_tests {
         for seed in [3, 7] {
             let w = world(MIXED, seed, 9);
             let means = mean_d2(&w);
-            let present: Vec<MatId> = LAYERS.iter().copied().filter(|m| means.contains_key(m)).collect();
+            let present: Vec<MatId> = LAYERS
+                .iter()
+                .copied()
+                .filter(|m| means.contains_key(m))
+                .collect();
             // Fe -> Ni -> Si -> Mg -> crust -> ocean: each non-trivial layer lies outside the last.
-            let big: Vec<MatId> = present.into_iter().filter(|m| count(&w, *m) >= 20).collect();
+            let big: Vec<MatId> = present
+                .into_iter()
+                .filter(|m| count(&w, *m) >= 20)
+                .collect();
             for pair in big.windows(2) {
                 assert!(
                     means[&pair[0]] < means[&pair[1]],
@@ -1938,7 +2050,12 @@ mod band_tests {
 
     #[test]
     fn plan_matches_placement_and_caps_at_cell_count() {
-        for (budget, n) in [(MIXED, 50usize), (MIXED, 5000), ([0; NE], 10), ([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7], 3)] {
+        for (budget, n) in [
+            (MIXED, 50usize),
+            (MIXED, 5000),
+            ([0; NE], 10),
+            ([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7], 3),
+        ] {
             let (counts, bag) = plan_layers(&budget, n);
             let placed: usize = counts.iter().sum();
             assert!(placed <= n);

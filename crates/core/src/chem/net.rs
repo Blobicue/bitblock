@@ -162,7 +162,9 @@ fn groups(body: &str, open: char, close: char) -> Result<Vec<&str>, ChemNetError
                 out.push(&body[start..k]);
             }
         } else if depth == 0 && !(ch.is_whitespace() || ch == ',') {
-            return Err(ChemNetError::Parse(format!("unexpected `{ch}` between rows")));
+            return Err(ChemNetError::Parse(format!(
+                "unexpected `{ch}` between rows"
+            )));
         }
     }
     Ok(out)
@@ -220,7 +222,9 @@ impl NetTable {
                     .ok_or_else(|| ChemNetError::Parse(format!("species {k}: no `{key}`")))
             };
             if int(get("i")?)? != k as i64 {
-                return Err(ChemNetError::Parse(format!("species {k}: index out of order")));
+                return Err(ChemNetError::Parse(format!(
+                    "species {k}: index out of order"
+                )));
             }
             let unq = |v: &str| v.trim_matches('"').to_string();
             let cs = get("c")?.trim_start_matches('[').trim_end_matches(']');
@@ -248,10 +252,16 @@ impl NetTable {
         {
             let v: Vec<i64> = row.split(',').map(int).collect::<Result<_, _>>()?;
             if v.len() != 10 {
-                return Err(ChemNetError::Parse(format!("reaction {k}: {} fields", v.len())));
+                return Err(ChemNetError::Parse(format!(
+                    "reaction {k}: {} fields",
+                    v.len()
+                )));
             }
             let ix = |x: i64| {
-                usize::try_from(x).map_err(|_| ChemNetError::BadSpecies { row: k, index: usize::MAX })
+                usize::try_from(x).map_err(|_| ChemNetError::BadSpecies {
+                    row: k,
+                    index: usize::MAX,
+                })
             };
             reactions.push(NetReaction {
                 a: ix(v[0])?,
@@ -338,7 +348,12 @@ impl ChemNet {
             m.iter().find(|(kk, _)| kk == k).map(|(_, id)| *id)
         };
         let is_atom = |sp: &NetSpecies| sp.c.iter().sum::<i64>() == 1 && sp.p == 'a';
-        let atom_keys: Vec<[i64; 6]> = t.species.iter().filter(|s| is_atom(s)).map(|s| s.c).collect();
+        let atom_keys: Vec<[i64; 6]> = t
+            .species
+            .iter()
+            .filter(|s| is_atom(s))
+            .map(|s| s.c)
+            .collect();
 
         // Batch 4: mint every remaining species.
         let mut next: u8 = 41;
@@ -397,7 +412,8 @@ impl ChemNet {
         for (r, rx) in t.reactions.iter().enumerate() {
             let (a, b) = (species(r, rx.a)?, species(r, rx.b)?);
             let (pc, pd) = (species(r, rx.pc)?, species(r, rx.pd)?);
-            let (Some(ra), Some(rb), Some(pci), Some(pdi)) = (sp_id(a), sp_id(b), sp_id(pc), sp_id(pd))
+            let (Some(ra), Some(rb), Some(pci), Some(pdi)) =
+                (sp_id(a), sp_id(b), sp_id(pc), sp_id(pd))
             else {
                 continue;
             };
@@ -436,21 +452,27 @@ impl ChemNet {
             let nm = mat.name(*id).unwrap_or("?").to_string();
             let Some(sp) = sp_by_comp.get(k) else {
                 if !DEAD_OK.contains(id) {
-                    errs.push(format!("mount key {k:?} (material {nm}) matches NO species"));
+                    errs.push(format!(
+                        "mount key {k:?} (material {nm}) matches NO species"
+                    ));
                 }
                 continue;
             };
             let c = mat.comp(*id).expect("mounted id has a row");
-            for lane in 0..6 {
-                if c[lane] != sp.c[lane] {
+            for (lane, (&got, &want)) in c[..6].iter().zip(&sp.c[..6]).enumerate() {
+                if got != want {
                     errs.push(format!(
                         "material {nm} comp lane {lane} says {}, species {} says {}",
-                        c[lane], sp.f, sp.c[lane]
+                        got, sp.f, want
                     ));
                 }
             }
             if !LEGACY_ENERGY.contains(&id.0) && mat.bind(*id) != sp.u {
-                errs.push(format!("material {nm} BIND {} != table U {}", mat.bind(*id), sp.u));
+                errs.push(format!(
+                    "material {nm} BIND {} != table U {}",
+                    mat.bind(*id),
+                    sp.u
+                ));
             }
         }
         if !errs.is_empty() {
@@ -462,7 +484,9 @@ impl ChemNet {
         let pk = |row: &Mounted| -> Result<usize, ChemNetError> {
             let (a, b) = (row.ra.0 as usize, row.rb.0 as usize);
             if a >= NMAT_CSR || b >= NMAT_CSR {
-                return Err(ChemNetError::Parse(format!("mounted id {a}/{b} >= {NMAT_CSR}")));
+                return Err(ChemNetError::Parse(format!(
+                    "mounted id {a}/{b} >= {NMAT_CSR}"
+                )));
             }
             Ok(a * NMAT_CSR + b)
         };
@@ -488,7 +512,10 @@ impl ChemNet {
             let w = (pair_off[p] + fill[p]) as usize;
             fill[p] += 1;
             if fill[p] > 64 {
-                return Err(ChemNetError::PairOverflow { ra: row.ra, rb: row.rb });
+                return Err(ChemNetError::PairOverflow {
+                    ra: row.ra,
+                    rb: row.rb,
+                });
             }
             rows[w] = PackedRow {
                 sa: row.sa as u8,
@@ -507,12 +534,18 @@ impl ChemNet {
             idx_by_comp.insert(sp.c, k);
         }
         let g = |c: [i64; 6]| idx_by_comp.get(&c).copied();
-        let net_row = match (g([0, 0, 1, 0, 0, 0]), g([0, 1, 0, 0, 0, 0]), g([0, 2, 1, 0, 0, 0])) {
+        let net_row = match (
+            g([0, 0, 1, 0, 0, 0]),
+            g([0, 1, 0, 0, 0, 0]),
+            g([0, 2, 1, 0, 0, 0]),
+        ) {
             (Some(c), Some(o), Some(co2)) => t
                 .reactions
                 .iter()
                 .find(|rx| {
-                    (rx.a == c || rx.b == c) && (rx.a == o || rx.b == o) && (rx.pc == co2 || rx.pd == co2)
+                    (rx.a == c || rx.b == c)
+                        && (rx.a == o || rx.b == o)
+                        && (rx.pc == co2 || rx.pd == co2)
                 })
                 .map(|rx| NetRow {
                     de: rx.de,
@@ -610,7 +643,11 @@ impl ChemWorld {
     /// The generic network law v5: snapshot intents, lowest-index-owner
     /// claims, commit, repeat to a fixpoint (at most [`FIRE_MAX_ROUNDS`]).
     /// Returns (firings, rounds run).
-    pub(crate) fn network_pass(&mut self, topo: &Topology, net: &ChemNet) -> Result<(u32, u32), StepError> {
+    pub(crate) fn network_pass(
+        &mut self,
+        topo: &Topology,
+        net: &ChemNet,
+    ) -> Result<(u32, u32), StepError> {
         let n = self.cells.len();
         let mut prov = vec![0u8; n];
         let mut done = vec![false; n];
@@ -714,7 +751,8 @@ impl ChemWorld {
                             && b_pick >= sb
                             && !(row.bd < 0 && i64::from(qi) < -i64::from(row.bd))
                         {
-                            let salt = 0x9e3u32.wrapping_add(u32::from(row.p0.0).wrapping_mul(7919));
+                            let salt =
+                                0x9e3u32.wrapping_add(u32::from(row.p0.0).wrapping_mul(7919));
                             if self.roll_at(topo, salt, i, tick) < 60 {
                                 intent[i] = Some(Intent {
                                     row: r as u32,
@@ -736,8 +774,8 @@ impl ChemWorld {
                 break;
             }
             // pass B - CLAIM
-            for i in 0..n {
-                if let Some(it) = &intent[i] {
+            for (i, it) in intent.iter().enumerate() {
+                if let Some(it) = it {
                     for &s in &it.slots[..it.n as usize] {
                         let s = s as usize;
                         claim[s] = claim[s].min(i as u32 + 1);
@@ -749,7 +787,10 @@ impl ChemWorld {
             for i in 0..n {
                 let Some(it) = intent[i] else { continue };
                 let k = it.n as usize;
-                if it.slots[..k].iter().any(|&s| claim[s as usize] != i as u32 + 1) {
+                if it.slots[..k]
+                    .iter()
+                    .any(|&s| claim[s as usize] != i as u32 + 1)
+                {
                     continue;
                 }
                 let raid = self.mat[i];

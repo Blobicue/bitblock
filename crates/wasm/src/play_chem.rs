@@ -10,11 +10,11 @@
 
 use std::sync::Arc;
 
-use bitblock_core::chem::{
-    genesis, ChemNet, ChemWorld, EnergyInput, GenesisBudget, GenesisConfig, GenesisShape, Lanes,
-    MatId, SunSweep, WaterCycle, DEFAULT_ATOM_CAP, NE, SYM,
-};
 use bitblock_core::camera::Vec3;
+use bitblock_core::chem::{
+    ChemNet, ChemWorld, DEFAULT_ATOM_CAP, EnergyInput, GenesisBudget, GenesisConfig, GenesisShape,
+    Lanes, MatId, NE, SYM, SunSweep, WaterCycle, genesis,
+};
 use bitblock_core::world::{Coord, World};
 
 /// planet6's trimmed reaction table (11 mounted rows, 2.8 KB). The full 24k-row
@@ -89,7 +89,10 @@ impl ChemCut {
     }
 
     pub fn name(self) -> &'static str {
-        CHEM_CUT_NAMES.get(self.mode as usize).copied().unwrap_or("?")
+        CHEM_CUT_NAMES
+            .get(self.mode as usize)
+            .copied()
+            .unwrap_or("?")
     }
 }
 
@@ -290,8 +293,16 @@ impl ChemPlay {
             _ => EnergyInput::OFF,
         };
         // the full-sphere sweep belongs to the sun8 baseline; M1 keeps its upper-sky day
-        p.sun_sweep = if energy == CHEM_ENERGY_SUN8 { SunSweep::FULL } else { SunSweep::Upper };
-        p.cycle = if cycle == CHEM_CYCLE_DRIVEN { WaterCycle::Driven } else { WaterCycle::Classic };
+        p.sun_sweep = if energy == CHEM_ENERGY_SUN8 {
+            SunSweep::FULL
+        } else {
+            SunSweep::Upper
+        };
+        p.cycle = if cycle == CHEM_CYCLE_DRIVEN {
+            WaterCycle::Driven
+        } else {
+            WaterCycle::Classic
+        };
         self.world.set_params(p);
         self.energy = energy;
         self.cycle = cycle;
@@ -303,10 +314,16 @@ impl ChemPlay {
     pub fn dynamics_suffix(&self) -> String {
         let mut s = String::new();
         if self.energy != CHEM_ENERGY_OFF {
-            s += &format!(" energy={}", CHEM_ENERGY_NAMES.get(self.energy as usize).unwrap_or(&"?"));
+            s += &format!(
+                " energy={}",
+                CHEM_ENERGY_NAMES.get(self.energy as usize).unwrap_or(&"?")
+            );
         }
         if self.cycle != CHEM_CYCLE_CLASSIC {
-            s += &format!(" cycle={}", CHEM_CYCLE_NAMES.get(self.cycle as usize).unwrap_or(&"?"));
+            s += &format!(
+                " cycle={}",
+                CHEM_CYCLE_NAMES.get(self.cycle as usize).unwrap_or(&"?")
+            );
         }
         s
     }
@@ -318,7 +335,10 @@ impl ChemPlay {
         if self.preset == CHEM_PRESET_GAS {
             return "gas";
         }
-        CHEM_PRESETS.get(self.preset as usize).copied().unwrap_or("?")
+        CHEM_PRESETS
+            .get(self.preset as usize)
+            .copied()
+            .unwrap_or("?")
     }
 
     /// ` cut=<mode>:<offset>` while a cross-section is active, else empty (status text with the
@@ -343,7 +363,10 @@ impl ChemPlay {
             return false;
         }
         let r = self.radius as i32;
-        self.cut = ChemCut { mode, offset: offset.clamp(-r, r) };
+        self.cut = ChemCut {
+            mode,
+            offset: offset.clamp(-r, r),
+        };
         true
     }
 
@@ -370,14 +393,14 @@ impl ChemPlay {
         let bx = beyond(signs[0], coord.x - c.x);
         let by = beyond(signs[1], coord.y - c.y);
         let bz = beyond(signs[2], coord.z - c.z);
-        let hit = match self.cut.mode {
+
+        match self.cut.mode {
             CHEM_CUT_WEDGE => bx && by && bz,
             CHEM_CUT_X => bx,
             CHEM_CUT_Y => by,
             CHEM_CUT_Z => bz,
             _ => false,
-        };
-        hit
+        }
     }
 
     /// `world` with every on-bit the active cut hides switched off (render / aim view only).
@@ -411,7 +434,10 @@ impl ChemPlay {
             let mut mask = 0u8;
             for (bit, d) in bitblock_core::render::TINT_LIT_DIRS.iter().enumerate() {
                 let n = Coord::new(coord.x + d[0], coord.y + d[1], coord.z + d[2]);
-                if self.cut_geometry_hides(n, signs) && world.is_on(n) && self.world.heat(n).is_some() {
+                if self.cut_geometry_hides(n, signs)
+                    && world.is_on(n)
+                    && self.world.heat(n).is_some()
+                {
                     mask |= 1 << bit;
                 }
             }
@@ -430,7 +456,7 @@ impl ChemPlay {
         }
         let mut n = self.queued.min(CHEM_STEPS_PER_TICK_MAX);
         self.queued -= n;
-        if self.every > 0 && tick % u64::from(self.every) == 0 {
+        if self.every > 0 && tick.is_multiple_of(u64::from(self.every)) {
             n += 1;
         }
         n
@@ -499,7 +525,10 @@ impl ChemPlay {
             self.drift_abs(),
             self.world.energy_drift(),
             self.last,
-            self.error.as_ref().map(|e| format!(" chem_error={e}")).unwrap_or_default(),
+            self.error
+                .as_ref()
+                .map(|e| format!(" chem_error={e}"))
+                .unwrap_or_default(),
         ) + &self.dynamics_suffix()
             + &self.cut_suffix()
     }
@@ -528,7 +557,11 @@ impl ChemPlay {
             self.world.space_q(),
             self.world.energy_total(),
             self.world.energy_drift(),
-            if self.world.check_books().is_ok() { "ok" } else { "BAD" },
+            if self.world.check_books().is_ok() {
+                "ok"
+            } else {
+                "BAD"
+            },
             mat_name(self.place_mat),
             self.last,
             self.error.as_deref().unwrap_or("none"),
@@ -633,7 +666,6 @@ fn mat_name(m: MatId) -> String {
         .unwrap_or_else(|| format!("m{}", m.0))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -643,7 +675,10 @@ mod tests {
         let mut seen = std::collections::BTreeSet::new();
         for &(id, rgb) in CHEM_PALETTE {
             assert!(seen.insert(rgb), "duplicate colour for id {id}");
-            assert!(bitblock_core::chem::name(MatId(id)).is_some(), "id {id} has no chem row");
+            assert!(
+                bitblock_core::chem::name(MatId(id)).is_some(),
+                "id {id} has no chem row"
+            );
         }
         let colors = ChemColors::new();
         assert_eq!(colors.by_id[0], 0);
@@ -659,7 +694,11 @@ mod tests {
             let mut ids = std::collections::BTreeSet::new();
             for (_, m) in c.world.materials() {
                 ids.insert(m.0);
-                assert!(CHEM_PALETTE.iter().any(|(id, _)| *id == m.0), "preset {p} id {} unpaletted", m.0);
+                assert!(
+                    CHEM_PALETTE.iter().any(|(id, _)| *id == m.0),
+                    "preset {p} id {} unpaletted",
+                    m.0
+                );
             }
             assert!(ids.len() >= 5, "preset {p} materials {ids:?}");
         }
@@ -672,7 +711,10 @@ mod tests {
         // lands radially and sheds the rest onto the nearest regions with
         // ground. Books exact either way.
         let mut out = Vec::new();
-        for fall in [bitblock_core::chem::RainFall::Down, bitblock_core::chem::RainFall::Core] {
+        for fall in [
+            bitblock_core::chem::RainFall::Down,
+            bitblock_core::chem::RainFall::Core,
+        ] {
             let mut c = ChemPlay::new(CHEM_PRESET_OCEAN, 1, 12).unwrap();
             assert!(c.set_dynamics(CHEM_ENERGY_M1, CHEM_CYCLE_DRIVEN));
             let mut p = *c.world.params();
@@ -685,12 +727,19 @@ mod tests {
             assert_eq!(c.world.energy_drift(), 0);
             assert!(c.world.lane_drift().iter().all(|&x| x == 0));
             assert_eq!(c.world.vapor_bins().iter().sum::<i64>(), c.world.vapor());
-            out.push((c.world.rained(), c.world.rain_spilled(), c.world.rain_shed()));
+            out.push((
+                c.world.rained(),
+                c.world.rain_spilled(),
+                c.world.rain_shed(),
+            ));
         }
         let ((dr, ds, dh), (cr, cs, ch)) = (out[0], out[1]);
         assert!(dr > 0 && cr > 0, "{out:?}");
         assert!(ds > 0 && dh == (0, 0), "down: spills, never sheds {out:?}");
-        assert!(cs == 0 && ch.0 > 0 && ch.1 >= ch.0 && ch.0 < cr, "core: no spill, sheds {out:?}");
+        assert!(
+            cs == 0 && ch.0 > 0 && ch.1 >= ch.0 && ch.0 < cr,
+            "core: no spill, sheds {out:?}"
+        );
     }
 
     #[test]
@@ -716,7 +765,10 @@ mod tests {
             out.push((c.world.evaporated(), c.world.rained()));
         }
         assert!(out.iter().all(|&(e, r)| e > 0 && r > 0), "{out:?}");
-        assert_ne!(out[0], out[1], "the evaporation frame matters on the full ball {out:?}");
+        assert_ne!(
+            out[0], out[1],
+            "the evaporation frame matters on the full ball {out:?}"
+        );
     }
 
     #[test]
@@ -759,7 +811,10 @@ mod tests {
         assert_eq!((c.energy, c.cycle), (CHEM_ENERGY_SUN8, CHEM_CYCLE_DRIVEN));
         let p = *c.world.params();
         assert!(p.convect);
-        assert_eq!((p.energy_in.sun, p.energy_in.day, p.energy_in.core), (8, 600, 40));
+        assert_eq!(
+            (p.energy_in.sun, p.energy_in.day, p.energy_in.core),
+            (8, 600, 40)
+        );
         assert_eq!(p.sun_sweep, SunSweep::FULL);
         assert_eq!(p.cycle, WaterCycle::Driven);
         assert!(c.dynamics_suffix().contains("energy=sun8"));
@@ -767,7 +822,10 @@ mod tests {
         let count = |m: MatId| c.world.domain().filter(|&(_, x, _)| x == m).count();
         assert_eq!(count(MatId::WATER), 0);
         assert_eq!(count(MatId::ROCK), 0);
-        assert!(count(MatId::CH4) > count(MatId(126)) * 3, "thick gas envelope over a small core");
+        assert!(
+            count(MatId::CH4) > count(MatId(126)) * 3,
+            "thick gas envelope over a small core"
+        );
         let mut convected = 0u64;
         for _ in 0..40 {
             convected += u64::from(c.world.step().unwrap().convected);
@@ -777,6 +835,12 @@ mod tests {
         assert_eq!(c.world.energy_drift(), 0);
         assert!(c.world.lane_drift().iter().all(|&x| x == 0));
         // rocky presets are untouched: convection stays off
-        assert!(!ChemPlay::new(CHEM_PRESET_OCEAN, 7, 8).unwrap().world.params().convect);
+        assert!(
+            !ChemPlay::new(CHEM_PRESET_OCEAN, 7, 8)
+                .unwrap()
+                .world
+                .params()
+                .convect
+        );
     }
 }

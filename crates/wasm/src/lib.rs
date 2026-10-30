@@ -13,39 +13,39 @@ pub mod play_chem;
 use std::cell::RefCell;
 use std::io::Cursor;
 
-use bitblock_core::camera::{Camera, Vec3, DEFAULT_VERTICAL_FOV_RADIANS};
-use bitblock_core::frame::FrameRef;
-use bitblock_core::history::{world_tag, History};
-use bitblock_core::program::{Edit, Operation, Program};
+use bitblock_core::camera::{Camera, DEFAULT_VERTICAL_FOV_RADIANS, Vec3};
 use bitblock_core::display::{
     CaptureRect, CaptureStage, DisplayCaptureFacts, DisplayLedgerV2, DisplayOutcome,
 };
+use bitblock_core::frame::FrameRef;
 use bitblock_core::frame_v2::{FrameReceiptV2, FrameStream};
+use bitblock_core::history::{History, world_tag};
 use bitblock_core::interaction::InteractionTape;
-use bitblock_core::protocol::{hash_canonical, ContentTag};
-use bitblock_core::render::{bounds_aabb, coord_containing, raycast, Renderer};
+use bitblock_core::program::{Edit, Operation, Program};
+use bitblock_core::protocol::{ContentTag, hash_canonical};
+use bitblock_core::render::{Renderer, bounds_aabb, coord_containing, raycast};
 use bitblock_core::sidebar::{DisplayStatus, FrameCompositor, SidebarSnapshot};
-use bitblock_core::world::{is_bedrock, Coord, World};
+use bitblock_core::world::{Coord, World, is_bedrock};
 use bitblock_research::coordinate_episode::CoordinateEpisodeEvidence;
-use bitblock_research::ladder_bridge::quote_edit;
-use bitblock_research::program::EDIT_SCHEMA;
-use bitblock_research::protocol::TagKind;
-use bitblock_research::sequential::{
-    open_local_mode_tag, sequential_function_tag, sequential_mode_tag,
-};
 use bitblock_research::display_artifact::DisplayCaptureArtifact;
+use bitblock_research::ladder_bridge::quote_edit;
 use bitblock_research::output_color::OutputColorObservation;
 use bitblock_research::output_topology::{
     AcquisitionAttempt, AcquisitionFacts, OutputTopologyObservation,
 };
 use bitblock_research::physical_sensor::{
-    physical_sensor_policy_tag, DeclaredSensorKind, DeclaredSensorProfile,
-    PhysicalSensorObservation, SensorChallenge, SensorChallengePoint, SensorRgbSample,
+    DeclaredSensorKind, DeclaredSensorProfile, PhysicalSensorObservation, SensorChallenge,
+    SensorChallengePoint, SensorRgbSample, physical_sensor_policy_tag,
 };
 use bitblock_research::presentation::composition_timing_policy_tag;
+use bitblock_research::program::EDIT_SCHEMA;
+use bitblock_research::protocol::TagKind;
 use bitblock_research::replay_evidence::{
     LocalReplayBuild, LocalReplayContext, LocalReplayEndpoint, LocalReplayEvidence,
     ReplayFrameCommitment,
+};
+use bitblock_research::sequential::{
+    open_local_mode_tag, sequential_function_tag, sequential_mode_tag,
 };
 use bitblock_research::storage::StorageRecord;
 use sha2::{Digest, Sha256};
@@ -207,7 +207,10 @@ pub fn xrgb_to_rgba(xrgb: &[u32]) -> Vec<u8> {
 }
 
 pub fn rgba_to_xrgb(rgba: &[u8]) -> Vec<u32> {
-    assert!(rgba.len() % 4 == 0, "RGBA byte length must be a multiple of 4");
+    assert!(
+        rgba.len().is_multiple_of(4),
+        "RGBA byte length must be a multiple of 4"
+    );
     rgba.chunks_exact(4)
         .map(|px| {
             debug_assert_eq!(px[3], 255);
@@ -235,12 +238,7 @@ pub fn coord_for_canvas_pixel(world: &World, camera: &Camera, px: u32, py: u32) 
     if px >= VIEWPORT || py >= VIEWPORT {
         return None;
     }
-    let ray = camera.ray_for_pixel(
-        f64::from(px) + 0.5,
-        f64::from(py) + 0.5,
-        VIEWPORT,
-        VIEWPORT,
-    )?;
+    let ray = camera.ray_for_pixel(f64::from(px) + 0.5, f64::from(py) + 0.5, VIEWPORT, VIEWPORT)?;
     raycast(world, ray).map(|hit| hit.coord)
 }
 
@@ -295,11 +293,14 @@ pub fn browser_edit_result() -> String {
     )
 }
 
+/// A live toggle: the coord, the canvas pixel it came from (if any), and its tick.
+type LiveToggle = (Coord, Option<(u32, u32)>, u64);
+
 fn format_live_status(
     world: &World,
     camera: &Camera,
     receipt: Option<ContentTag>,
-    toggle: Option<(Coord, Option<(u32, u32)>, u64)>,
+    toggle: Option<LiveToggle>,
 ) -> String {
     let world_content = world_tag(world);
     let frame_content = frame_tag_with(world, camera);
@@ -399,10 +400,10 @@ impl LiveSession {
         if let Some(coord) = coord_for_canvas_pixel(&self.world, &self.camera, px, py) {
             return self.apply_toggle(coord, Some((px, py)));
         }
-        if self.last_px == Some((px, py)) {
-            if let Some(coord) = self.last_coord {
-                return self.apply_toggle(coord, Some((px, py)));
-            }
+        if self.last_px == Some((px, py))
+            && let Some(coord) = self.last_coord
+        {
+            return self.apply_toggle(coord, Some((px, py)));
         }
         false
     }
@@ -440,7 +441,6 @@ impl LiveSession {
     }
 }
 
-
 /// Windowless gallery raster. Mirrors `examples/gallery_frame.rs`:
 /// `Program::parse` → `World::new_with_origin` → bounds camera → `Renderer::render`.
 /// No crosshair, no window, no PNG. `size` is the only bound (preview vs 801).
@@ -476,13 +476,20 @@ impl GalleryRaster {
 }
 
 fn format_gallery_deg(deg: f64) -> i32 {
-    assert!(deg.is_finite() && deg.fract() == 0.0, "gallery degrees must be whole");
+    assert!(
+        deg.is_finite() && deg.fract() == 0.0,
+        "gallery degrees must be whole"
+    );
     deg as i32
 }
 
 /// Gallery camera from `examples/gallery_frame.rs` (yaw/pitch in degrees).
 pub fn gallery_camera(world: &World, yaw_deg: f64, pitch_deg: f64) -> Camera {
-    let (min, max) = bounds_aabb(world.bounds().expect("gallery program left the world empty"));
+    let (min, max) = bounds_aabb(
+        world
+            .bounds()
+            .expect("gallery program left the world empty"),
+    );
     let center = Vec3::new(
         (min.x + max.x) / 2.0,
         (min.y + max.y) / 2.0,
@@ -546,7 +553,13 @@ pub fn raster_recursion_dead_frontal() -> GalleryRaster {
 }
 
 pub fn raster_symbol_gallery(size: u32) -> GalleryRaster {
-    raster_gallery_source("symbol", SYMBOL_BB, size, GALLERY_YAW_DEG, GALLERY_PITCH_DEG)
+    raster_gallery_source(
+        "symbol",
+        SYMBOL_BB,
+        size,
+        GALLERY_YAW_DEG,
+        GALLERY_PITCH_DEG,
+    )
 }
 
 /// `program_id` 0..3 selects symbol, recognition, architecture, recursion.
@@ -567,7 +580,6 @@ fn publish_gallery(raster: GalleryRaster) -> u32 {
     store_into(&GALLERY_RGBA, &raster.rgba);
     store_text(&GALLERY_RESULT, &status)
 }
-
 
 /// Storage envelope of the `on 0 0 0` edit pinned by `envelope_tag_matches_the_independent_vector`.
 pub fn research_storage_status() -> String {
@@ -615,8 +627,8 @@ pub fn research_episode_status() -> String {
     history
         .commit_tick(transaction, &world)
         .expect("episode fixture tick must publish");
-    let evidence = CoordinateEpisodeEvidence::derive(&initial, &history)
-        .expect("episode fixture derives");
+    let evidence =
+        CoordinateEpisodeEvidence::derive(&initial, &history).expect("episode fixture derives");
     format!(
         "bitblock_browser_research ok module=coordinate_episode episodes={} encoded={} policy={} tag={}",
         evidence.episodes().len(),
@@ -646,7 +658,6 @@ pub fn research_ladder_status() -> String {
         quote.receipt_tag(),
     )
 }
-
 
 fn range_tag(kind: TagKind, start: u8) -> ContentTag {
     ContentTag::from_digest(
@@ -780,10 +791,10 @@ pub fn research_presentation_status() -> String {
 }
 
 const OUTPUT_COLOR_VECTOR: [u8; 53] = [
-    0x75, 0x20, 0xbc, 0x7b, 0x7d, 0xae, 0x8e, 0x9c, 0x1d, 0x37, 0x12, 0x39, 0xb4, 0x56, 0xf9,
-    0xbf, 0x03, 0x78, 0xbc, 0x51, 0xe8, 0x58, 0xf2, 0x20, 0xeb, 0xeb, 0x1d, 0x58, 0xb3, 0x6e,
-    0x70, 0x4f, 0x00, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0x0f, 0xff, 0xff, 0xff, 0xfe, 0xff,
-    0xff, 0xff, 0xff, 0x01, 0x00, 0x00, 0x04, 0x90,
+    0x75, 0x20, 0xbc, 0x7b, 0x7d, 0xae, 0x8e, 0x9c, 0x1d, 0x37, 0x12, 0x39, 0xb4, 0x56, 0xf9, 0xbf,
+    0x03, 0x78, 0xbc, 0x51, 0xe8, 0x58, 0xf2, 0x20, 0xeb, 0xeb, 0x1d, 0x58, 0xb3, 0x6e, 0x70, 0x4f,
+    0x00, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0x0f, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff,
+    0x01, 0x00, 0x00, 0x04, 0x90,
 ];
 
 /// Independent output-color byte vector (`independent_python_known_answer_vector_decodes_and_retags`).
@@ -951,8 +962,11 @@ pub fn sidebar_composite() -> SidebarComposite {
         previous_raster: None,
     };
     let game = renderer.pixels().to_vec();
-    let mut compositor =
-        FrameCompositor::new(SIDEBAR_OUTPUT_WIDTH, SIDEBAR_OUTPUT_HEIGHT, SIDEBAR_SIMULATION);
+    let mut compositor = FrameCompositor::new(
+        SIDEBAR_OUTPUT_WIDTH,
+        SIDEBAR_OUTPUT_HEIGHT,
+        SIDEBAR_SIMULATION,
+    );
     let facts = compositor.compose(&game, game_tag, &snapshot);
     let pixels = compositor.pixels();
     let frame_tag = FrameRef::new(SIDEBAR_OUTPUT_WIDTH, SIDEBAR_OUTPUT_HEIGHT, pixels)
@@ -1532,7 +1546,8 @@ pub extern "C" fn bitblock_storage_journal_verify(len: u32) -> u32 {
     });
     let status = match bytes {
         Some(bytes) => browser_storage::journal_verify_status(&bytes),
-        None => "bitblock_browser_storage err store=journal op=verify error=length exceeds buffer".to_owned(),
+        None => "bitblock_browser_storage err store=journal op=verify error=length exceeds buffer"
+            .to_owned(),
     };
     publish_storage(&status, &[])
 }
@@ -1549,7 +1564,8 @@ pub extern "C" fn bitblock_storage_history_verify(len: u32) -> u32 {
     });
     let status = match bytes {
         Some(bytes) => browser_storage::history_verify_status(&bytes),
-        None => "bitblock_browser_storage err store=history op=verify error=length exceeds buffer".to_owned(),
+        None => "bitblock_browser_storage err store=history op=verify error=length exceeds buffer"
+            .to_owned(),
     };
     publish_storage(&status, &[])
 }
@@ -1566,7 +1582,8 @@ pub extern "C" fn bitblock_storage_display_verify(len: u32) -> u32 {
     });
     let status = match bytes {
         Some(bytes) => browser_storage::display_verify_status(&bytes),
-        None => "bitblock_browser_storage err store=display op=verify error=length exceeds buffer".to_owned(),
+        None => "bitblock_browser_storage err store=display op=verify error=length exceeds buffer"
+            .to_owned(),
     };
     publish_storage(&status, &[])
 }
@@ -1585,7 +1602,6 @@ pub extern "C" fn bitblock_storage_bytes() -> u32 {
 pub extern "C" fn bitblock_storage_bytes_ptr() -> *const u8 {
     ptr_of(&STORAGE_BYTES)
 }
-
 
 fn with_play<R>(f: impl FnOnce(&mut play::PlaySession) -> R) -> R {
     PLAY.with(|cell| {
@@ -1685,7 +1701,12 @@ pub extern "C" fn bitblock_play_renders() -> u32 {
 
 /// Stage profiler setup (separate session; does not touch the live one).
 #[unsafe(no_mangle)]
-pub extern "C" fn bitblock_play_bench_setup(scene: u32, sim_width: u32, sim_height: u32, sidebar: u32) -> u32 {
+pub extern "C" fn bitblock_play_bench_setup(
+    scene: u32,
+    sim_width: u32,
+    sim_height: u32,
+    sidebar: u32,
+) -> u32 {
     let session = play::PlaySession::bench(scene, sim_width, sim_height, sidebar != 0);
     let w = session.output_width();
     PLAY_BENCH.with(|cell| *cell.borrow_mut() = Some(session));
@@ -1700,7 +1721,8 @@ pub extern "C" fn bitblock_play_bench_stage(stage: u32) -> u32 {
         let Some(session) = slot.as_mut() else {
             return 0;
         };
-        PLAY_BENCH_SCRATCH.with(|scratch| session.bench_stage(stage, &mut scratch.borrow_mut()) as u32)
+        PLAY_BENCH_SCRATCH
+            .with(|scratch| session.bench_stage(stage, &mut scratch.borrow_mut()) as u32)
     })
 }
 
@@ -1964,8 +1986,12 @@ mod tests {
         bitblock_play_set_layout(320, 180, 0);
         assert_eq!(bitblock_play_step(1), 1);
         let n = bitblock_play_chem_status();
-        let st = PLAY_CHEM_RESULT.with(|r| String::from_utf8(r.borrow()[..n as usize].to_vec()).unwrap());
-        assert!(st.starts_with("bitblock_play_chem ok preset=ash seed=7 radius=10 tick=2 auto=0 "), "{st}");
+        let st = PLAY_CHEM_RESULT
+            .with(|r| String::from_utf8(r.borrow()[..n as usize].to_vec()).unwrap());
+        assert!(
+            st.starts_with("bitblock_play_chem ok preset=ash seed=7 radius=10 tick=2 auto=0 "),
+            "{st}"
+        );
         // Back to a gallery world: chem exports go inert, status has no chem fields.
         let len = bitblock_play_load_world(2);
         assert!(!play_text(len).contains(" chem="));
@@ -1984,7 +2010,10 @@ mod tests {
         assert!(len > 0);
         assert_eq!(bitblock_play_chem_dynamics_get(), 1);
         let text = play_text(len);
-        assert!(!text.contains(" energy=") && !text.contains(" cycle="), "{text}");
+        assert!(
+            !text.contains(" energy=") && !text.contains(" cycle="),
+            "{text}"
+        );
         assert!(!chem_text(bitblock_play_chem_status()).contains(" cycle="));
         // Unknown modes rejected, state unchanged.
         assert_eq!(bitblock_play_chem_dynamics(3, 0), 0);
@@ -1998,13 +2027,18 @@ mod tests {
         bitblock_play_set_layout(320, 180, 0);
         assert_eq!(bitblock_play_step(1), 1);
         let st = chem_text(bitblock_play_chem_status());
-        assert!(st.contains(" tick=6 ") && st.contains(" books=ok ") && st.contains(" energy_drift=0 "), "{st}");
+        assert!(
+            st.contains(" tick=6 ") && st.contains(" books=ok ") && st.contains(" energy_drift=0 "),
+            "{st}"
+        );
         assert!(st.ends_with(" energy=m1 cycle=driven"), "{st}");
         let len = bitblock_play_status(0);
         assert!(play_text(len).contains(" energy=m1 cycle=driven"));
         // Cut suffix follows the dynamics suffix.
         assert_eq!(bitblock_play_chem_cut(1, 0), 1);
-        assert!(chem_text(bitblock_play_chem_status()).ends_with(" energy=m1 cycle=driven cut=wedge:0"));
+        assert!(
+            chem_text(bitblock_play_chem_status()).ends_with(" energy=m1 cycle=driven cut=wedge:0")
+        );
         // A reload resets to the defaults (the client re-applies its menu choice).
         bitblock_play_load_chem(2, 7, 8);
         assert_eq!(bitblock_play_chem_dynamics_get(), 1);
@@ -2016,7 +2050,11 @@ mod tests {
         assert_eq!(bitblock_play_chem_dynamics_get(), 1 | 8);
         assert!(chem_text(bitblock_play_chem_status()).ends_with(" energy=sun8"));
         let len = bitblock_play_load_chem(4, 7, 8);
-        assert!(len > 0 && play_text(len).contains(" last=world:chem-gas "), "{}", play_text(len));
+        assert!(
+            len > 0 && play_text(len).contains(" last=world:chem-gas "),
+            "{}",
+            play_text(len)
+        );
         assert_eq!(bitblock_play_chem_dynamics_get(), 1 | 4 | 8);
         assert_eq!(bitblock_play_chem_step(4), 1);
         assert!(chem_text(bitblock_play_chem_status()).contains(" books=ok "));
@@ -2041,15 +2079,21 @@ mod tests {
     fn chem_budget_exports_smoke() {
         assert_eq!(bitblock_play_chem_preset_budget(7, 12), 0, "unknown preset");
         assert_eq!(bitblock_play_load_chem(9, 1, 12), 0);
-        assert_eq!(chem_text(bitblock_play_chem_error()), "unknown_chem_preset_9");
+        assert_eq!(
+            chem_text(bitblock_play_chem_error()),
+            "unknown_chem_preset_9"
+        );
         // Preset lanes into the buffer, loaded as custom: identical world to the preset.
         assert_eq!(bitblock_play_chem_preset_budget(1, 10), 1);
         let rocky = budget_get();
         assert!(rocky.iter().all(|&x| x >= 0) && rocky[6] > 0, "{rocky:?}");
         let len = bitblock_play_load_chem(1, 7, 10);
         assert_eq!(bitblock_play_chem_error(), 0);
-        let world_preset =
-            play_text(len).split(' ').find(|f| f.starts_with("world=")).unwrap().to_owned();
+        let world_preset = play_text(len)
+            .split(' ')
+            .find(|f| f.starts_with("world="))
+            .unwrap()
+            .to_owned();
         let len = bitblock_play_load_chem_budget(7, 10);
         assert!(len > 0);
         assert_eq!(bitblock_play_chem_error(), 0);
@@ -2071,8 +2115,14 @@ mod tests {
         // Negative lane: rejected, session (the custom world) unchanged, reason readable.
         budget_set(2, -3);
         assert_eq!(bitblock_play_load_chem_budget(7, 10), 0);
-        assert_eq!(chem_text(bitblock_play_chem_error()), "budget_lane_2_(C)_is_negative:_-3");
-        assert!(chem_text(bitblock_play_chem_status()).starts_with("bitblock_play_chem ok preset=custom "));
+        assert_eq!(
+            chem_text(bitblock_play_chem_error()),
+            "budget_lane_2_(C)_is_negative:_-3"
+        );
+        assert!(
+            chem_text(bitblock_play_chem_status())
+                .starts_with("bitblock_play_chem ok preset=custom ")
+        );
     }
 
     // Filled after first host run of play_input_tape_status().
@@ -2375,9 +2425,10 @@ mod tests {
         assert!(status.starts_with("bitblock_browser_program ok "));
         assert!(status.contains("applied=1"));
         assert!(status.contains("on_bits=2"));
-        assert!(!status.contains(
-            "#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq"
-        ));
+        assert!(
+            !status
+                .contains("#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq")
+        );
         assert_eq!(rgba.len(), 81 * 81 * 4);
         assert!(status.len() <= RESULT_CAP);
     }
@@ -2413,12 +2464,30 @@ mod tests {
         for status in [&jw, &jv, &hw, &hv, &dw, &dv] {
             assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
         }
-        assert_eq!(jw, "bitblock_browser_storage ok store=journal op=write records=2 head=#bb.storage-record.sha256.tcvmwlz7pxqlcn4s5quxrhbc2sw3qhenvjfjiesmlee5prdkjela bytes=333");
-        assert_eq!(jv, "bitblock_browser_storage ok store=journal op=verify scan=clean records=2 head=#bb.storage-record.sha256.tcvmwlz7pxqlcn4s5quxrhbc2sw3qhenvjfjiesmlee5prdkjela bytes=333 valid_prefix=333");
-        assert_eq!(hw, "bitblock_browser_storage ok store=history op=write records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461");
-        assert_eq!(hv, "bitblock_browser_storage ok store=history op=verify scan=clean records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461 valid_prefix=461");
-        assert_eq!(dw, "bitblock_browser_storage ok store=display op=write records=1 artifact=#bb.display-artifact.sha256.fbd5hyvucb3zycqdqletiyrasrflufmnkjuo4zkdkd6iddprjs6q storage_head=#bb.storage-record.sha256.4p2puofcuopqi6u5rki7kgpszi4hzwier2t6u6llncsd76pk6aoq bytes=604");
-        assert_eq!(dv, "bitblock_browser_storage ok store=display op=verify scan=clean records=1 artifact=#bb.display-artifact.sha256.fbd5hyvucb3zycqdqletiyrasrflufmnkjuo4zkdkd6iddprjs6q storage_head=#bb.storage-record.sha256.4p2puofcuopqi6u5rki7kgpszi4hzwier2t6u6llncsd76pk6aoq bytes=604 valid_prefix=604");
+        assert_eq!(
+            jw,
+            "bitblock_browser_storage ok store=journal op=write records=2 head=#bb.storage-record.sha256.tcvmwlz7pxqlcn4s5quxrhbc2sw3qhenvjfjiesmlee5prdkjela bytes=333"
+        );
+        assert_eq!(
+            jv,
+            "bitblock_browser_storage ok store=journal op=verify scan=clean records=2 head=#bb.storage-record.sha256.tcvmwlz7pxqlcn4s5quxrhbc2sw3qhenvjfjiesmlee5prdkjela bytes=333 valid_prefix=333"
+        );
+        assert_eq!(
+            hw,
+            "bitblock_browser_storage ok store=history op=write records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461"
+        );
+        assert_eq!(
+            hv,
+            "bitblock_browser_storage ok store=history op=verify scan=clean records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461 valid_prefix=461"
+        );
+        assert_eq!(
+            dw,
+            "bitblock_browser_storage ok store=display op=write records=1 artifact=#bb.display-artifact.sha256.fbd5hyvucb3zycqdqletiyrasrflufmnkjuo4zkdkd6iddprjs6q storage_head=#bb.storage-record.sha256.4p2puofcuopqi6u5rki7kgpszi4hzwier2t6u6llncsd76pk6aoq bytes=604"
+        );
+        assert_eq!(
+            dv,
+            "bitblock_browser_storage ok store=display op=verify scan=clean records=1 artifact=#bb.display-artifact.sha256.fbd5hyvucb3zycqdqletiyrasrflufmnkjuo4zkdkd6iddprjs6q storage_head=#bb.storage-record.sha256.4p2puofcuopqi6u5rki7kgpszi4hzwier2t6u6llncsd76pk6aoq bytes=604 valid_prefix=604"
+        );
     }
 
     #[test]
@@ -2498,9 +2567,11 @@ mod tests {
         let status = session.status();
         assert!(status.contains("tick=1"), "{status}");
         assert!(status.contains("output=1201x801"), "{status}");
-        assert_eq!(session.rgba().len(), (play::PLAY_OUTPUT_WIDTH * play::PLAY_OUTPUT_HEIGHT * 4) as usize);
+        assert_eq!(
+            session.rgba().len(),
+            (play::PLAY_OUTPUT_WIDTH * play::PLAY_OUTPUT_HEIGHT * 4) as usize
+        );
     }
-
 
     #[test]
     fn play_tape_through_handler_sequence_matches_host_string() {
@@ -2526,7 +2597,6 @@ mod tests {
         assert_eq!(session.status(), play::play_input_tape_status());
     }
 
-
     #[test]
     fn play_space_held_across_tick_moves_up_like_native() {
         let mut session = play::PlaySession::new();
@@ -2536,7 +2606,10 @@ mod tests {
         session.key(play::PLAY_KEY_SPACE, true);
         let _ = session.fixed_tick();
         let y1 = parse_pos_y(&session.status());
-        assert!(y1 > y0, "Space held across a tick must raise y (native MoveEdge Up); y0={y0} y1={y1}");
+        assert!(
+            y1 > y0,
+            "Space held across a tick must raise y (native MoveEdge Up); y0={y0} y1={y1}"
+        );
         session.key(play::PLAY_KEY_SPACE, false);
     }
 
@@ -2550,7 +2623,10 @@ mod tests {
         session.key(play::PLAY_KEY_SPACE, false);
         let _ = session.fixed_tick();
         let y1 = parse_pos_y(&session.status());
-        assert_eq!(y0, y1, "same-tick Space tap must not move (native level latch)");
+        assert_eq!(
+            y0, y1,
+            "same-tick Space tap must not move (native level latch)"
+        );
     }
 
     #[test]
@@ -2561,7 +2637,10 @@ mod tests {
         session.key(play::PLAY_KEY_A, true);
         let _ = session.fixed_tick();
         let x1 = parse_pos_x(&session.status());
-        assert!(x1 < x0, "A held across a tick must decrease x; x0={x0} x1={x1}");
+        assert!(
+            x1 < x0,
+            "A held across a tick must decrease x; x0={x0} x1={x1}"
+        );
         session.key(play::PLAY_KEY_A, false);
     }
 
@@ -2574,28 +2653,50 @@ mod tests {
         let before = session.rgba().len();
         session.key(play::PLAY_KEY_F3, true);
         let _ = session.fixed_tick();
-        assert!(session.status().contains("sidebar=0"), "{}", session.status());
-        assert!(session.status().contains("output=1201x801"), "native keeps 1201 output when sidebar hidden");
+        assert!(
+            session.status().contains("sidebar=0"),
+            "{}",
+            session.status()
+        );
+        assert!(
+            session.status().contains("output=1201x801"),
+            "native keeps 1201 output when sidebar hidden"
+        );
         assert_eq!(session.rgba().len(), before);
         // Sidebar panel pixels remain (native paints "F3 TO SHOW METRICS" into the 400px strip).
         let rgba = session.rgba();
         let w = play::PLAY_OUTPUT_WIDTH as usize;
         let ix = (50 * w + 1000) * 4;
-        assert!(rgba[ix] > 0 || rgba[ix + 1] > 0 || rgba[ix + 2] > 0 || true);
+        // The panel pixel's value is not pinned here; only that it lies inside the frame.
+        assert!(ix + 2 < rgba.len(), "sidebar pixel inside the frame");
         // Panel background is non-game; just assert we still have a full frame.
-        assert_eq!(rgba.len(), (play::PLAY_OUTPUT_WIDTH * play::PLAY_OUTPUT_HEIGHT * 4) as usize);
+        assert_eq!(
+            rgba.len(),
+            (play::PLAY_OUTPUT_WIDTH * play::PLAY_OUTPUT_HEIGHT * 4) as usize
+        );
     }
 
     fn parse_pos_x(status: &str) -> f64 {
-        let p = status.split("pos=").nth(1).expect("pos").split(' ').next().expect("triple");
+        let p = status
+            .split("pos=")
+            .nth(1)
+            .expect("pos")
+            .split(' ')
+            .next()
+            .expect("triple");
         p.split(',').next().expect("x").parse().expect("x f64")
     }
 
     fn parse_pos_y(status: &str) -> f64 {
-        let p = status.split("pos=").nth(1).expect("pos").split(' ').next().expect("triple");
+        let p = status
+            .split("pos=")
+            .nth(1)
+            .expect("pos")
+            .split(' ')
+            .next()
+            .expect("triple");
         p.split(',').nth(1).expect("y").parse().expect("y f64")
     }
-
 
     #[test]
     fn play_uncaptured_keyboard_still_moves_like_native() {
@@ -2608,7 +2709,11 @@ mod tests {
         let _ = session.fixed_tick();
         session.key(play::PLAY_KEY_W, false);
         session.set_capture(false); // ClearMotion — mirrors Esc
-        assert!(session.status().contains("captured=0"), "{}", session.status());
+        assert!(
+            session.status().contains("captured=0"),
+            "{}",
+            session.status()
+        );
         let z0 = parse_pos_z(&session.status());
         session.key(play::PLAY_KEY_W, true);
         let _ = session.fixed_tick();
@@ -2624,8 +2729,13 @@ mod tests {
     }
 
     fn parse_pos_z(status: &str) -> f64 {
-        let p = status.split("pos=").nth(1).expect("pos").split(' ').next().expect("triple");
+        let p = status
+            .split("pos=")
+            .nth(1)
+            .expect("pos")
+            .split(' ')
+            .next()
+            .expect("triple");
         p.split(',').nth(2).expect("z").parse().expect("z f64")
     }
-
 }

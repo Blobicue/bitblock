@@ -131,7 +131,10 @@ pub struct EnergyInput {
 pub enum SunSweep {
     #[default]
     Upper,
-    Full { tilt: u16, year: u32 },
+    Full {
+        tilt: u16,
+        year: u32,
+    },
 }
 
 impl SunSweep {
@@ -235,7 +238,10 @@ pub fn water_albedo(mu: i64, model: WaterAlbedo) -> i64 {
     match model {
         WaterAlbedo::Fixed => ALBEDO_WATER,
         WaterAlbedo::Fresnel { nadir, graze, pow } => {
-            let (n, g) = (i64::from(nadir).min(ALBEDO_DEN), i64::from(graze).min(ALBEDO_DEN));
+            let (n, g) = (
+                i64::from(nadir).min(ALBEDO_DEN),
+                i64::from(graze).min(ALBEDO_DEN),
+            );
             let c = ALBEDO_DEN - mu.clamp(0, ALBEDO_DEN);
             let mut x = ALBEDO_DEN;
             for _ in 0..pow {
@@ -266,8 +272,7 @@ pub(crate) fn absorbed_share(f: i64, a: i64, tick: u64, cell: usize, face: usize
     if a <= 0 || f <= 0 {
         return f;
     }
-    let mut h = tick
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    let mut h = tick.wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (cell as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
         ^ (face as u64).wrapping_mul(0x1656_67B1_9E37_79F9);
     h ^= h >> 31;
@@ -338,7 +343,10 @@ pub enum CloudAlbedo {
 
 impl CloudAlbedo {
     /// The tuned default: [`CLOUD_MAX`] / [`CLOUD_HALF`].
-    pub const VAPOR: Self = Self::Vapor { max: CLOUD_MAX, half: CLOUD_HALF };
+    pub const VAPOR: Self = Self::Vapor {
+        max: CLOUD_MAX,
+        half: CLOUD_HALF,
+    };
 }
 
 impl Default for CloudAlbedo {
@@ -353,7 +361,9 @@ impl Default for CloudAlbedo {
 /// `rim == 0`, or under [`CloudAlbedo::Off`]; monotone in `vapor`, never above
 /// `max`. All-integer.
 pub fn cloud_reflect(vapor: i64, rim: i64, model: CloudAlbedo) -> i64 {
-    let CloudAlbedo::Vapor { max, half } = model else { return 0 };
+    let CloudAlbedo::Vapor { max, half } = model else {
+        return 0;
+    };
     if vapor <= 0 || rim <= 0 || max == 0 {
         return 0;
     }
@@ -366,10 +376,20 @@ pub fn cloud_reflect(vapor: i64, rim: i64, model: CloudAlbedo) -> i64 {
 
 impl EnergyInput {
     /// No inbound energy: planet6 behaviour.
-    pub const OFF: Self = Self { sun: 0, day: 0, core: 0, core_r: 0 };
+    pub const OFF: Self = Self {
+        sun: 0,
+        day: 0,
+        core: 0,
+        core_r: 0,
+    };
     /// The M1 soak setting: a 600-tick day (40 s at the 15 Hz play cadence) at
     /// 16 units per space face at noon, plus a weak 40/tick core.
-    pub const M1: Self = Self { sun: 16, day: 600, core: 40, core_r: 0 };
+    pub const M1: Self = Self {
+        sun: 16,
+        day: 600,
+        core: 40,
+        core_r: 0,
+    };
     /// Default core-sphere radius for sky-shell soaks at r12 (see
     /// [`EnergyInput::with_core_r`]): reaches past the plume roots under the
     /// pole (`R - PLUME_DEPTH = 4` at r12).
@@ -415,7 +435,13 @@ impl EnergyInput {
                 let ylen = u64::from(self.day) * u64::from(year);
                 let u = ((tick % ylen) * 4096 / ylen) as i64;
                 // triangle sine: 0 at u=0, +1024 at u=1024, 0 at 2048, -1024 at 3072
-                let tri_sin = if u < 1024 { u } else if u < 3072 { 2048 - u } else { u - 4096 };
+                let tri_sin = if u < 1024 {
+                    u
+                } else if u < 3072 {
+                    2048 - u
+                } else {
+                    u - 4096
+                };
                 let sz = i64::from(tilt.min(1024)) * tri_sin / 1024;
                 let k = 1024 - sz.abs();
                 (sx * k / 1024, sy * k / 1024, sz, true)
@@ -1014,10 +1040,10 @@ impl ChemWorld {
             return t.clone();
         }
         let mut t = Topology::build(&self.cells);
-        if let Some(pin) = self.core_pin {
-            if let Some(i) = self.index_of(pin) {
-                t.core = Some(i as u32);
-            }
+        if let Some(pin) = self.core_pin
+            && let Some(i) = self.index_of(pin)
+        {
+            t.core = Some(i as u32);
         }
         t.radial_frame(&self.cells);
         let t = Arc::new(t);
@@ -1108,7 +1134,10 @@ impl ChemWorld {
         self.tick += 1;
         let topo = self.topology();
         self.vapor_sync(&topo);
-        let mut rep = StepReport { tick: self.tick, ..StepReport::default() };
+        let mut rep = StepReport {
+            tick: self.tick,
+            ..StepReport::default()
+        };
         self.reset_marks();
         lap(0, &mut t);
         if !self.params.energy_in.is_off() {
@@ -1265,7 +1294,8 @@ impl ChemWorld {
                 // Cloud albedo (Driven + greenhouse on): one reflectance per
                 // tick per vapor region (its local pool over its own rim
                 // cells; one region = the global pool).
-                let gated = self.params.cycle == WaterCycle::Driven && self.params.greenhouse != Greenhouse::Off;
+                let gated = self.params.cycle == WaterCycle::Driven
+                    && self.params.greenhouse != Greenhouse::Off;
                 let geo = if gated { self.vgeo.clone() } else { None };
                 let clouds: Vec<i64> = match &geo {
                     Some(g) if self.vapor_bins.len() == g.rim.len() => self
@@ -1274,7 +1304,11 @@ impl ChemWorld {
                         .zip(&g.rim)
                         .map(|(&v, &r)| cloud_reflect(v, r, self.params.cloud))
                         .collect(),
-                    _ if gated => vec![cloud_reflect(self.vapor, topo.space_faces.len() as i64, self.params.cloud)],
+                    _ if gated => vec![cloud_reflect(
+                        self.vapor,
+                        topo.space_faces.len() as i64,
+                        self.params.cloud,
+                    )],
                     _ => vec![0],
                 };
                 let local = clouds.len() > 1;
@@ -1289,8 +1323,16 @@ impl ChemWorld {
                 self.cloud_last = match &geo {
                     Some(g) if local => {
                         let rt: i64 = g.rim.iter().sum();
-                        let s: i128 = clouds.iter().zip(&g.rim).map(|(&c, &r)| i128::from(c) * i128::from(r)).sum();
-                        if rt > 0 { (s / i128::from(rt)) as i64 } else { 0 }
+                        let s: i128 = clouds
+                            .iter()
+                            .zip(&g.rim)
+                            .map(|(&c, &r)| i128::from(c) * i128::from(r))
+                            .sum();
+                        if rt > 0 {
+                            (s / i128::from(rt)) as i64
+                        } else {
+                            0
+                        }
                     }
                     _ => clouds[0],
                 };
@@ -1306,7 +1348,11 @@ impl ChemWorld {
                     }
                     let i = i as usize;
                     let cloud = cloud_of(i);
-                    let pb = if gated { geo.as_ref().map(|g| usize::from(g.patch[i])) } else { None };
+                    let pb = if gated {
+                        geo.as_ref().map(|g| usize::from(g.patch[i]))
+                    } else {
+                        None
+                    };
                     if self.params.cycle == WaterCycle::Driven {
                         // Transparent air: each lit face's share rides its own ray
                         // inward through AIR and lands on the first non-AIR cell.
@@ -1318,7 +1364,9 @@ impl ChemWorld {
                             if fk == 0 {
                                 continue;
                             }
-                            let Some(t) = self.sun_target(topo, i, k) else { continue };
+                            let Some(t) = self.sun_target(topo, i, k) else {
+                                continue;
+                            };
                             // Albedo: the reflected share leaves the domain again
                             // and is never injected (so never booked).
                             // Water's albedo depends on the incidence cosine on the
@@ -1359,7 +1407,10 @@ impl ChemWorld {
                             if ak == 0 {
                                 continue;
                             }
-                            if let Some(nq) = i32::try_from(ak).ok().and_then(|f| self.q[t].checked_add(f)) {
+                            if let Some(nq) = i32::try_from(ak)
+                                .ok()
+                                .and_then(|f| self.q[t].checked_add(f))
+                            {
                                 self.q[t] = nq;
                                 total += ak;
                             }
@@ -1373,17 +1424,17 @@ impl ChemWorld {
                 }
             }
         }
-        if ein.core > 0 {
-            if let Some(c) = topo.core {
-                let c = c as usize;
-                if ein.core_r == 0 {
-                    if let Some(nq) = self.q[c].checked_add(ein.core) {
-                        self.q[c] = nq;
-                        total += i64::from(ein.core);
-                    }
-                } else {
-                    total += self.core_sphere_input(topo, c, ein);
+        if ein.core > 0
+            && let Some(c) = topo.core
+        {
+            let c = c as usize;
+            if ein.core_r == 0 {
+                if let Some(nq) = self.q[c].checked_add(ein.core) {
+                    self.q[c] = nq;
+                    total += i64::from(ein.core);
                 }
+            } else {
+                total += self.core_sphere_input(topo, c, ein);
             }
         }
         self.input_q += total;
@@ -1501,15 +1552,22 @@ impl ChemWorld {
             }
             nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
         }
-        let gh_on = self.params.cycle == WaterCycle::Driven && self.params.greenhouse != Greenhouse::Off;
+        let gh_on =
+            self.params.cycle == WaterCycle::Driven && self.params.greenhouse != Greenhouse::Off;
         // Vapor greenhouse per region (its local pool over its own rim cells;
         // one region = the global pool).
         let geo = if gh_on { self.vgeo.clone() } else { None };
         let traps: Vec<i64> = match &geo {
-            Some(g) if self.vapor_bins.len() == g.rim.len() && g.rim.len() > 1 => {
-                self.vapor_bins.iter().zip(&g.rim).map(|(&v, &r)| vapor_trap(v, r)).collect()
-            }
-            _ if gh_on => vec![vapor_trap(self.vapor, surface.iter().filter(|s| **s != 0).count() as i64)],
+            Some(g) if self.vapor_bins.len() == g.rim.len() && g.rim.len() > 1 => self
+                .vapor_bins
+                .iter()
+                .zip(&g.rim)
+                .map(|(&v, &r)| vapor_trap(v, r))
+                .collect(),
+            _ if gh_on => vec![vapor_trap(
+                self.vapor,
+                surface.iter().filter(|s| **s != 0).count() as i64,
+            )],
             _ => vec![0],
         };
         let local = traps.len() > 1;
@@ -1533,11 +1591,16 @@ impl ChemWorld {
                 };
             }
             let pb = geo.as_ref().map(|g| usize::from(g.patch[i]));
-            let gh_vap = if local { pb.map_or(0, |p| traps[p]) } else { traps[0] };
-            if gh_on && leak > 0 {
-                if let Some(pd) = pb.and_then(|p| self.patch_diag.get_mut(p)) {
-                    pd[3] += v.min(leak); // diagnostic: leak before the vapor
-                }
+            let gh_vap = if local {
+                pb.map_or(0, |p| traps[p])
+            } else {
+                traps[0]
+            };
+            if gh_on
+                && leak > 0
+                && let Some(pd) = pb.and_then(|p| self.patch_diag.get_mut(p))
+            {
+                pd[3] += v.min(leak); // diagnostic: leak before the vapor
             }
             if gh_vap > 0 && leak > 0 {
                 let l0 = v.min(leak);
@@ -1625,7 +1688,11 @@ impl ChemWorld {
             };
             topo.cube(&self.cells, i, 1, &mut cube);
             hs.clear();
-            hs.extend(cube.iter().copied().filter(|&j| j != partner && self.mat[j] == MatId::H));
+            hs.extend(
+                cube.iter()
+                    .copied()
+                    .filter(|&j| j != partner && self.mat[j] == MatId::H),
+            );
             if hs.len() < 4 {
                 continue;
             }
@@ -1642,7 +1709,10 @@ impl ChemWorld {
     }
 
     fn first_nb6(&self, topo: &Topology, i: usize, f: impl Fn(usize) -> bool) -> Option<usize> {
-        topo.nb6(&self.cells, i).into_iter().flatten().find(|&j| f(j))
+        topo.nb6(&self.cells, i)
+            .into_iter()
+            .flatten()
+            .find(|&j| f(j))
     }
 
     /// planet6 `stepCombine2` (everything after its `elements` gate).
@@ -1837,8 +1907,8 @@ impl ChemWorld {
                 if self.mat[i] != MatId::STEAM || self.q[i] >= 150 {
                     continue;
                 }
-                let Some(j) = self
-                    .first_nb6(topo, i, |j| self.mat[j] == MatId::STEAM && self.q[j] < 150)
+                let Some(j) =
+                    self.first_nb6(topo, i, |j| self.mat[j] == MatId::STEAM && self.q[j] < 150)
                 else {
                     continue;
                 };
@@ -1856,7 +1926,11 @@ impl ChemWorld {
             // §5w: under Gravity::Core gas rises along the outward step,
             // outermost first (planet6's +y list otherwise)
             let gc = self.grav_core(topo);
-            let len = if gc.is_some() { topo.rsort.len() } else { topo.rise.len() };
+            let len = if gc.is_some() {
+                topo.rsort.len()
+            } else {
+                topo.rise.len()
+            };
             for k in 0..len {
                 let (i, up) = match gc {
                     Some(o) => {
@@ -1866,7 +1940,10 @@ impl ChemWorld {
                         }
                         let p = self.cells[i];
                         let st = super::p6_rest::outward_step((p.x - o.x, p.y - o.y, p.z - o.z));
-                        let Some(up) = (st != (0, 0, 0)).then(|| topo.offset(&self.cells, i, st)).flatten() else {
+                        let Some(up) = (st != (0, 0, 0))
+                            .then(|| topo.offset(&self.cells, i, st))
+                            .flatten()
+                        else {
                             continue;
                         };
                         (i, up)
@@ -1933,5 +2010,9 @@ fn js_to_int32(x: f64) -> i64 {
     let t = x.trunc();
     let m = t.rem_euclid(4_294_967_296.0);
     let v = m as i64;
-    i64::from(if v >= 2_147_483_648 { (v - 4_294_967_296) as i32 } else { v as i32 })
+    i64::from(if v >= 2_147_483_648 {
+        (v - 4_294_967_296) as i32
+    } else {
+        v as i32
+    })
 }

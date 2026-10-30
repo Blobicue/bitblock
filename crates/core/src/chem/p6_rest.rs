@@ -20,7 +20,7 @@
 //! is y ascending, then x, then z over the whole domain (on planet6's grid
 //! that is exactly its `for y, for x, for z` with the MASK test).
 
-use super::p6::{StepReport, Topology, WaterCycle, NB6, wide_roll};
+use super::p6::{NB6, StepReport, Topology, WaterCycle, wide_roll};
 use super::vapor::{EvapTop, RainFall};
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
@@ -78,7 +78,6 @@ pub const DISSOLVE_SLOSH: u32 = 4;
 /// its own level or below swaps into the water's cell (carried downstream).
 pub const ENTRAIN_RUN: u32 = 120;
 pub const ENTRAIN_SLOSH: u32 = 8;
-
 
 // ---- Driven relief laws (late-relief follow-up; all book-neutral) ----
 
@@ -173,12 +172,12 @@ pub const DEGAS_MAX_PER_TICK: u32 = 2;
 pub const COLLAPSE_ODDS: u32 = 4096;
 
 const SALT_WEATHER: u32 = 0x3ea7_43e2;
-const SALT_SCOUR: u32 = 0x5c0_0e2;
-const SALT_UPLIFT: u32 = 0x0b1f_7ed;
-const SALT_PLUME: u32 = 0x9_1a3e;
-const SALT_DEGAS: u32 = 0xde6a_5ed;
+const SALT_SCOUR: u32 = 0x005c_00e2;
+const SALT_UPLIFT: u32 = 0x00b1_f7ed;
+const SALT_PLUME: u32 = 0x0009_1a3e;
+const SALT_DEGAS: u32 = 0x0de6_a5ed;
 const SALT_RAIN: u32 = 0x5a17_0d0b;
-const SALT_ERODE: u32 = 0xe2_0de;
+const SALT_ERODE: u32 = 0x000e_20de;
 const SALT_ENTRAIN: u32 = 0xe47_2a1;
 const SALT_COLLAPSE: u32 = 0xc011_a95e;
 const SALT_FLOW: u32 = 0xf10_c0de;
@@ -210,14 +209,16 @@ impl ChemWorld {
         if !self.params.convect {
             return;
         }
-        let Some(o) = self.grav_core(topo) else { return };
+        let Some(o) = self.grav_core(topo) else {
+            return;
+        };
         let mut mass = [0i64; 256];
         for (m, slot) in mass.iter_mut().enumerate() {
             let id = MatId(m as u8);
-            if self.is_rising(id) {
-                if let Some(c) = self.table().comp(id) {
-                    *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
-                }
+            if self.is_rising(id)
+                && let Some(c) = self.table().comp(id)
+            {
+                *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
             }
         }
         let len = topo.rsort.len();
@@ -233,7 +234,9 @@ impl ChemWorld {
             if st == (0, 0, 0) {
                 continue;
             }
-            let Some(up) = topo.offset(&self.cells, i, st) else { continue };
+            let Some(up) = topo.offset(&self.cells, i, st) else {
+                continue;
+            };
             let ma = mass[self.mat[up].0 as usize];
             if ma == 0 || moved[up] {
                 continue;
@@ -277,16 +280,25 @@ impl ChemWorld {
     /// taken only through an open corner (every axis component in the domain
     /// and AIR/WATER), so nothing squeezes between two solids; otherwise an
     /// open axis component is the fall target. `None` at the core.
-    pub(crate) fn inward_target(&self, topo: &Topology, o: Coord, i: usize, open: impl Fn(MatId) -> bool) -> Option<usize> {
+    pub(crate) fn inward_target(
+        &self,
+        topo: &Topology,
+        o: Coord,
+        i: usize,
+        open: impl Fn(MatId) -> bool,
+    ) -> Option<usize> {
         let (set, k) = Self::inward_support(o, self.cells[i]);
         for q in 0..k {
-            let Some(u) = topo.offset(&self.cells, i, set[q]) else { continue };
+            let Some(u) = topo.offset(&self.cells, i, set[q]) else {
+                continue;
+            };
             if !open(self.mat[u]) || self.shell_blocked(u) {
                 continue;
             }
             if q == 0 && k > 1 {
                 let corner = set[1..k].iter().all(|d| {
-                    topo.offset(&self.cells, i, *d).is_some_and(|v| self.fluid(self.mat[v]))
+                    topo.offset(&self.cells, i, *d)
+                        .is_some_and(|v| self.fluid(self.mat[v]))
                 });
                 if !corner {
                     continue;
@@ -302,12 +314,20 @@ impl ChemWorld {
     /// squared core distance is at most `r2[i] + 1` (level, or the one-unit
     /// rise of a pure lattice tangent step), the lowest; ties in face order
     /// rotated by `roll` so no direction is favoured.
-    pub(crate) fn side_target(&self, topo: &Topology, i: usize, roll: u32, open: impl Fn(MatId) -> bool) -> Option<usize> {
+    pub(crate) fn side_target(
+        &self,
+        topo: &Topology,
+        i: usize,
+        roll: u32,
+        open: impl Fn(MatId) -> bool,
+    ) -> Option<usize> {
         let lim = topo.r2[i] + 1;
         let start = (roll % 6) as usize;
         let mut best: Option<(usize, i64)> = None;
         for k in 0..6 {
-            let Some(s) = topo.offset(&self.cells, i, NB6[(start + k) % 6]) else { continue };
+            let Some(s) = topo.offset(&self.cells, i, NB6[(start + k) % 6]) else {
+                continue;
+            };
             let r = topo.r2[s];
             if r > lim || !open(self.mat[s]) || self.shell_blocked(s) {
                 continue;
@@ -372,7 +392,11 @@ impl ChemWorld {
         let air_only = self.params.evap_top == EvapTop::CoreAir;
         topo.offset(&self.cells, i, s).is_none_or(|u| {
             let m = self.mat[u];
-            if air_only { m == MatId::AIR } else { m != MatId::WATER }
+            if air_only {
+                m == MatId::AIR
+            } else {
+                m != MatId::WATER
+            }
         })
     }
 
@@ -451,8 +475,14 @@ impl ChemWorld {
             if v <= 0 || cap <= 0 {
                 continue;
             }
-            let frac = i64::from(wide_roll(seed ^ SALT_RAIN, Coord::new(-1, -1, -1 - b as i64), tick)) % RAIN_TAU;
-            let d = (v / RAIN_TAU + i64::from(frac < v % RAIN_TAU)).min(v).min(cap);
+            let frac = i64::from(wide_roll(
+                seed ^ SALT_RAIN,
+                Coord::new(-1, -1, -1 - b as i64),
+                tick,
+            )) % RAIN_TAU;
+            let d = (v / RAIN_TAU + i64::from(frac < v % RAIN_TAU))
+                .min(v)
+                .min(cap);
             cap -= d;
             *w = d;
         }
@@ -629,7 +659,11 @@ impl ChemWorld {
                 }
                 // Core fall: spill only from a region with no landing ground
                 // and no waterline; failed probes on its own ground wait
-                if hit.is_none() && spill_on && !all.is_empty() && (core.is_none() || cand.is_empty()) {
+                if hit.is_none()
+                    && spill_on
+                    && !all.is_empty()
+                    && (core.is_none() || cand.is_empty())
+                {
                     for _ in 0..4 {
                         let key = Coord::new(ks as i64, 1, b as i64);
                         let h = (u64::from(wide_roll(seed ^ SALT_RAIN, key, tick)) << 32
@@ -708,17 +742,19 @@ impl ChemWorld {
             for j in topo.nb6(&self.cells, i).into_iter().flatten() {
                 if self.mat[j] == MatId::WATER {
                     wet |= self.marks[j] & (MARK_RUN | MARK_SIDE);
-                } else if self.mat[j] == MatId::AIR && air.is_none() {
-                    if !self.shell_blocked(j) {
-                        air = Some(j);
-                    }
+                } else if self.mat[j] == MatId::AIR && air.is_none() && !self.shell_blocked(j) {
+                    air = Some(j);
                 }
             }
             let Some(a) = air else { continue };
             if wet == 0 {
                 continue;
             }
-            let odds = if wet & MARK_RUN != 0 { DISSOLVE_RUN } else { DISSOLVE_SLOSH };
+            let odds = if wet & MARK_RUN != 0 {
+                DISSOLVE_RUN
+            } else {
+                DISSOLVE_SLOSH
+            };
             if self.roll(topo, SALT_DISSOLVE, i) < odds {
                 intents.push((i, a));
             }
@@ -755,11 +791,19 @@ impl ChemWorld {
             let mut pick = None;
             for j in topo.nb6(&self.cells, i).into_iter().flatten() {
                 let mk = self.marks[j];
-                let above = if core { topo.r2[j] > topo.r2[i] + 1 } else { self.cells[j].y > yi };
+                let above = if core {
+                    topo.r2[j] > topo.r2[i] + 1
+                } else {
+                    self.cells[j].y > yi
+                };
                 if self.mat[j] != MatId::WATER || mk & (MARK_RUN | MARK_SIDE) == 0 || above {
                     continue;
                 }
-                let odds = if mk & MARK_RUN != 0 { ENTRAIN_RUN } else { ENTRAIN_SLOSH };
+                let odds = if mk & MARK_RUN != 0 {
+                    ENTRAIN_RUN
+                } else {
+                    ENTRAIN_SLOSH
+                };
                 if pick.is_none_or(|(_, o)| odds > o) {
                     pick = Some((j, odds));
                 }
@@ -886,7 +930,11 @@ impl ChemWorld {
             if mk == 0 {
                 continue;
             }
-            let odds = if mk & MARK_RUN != 0 { SCOUR_RUN } else { SCOUR_SLOSH };
+            let odds = if mk & MARK_RUN != 0 {
+                SCOUR_RUN
+            } else {
+                SCOUR_SLOSH
+            };
             let r = wide_roll(seed ^ SALT_SCOUR, self.cells[i], tick);
             if r % 1000 >= odds {
                 continue;
@@ -899,7 +947,9 @@ impl ChemWorld {
                 let start = ((r >> 16) % 6) as usize;
                 let lim = topo.r2[i] + 1;
                 for k in 0..6 {
-                    let Some(s) = topo.offset(&self.cells, i, NB6[(start + k) % 6]) else { continue };
+                    let Some(s) = topo.offset(&self.cells, i, NB6[(start + k) % 6]) else {
+                        continue;
+                    };
                     if topo.r2[s] > lim || !self.fluid(self.mat[s]) || self.shell_blocked(s) {
                         continue;
                     }
@@ -916,7 +966,9 @@ impl ChemWorld {
             let start = ((r >> 16) % 4) as usize;
             for k in 0..if gc.is_some() { 0 } else { 4 } {
                 let (dx, dz) = FLOW_SIDE[(start + k) % 4];
-                let Some(s) = topo.offset(&self.cells, i, (dx, 0, dz)) else { continue };
+                let Some(s) = topo.offset(&self.cells, i, (dx, 0, dz)) else {
+                    continue;
+                };
                 if !self.fluid(self.mat[s]) || self.shell_blocked(s) {
                     continue;
                 }
@@ -969,7 +1021,9 @@ impl ChemWorld {
             if !self.rock_like(self.mat[t]) {
                 continue;
             }
-            let Some(a) = topo.offset(&self.cells, t, (0, 1, 0)) else { continue };
+            let Some(a) = topo.offset(&self.cells, t, (0, 1, 0)) else {
+                continue;
+            };
             if !self.fluid(self.mat[a]) {
                 continue;
             }
@@ -997,7 +1051,9 @@ impl ChemWorld {
             }
             let r2 = wide_roll(seed ^ SALT_UPLIFT ^ 0x0200_0000, self.cells[t], tick);
             let (dx, dz) = FLOW_SIDE[(r2 % 4) as usize];
-            let Some(h2) = topo.offset(&self.cells, h, (dx, 0, dz)) else { continue };
+            let Some(h2) = topo.offset(&self.cells, h, (dx, 0, dz)) else {
+                continue;
+            };
             if !self.rock_like(self.mat[h2]) {
                 continue;
             }
@@ -1008,7 +1064,9 @@ impl ChemWorld {
             if !self.heated_from_below(topo, o, h) {
                 continue;
             }
-            let Some(p2) = self.radial_peer(topo, o, h, h2) else { continue };
+            let Some(p2) = self.radial_peer(topo, o, h, h2) else {
+                continue;
+            };
             let dq = i64::from(self.q[h]) - i64::from(self.q[p2]);
             if dq <= 0 || u64::from(r) >= (dq.min(UPLIFT_DQ_MAX) as u64) * UPLIFT_K {
                 continue;
@@ -1044,7 +1102,9 @@ impl ChemWorld {
                 if c == h2 {
                     break;
                 }
-                c = topo.offset(&self.cells, c, (0, -1, 0)).expect("walked up from h2");
+                c = topo
+                    .offset(&self.cells, c, (0, -1, 0))
+                    .expect("walked up from h2");
             }
             let mut c = h;
             loop {
@@ -1052,7 +1112,9 @@ impl ChemWorld {
                 if c == t {
                     break;
                 }
-                c = topo.offset(&self.cells, c, (0, 1, 0)).expect("walked down from t");
+                c = topo
+                    .offset(&self.cells, c, (0, 1, 0))
+                    .expect("walked down from t");
             }
             path.push(a);
             // rotate: new[path[k+1]] = old[path[k]], new[path[0]] = old[last]
@@ -1116,7 +1178,9 @@ impl ChemWorld {
             if !self.rock_like(self.mat[t]) {
                 continue;
             }
-            let Some(a) = topo.offset(&self.cells, t, (0, 1, 0)) else { continue };
+            let Some(a) = topo.offset(&self.cells, t, (0, 1, 0)) else {
+                continue;
+            };
             if !self.fluid(self.mat[a]) {
                 continue;
             }
@@ -1167,7 +1231,9 @@ impl ChemWorld {
             if !self.heated_from_below(topo, o, h2) {
                 continue;
             }
-            let Some(p) = self.radial_peer(topo, o, h2, h) else { continue };
+            let Some(p) = self.radial_peer(topo, o, h2, h) else {
+                continue;
+            };
             let dq = i64::from(self.q[h2]) - i64::from(self.q[p]);
             if dq <= 0 || u64::from(r) >= (dq.min(PLUME_DQ_MAX) as u64) * PLUME_K {
                 continue;
@@ -1211,7 +1277,9 @@ impl ChemWorld {
             }
             // repose: no shaft at the sunk cold top, no spire at the risen hot top
             let (ty, ny) = (self.cells[t].y - 1, self.cells[n].y + 1);
-            if !self.within_repose(topo, t, |yn| yn - ty) || !self.within_repose(topo, n, |yn| ny - yn) {
+            if !self.within_repose(topo, t, |yn| yn - ty)
+                || !self.within_repose(topo, n, |yn| ny - yn)
+            {
                 continue;
             }
             // path in rotation order: a, t .. h (whole cold column), channel .. h2, up to n, f
@@ -1223,12 +1291,16 @@ impl ChemWorld {
                 if c == h {
                     break;
                 }
-                c = topo.offset(&self.cells, c, (0, -1, 0)).expect("walked down from t");
+                c = topo
+                    .offset(&self.cells, c, (0, -1, 0))
+                    .expect("walked down from t");
             }
             path.extend_from_slice(&chan);
             let mut c = h2;
             while c != n {
-                c = topo.offset(&self.cells, c, (0, 1, 0)).expect("walked down from n");
+                c = topo
+                    .offset(&self.cells, c, (0, 1, 0))
+                    .expect("walked down from n");
                 path.push(c);
             }
             path.push(f);
@@ -1302,7 +1374,13 @@ impl ChemWorld {
     /// under the pole, and a bare "hot root not more central" veto just moved
     /// the pin to the sun-warmed rim). Matching radii cancels the radial
     /// background in both directions, so only lateral contrasts drive.
-    pub(crate) fn radial_peer(&self, topo: &Topology, o: Coord, hot: usize, col: usize) -> Option<usize> {
+    pub(crate) fn radial_peer(
+        &self,
+        topo: &Topology,
+        o: Coord,
+        hot: usize,
+        col: usize,
+    ) -> Option<usize> {
         let d2 = |c: Coord| (c.x - o.x).pow(2) + (c.y - o.y).pow(2) + (c.z - o.z).pow(2);
         let target = d2(self.cells[hot]);
         let c = self.cells[col];
@@ -1380,7 +1458,9 @@ impl ChemWorld {
             if self.mat[i] != MatId::WATER || self.q[i] <= DEGAS_Q {
                 continue;
             }
-            let odds = ((self.q[i] - DEGAS_Q) as u32).saturating_mul(DEGAS_SLOPE).min(DEGAS_MAX);
+            let odds = ((self.q[i] - DEGAS_Q) as u32)
+                .saturating_mul(DEGAS_SLOPE)
+                .min(DEGAS_MAX);
             if wide_roll(seed ^ SALT_DEGAS, self.cells[i], tick) & 0xffff >= odds {
                 continue;
             }
@@ -1534,10 +1614,10 @@ impl ChemWorld {
             if self.mat[i] != MatId::WATER {
                 continue;
             }
-            if let Some(up) = topo.offset(&self.cells, i, (0, 1, 0)) {
-                if self.mat[up] == MatId::WATER {
-                    continue; // buried: not surface
-                }
+            if let Some(up) = topo.offset(&self.cells, i, (0, 1, 0))
+                && self.mat[up] == MatId::WATER
+            {
+                continue; // buried: not surface
             }
             if self.q[i] > 200 && self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
                 self.set_mat(i, MatId::AIR);
@@ -1620,10 +1700,10 @@ impl ChemWorld {
                     air = Some(j);
                 }
             }
-            if let (true, Some(a)) = (wet, air) {
-                if self.roll(topo, SALT_DISSOLVE, i) < 60 {
-                    intents.push((i, a));
-                }
+            if let (true, Some(a)) = (wet, air)
+                && self.roll(topo, SALT_DISSOLVE, i) < 60
+            {
+                intents.push((i, a));
             }
         }
         if intents.is_empty() {

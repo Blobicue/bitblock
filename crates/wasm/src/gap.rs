@@ -8,21 +8,23 @@ use bitblock_core::display::{
     CaptureRect, CaptureStage, DisplayCaptureFacts, DisplayLedgerV2, DisplayOutcome,
 };
 use bitblock_core::frame::{FrameInput, FrameRef};
-use bitblock_core::frame_v2::{FrameLedgerV2, FrameReceiptV2, FrameStream, admit_frame_pair_derived};
-use bitblock_core::history::world_tag;
+use bitblock_core::frame_v2::{
+    FrameLedgerV2, FrameReceiptV2, FrameStream, admit_frame_pair_derived,
+};
 use bitblock_core::history::History;
+use bitblock_core::history::world_tag;
 use bitblock_core::program::{Edit, Operation};
-use bitblock_core::protocol::{hash_canonical, ContentTag};
+use bitblock_core::protocol::{ContentTag, hash_canonical};
 use bitblock_core::render::{crosshair_overlay_input, renderer_profile_tag};
 use bitblock_core::sidebar::composite_overlay_input;
 use bitblock_core::tick::{
     TickAttempt, TickCameraState, TickFrameCommitment, TickInputFlags, TickInputState, TickOutcome,
 };
-use bitblock_core::world::{Coord, World, BEDROCK_COORD};
+use bitblock_core::world::{BEDROCK_COORD, Coord, World};
 use bitblock_research::display_artifact::DisplayCaptureArtifact;
 use bitblock_research::optimization::{
-    assay_optimization_equivalence, CompositeFrameArtifact, DeterministicSyntheticDisplay,
-    OptimizationArtifact, OptimizationCase, OptimizationIdentity,
+    CompositeFrameArtifact, DeterministicSyntheticDisplay, OptimizationArtifact, OptimizationCase,
+    OptimizationIdentity, assay_optimization_equivalence,
 };
 use bitblock_research::output_color::{AdvancedColorRouteFacts, OutputColorObservation};
 use bitblock_research::output_topology::{
@@ -327,7 +329,8 @@ pub fn research_presentation_output_v2_status() -> String {
         match artifact.reported_color_state() {
             bitblock_research::presentation_output_v2::ReportedColorState::Stable => "stable",
             bitblock_research::presentation_output_v2::ReportedColorState::Changed => "changed",
-            bitblock_research::presentation_output_v2::ReportedColorState::Unavailable => "unavailable",
+            bitblock_research::presentation_output_v2::ReportedColorState::Unavailable =>
+                "unavailable",
         },
     )
 }
@@ -411,9 +414,8 @@ pub fn research_optimization_status() -> String {
     let mut history = History::new(&world);
     let camera = Camera::for_single_pixel_voxel(2);
     let camera_state = TickCameraState::capture(&camera);
-    let idle_input =
-        TickInputState::new(TickInputFlags::default(), 0.0, 0.0, 0.0, 2, 2, 3, 2)
-            .expect("idle input");
+    let idle_input = TickInputState::new(TickInputFlags::default(), 0.0, 0.0, 0.0, 2, 2, 3, 2)
+        .expect("idle input");
     let initial_world_tag = world_tag(&world);
     let genesis = TickOutcome::with_edit_attempts_only(
         None,
@@ -505,9 +507,8 @@ pub fn research_optimization_status() -> String {
             .expect("composite frame")
             .observe();
         let game = TickFrameCommitment::new(input.tag(), game_observation.tag).expect("game");
-        let composite =
-            TickFrameCommitment::new(composite_input.tag(), composite_observation.tag)
-                .expect("composite");
+        let composite = TickFrameCommitment::new(composite_input.tag(), composite_observation.tag)
+            .expect("composite");
         let outcome = TickOutcome::with_edit_attempts_only(
             Some(parent),
             tick,
@@ -540,13 +541,11 @@ pub fn research_optimization_status() -> String {
         FrameLedgerV2::new_structural_genesis(FrameStream::Game, genesis.clone())
             .expect("game ledger");
     let mut composite_frame_ledger =
-        FrameLedgerV2::new_structural_genesis(FrameStream::Composite, genesis).expect("composite ledger");
+        FrameLedgerV2::new_structural_genesis(FrameStream::Composite, genesis)
+            .expect("composite ledger");
     let receipts = admit_frame_pair_derived(
         Some((&mut frame_ledger, successors.clone().into_boxed_slice())),
-        (
-            &mut composite_frame_ledger,
-            successors.into_boxed_slice(),
-        ),
+        (&mut composite_frame_ledger, successors.into_boxed_slice()),
         |_| Ok::<(), std::convert::Infallible>(()),
     )
     .expect("frame pair admission");
@@ -559,12 +558,7 @@ pub fn research_optimization_status() -> String {
         observation: final_composite_observation.expect("composite observation"),
         frame_ledger: composite_frame_ledger,
     };
-    let synthetic_display = synthetic_display(
-        &final_composite_pixels,
-        3,
-        2,
-        receipts.composite(),
-    );
+    let synthetic_display = synthetic_display(&final_composite_pixels, 3, 2, receipts.composite());
     let reference = OptimizationArtifact {
         identity: OptimizationIdentity {
             implementation: Some(opt_tag(TagKind::Registry, b"reference")),

@@ -18,19 +18,19 @@ use bitblock_core::display::{
 };
 use bitblock_core::frame::FrameRef;
 use bitblock_core::frame_v2::{FrameReceiptV2, FrameStream};
-use bitblock_core::history::{world_tag, GENESIS_SCHEMA, History, RECEIPT_SCHEMA};
-use bitblock_core::program::{Edit, Operation, EDIT_SCHEMA};
-use bitblock_core::protocol::{hash_canonical, ContentTag, TagKind};
+use bitblock_core::history::{GENESIS_SCHEMA, History, RECEIPT_SCHEMA, world_tag};
+use bitblock_core::program::{EDIT_SCHEMA, Edit, Operation};
+use bitblock_core::protocol::{ContentTag, TagKind, hash_canonical};
 use bitblock_core::world::{Coord, World};
 use bitblock_research::display_artifact::{
-    DisplayCaptureArtifact, DISPLAY_CAPTURE_ARTIFACT_SCHEMA,
+    DISPLAY_CAPTURE_ARTIFACT_SCHEMA, DisplayCaptureArtifact,
 };
 use bitblock_research::display_store::{
-    inspect_display_artifact_bytes, replay_display_artifact_records,
-    ReadOnlyDisplayArtifactInspection,
+    ReadOnlyDisplayArtifactInspection, inspect_display_artifact_bytes,
+    replay_display_artifact_records,
 };
 use bitblock_research::history_store::replay_history_records;
-use bitblock_research::journal::{inspect_bytes, AnchorPolicy, ByteScan};
+use bitblock_research::journal::{AnchorPolicy, ByteScan, inspect_bytes};
 use bitblock_research::storage::{StorageChain, StorageLimits, StorageRecord};
 
 const JOURNAL_OBJECT_SCHEMA: &[u8] = b"bitblock/browser-storage/journal-object/v1";
@@ -83,7 +83,8 @@ fn sample_display_artifact() -> DisplayCaptureArtifact {
     let receipt = *DisplayLedgerV2::default()
         .append(frame_receipt, 2, 1, facts)
         .expect("display ledger append");
-    DisplayCaptureArtifact::new(receipt, expected, Some(captured)).expect("matched display artifact")
+    DisplayCaptureArtifact::new(receipt, expected, Some(captured))
+        .expect("matched display artifact")
 }
 
 /// Canonical journal sample: two parent-linked storage records.
@@ -213,9 +214,9 @@ pub fn history_verify_status(bytes: &[u8]) -> String {
                     report.file_bytes,
                     report.valid_prefix_bytes,
                 ),
-                Err(err) => format!(
-                    "bitblock_browser_storage err store=history op=verify replay={err}"
-                ),
+                Err(err) => {
+                    format!("bitblock_browser_storage err store=history op=verify replay={err}")
+                }
             }
         }
         Ok(ByteScan::NeedsRecovery(report)) => format!(
@@ -265,8 +266,11 @@ pub fn display_write_status() -> (String, Vec<u8>) {
 }
 
 pub fn display_verify_status(bytes: &[u8]) -> String {
-    match inspect_display_artifact_bytes(bytes, StorageLimits::DEFAULT, AnchorPolicy::UnanchoredLocal)
-    {
+    match inspect_display_artifact_bytes(
+        bytes,
+        StorageLimits::DEFAULT,
+        AnchorPolicy::UnanchoredLocal,
+    ) {
         Ok(ReadOnlyDisplayArtifactInspection::Clean { carrier, state }) => {
             let artifact = state
                 .entries()
@@ -316,9 +320,16 @@ pub fn assert_carrier_file_matches_bytes(label: &str, bytes: &[u8]) {
     assert_eq!(from_disk, bytes, "{label}: tempfile bytes diverged");
     let memory = inspect_bytes(bytes, StorageLimits::DEFAULT, AnchorPolicy::UnanchoredLocal)
         .expect("memory inspect");
-    let disk = inspect_bytes(&from_disk, StorageLimits::DEFAULT, AnchorPolicy::UnanchoredLocal)
-        .expect("disk inspect");
-    assert_eq!(memory, disk, "{label}: inspect_bytes diverged across tempfile");
+    let disk = inspect_bytes(
+        &from_disk,
+        StorageLimits::DEFAULT,
+        AnchorPolicy::UnanchoredLocal,
+    )
+    .expect("disk inspect");
+    assert_eq!(
+        memory, disk,
+        "{label}: inspect_bytes diverged across tempfile"
+    );
 }
 
 #[cfg(test)]
@@ -392,5 +403,4 @@ mod tests {
         let truncated = &torn[..prefix as usize];
         assert_eq!(display_verify_status(truncated), verify);
     }
-
 }

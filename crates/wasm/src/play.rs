@@ -12,21 +12,21 @@ use std::cell::Cell;
 use std::time::Instant;
 
 use bitblock_core::camera::{
-    Camera, Vec3, DEFAULT_DOLLY_LOG_STEP, DEFAULT_MOUSE_SENSITIVITY, MAX_OBSERVATION_DISTANCE,
+    Camera, DEFAULT_DOLLY_LOG_STEP, DEFAULT_MOUSE_SENSITIVITY, MAX_OBSERVATION_DISTANCE, Vec3,
 };
 use bitblock_core::frame::FrameRef;
-use bitblock_core::history::{world_tag, History, TickTransaction};
+use bitblock_core::history::{History, TickTransaction, world_tag};
 use bitblock_core::interaction::{AcceptedAction, InteractionTape, MoveControl};
 use bitblock_core::program::{Edit, Operation, Program};
 use bitblock_core::protocol::ContentTag;
 use bitblock_core::render::{
-    bounds_aabb, coord_containing, crosshair_overlay_input, raycast, sweep_point, Renderer,
+    Renderer, bounds_aabb, coord_containing, crosshair_overlay_input, raycast, sweep_point,
 };
 use bitblock_core::sidebar::{DisplayStatus, FrameCompositor, SidebarRasterFacts, SidebarSnapshot};
 use bitblock_core::tick::{
-    TickActionError, TickActionLedger, LANE_AIM_DELETE, LANE_AIM_PLACE, LANE_CLEAR_MOTION,
-    LANE_EXACT_EDIT, LANE_FIT_WORLD, LANE_LOOK_DELTA, LANE_MOVE_EDGE, LANE_RESIZE,
-    LANE_TOGGLE_SIDEBAR, LANE_WHEEL_LINES,
+    LANE_AIM_DELETE, LANE_AIM_PLACE, LANE_CLEAR_MOTION, LANE_EXACT_EDIT, LANE_FIT_WORLD,
+    LANE_LOOK_DELTA, LANE_MOVE_EDGE, LANE_RESIZE, LANE_TOGGLE_SIDEBAR, LANE_WHEEL_LINES,
+    TickActionError, TickActionLedger,
 };
 use bitblock_core::world::{Coord, World};
 
@@ -122,7 +122,10 @@ impl Inputs {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ApplyError {
-    NonFiniteLane { field: &'static str, bits: u64 },
+    NonFiniteLane {
+        field: &'static str,
+        bits: u64,
+    },
     NonFiniteAccumulation {
         field: &'static str,
         prior_bits: u64,
@@ -192,6 +195,12 @@ enum RenderPolicy {
 pub const PLAY_WORLD_EMPTY: u32 = 4;
 /// World the play client loads on start: architecture (readable from outside, cheap at High).
 pub const PLAY_WORLD_DEFAULT: u32 = 2;
+
+impl Default for PlaySession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl PlaySession {
     /// A fresh session whose world is gallery program `program_id`, built on the same
@@ -298,7 +307,9 @@ impl PlaySession {
     /// one of `play_chem::CHEM_CYCLE_*`). Returns false outside chem mode or for an unknown mode.
     /// Pixels change only through later chem steps.
     pub fn chem_set_dynamics(&mut self, energy: u32, cycle: u32) -> bool {
-        self.chem.as_mut().is_some_and(|c| c.set_dynamics(energy, cycle))
+        self.chem
+            .as_mut()
+            .is_some_and(|c| c.set_dynamics(energy, cycle))
     }
 
     /// `(energy, cycle)` modes of the chem world, or `None` outside chem mode.
@@ -321,7 +332,11 @@ impl PlaySession {
             }
             return false;
         };
-        let key = (self.last_world_tag, chem.cut, chem.cut_signs(self.camera.position()));
+        let key = (
+            self.last_world_tag,
+            chem.cut,
+            chem.cut_signs(self.camera.position()),
+        );
         if self.cut_view.as_ref().is_none_or(|(k, _)| *k != key) {
             self.cut_view = Some((key, chem.cut_view(&self.world, key.2)));
             self.cut_faces = chem.cut_faces(&self.world, key.2);
@@ -414,9 +429,13 @@ impl PlaySession {
     }
 
     fn output_frame_tag(&self) -> ContentTag {
-        FrameRef::new(self.output_width(), self.output_height(), self.output_pixels())
-            .expect("play output framebuffer")
-            .content_tag()
+        FrameRef::new(
+            self.output_width(),
+            self.output_height(),
+            self.output_pixels(),
+        )
+        .expect("play output framebuffer")
+        .content_tag()
     }
 
     /// Full status, hashing the current output frame if its tag is not cached yet.
@@ -439,7 +458,11 @@ impl PlaySession {
             "pending".to_owned()
         };
         let pos = self.camera.position();
-        let chem = self.chem.as_ref().map(|c| c.status_fields()).unwrap_or_default();
+        let chem = self
+            .chem
+            .as_ref()
+            .map(|c| c.status_fields())
+            .unwrap_or_default();
         format!(
             "bitblock_browser_play ok tick={} world={} frame={} pos={:.12},{:.12},{:.12} yaw={:.12} pitch={:.12} dist={:.12} last={} sidebar={} captured={} output={}x{}{}",
             self.tick,
@@ -530,10 +553,8 @@ impl PlaySession {
     pub fn key(&mut self, code: u32, pressed: bool) {
         match code {
             PLAY_KEY_W => {
-                let _ = self.apply_accepted_action(AcceptedAction::MoveEdge(
-                    MoveControl::Forward,
-                    pressed,
-                ));
+                let _ = self
+                    .apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Forward, pressed));
                 self.last_action = if pressed { "key:W:down" } else { "key:W:up" }.to_owned();
             }
             PLAY_KEY_S => {
@@ -544,24 +565,18 @@ impl PlaySession {
                 self.last_action = if pressed { "key:S:down" } else { "key:S:up" }.to_owned();
             }
             PLAY_KEY_A => {
-                let _ = self.apply_accepted_action(AcceptedAction::MoveEdge(
-                    MoveControl::Left,
-                    pressed,
-                ));
+                let _ = self
+                    .apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Left, pressed));
                 self.last_action = if pressed { "key:A:down" } else { "key:A:up" }.to_owned();
             }
             PLAY_KEY_D => {
-                let _ = self.apply_accepted_action(AcceptedAction::MoveEdge(
-                    MoveControl::Right,
-                    pressed,
-                ));
+                let _ = self
+                    .apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Right, pressed));
                 self.last_action = if pressed { "key:D:down" } else { "key:D:up" }.to_owned();
             }
             PLAY_KEY_SPACE => {
-                let _ = self.apply_accepted_action(AcceptedAction::MoveEdge(
-                    MoveControl::Up,
-                    pressed,
-                ));
+                let _ =
+                    self.apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Up, pressed));
                 self.last_action = if pressed {
                     "key:Space:down"
                 } else {
@@ -570,10 +585,8 @@ impl PlaySession {
                 .to_owned();
             }
             PLAY_KEY_SHIFT => {
-                let _ = self.apply_accepted_action(AcceptedAction::MoveEdge(
-                    MoveControl::Down,
-                    pressed,
-                ));
+                let _ = self
+                    .apply_accepted_action(AcceptedAction::MoveEdge(MoveControl::Down, pressed));
                 self.last_action = if pressed {
                     "key:Shift:down"
                 } else {
@@ -760,11 +773,11 @@ impl PlaySession {
                         &self.camera,
                         edit
                     ));
-                    if let Some(chem) = self.chem.as_mut() {
-                        if !chem.dig(edit.coord) {
-                            self.needs_sidebar_render = true;
-                            continue;
-                        }
+                    if let Some(chem) = self.chem.as_mut()
+                        && !chem.dig(edit.coord)
+                    {
+                        self.needs_sidebar_render = true;
+                        continue;
                     }
                     self.needs_render |=
                         transaction.apply_edit(&self.history, &mut self.world, edit);
@@ -788,7 +801,8 @@ impl PlaySession {
                         // onto a bit the cut only hides.
                         if cut
                             && (self.world.is_on(edit.coord)
-                                || chem.cut_hides(edit.coord, chem.cut_signs(self.camera.position())))
+                                || chem
+                                    .cut_hides(edit.coord, chem.cut_signs(self.camera.position())))
                         {
                             chem.last = "place_refused:cut".to_owned();
                             self.needs_sidebar_render = true;
@@ -813,7 +827,11 @@ impl PlaySession {
                             Operation::Off => on && chem.dig(edit.coord),
                             Operation::On => !on && chem.place(edit.coord),
                             Operation::Toggle => {
-                                if on { chem.dig(edit.coord) } else { chem.place(edit.coord) }
+                                if on {
+                                    chem.dig(edit.coord)
+                                } else {
+                                    chem.place(edit.coord)
+                                }
                             }
                         };
                         if !ok {
@@ -933,7 +951,9 @@ impl PlaySession {
                         };
                         self.renderer.render_tinted(view, &self.camera, Some(&lit));
                     }
-                    _ => self.renderer.render_tinted(&self.world, &self.camera, Some(&tint)),
+                    _ => self
+                        .renderer
+                        .render_tinted(&self.world, &self.camera, Some(&tint)),
                 }
             }
             None => self.renderer.render(&self.world, &self.camera),
@@ -965,7 +985,9 @@ impl PlaySession {
         let serial = self.renderer.frame_serial();
         let incremental = self.game_only
             && rgba.len() == len
-            && self.rgba_game_serial.is_some_and(|s| s.wrapping_add(1) == serial);
+            && self
+                .rgba_game_serial
+                .is_some_and(|s| s.wrapping_add(1) == serial);
         let mut done = false;
         if incremental && let Some(rows) = self.renderer.changed_rows() {
             let width = self.renderer.width() as usize;
@@ -1033,7 +1055,8 @@ impl PlaySession {
             AcceptedAction::Resize(width, height) => {
                 if width > 0 && height > 0 {
                     let was_top = self.was_top_saturated();
-                    let sidebar_width = bitblock_core::sidebar::SIDEBAR_WIDTH.min(width.saturating_sub(1));
+                    let sidebar_width =
+                        bitblock_core::sidebar::SIDEBAR_WIDTH.min(width.saturating_sub(1));
                     let simulation_width = width - sidebar_width;
                     self.renderer.resize(simulation_width, height);
                     self.compositor.resize(width, height, simulation_width);
@@ -1189,11 +1212,7 @@ fn handler_label(action: AcceptedAction) -> String {
     }
 }
 
-fn checked_accumulation(
-    field: &'static str,
-    prior: f64,
-    delta: f64,
-) -> Result<f64, ApplyError> {
+fn checked_accumulation(field: &'static str, prior: f64, delta: f64) -> Result<f64, ApplyError> {
     if !delta.is_finite() {
         return Err(ApplyError::NonFiniteLane {
             field,
@@ -1285,8 +1304,7 @@ impl PlaySession {
         let mut session = if scene == BENCH_SCENE_SYMBOL {
             Self::with_gallery_program(0).expect("symbol program id")
         } else if scene >= BENCH_SCENE_GALLERY_BASE {
-            Self::with_gallery_program(scene - BENCH_SCENE_GALLERY_BASE)
-                .unwrap_or_else(Self::new)
+            Self::with_gallery_program(scene - BENCH_SCENE_GALLERY_BASE).unwrap_or_default()
         } else {
             Self::new()
         };
@@ -1300,7 +1318,13 @@ impl PlaySession {
     }
 
     /// A chem session posed for profiling (auto-step paused; stages drive chem explicitly).
-    pub fn bench_chem(preset: u32, radius: u32, sim_width: u32, sim_height: u32, sidebar: bool) -> Option<Self> {
+    pub fn bench_chem(
+        preset: u32,
+        radius: u32,
+        sim_width: u32,
+        sim_height: u32,
+        sidebar: bool,
+    ) -> Option<Self> {
         let mut session = Self::with_chem(preset, 7, radius)?;
         session.chem_set_auto(0);
         session.set_layout(sim_width, sim_height, sidebar);
@@ -1337,7 +1361,8 @@ impl PlaySession {
             }
             4 => {
                 let c = |_: Coord| Some(0x808080u32);
-                self.renderer.render_tinted(&self.world, &self.camera, Some(&c));
+                self.renderer
+                    .render_tinted(&self.world, &self.camera, Some(&c));
                 self.renderer.world_pixel_count()
             }
             2 => {
@@ -1498,7 +1523,13 @@ mod tests {
     }
 
     fn frame_of(status: &str) -> &str {
-        status.split("frame=").nth(1).expect("frame=").split(' ').next().expect("tag")
+        status
+            .split("frame=")
+            .nth(1)
+            .expect("frame=")
+            .split(' ')
+            .next()
+            .expect("tag")
     }
 
     fn without_frame(status: &str) -> String {
@@ -1520,7 +1551,11 @@ mod tests {
                 audited.fixed_tick();
             }
             assert!(live.step(n), "a camera change must finalise a frame");
-            assert_eq!(without_frame(&live.status()), without_frame(&audited.status()), "n={n}");
+            assert_eq!(
+                without_frame(&live.status()),
+                without_frame(&audited.status()),
+                "n={n}"
+            );
             assert_eq!(live.renderer.pixels(), audited.renderer.pixels(), "n={n}");
             if n == 1 {
                 assert_eq!(live.status(), audited.status());
@@ -1538,8 +1573,16 @@ mod tests {
             audited.fixed_tick();
             audited.fixed_tick();
             assert!(live.step(2));
-            assert_eq!(without_frame(&live.status()), without_frame(&audited.status()), "phase 2 n={n}");
-            assert_eq!(live.renderer.pixels(), audited.renderer.pixels(), "phase 2 n={n}");
+            assert_eq!(
+                without_frame(&live.status()),
+                without_frame(&audited.status()),
+                "phase 2 n={n}"
+            );
+            assert_eq!(
+                live.renderer.pixels(),
+                audited.renderer.pixels(),
+                "phase 2 n={n}"
+            );
         }
     }
 
@@ -1565,7 +1608,10 @@ mod tests {
         assert!(!session.step(0), "no tick yet");
         assert!(session.step(1), "first tick renders the spawn frame");
         let renders = session.renders();
-        assert!(!session.step(4), "nothing changed: dirty-only rendering skips the frame");
+        assert!(
+            !session.step(4),
+            "nothing changed: dirty-only rendering skips the frame"
+        );
         assert_eq!(session.renders(), renders);
         assert!(session.status().contains("tick=5"));
     }
@@ -1600,8 +1646,15 @@ mod tests {
             }
             audited.fixed_tick();
             assert!(live.step(1));
-            assert_eq!(live.compositor.pixels(), audited.compositor.pixels(), "frame {i}");
-            assert_eq!(live.last_sidebar_facts, audited.last_sidebar_facts, "frame {i}");
+            assert_eq!(
+                live.compositor.pixels(),
+                audited.compositor.pixels(),
+                "frame {i}"
+            );
+            assert_eq!(
+                live.last_sidebar_facts, audited.last_sidebar_facts,
+                "frame {i}"
+            );
             assert_eq!(live.status(), audited.status(), "frame {i}");
         }
         // Audited path after a live (unbound) compose must re-bind, not panic.
@@ -1614,11 +1667,20 @@ mod tests {
 
     #[test]
     fn rgba_buffer_matches_reference_conversion_in_every_layout() {
-        for (w, h, sidebar) in [(801, 801, true), (960, 540, false), (1280, 720, true), (333, 200, false)] {
+        for (w, h, sidebar) in [
+            (801, 801, true),
+            (960, 540, false),
+            (1280, 720, true),
+            (333, 200, false),
+        ] {
             let mut session = PlaySession::new();
             session.set_layout(w, h, sidebar);
             assert!(session.step(1));
-            assert_eq!(session.rgba(), &crate::xrgb_to_rgba(session.output_pixels())[..], "{w}x{h} {sidebar}");
+            assert_eq!(
+                session.rgba(),
+                &crate::xrgb_to_rgba(session.output_pixels())[..],
+                "{w}x{h} {sidebar}"
+            );
             assert_eq!(
                 session.rgba().len(),
                 (session.output_width() * session.output_height() * 4) as usize
@@ -1629,20 +1691,40 @@ mod tests {
     #[test]
     fn set_layout_sizes_and_clamps() {
         let mut session = PlaySession::new();
-        assert_eq!((session.output_width(), session.output_height()), (1201, 801));
+        assert_eq!(
+            (session.output_width(), session.output_height()),
+            (1201, 801)
+        );
         session.set_layout(1280, 720, true);
         session.step(1);
         assert_eq!(session.simulation_size(), (1280, 720));
-        assert_eq!((session.output_width(), session.output_height()), (1680, 720));
+        assert_eq!(
+            (session.output_width(), session.output_height()),
+            (1680, 720)
+        );
         assert!(!session.game_only());
-        assert!(session.status().contains("output=1680x720"), "{}", session.status());
+        assert!(
+            session.status().contains("output=1680x720"),
+            "{}",
+            session.status()
+        );
         session.set_layout(1280, 720, false);
-        assert_eq!(frame_of(&session.status_with(false)), "none", "layout change drops the stale frame");
+        assert_eq!(
+            frame_of(&session.status_with(false)),
+            "none",
+            "layout change drops the stale frame"
+        );
         session.step(1);
         assert!(session.game_only());
-        assert_eq!((session.output_width(), session.output_height()), (1280, 720));
+        assert_eq!(
+            (session.output_width(), session.output_height()),
+            (1280, 720)
+        );
         session.set_cursor(1279.5, 10.5);
-        assert!(!session.pointer_in_sidebar(), "game-only has no sidebar strip");
+        assert!(
+            !session.pointer_in_sidebar(),
+            "game-only has no sidebar strip"
+        );
         session.set_layout(1, 1, false);
         assert_eq!(session.simulation_size(), (PLAY_MIN_DIM, PLAY_MIN_DIM));
         session.set_layout(100_000, 100_000, true);
@@ -1660,9 +1742,16 @@ mod tests {
         assert!(session.step(1));
         session.set_layout(801, 801, true);
         session.fixed_tick();
-        assert_eq!((session.output_width(), session.output_height()), (1201, 801));
+        assert_eq!(
+            (session.output_width(), session.output_height()),
+            (1201, 801)
+        );
         assert_eq!(session.renderer.pixels(), reference.renderer.pixels());
-        assert_eq!(&session.rgba()[..4 * 801], &reference.rgba()[..4 * 801], "first game row");
+        assert_eq!(
+            &session.rgba()[..4 * 801],
+            &reference.rgba()[..4 * 801],
+            "first game row"
+        );
     }
 
     #[test]
@@ -1672,8 +1761,18 @@ mod tests {
         live.step(3);
         // The tape always runs on a reset (native 801+400) session through fixed_tick.
         let tape = play_input_tape_status();
-        assert!(tape.contains("tick=5 world=#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca"), "{tape}");
-        assert!(tape.contains("frame=#bb.frame.sha256.vyn2woic4slbg5vo6xxqj4qbx3pg4fsueskewrrh57j7sayknpya"), "{tape}");
+        assert!(
+            tape.contains(
+                "tick=5 world=#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca"
+            ),
+            "{tape}"
+        );
+        assert!(
+            tape.contains(
+                "frame=#bb.frame.sha256.vyn2woic4slbg5vo6xxqj4qbx3pg4fsueskewrrh57j7sayknpya"
+            ),
+            "{tape}"
+        );
         assert!(tape.ends_with("output=1201x801"), "{tape}");
     }
 }
@@ -1702,7 +1801,10 @@ mod start_world_tests {
         assert_eq!(PLAY_WORLD_DEFAULT, 2);
         let s = client_startup(PLAY_WORLD_DEFAULT);
         assert_eq!(s.status(), ARCH_HIGH_KNOWN);
-        assert_eq!(crate::count_non_background(s.renderer.pixels()), ARCH_HIGH_GAME_NON_BACKGROUND);
+        assert_eq!(
+            crate::count_non_background(s.renderer.pixels()),
+            ARCH_HIGH_GAME_NON_BACKGROUND
+        );
         // Same world as the architecture gallery button.
         let gallery = crate::raster_gallery_program(2, crate::GALLERY_PREVIEW_SIZE).unwrap();
         assert_eq!(s.last_world_tag, gallery.world_tag);
@@ -1713,7 +1815,10 @@ mod start_world_tests {
     fn symbol_start_world_at_high_known_answer() {
         let s = client_startup(0);
         assert_eq!(s.status(), SYMBOL_HIGH_KNOWN);
-        assert_eq!(crate::count_non_background(s.renderer.pixels()), SYMBOL_HIGH_GAME_NON_BACKGROUND);
+        assert_eq!(
+            crate::count_non_background(s.renderer.pixels()),
+            SYMBOL_HIGH_GAME_NON_BACKGROUND
+        );
     }
 
     #[test]
@@ -1733,7 +1838,10 @@ mod start_world_tests {
             let total = 1600 * 900;
             let nb = crate::count_non_background(s.renderer.pixels());
             // A visible structure on a black sky: neither empty nor a wall filling the view.
-            assert!(nb > total / 50 && nb < total / 2, "world id {id}: non_background={nb}");
+            assert!(
+                nb > total / 50 && nb < total / 2,
+                "world id {id}: non_background={nb}"
+            );
         }
         assert!(PlaySession::with_start_world(PLAY_WORLD_EMPTY + 1).is_none());
     }
@@ -1752,7 +1860,10 @@ mod start_world_tests {
         s.pointer_button(2, true); // RMB = aimed place (falls back to the view anchor cell)
         s.pointer_button(2, false);
         assert!(s.step(1));
-        assert_ne!(s.last_world_tag, start, "aimed place edited the gallery world");
+        assert_ne!(
+            s.last_world_tag, start,
+            "aimed place edited the gallery world"
+        );
         assert_eq!(s.world.iter_on().count(), 664);
         let before = s.camera.position();
         s.key(PLAY_KEY_W, true);
@@ -1776,7 +1887,11 @@ mod chem_play_tests {
 
     fn assert_mirrors_chem(s: &PlaySession) {
         let chem = s.chem.as_ref().unwrap();
-        assert_eq!(world_tag(&s.world), world_tag(chem.world.world()), "play world == chem occupancy");
+        assert_eq!(
+            world_tag(&s.world),
+            world_tag(chem.world.world()),
+            "play world == chem occupancy"
+        );
         assert_eq!(s.history.current_world(), s.last_world_tag);
         assert_eq!(chem.world.check_books(), Ok(()));
         assert!(chem.world.lane_drift().iter().all(|&x| x == 0));
@@ -1789,11 +1904,21 @@ mod chem_play_tests {
             let s = chem_startup(preset);
             let chem = s.chem.as_ref().unwrap();
             assert!(chem.world.material_count() > 1000, "preset {preset}");
-            assert_eq!(s.world.iter_on().count(), chem.world.material_count() + 1, "+ bedrock");
+            assert_eq!(
+                s.world.iter_on().count(),
+                chem.world.material_count() + 1,
+                "+ bedrock"
+            );
             let nb = crate::count_non_background(s.renderer.pixels());
             let total = 1600 * 900;
-            assert!(nb > total / 50 && nb < total * 3 / 4, "preset {preset}: non_background={nb}");
-            assert!(s.status().contains(&format!(" chem={} ", CHEM_PRESETS[preset as usize])));
+            assert!(
+                nb > total / 50 && nb < total * 3 / 4,
+                "preset {preset}: non_background={nb}"
+            );
+            assert!(
+                s.status()
+                    .contains(&format!(" chem={} ", CHEM_PRESETS[preset as usize]))
+            );
             assert_mirrors_chem(&s);
         }
         assert!(PlaySession::with_chem(3, 7, 12).is_none());
@@ -1805,8 +1930,15 @@ mod chem_play_tests {
         let t0 = s.chem.as_ref().unwrap().world.tick();
         s.step(4 * 60); // 60 chem steps at the default cadence
         let chem = s.chem.as_ref().unwrap();
-        assert!(chem.world.tick() >= t0 + 59, "chem tick advanced: {}", chem.world.tick());
-        assert!(chem.world.evaporated() > 0 || chem.world.vapor() != 0, "water cycle moved");
+        assert!(
+            chem.world.tick() >= t0 + 59,
+            "chem tick advanced: {}",
+            chem.world.tick()
+        );
+        assert!(
+            chem.world.evaporated() > 0 || chem.world.vapor() != 0,
+            "water cycle moved"
+        );
         assert!(chem.error.is_none());
         assert_mirrors_chem(&s);
         // Pause + manual step.
@@ -1840,14 +1972,22 @@ mod chem_play_tests {
         let chem = s.chem.as_ref().unwrap();
         assert!(chem.last.starts_with("place:"), "last={}", chem.last);
         assert_eq!(s.world.iter_on().count(), n0);
-        assert_eq!(chem.world.inventory(), bag0, "place paid back what dig returned");
+        assert_eq!(
+            chem.world.inventory(),
+            bag0,
+            "place paid back what dig returned"
+        );
         assert_mirrors_chem(&s);
     }
 
     fn shade_pixels(s: &PlaySession, rgb: u32) -> usize {
         let shades = bitblock_core::render::tinted_shades(rgb);
         let lit = bitblock_core::render::lit_face_color(rgb);
-        s.renderer.pixels().iter().filter(|p| shades.contains(p) || **p == lit).count()
+        s.renderer
+            .pixels()
+            .iter()
+            .filter(|p| shades.contains(p) || **p == lit)
+            .count()
     }
 
     /// Cut faces are lit: against the same cut rendered without lit faces (the pre-highlight
@@ -1862,7 +2002,12 @@ mod chem_play_tests {
             let off_pixels = s.renderer.pixels().to_vec();
             let lit_of: std::collections::BTreeMap<u32, u32> = {
                 let c = s.chem.as_ref().unwrap();
-                c.colors.by_id.iter().filter(|&&b| b != 0).map(|&b| (lit_face_color(b), b)).collect()
+                c.colors
+                    .by_id
+                    .iter()
+                    .filter(|&&b| b != 0)
+                    .map(|&b| (lit_face_color(b), b))
+                    .collect()
             };
             let core_lit = {
                 let c = s.chem.as_ref().unwrap();
@@ -1872,8 +2017,14 @@ mod chem_play_tests {
                 for offset in [0, -3] {
                     assert!(s.chem_set_cut(mode, offset));
                     assert!(s.step(1));
-                    assert!(!s.cut_faces.is_empty(), "preset {preset} mode {mode}: cut faces");
-                    assert!(s.cut_faces.windows(2).all(|w| w[0].0 < w[1].0), "cut faces sorted");
+                    assert!(
+                        !s.cut_faces.is_empty(),
+                        "preset {preset} mode {mode}: cut faces"
+                    );
+                    assert!(
+                        s.cut_faces.windows(2).all(|w| w[0].0 < w[1].0),
+                        "cut faces sorted"
+                    );
                     s.audit_game_palette();
                     let lit = s.renderer.pixels().to_vec();
                     // Same cut, lit faces suppressed: the pre-highlight frame.
@@ -1885,26 +2036,47 @@ mod chem_play_tests {
                     for (p, q) in lit.iter().zip(&plain) {
                         if p != q {
                             // Crosshair pixels are the inverse of what lies under them.
-                            let base = lit_of.get(p).or_else(|| lit_of.get(&(!p & 0x00ff_ffff))).unwrap_or_else(|| {
-                                panic!("preset {preset} mode {mode}: changed pixel {p:06x} not lit")
-                            });
+                            let base = lit_of
+                                .get(p)
+                                .or_else(|| lit_of.get(&(!p & 0x00ff_ffff)))
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "preset {preset} mode {mode}: changed pixel {p:06x} not lit"
+                                    )
+                                });
                             changed += 1;
                             hues.insert(*base);
                         }
                     }
                     let core = lit.iter().filter(|&&p| p == core_lit).count();
-                    assert!(changed > 5000, "preset {preset} mode {mode}:{offset} lit pixels {changed}");
-                    assert!(hues.len() >= 3, "preset {preset} mode {mode}:{offset} lit hues {hues:x?}");
+                    assert!(
+                        changed > 5000,
+                        "preset {preset} mode {mode}:{offset} lit pixels {changed}"
+                    );
+                    assert!(
+                        hues.len() >= 3,
+                        "preset {preset} mode {mode}:{offset} lit hues {hues:x?}"
+                    );
                     if offset == 0 {
-                        assert!(core > 300, "preset {preset} mode {mode}: core lit pixels {core}");
+                        assert!(
+                            core > 300,
+                            "preset {preset} mode {mode}: core lit pixels {core}"
+                        );
                     }
-                    eprintln!("preset {preset} cut {mode}:{offset}: lit={changed} hues={} core={core}", hues.len());
+                    eprintln!(
+                        "preset {preset} cut {mode}:{offset}: lit={changed} hues={} core={core}",
+                        hues.len()
+                    );
                 }
             }
             assert!(s.chem_set_cut(CHEM_CUT_OFF, 0));
             assert!(s.step(1));
             assert!(s.cut_faces.is_empty());
-            assert_eq!(s.renderer.pixels(), &off_pixels[..], "preset {preset}: cut off == uncut");
+            assert_eq!(
+                s.renderer.pixels(),
+                &off_pixels[..],
+                "preset {preset}: cut off == uncut"
+            );
         }
     }
 
@@ -1930,9 +2102,17 @@ mod chem_play_tests {
                     core > off_core + 500,
                     "preset {preset} mode {mode}: core pixels {core} vs uncut {off_core}"
                 );
-                assert!(s.status().ends_with(&format!(" cut={}:0", CHEM_CUT_NAMES[mode as usize]))
-                    || s.status().contains(&format!(" cut={}:0", CHEM_CUT_NAMES[mode as usize])));
-                assert!(s.chem_status().unwrap().ends_with(&format!(" cut={}:0", CHEM_CUT_NAMES[mode as usize])));
+                assert!(
+                    s.status()
+                        .ends_with(&format!(" cut={}:0", CHEM_CUT_NAMES[mode as usize]))
+                        || s.status()
+                            .contains(&format!(" cut={}:0", CHEM_CUT_NAMES[mode as usize]))
+                );
+                assert!(
+                    s.chem_status()
+                        .unwrap()
+                        .ends_with(&format!(" cut={}:0", CHEM_CUT_NAMES[mode as usize]))
+                );
                 // Render-only: world, history and chem untouched.
                 assert_eq!(world_tag(&s.world), tag0);
                 assert!(s.world.is_on(center));
@@ -1942,7 +2122,11 @@ mod chem_play_tests {
             // Off again: pixel-identical to the never-cut frame, status back to the old text.
             assert!(s.chem_set_cut(CHEM_CUT_OFF, 0));
             assert!(s.step(1));
-            assert_eq!(s.renderer.pixels(), &off_pixels[..], "preset {preset}: cut off == before");
+            assert_eq!(
+                s.renderer.pixels(),
+                &off_pixels[..],
+                "preset {preset}: cut off == before"
+            );
             assert!(!s.status().contains(" cut="));
             assert!(!s.chem_status().unwrap().contains(" cut="));
             // Unknown mode refused; offset clamps to the radius.
@@ -1974,7 +2158,11 @@ mod chem_play_tests {
         s.pointer_button(2, true);
         s.step(1);
         let c = s.chem.as_ref().unwrap();
-        assert!(c.last.starts_with("place:") || c.last == "place_refused:cut", "last={}", c.last);
+        assert!(
+            c.last.starts_with("place:") || c.last == "place_refused:cut",
+            "last={}",
+            c.last
+        );
         assert_mirrors_chem(&s);
         let _ = bag0;
         // Chem tick still runs with the cut on; the view follows the world.
@@ -1989,7 +2177,11 @@ mod chem_play_tests {
         assert_mirrors_chem(&s);
         // Cut view == play world minus exactly the hidden domain cells.
         s.step(1);
-        let view = s.cut_view.as_ref().map(|(_, w)| w.clone()).expect("view built");
+        let view = s
+            .cut_view
+            .as_ref()
+            .map(|(_, w)| w.clone())
+            .expect("view built");
         let c = s.chem.as_ref().unwrap();
         let signs = c.cut_signs(s.camera.position());
         for coord in s.world.iter_on() {
@@ -2019,14 +2211,20 @@ mod chem_play_tests {
         assert!(q < bind, "q={q} bind={bind}");
         assert!(!c.dig(far), "cold rock: bonds cannot break");
         assert!(c.last.starts_with("dig_refused_heat:"), "last={}", c.last);
-        assert_ne!(c.world.material(far), MatId::AIR, "refused dig left the cell");
+        assert_ne!(
+            c.world.material(far),
+            MatId::AIR,
+            "refused dig left the cell"
+        );
     }
 
     #[test]
     fn custom_budget_matches_preset_and_spends_entered_lanes() {
         // The preset's own lanes entered as a custom budget build the very same world.
         for preset in 0..CHEM_PRESETS.len() as u32 {
-            let lanes = preset_budget(preset, sphere_cells(CHEM_RADIUS_DEFAULT)).unwrap().lanes;
+            let lanes = preset_budget(preset, sphere_cells(CHEM_RADIUS_DEFAULT))
+                .unwrap()
+                .lanes;
             let p = PlaySession::with_chem(preset, 7, CHEM_RADIUS_DEFAULT).unwrap();
             let c = PlaySession::with_chem_budget(lanes, 7, CHEM_RADIUS_DEFAULT).unwrap();
             assert_eq!(world_tag(&p.world), world_tag(&c.world), "preset {preset}");
@@ -2034,7 +2232,9 @@ mod chem_play_tests {
             assert_eq!(c.last_action, "world:chem-custom");
         }
         // A tweaked budget: totals equal exactly what was entered, books balance while ticking.
-        let lanes = [9000, 6000, 800, 300, 700, 900, 1500, 200, 1200, 900, 150, 80];
+        let lanes = [
+            9000, 6000, 800, 300, 700, 900, 1500, 200, 1200, 900, 150, 80,
+        ];
         let mut s = PlaySession::with_chem_budget(lanes, 11, 10).unwrap();
         s.set_layout(1600, 900, true);
         assert!(s.step(1));
@@ -2043,7 +2243,10 @@ mod chem_play_tests {
         assert_eq!(chem.world.t0(), lanes);
         assert!(chem.world.material_count() > 500);
         let text = s.chem_status().unwrap();
-        assert!(text.starts_with("bitblock_play_chem ok preset=custom seed=11 radius=10 "), "{text}");
+        assert!(
+            text.starts_with("bitblock_play_chem ok preset=custom seed=11 radius=10 "),
+            "{text}"
+        );
         assert!(text.contains(" lanes=H:9000,O:6000,C:800,N:300,S:700,Ca:900,Fe:1500,Ni:200,Si:1200,Mg:900,Na:150,K:80 "));
         assert!(text.ends_with(" budget=H:9000,O:6000,C:800,N:300,S:700,Ca:900,Fe:1500,Ni:200,Si:1200,Mg:900,Na:150,K:80 atoms=21730"), "{text}");
         assert!(s.status().contains(" chem=custom seed=11 radius=10 "));
@@ -2067,10 +2270,14 @@ mod chem_play_tests {
         let mut big = [0; 12];
         big[0] = CHEM_ATOM_CAP + 1;
         let e = PlaySession::with_chem_budget(big, 7, 8).err().unwrap();
-        assert!(e.starts_with("budget_of_4294967297_atoms_exceeds_cap_4294967296"), "{e}");
-        let e = PlaySession::with_chem_budget([i64::MAX, i64::MAX, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 7, 8)
-            .err()
-            .unwrap();
+        assert!(
+            e.starts_with("budget_of_4294967297_atoms_exceeds_cap_4294967296"),
+            "{e}"
+        );
+        let e =
+            PlaySession::with_chem_budget([i64::MAX, i64::MAX, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 7, 8)
+                .err()
+                .unwrap();
         assert_eq!(e, "budget_arithmetic_overflowed");
         // Exactly at the cap is accepted (the surplus waits in the bag).
         big[0] = CHEM_ATOM_CAP;
@@ -2109,13 +2316,24 @@ mod chem_play_tests {
                 .filter(|rgb| s.renderer.pixels().iter().any(|p| p & 0x00ff_ffff == *rgb))
                 .collect();
             let hues = tinted_colors(&s);
-            assert!(hues.len() >= 8, "preset {preset}: tinted colours {}", hues.len());
+            assert!(
+                hues.len() >= 8,
+                "preset {preset}: tinted colours {}",
+                hues.len()
+            );
             // Genesis sizes concentric shells from the budget, so from outside only the
             // outermost layers show (ash: ocean under a methane skin); inner layers are
             // under the crust.
-            assert!(visible.len() >= 2, "preset {preset}: visible base colours {visible:x?}");
+            assert!(
+                visible.len() >= 2,
+                "preset {preset}: visible base colours {visible:x?}"
+            );
             s.audit_game_palette();
-            eprintln!("chem preset {preset}: tinted_colours={} visible_bases={} {visible:x?}", hues.len(), visible.len());
+            eprintln!(
+                "chem preset {preset}: tinted_colours={} visible_bases={} {visible:x?}",
+                hues.len(),
+                visible.len()
+            );
         }
     }
 
@@ -2138,7 +2356,10 @@ mod chem_play_tests {
                 }
             }
         }
-        assert!(repaint_without_occupancy > 0, "rocky recolours in place (rock -> sediment)");
+        assert!(
+            repaint_without_occupancy > 0,
+            "rocky recolours in place (rock -> sediment)"
+        );
         assert_mirrors_chem(&s);
     }
 

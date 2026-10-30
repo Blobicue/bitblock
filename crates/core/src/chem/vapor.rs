@@ -38,8 +38,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::p6::{wide_roll, Topology, NB6};
 use super::ChemWorld;
+use super::p6::{NB6, Topology, wide_roll};
 use crate::world::Coord;
 
 /// Tiles per cube face edge for the default [`VaporLocality::PATCHES`]
@@ -64,7 +64,10 @@ pub enum VaporLocality {
 
 impl VaporLocality {
     /// The tuned default: [`VAPOR_PATCH_N`] / [`VAPOR_MIX_TAU`].
-    pub const PATCHES: Self = Self::Patches { n: VAPOR_PATCH_N, mix_tau: VAPOR_MIX_TAU };
+    pub const PATCHES: Self = Self::Patches {
+        n: VAPOR_PATCH_N,
+        mix_tau: VAPOR_MIX_TAU,
+    };
 
     /// Number of vapor bins this model uses.
     pub fn patch_count(self) -> usize {
@@ -153,7 +156,13 @@ pub fn vapor_patch(d: (i64, i64, i64), n: u8) -> usize {
     if m == 0 {
         return 0;
     }
-    let ax = if a[0] == m { 0 } else if a[1] == m { 1 } else { 2 };
+    let ax = if a[0] == m {
+        0
+    } else if a[1] == m {
+        1
+    } else {
+        2
+    };
     let face = 2 * ax + usize::from(c[ax] > 0);
     let (u, v) = match ax {
         0 => (c[1], c[2]),
@@ -200,10 +209,11 @@ impl VaporGeo {
         for &(i, _) in &topo.space_faces {
             let i = i as usize;
             for d in NB6 {
-                if let Some(j) = topo.offset(cells, i, d) {
-                    if is_rim[j] && patch[j] != patch[i] {
-                        edges.insert((patch[i].min(patch[j]), patch[i].max(patch[j])));
-                    }
+                if let Some(j) = topo.offset(cells, i, d)
+                    && is_rim[j]
+                    && patch[j] != patch[i]
+                {
+                    edges.insert((patch[i].min(patch[j]), patch[i].max(patch[j])));
                 }
             }
         }
@@ -216,7 +226,14 @@ impl VaporGeo {
         for v in &mut adj {
             v.sort_unstable();
         }
-        Self { topo: topo.clone(), mode, patch, rim, edges, adj }
+        Self {
+            topo: topo.clone(),
+            mode,
+            patch,
+            rim,
+            edges,
+            adj,
+        }
     }
 }
 
@@ -253,10 +270,9 @@ impl ChemWorld {
     /// `vapor` directly, or the model changed) are re-spread by rim.
     pub(crate) fn vapor_sync(&mut self, topo: &Arc<Topology>) {
         let mode = self.params.vapor_local;
-        let ok = self
-            .vgeo
-            .as_ref()
-            .is_some_and(|g| Arc::ptr_eq(&g.topo, topo) && g.mode == mode && g.patch.len() == self.cells.len());
+        let ok = self.vgeo.as_ref().is_some_and(|g| {
+            Arc::ptr_eq(&g.topo, topo) && g.mode == mode && g.patch.len() == self.cells.len()
+        });
         if !ok {
             self.vgeo = Some(Arc::new(VaporGeo::build(&self.cells, topo, mode)));
         }
@@ -292,7 +308,9 @@ impl ChemWorld {
     /// hops (`has[r]`: region `r` can land a drop), and that hop count; empty
     /// when no region can land or there is no geometry. `b` itself at 0 hops.
     pub(crate) fn nearest_ground(&self, b: usize, has: &[bool]) -> (Vec<usize>, u32) {
-        let Some(g) = self.vgeo.as_ref() else { return (Vec::new(), 0) };
+        let Some(g) = self.vgeo.as_ref() else {
+            return (Vec::new(), 0);
+        };
         let pc = g.adj.len();
         if b >= pc || has.len() != pc {
             return (Vec::new(), 0);
@@ -330,7 +348,9 @@ impl ChemWorld {
     /// Moves pairs between bins only, so `vapor` and every book are unchanged.
     pub(crate) fn vapor_mix_pass(&mut self) {
         let Some(g) = self.vgeo.clone() else { return };
-        let VaporLocality::Patches { mix_tau, .. } = g.mode else { return };
+        let VaporLocality::Patches { mix_tau, .. } = g.mode else {
+            return;
+        };
         if mix_tau == 0 || g.edges.is_empty() || self.vapor_bins.len() != g.rim.len() {
             return;
         }
