@@ -8,8 +8,8 @@
 
 The point of a refactor gate here is narrow and unusual: this crate's value is
 byte-exact canonical encodings, so "nothing broke" means *no canonical byte
-moved*. 101 literal content tags are asserted across the test suite and 24
-Python suites reconstruct those same payloads without importing any Rust. A
+moved*. 101 literal content tags are asserted across the test suite and the
+`tools/*_vectors.py` suites reconstruct those same payloads without importing any Rust. A
 refactor that changes a byte fails both, from opposite directions.
 
 `tools/bbmutate.py` measures whether that is true rather than assuming it:
@@ -283,8 +283,10 @@ EXTRA_CHECKS = {
     "cargo fmt": (RUST_INPUTS, lambda: run(["cargo", "fmt", "--check"]),
                   "formatting is a CI gate; rustfmt skips macro bodies"),
     "python vectors": (VECTOR_INPUTS, run_vectors,
-                       "%d independent reconstructions; they catch the two sides disagreeing"
-                       % len(vector_suites())),
+                       "%d bare validators, %d of them independent vector reconstructions; "
+                       "they catch the two sides disagreeing"
+                       % (len(vector_suites()),
+                          sum(p.name.endswith("_vectors.py") for p in vector_suites()))),
     "metric registry": (REGISTRY_INPUTS,
                         lambda: run([sys.executable, "-B", "tools/metric_registry.py", "audit"]),
                         "1,112 aliases must still resolve to their definition tags"),
@@ -425,8 +427,18 @@ def report(rows, failures, started, parallel: float = 0.0) -> int:
 
 
 def main(argv: list[str]) -> int:
-    args = [a for a in argv[1:] if not a.startswith("--")]
-    force = "--force" in argv
+    flags = [a for a in argv[1:] if a.startswith("-")]
+    if "-h" in flags or "--help" in flags:
+        print(__doc__)
+        return 0
+    unknown = [f for f in flags if f != "--force"]
+    if unknown:
+        # Unknown flags used to be dropped silently, so `--help` ran the full suite.
+        print("bbverify: unknown option(s): %s\n" % " ".join(unknown), file=sys.stderr)
+        print(__doc__, file=sys.stderr)
+        return 2
+    args = [a for a in argv[1:] if not a.startswith("-")]
+    force = "--force" in flags
     mode = (args[0] if args else "full").lower()
     if mode == "quick":
         return tier("quick", [], {}, force)

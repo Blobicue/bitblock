@@ -9,11 +9,17 @@ repository's work.
 
 ## What enforcement exists
 
-Three CI jobs gate every push and pull request:
+These CI jobs gate every push and pull request (`.github/workflows/ci.yml` is the
+authority; this list is a summary):
 
 - **rust (windows-latest)** — `cargo fmt --check`, `cargo clippy --all-targets
   -D warnings`, `cargo test`. The pinned `1.96.0` toolchain comes from
   `rust-toolchain.toml`.
+- **rust (ubuntu-latest)** — `cargo clippy --all-targets --features protocol-research
+  -D warnings`, `cargo test --workspace --features protocol-research`, and the headless replay
+  of every example tape, uploaded as an artifact. Added 2026-11-03.
+- **generated index (ubuntu-latest)** — regenerates `index/`, fails on drift, then runs the
+  `bbgraph.py selftest` expectations.
 - **python vector tools (ubuntu-latest)** — every standalone `tools/*.py`
   vector tool must exit zero; `tools/check_planning_docs.py --self-test` runs
   the powered planning/audit/receipt/link controls, exact planning-authority inventory, and frozen
@@ -39,6 +45,14 @@ today is that CI runs on every branch push and pull request and a red run is
 loud and visible. Enabling hard protection is a one-command change
 if the repository is later made public or the plan upgraded; that choice
 belongs to the owner, not the timeline.
+
+**Update 2026-11-03.** GitHub now reports this repository as `public`, so the paragraph above
+no longer describes it, and the 403 blocker no longer applies. At the owner's request `main`
+was then protected: changes land only through a pull request, the five CI jobs above must
+pass, force-pushes and deletion are refused, and administrators are held to the same rules
+(`GET .../branches/main/protection` is the authority; this sentence is only a summary). Being
+public also means everything committed here, including local paths in the frozen audit
+records, is world-readable; [`UNPUBLISHED_SOURCES.md`](UNPUBLISHED_SOURCES.md) lists them.
 
 ## The mirror — retired 2026-08-27, the timelines have converged
 
