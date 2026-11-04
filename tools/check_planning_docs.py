@@ -124,10 +124,12 @@ PLANNING_FILES = (
     LAYER1_DESIGN_AUDIT,
     ROOT / "docs" / "PROTOCOL.md",
     ROOT / "docs" / "TIMELINES.md",
+    ROOT / "docs" / "AUDIT_HISTORY.md",
 )
 EXPECTED_PLANNING_PATHS = frozenset(
     {
         "README.md",
+        "docs/AUDIT_HISTORY.md",
         "docs/AUTHENTICATED_STATE_PLAN.md",
         "docs/CAPABILITY_TREE.md",
         "docs/DESIGN_RESEARCH_DISTILLATION.md",
@@ -154,7 +156,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "4db6e56035837605738015f5d1a2dbe5b1e5ddaa0b323baabd8a80a577214803"
+    "1e7281bdf019131fe55513c2cd1b2e944dacaeda2a86af45366e800e44ffd821"
 )
 EXPECTED_HANDOFF_READ_ORDER = (
     "docs/HANDOFF.md",
@@ -179,6 +181,7 @@ EXPECTED_HANDOFF_READ_ORDER = (
     "docs/LAYER1_DESIGN_PAPER.md",
     "docs/LAYER1_DESIGN_AUDIT.md",
     "README.md",
+    "docs/AUDIT_HISTORY.md",
     "docs/PROTOCOL.md",
     "docs/TIMELINES.md",
 )
@@ -7199,7 +7202,7 @@ def run_self_tests(
     check_no_duplicate_exact_projections(benign_protocol_counts, planning_summary)
 
     handoff_omission = re.sub(
-        r"^24\. `docs/TIMELINES\.md`(?:\n|$)",
+        r"^25\. `docs/TIMELINES\.md`(?:\n|$)",
         "",
         handoff_text,
         count=1,
@@ -7215,8 +7218,8 @@ def run_self_tests(
     )
 
     handoff_insertion = re.sub(
-        r"^(24\. `docs/TIMELINES\.md`)$",
-        r"\1\n25. `Cargo.toml`",
+        r"^(25\. `docs/TIMELINES\.md`)$",
+        r"\1\n26. `Cargo.toml`",
         handoff_text,
         count=1,
         flags=re.MULTILINE,
@@ -7231,8 +7234,8 @@ def run_self_tests(
     )
 
     handoff_duplicate = handoff_text.replace(
-        "24. `docs/TIMELINES.md`",
-        "24. `docs/PROTOCOL.md`",
+        "25. `docs/TIMELINES.md`",
+        "25. `docs/PROTOCOL.md`",
         1,
     )
     if handoff_duplicate == handoff_text:
@@ -7277,8 +7280,8 @@ def run_self_tests(
     )
 
     handoff_description = handoff_text.replace(
-        "24. `docs/TIMELINES.md`",
-        "24. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
+        "25. `docs/TIMELINES.md`",
+        "25. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
         1,
     )
     if handoff_description == handoff_text:
@@ -7291,8 +7294,8 @@ def run_self_tests(
     )
 
     handoff_outside = handoff_text.replace(
-        "24. `docs/TIMELINES.md`",
-        "24. `../outside-read-order-negative-control.md`",
+        "25. `docs/TIMELINES.md`",
+        "25. `../outside-read-order-negative-control.md`",
         1,
     )
     if handoff_outside == handoff_text:
@@ -7305,8 +7308,8 @@ def run_self_tests(
     )
 
     handoff_untracked = handoff_text.replace(
-        "24. `docs/TIMELINES.md`",
-        "24. `docs/untracked-read-order-negative-control.md`",
+        "25. `docs/TIMELINES.md`",
+        "25. `docs/untracked-read-order-negative-control.md`",
         1,
     )
     if handoff_untracked == handoff_text:

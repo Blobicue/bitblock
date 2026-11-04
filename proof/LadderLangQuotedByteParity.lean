@@ -1,8 +1,12 @@
 /-
 Run this file from the pinned LadderLang checkout, not from Bitblock's standalone
-proof package:
+proof package (it imports `Ladderlang.Closed`, which this repository does not carry):
 
-  lake env lean C:\Users\Owen\bitblock\proof\LadderLangQuotedByteParity.lean
+  cd <LadderLang checkout at the commit below>
+  lake env lean <path to bitblock>/proof/LadderLangQuotedByteParity.lean
+
+LadderLang is not published with Bitblock, so this assay cannot be re-run from this
+repository alone and is not part of CI.
 
 Audited LadderLang commit: 59042265167b8f40700a891d890fde8015bcade9
 

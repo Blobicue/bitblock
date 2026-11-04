@@ -242,8 +242,9 @@ Read in this order:
 20. `docs/LAYER1_DESIGN_PAPER.md`
 21. `docs/LAYER1_DESIGN_AUDIT.md`
 22. `README.md`
-23. `docs/PROTOCOL.md`
-24. `docs/TIMELINES.md`
+23. `docs/AUDIT_HISTORY.md`
+24. `docs/PROTOCOL.md`
+25. `docs/TIMELINES.md`
 
 `AGENTS.md` describes the generated index over this tree. Rather than
 reading the tree, query it:

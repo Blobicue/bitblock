@@ -25,6 +25,32 @@ jobs:
       - name: test
         run: cargo test --workspace --features protocol-research
 
+  # The README lists Linux as supported for the library suites and headless
+  # replay, but until this job only Windows ever compiled the crate in CI. It
+  # passed when first run by hand (2026-11-03); this keeps it that way. The
+  # replay output is uploaded so a Windows/Linux byte comparison can be repeated.
+  rust-linux:
+    name: rust (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: components
+        run: rustup component add clippy
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --features protocol-research -- -D warnings
+      - name: test
+        run: cargo test --workspace --features protocol-research
+      - name: headless replay
+        run: |
+          cargo build --release
+          for t in examples/*.tape; do
+            ./target/release/bitblock --simulate-actions "$t" > "replay-$(basename "$t" .tape).txt"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-linux
+          path: replay-*.txt
+
   python-tools:
     name: python vector tools (ubuntu-latest)
     runs-on: ubuntu-latest
