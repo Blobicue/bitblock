@@ -1,7 +1,7 @@
 # Using this repo as an index
 
-Bitblock is ~52,000 lines of Rust across 33 modules, ~8,600 lines of protocol
-prose, a 1,112-family metric registry, 28 independent Python vector suites, and
+Bitblock is ~61,000 lines of Rust across 37 modules, ~8,600 lines of protocol
+prose, a 1,112-family metric registry, 37 independent Python vector suites, and
 a Lean proof capsule. `index/` turns that into something an agent can query
 instead of scan.
 
@@ -46,14 +46,14 @@ python tools/bbgraph.py node frame
 `node` answers the question you actually have before editing: what a module
 pulls in, what breaks if you change it, which protocol objects it owns, whether
 anything independently checks those objects, and **which cfg gate it lives
-behind** — 18 of 33 modules do not exist in a default build, which is the single
+behind** — 20 of 37 modules do not exist in a default build, which is the single
 most common way to waste an hour here.
 
 ```bash
 python tools/bbgraph.py schema
 ```
 
-`schema` is the coverage report the tree cannot state about itself. 58 protocol objects, every one with an independent Python reconstruction. That
+`schema` is the coverage report the tree cannot state about itself. 74 protocol objects, every one with an independent Python reconstruction. That
 number is derived, not authored: a tool that declares the identical schema
 string has independently rebuilt that payload, so the uncovered set is a fact
 about the tree rather than a TODO list someone forgot to update.
@@ -67,7 +67,7 @@ decisive. Structural rank — how many modules transitively reach a module —
 orders results but never decides them, and applies only inside a subsystem the
 query already matched.
 
-That last rule is not decoration. `protocol` is reached by 29 of 33 modules;
+That last rule is not decoration. `protocol` is reached by 34 of 37 modules;
 with an unconditional load-bearing multiplier it won `ask "canonical framebuffer
 bytes"` outright, over `frame`. It is the same failure a download count produces
 in a curated list, and `bbselftest.json` guards it.
@@ -125,8 +125,8 @@ truncates `frame_v2` to `frame_v` and grows a phantom node that looks entirely
 plausible in the output. Resolving every target against the declared module set
 is what turns that into a failure instead of a wrong graph.
 
-**Staleness — catches an index older than the tree.** There is no CI here, so it
-runs locally:
+**Staleness — catches an index older than the tree.** CI's `generated index` job
+runs it on every push; run it locally before committing:
 
 ```bash
 python tools/bbgraph.py gates
@@ -151,7 +151,8 @@ python tools/bbgraph.py selftest
 
 ## Model
 
-**Modules** are the 33 files in `src/`, each carrying its `//!` doc comment, its
+**Modules** are the 37 Rust files under `crates/core/src/`, `crates/research/src/` and
+`src/` (the two crate-root `lib.rs` re-export files aside), each carrying its `//!` doc comment, its
 public items, its test count, its cfg gate, and the schemas it declares.
 Dependencies come from `crate::` and `bitblock::` paths — the binary reaches the
 library through the latter, and matching only `crate::` reported `main.rs`,
@@ -184,8 +185,8 @@ python tools/bbverify.py list      # what each check reads
 ```
 
 "Nothing broke" means something specific in this repository: **no canonical byte
-moved**. 101 literal content tags are asserted across the Rust tests, and 24
-Python suites rebuild those same payloads without importing any Rust, so a moved
+moved**. 101 literal content tags are asserted across the Rust tests, and the 37
+`tools/*_vectors.py` suites rebuild those same payloads without importing any Rust, so a moved
 byte fails both from opposite directions.
 
 | what changed | full | quick |
@@ -252,7 +253,8 @@ everything run". A suite that quietly stops running is indistinguishable from a
 suite that passes. `bbverify` now records a floor per tier and fails below it,
 and both it and CI use `--workspace`.
 
-**All 58 protocol objects now have an independent vector suite**, closed by two
+**Every protocol object has an independent vector suite** (58 objects when this
+was closed, 74 now; `bbgraph.py schema` is the current count), closed by two
 agents working disjoint halves of the tree. That number was wrong here before
 they ran: this page claimed every object was guarded while the index said 44 of
 58, and the agents flagged it rather than quietly matching the prose.
@@ -297,7 +299,7 @@ worth optimising is always the longest pole, never the largest sum.
 
 ```
 crates/core/       bitblock-core       13 modules, no dependencies
-crates/research/   bitblock-research   18 modules, depends on core
+crates/research/   bitblock-research   22 modules, depends on core
 src/               bitblock            the binary, plus a facade lib
 ```
 
@@ -393,10 +395,11 @@ it from git.
 
 ### What still is not covered
 
-CI's rust job runs bare `cargo test` on windows-latest, so the
-`all(windows, feature = "protocol-research")` modules are never compiled there.
-`bbverify full` does compile them. Until CI gains a feature-enabled step, that
-gap is closed locally or not at all.
+CI runs `cargo test --workspace --features protocol-research` on Windows and on
+Linux, so the `all(windows, feature = "protocol-research")` modules are compiled
+and tested on Windows. Not covered by CI: macOS and non-x86-64 targets (no job),
+`bbmutate` (local only), and `proof/LadderLangQuotedByteParity.lean`, which needs
+the unpublished LadderLang checkout.
 
 ## How compressible is this tree
 
