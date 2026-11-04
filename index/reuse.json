@@ -803,7 +803,7 @@
     {
      "left": "display_store:1705",
      "lines": 19,
-     "right": "main:4141"
+     "right": "main:4148"
     },
     {
      "left": "output_topology:1499",
@@ -811,9 +811,9 @@
      "right": "presentation_output:678"
     },
     {
-     "left": "main:4183",
+     "left": "main:4190",
      "lines": 17,
-     "right": "main:5495"
+     "right": "main:5502"
     },
     {
      "left": "presentation_output:708",
@@ -823,7 +823,7 @@
     {
      "left": "display_store:1669",
      "lines": 12,
-     "right": "main:4100"
+     "right": "main:4107"
     },
     {
      "left": "history:980",
@@ -868,7 +868,7 @@
     {
      "left": "frame_v2:997",
      "lines": 8,
-     "right": "main:4917"
+     "right": "main:4924"
     },
     {
      "left": "history_store:1669",

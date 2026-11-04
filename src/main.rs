@@ -1,3 +1,10 @@
+//! The `bitblock` binary: the interactive observer window and the headless CLI.
+//!
+//! With no arguments it opens the observer window (the GDI/DWM presentation and audit paths
+//! are Windows-only). `--simulate-actions <tape>` replays an interaction tape without a window
+//! and prints one content-tagged line per tick. The protocol logic lives in `bitblock-core`
+//! and `bitblock-research`; this file is wiring, argument parsing and platform presentation.
+
 #![cfg_attr(
     all(not(debug_assertions), not(feature = "headless-console")),
     windows_subsystem = "windows"
