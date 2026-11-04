@@ -39,18 +39,30 @@ documents the index, its three gates, and its limits.
 | Tool | Requirement | Notes |
 | --- | --- | --- |
 | Rust | `1.96.0` (`edition = "2024"`) | Pinned automatically by [`rust-toolchain.toml`](rust-toolchain.toml) (`rustfmt` + `clippy` components) |
-| Python | Python `3.10+` (stdlib only) | Zero `pip` dependencies; drives `bbverify.py`, `bbgraph.py`, `bbindex.py`, and all 32 vector suites |
+| Python | Python `3.10+` (stdlib only) | Zero `pip` dependencies; drives `bbverify.py`, `bbgraph.py`, `bbindex.py`, and all 37 vector suites |
 | Lean 4 | `leanprover/lean4:v4.33.0` (optional) | Pinned by [`proof/lean-toolchain`](proof/lean-toolchain); required only when building [`proof/`](proof/) via `elan` / `lake` |
 
 | Surface | Crate / Path | Platform Support | Command |
 | --- | --- | --- | --- |
-| Full verification gauntlet | [`tools/bbverify.py`](tools/bbverify.py) | Linux, macOS, Windows | `python tools/bbverify.py full` |
-| Fast edit-loop check | [`tools/bbverify.py`](tools/bbverify.py) | Linux, macOS, Windows | `python tools/bbverify.py quick` |
+| Full verification gauntlet | [`tools/bbverify.py`](tools/bbverify.py) | Windows, Linux | `python tools/bbverify.py full` |
+| Fast edit-loop check | [`tools/bbverify.py`](tools/bbverify.py) | Windows, Linux | `python tools/bbverify.py quick` |
 | Interactive HTML observatory | [`tools/bbgraph.py`](tools/bbgraph.py) | Any browser (offline HTML) | `python tools/bbgraph.py html` |
-| Core + research library suites | `bitblock-core`, `bitblock-research`, `bitblock` | Linux, macOS, Windows | `cargo test --workspace --features protocol-research` |
-| Headless deterministic tape replay | [`src/main.rs`](src/main.rs) (`--simulate-actions`) | Linux, macOS, Windows | `cargo run --release -- --simulate-actions examples/observer_walk.tape` |
+| Core + research library suites | `bitblock-core`, `bitblock-research`, `bitblock` | Windows, Linux (CI) | `cargo test --workspace --features protocol-research` |
+| Headless deterministic tape replay | [`src/main.rs`](src/main.rs) (`--simulate-actions`) | Windows, Linux (CI) | `cargo run --release -- --simulate-actions examples/observer_walk.tape` |
 | Live interactive observer window | [`src/main.rs`](src/main.rs) + GDI/DWM audit (`F4`/`F5`) | Windows desktop | `cargo run --release` |
-| Formal Lean 4 proof capsules | [`proof/`](proof/) | Linux, macOS, Windows | `cd proof && lake build` |
+| Formal Lean 4 proof capsules | [`proof/`](proof/) | Linux (CI), Windows | `cd proof && lake build` |
+
+Platform column: "CI" means a GitHub Actions job runs it on every push. macOS has no CI job
+and has not been tested; it is omitted rather than claimed.
+
+Replay determinism across platforms is measured, not guaranteed. World, edit and receipt
+encodings are integer-only. Frames are not: the camera uses `f64` `sin_cos`, `tan`, `ln` and
+`exp`, whose last bits Rust does not promise across platforms, which is why the renderer
+profile is declared `host-f64`. On 2026-11-03, at `b5ef13d`, both example tapes produced
+byte-identical `--simulate-actions` output, including every frame tag and the raw camera bits,
+on x86-64 Windows (MSVC) and x86-64 Linux (glibc, `rust:1.96.0`). That is two samples on one
+architecture. The `rust (ubuntu-latest)` CI job uploads its replay output so the comparison can
+be repeated.
 
 The forward-looking security architecture is documented in
 [`docs/LAYER1_DESIGN_PAPER.md`](docs/LAYER1_DESIGN_PAPER.md). It separates the implemented
