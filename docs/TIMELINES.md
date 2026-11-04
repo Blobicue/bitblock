@@ -47,10 +47,12 @@ if the repository is later made public or the plan upgraded; that choice
 belongs to the owner, not the timeline.
 
 **Update 2026-11-03.** GitHub now reports this repository as `public`, so the paragraph above
-no longer describes it, and the 403 blocker no longer applies. `main` is still unprotected
-(`GET .../branches/main/protection` returns 404). Turning protection on is still the owner's
-decision. Being public also means everything committed here, including local paths in the
-frozen audit records, is world-readable.
+no longer describes it, and the 403 blocker no longer applies. At the owner's request `main`
+was then protected: changes land only through a pull request, the five CI jobs above must
+pass, force-pushes and deletion are refused, and administrators are held to the same rules
+(`GET .../branches/main/protection` is the authority; this sentence is only a summary). Being
+public also means everything committed here, including local paths in the frozen audit
+records, is world-readable; [`UNPUBLISHED_SOURCES.md`](UNPUBLISHED_SOURCES.md) lists them.
 
 ## The mirror — retired 2026-08-27, the timelines have converged
 
