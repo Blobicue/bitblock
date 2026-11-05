@@ -8,6 +8,12 @@
     ]
    },
    {
+    "item": "BitTint",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "COMMIT_R1_ASSAY_REPORT_SCHEMA",
     "modules": [
      "commit_r1"
@@ -440,6 +446,12 @@
     ]
    },
    {
+    "item": "TINT_LIT_SHIFT",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "TickRecord",
     "modules": [
      "interaction"
@@ -488,6 +500,12 @@
     ]
    },
    {
+    "item": "changed_rows",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "check_restart_scan",
     "modules": [
      "local_bounds"
@@ -497,6 +515,12 @@
     "item": "common_prefix_len",
     "modules": [
      "commit_r1"
+    ]
+   },
+   {
+    "item": "compose_unbound",
+    "modules": [
+     "sidebar"
     ]
    },
    {
@@ -572,7 +596,7 @@
     ]
    }
   ],
-  "pub_items": 728,
+  "pub_items": 845,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -596,7 +620,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 33835,
+   "code_lines": 34498,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -777,7 +801,7 @@
    ]
   },
   "test": {
-   "code_lines": 20556,
+   "code_lines": 22460,
    "duplicated_lines": 341,
    "regions": [
     {

@@ -1,6 +1,9 @@
 {
  "adjacency": {
   "camera": [],
+  "chem": [
+   "world"
+  ],
   "commit_r1": [
    "protocol",
    "world"
@@ -202,9 +205,10 @@
   ],
   "world": []
  },
- "edges": 130,
+ "edges": 131,
  "stratum": {
   "camera": 0,
+  "chem": 1,
   "commit_r1": 1,
   "coordinate_episode": 4,
   "display": 4,
@@ -244,6 +248,7 @@
  },
  "transitive_dependents": {
   "camera": 16,
+  "chem": 0,
   "commit_r1": 2,
   "coordinate_episode": 0,
   "display": 7,
@@ -279,6 +284,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 26
+  "world": 27
  }
 }

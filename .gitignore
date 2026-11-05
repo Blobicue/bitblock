@@ -4,3 +4,4 @@ __pycache__/
 mirror-worktree/
 mirror-wt/
 mirror-wt-gm/
+.gitnexus/
