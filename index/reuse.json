@@ -8,12 +8,6 @@
     ]
    },
    {
-    "item": "BitTint",
-    "modules": [
-     "render"
-    ]
-   },
-   {
     "item": "COMMIT_R1_ASSAY_REPORT_SCHEMA",
     "modules": [
      "commit_r1"
@@ -596,7 +590,7 @@
     ]
    }
   ],
-  "pub_items": 845,
+  "pub_items": 847,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -620,7 +614,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 34498,
+   "code_lines": 34701,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -801,7 +795,7 @@
    ]
   },
   "test": {
-   "code_lines": 22460,
+   "code_lines": 22726,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -850,7 +844,7 @@
      "right": "main:4107"
     },
     {
-     "left": "history:980",
+     "left": "history:1036",
      "lines": 12,
      "right": "history_store:1573"
     },
