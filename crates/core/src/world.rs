@@ -442,6 +442,80 @@ impl World {
             .map(|(chunk_coord, chunk)| (*chunk_coord, chunk.count, chunk.bounds, &chunk.bits))
     }
 
+    /// The on bits of an allocated chunk that are *not* deeply enclosed, as a 64-word bitset in
+    /// the same layout as [`Self::iter_chunks`]. A bit is deeply enclosed when all 27 cells of
+    /// the 3 x 3 x 3 block centred on it are on (in this chunk or any of the 26 around it), so
+    /// every point of its surface, edges and corners included, lies at least one unit inside
+    /// that block. Cells past either end of the `i64` range do not exist and count as off. An
+    /// unallocated chunk yields all zeros.
+    ///
+    /// A separable 3 x 3 x 3 erosion over a padded 18 x 18 grid of 18-bit x rows: the cost is
+    /// a few hundred word operations and at most 27 chunk lookups per chunk, not per bit.
+    pub fn chunk_open_words(&self, chunk: ChunkCoord) -> [u64; CHUNK_WORDS] {
+        let mut open = [0_u64; CHUNK_WORDS];
+        let Some(here) = self.chunks.get(&chunk) else {
+            return open;
+        };
+        const SIDE: usize = CHUNK_SIDE as usize;
+        const PAD: usize = SIDE + 2;
+        // around[dx][dy][dz]: the chunk at offset (dx - 1, dy - 1, dz - 1).
+        let mut around: [[[Option<&[u64; CHUNK_WORDS]>; 3]; 3]; 3] = [[[None; 3]; 3]; 3];
+        for (dx, plane) in around.iter_mut().enumerate() {
+            for (dy, line) in plane.iter_mut().enumerate() {
+                for (dz, slot) in line.iter_mut().enumerate() {
+                    let offset = |base: i64, d: usize| base.checked_add(d as i64 - 1);
+                    *slot = match (
+                        offset(chunk.x, dx),
+                        offset(chunk.y, dy),
+                        offset(chunk.z, dz),
+                    ) {
+                        (Some(x), Some(y), Some(z)) => {
+                            self.chunks.get(&ChunkCoord::new(x, y, z)).map(|c| &c.bits)
+                        }
+                        _ => None,
+                    };
+                }
+            }
+        }
+        // Index = x + 16 (y + 16 z); word = y / 4 + 4 z; the row of x bits sits at 16 (y % 4).
+        let row = |words: Option<&[u64; CHUNK_WORDS]>, y: usize, z: usize| -> u32 {
+            words.map_or(0, |w| {
+                ((w[y / 4 + 4 * z] >> (16 * (y % 4))) & 0xffff) as u32
+            })
+        };
+        // Padded coordinate p in 0..18 is local p - 1: which chunk (0, 1, 2) and local index.
+        let split = |p: usize| match p {
+            0 => (0, SIDE - 1),
+            p if p <= SIDE => (1, p - 1),
+            _ => (2, 0),
+        };
+        // eroded_x[y][z]: bit 1 + x set when x - 1, x and x + 1 are all on in that row.
+        let mut eroded_x = [[0_u32; PAD]; PAD];
+        for (py, plane) in eroded_x.iter_mut().enumerate() {
+            let (cy, ly) = split(py);
+            for (pz, out) in plane.iter_mut().enumerate() {
+                let (cz, lz) = split(pz);
+                let centre = row(around[1][cy][cz], ly, lz);
+                let left = row(around[0][cy][cz], ly, lz) >> (SIDE - 1) & 1;
+                let right = row(around[2][cy][cz], ly, lz) & 1;
+                let bits = left | centre << 1 | right << (SIDE + 1);
+                *out = bits & (bits >> 1) & (bits << 1);
+            }
+        }
+        for y in 0..SIDE {
+            for z in 0..SIDE {
+                let column =
+                    |py: usize| eroded_x[py][z] & eroded_x[py][z + 1] & eroded_x[py][z + 2];
+                let enclosed = (column(y) & column(y + 1) & column(y + 2)) >> 1 & 0xffff;
+                let word = y / 4 + 4 * z;
+                let shift = 16 * (y % 4);
+                let on = (here.bits[word] >> shift) & 0xffff;
+                open[word] |= (on & !u64::from(enclosed)) << shift;
+            }
+        }
+        open
+    }
+
     /// Iterates over every on coordinate encoded in a chunk's 64-word bitset.
     pub fn iter_chunk_coords(
         chunk: ChunkCoord,
@@ -651,6 +725,105 @@ fn join_coord(chunk: ChunkCoord, index: usize) -> Coord {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    /// `chunk_open_words` against the definition (some cell of the 3 x 3 x 3 block around an
+    /// on bit is off), bit for bit, over random worlds that straddle chunk faces, edges and
+    /// corners on both sides of zero, and at the ends of the `i64` range.
+    #[test]
+    fn chunk_open_words_match_the_neighbourhood_definition() {
+        let mut state = 0x5eed_0fc4_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let check = |world: &World| {
+            let mut enclosed = 0;
+            for (chunk, _, _, words) in world.iter_chunks() {
+                let exposed = world.chunk_open_words(chunk);
+                for (word, (&all, &kept)) in words.iter().zip(&exposed).enumerate() {
+                    assert_eq!(kept & !all, 0, "{chunk:?} word {word} exposes an off bit");
+                }
+                let mut only_kept = Vec::new();
+                for coord in World::iter_chunk_coords(chunk, words) {
+                    let open = (-1..=1).any(|dx| {
+                        (-1..=1).any(|dy| {
+                            (-1..=1).any(|dz| {
+                                let shifted = (
+                                    coord.x.checked_add(dx),
+                                    coord.y.checked_add(dy),
+                                    coord.z.checked_add(dz),
+                                );
+                                match shifted {
+                                    (Some(x), Some(y), Some(z)) => {
+                                        !world.is_on(Coord::new(x, y, z))
+                                    }
+                                    _ => true,
+                                }
+                            })
+                        })
+                    });
+                    let (_, index) = split_coord(coord);
+                    let (word, mask) = word_and_mask(index);
+                    assert_eq!(exposed[word] & mask != 0, open, "{coord:?}");
+                    if open {
+                        only_kept.push(coord);
+                    } else {
+                        enclosed += 1;
+                    }
+                }
+                let listed: Vec<Coord> = World::iter_chunk_coords(chunk, &exposed).collect();
+                assert_eq!(listed, only_kept, "{chunk:?}");
+            }
+            enclosed
+        };
+        let mut enclosed = 0;
+        for case in 0..40 {
+            let mut world = World::new();
+            let base = Coord::new(
+                (next() % 3) as i64 * 16 - 24,
+                (next() % 3) as i64 * 16 - 8,
+                (next() % 3) as i64 * 16 - 40,
+            );
+            let density = 80 + next() % 21;
+            for x in -6..6 {
+                for y in -6..6 {
+                    for z in -6..6 {
+                        if next() % 100 < density {
+                            world.set_on(Coord::new(base.x + x, base.y + y, base.z + z));
+                        }
+                    }
+                }
+            }
+            if case % 2 == 0 {
+                assert!(world.chunk_open_words(ChunkCoord::new(99, 99, 99)) == [0; CHUNK_WORDS]);
+            }
+            enclosed += check(&world);
+        }
+        assert!(enclosed > 5_000, "only {enclosed} enclosed bits");
+        // The ends of the coordinate range: a full 3x3x3 block at each extreme corner.
+        for corner in [i64::MAX, i64::MIN] {
+            let mut world = World::new();
+            let step = if corner == i64::MAX { -1 } else { 1 };
+            for dx in 0..3 {
+                for dy in 0..3 {
+                    for dz in 0..3 {
+                        world.set_on(Coord::new(
+                            corner + step * dx,
+                            corner + step * dy,
+                            corner + step * dz,
+                        ));
+                    }
+                }
+            }
+            assert_eq!(
+                check(&world),
+                1,
+                "only the middle bit is enclosed at {corner}"
+            );
+        }
+    }
 
     fn assert_internal_invariants(world: &World) {
         assert!(world.is_on(BEDROCK_COORD));

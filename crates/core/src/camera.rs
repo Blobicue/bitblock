@@ -222,6 +222,11 @@ impl CameraProjection {
         self.position
     }
 
+    /// Focal length in physical pixels: screen offset per unit of `camera-space / depth`.
+    pub(crate) fn focal_length(self) -> f64 {
+        self.focal_length
+    }
+
     /// The depth [`Self::project`] would report for `point`, without the screen coordinates.
     ///
     /// It evaluates the same expression on the same operands, so it agrees bit for bit with
@@ -273,16 +278,7 @@ impl CameraProjection {
             return false;
         }
 
-        let corners = [
-            Vec3::new(min.x, min.y, min.z),
-            Vec3::new(min.x, min.y, max.z),
-            Vec3::new(min.x, max.y, min.z),
-            Vec3::new(min.x, max.y, max.z),
-            Vec3::new(max.x, min.y, min.z),
-            Vec3::new(max.x, min.y, max.z),
-            Vec3::new(max.x, max.y, min.z),
-            Vec3::new(max.x, max.y, max.z),
-        ];
+        let corners = bounds_corners(min, max);
 
         let mut all_behind = true;
         let mut all_left = true;
@@ -778,7 +774,8 @@ fn bounds_are_valid(min: Vec3, max: Vec3) -> bool {
     min.is_finite() && max.is_finite() && min.x <= max.x && min.y <= max.y && min.z <= max.z
 }
 
-fn bounds_corners(min: Vec3, max: Vec3) -> [Vec3; 8] {
+/// The eight corners of the axis-aligned box `[min, max]`.
+pub(crate) fn bounds_corners(min: Vec3, max: Vec3) -> [Vec3; 8] {
     [
         Vec3::new(min.x, min.y, min.z),
         Vec3::new(max.x, min.y, min.z),

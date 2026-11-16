@@ -316,6 +316,20 @@ pub struct Renderer {
     /// bits that level alone proved hidden, so a fixture can compare with and without it.
     #[cfg(test)]
     skip_coarse_cover: bool,
+    /// Test-only switch that turns off the enclosed-bit cull, so a fixture can compare with and
+    /// without it.
+    #[cfg(test)]
+    skip_enclosed_cull: bool,
+    /// Test-only count of enclosed bits the cull left out of the traversal, and (while
+    /// `verify_hidden_bits` is on) the bits themselves, checked against the finished frame.
+    #[cfg(test)]
+    enclosed_bits: u64,
+    #[cfg(test)]
+    enclosed_skipped: Vec<Coord>,
+    /// Test-only switch for that finished-frame check alone, without the (much dearer)
+    /// per-skip check of `verify_hidden_bits`.
+    #[cfg(test)]
+    verify_enclosed_bits: bool,
     #[cfg(test)]
     coarse_hidden: u64,
 }
@@ -427,6 +441,14 @@ impl Renderer {
             verify_hidden_bits: false,
             #[cfg(test)]
             skip_coarse_cover: false,
+            #[cfg(test)]
+            skip_enclosed_cull: false,
+            #[cfg(test)]
+            enclosed_bits: 0,
+            #[cfg(test)]
+            enclosed_skipped: Vec::new(),
+            #[cfg(test)]
+            verify_enclosed_bits: false,
             #[cfg(test)]
             coarse_hidden: 0,
         };
@@ -589,6 +611,8 @@ impl Renderer {
         {
             self.hidden_bits = 0;
             self.coarse_hidden = 0;
+            self.enclosed_bits = 0;
+            self.enclosed_skipped.clear();
         }
 
         if self.width == 0 || self.height == 0 || world.is_empty() {
@@ -688,6 +712,39 @@ impl Renderer {
                 }
                 continue;
             }
+            // The enclosed-bit cull. A bit whose whole 3 x 3 x 3 neighbourhood is on can never
+            // own a pixel of the finished frame: every point of its surface, edges and corners
+            // included, lies at least one unit inside that block, so the ray to it crosses the
+            // block's boundary -- a front face of some neighbour -- strictly and well nearer.
+            // (Six face neighbours are not enough: an edge of such a bit can lie on a concave
+            // crease, where an exact depth tie lets the lower-RGB rule pick its face.) Leaving
+            // it out of the traversal therefore changes nothing, and the work then scales with
+            // the surface of a solid rather than its volume. `enclosed_cull_applies` limits it
+            // to chunks where that argument holds for the rasteriser as written: every bit and
+            // neighbour fully in front of the camera (no face dropped for a vertex behind it)
+            // and none small enough for the single-pixel path (which plots the nearest vertex
+            // depth at the centre pixel, where a neighbour need not land). Tests rasterise every
+            // culled bit over the finished frame.
+            let exposed;
+            let words = if self.enclosed_cull_enabled()
+                && enclosed_cull_applies(projection, chunk_bounds)
+            {
+                exposed = world.chunk_open_words(chunk_coord);
+                #[cfg(test)]
+                for (word, (&all, &kept)) in words.iter().zip(&exposed).enumerate() {
+                    let culled = all & !kept;
+                    self.enclosed_bits += u64::from(culled.count_ones());
+                    if (self.verify_hidden_bits || self.verify_enclosed_bits) && culled != 0 {
+                        let mut only = [0_u64; crate::world::CHUNK_WORDS];
+                        only[word] = culled;
+                        self.enclosed_skipped
+                            .extend(crate::world::World::iter_chunk_coords(chunk_coord, &only));
+                    }
+                }
+                &exposed
+            } else {
+                words
+            };
             for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
                 let key = projection.view_depth(coord_center(coord));
                 nearest = f64::min(nearest, key);
@@ -731,6 +788,71 @@ impl Renderer {
         }
         self.keyed = keyed;
         self.order = order;
+        #[cfg(test)]
+        self.assert_enclosed_bits_write_nothing(projection, tint);
+    }
+
+    const fn enclosed_cull_enabled(&self) -> bool {
+        #[cfg(test)]
+        if self.skip_enclosed_cull {
+            return false;
+        }
+        true
+    }
+
+    /// Rasterises every bit the enclosed-bit cull left out over the finished frame and requires
+    /// that none of them moves a pixel or a depth: each is then not the per-pixel minimum
+    /// anywhere, which is exactly the condition for leaving it out to change nothing.
+    #[cfg(test)]
+    fn assert_enclosed_bits_write_nothing(
+        &mut self,
+        projection: CameraProjection,
+        tint: Option<BitTint<'_>>,
+    ) {
+        if !(self.verify_hidden_bits || self.verify_enclosed_bits)
+            || self.enclosed_skipped.is_empty()
+        {
+            return;
+        }
+        let width = self.width as usize;
+        let world_pixels = self.world_pixels;
+        for coord in std::mem::take(&mut self.enclosed_skipped) {
+            let center = coord_center(coord);
+            let projected = cube_vertices(center).map(|vertex| projection.project(vertex));
+            assert!(
+                projected.iter().all(Option::is_some),
+                "enclosed bit {coord:?} has a vertex behind the camera"
+            );
+            let (mut min_x, mut max_x) = (f64::INFINITY, f64::NEG_INFINITY);
+            let (mut min_y, mut max_y) = (f64::INFINITY, f64::NEG_INFINITY);
+            for p in projected.iter().flatten() {
+                (min_x, max_x) = (min_x.min(p.x), max_x.max(p.x));
+                (min_y, max_y) = (min_y.min(p.y), max_y.max(p.y));
+            }
+            assert!(
+                max_x - min_x > SMALL_BIT_EXTENT || max_y - min_y > SMALL_BIT_EXTENT,
+                "enclosed bit {coord:?} is small enough for the single-pixel path"
+            );
+            // Every write lands in the bit's clamped raster box (see `draw_bit_with`); one
+            // pixel of slack on each side costs nothing and guards the claim.
+            let left = (min_x.floor() - 1.0).max(0.0) as usize;
+            let right = (max_x.ceil() + 1.0).min(self.width as f64).max(0.0) as usize;
+            let top = (min_y.floor() - 1.0).max(0.0) as usize;
+            let bottom = (max_y.ceil() + 1.0).min(self.height as f64).max(0.0) as usize;
+            let snapshot = |r: &Self| -> Vec<(u32, u64)> {
+                (top..bottom)
+                    .flat_map(|y| (left..right).map(move |x| y * width + x))
+                    .map(|i| (r.pixels[i], r.depth[i].to_bits()))
+                    .collect()
+            };
+            let before = snapshot(self);
+            self.draw_faces(projection, coord, center, &projected, tint);
+            assert!(
+                snapshot(self) == before,
+                "enclosed bit {coord:?} would have written a pixel or a depth"
+            );
+            assert_eq!(self.world_pixels, world_pixels);
+        }
     }
 
     const fn optimized_traversal(&self) -> bool {
@@ -1561,6 +1683,42 @@ pub fn bounds_aabb(bounds: Bounds) -> (Vec3, Vec3) {
             bounds.max.z as f64 + 0.5,
         ),
     )
+}
+
+/// Least view depth, in world units, of every point of a chunk (and its neighbours) for
+/// the enclosed-bit cull. Far above rounding in `view_depth`, far below any useful view.
+const ENCLOSED_MIN_DEPTH: f64 = 1.0e-3;
+/// Least projected width, in pixels, of every bit near a chunk for the enclosed-bit cull: twice
+/// `SMALL_BIT_EXTENT`, so the single-pixel path is out of reach with a wide margin.
+const ENCLOSED_MIN_SPAN: f64 = 2.0 * SMALL_BIT_EXTENT;
+
+/// Whether the enclosed-bit cull may run over a chunk with tight bounds `bounds`.
+///
+/// Every bit of the chunk and its whole 3 x 3 x 3 neighbourhood lies in the chunk's cube box
+/// grown by one unit. If all eight corners of that box are at view depth above `ENCLOSED_MIN_DEPTH`, so
+/// is every vertex inside it (depth is affine), and every face of those bits is rasterised. A
+/// unit cube holds a ball of radius 1/2, whose image at distance `d` is at least `focal / d`
+/// pixels across in every direction; the box's farthest corner bounds `d`, so if
+/// `focal / d >= ENCLOSED_MIN_SPAN` no bit there takes the single-pixel path.
+fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
+    let (min, max) = bounds_aabb(bounds);
+    let (min, max) = (min - Vec3::splat(1.0), max + Vec3::splat(1.0));
+    let focal = projection.focal_length();
+    if !(focal.is_finite() && focal > 0.0) {
+        return false;
+    }
+    let mut farthest_squared = 0.0_f64;
+    for corner in crate::camera::bounds_corners(min, max) {
+        // `!(a > b)` is deliberate: it rejects NaN.
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
+        if !(projection.view_depth(corner) > ENCLOSED_MIN_DEPTH) {
+            return false;
+        }
+        let relative = corner - projection.position();
+        farthest_squared = farthest_squared.max(relative.dot(relative));
+    }
+    farthest_squared.is_finite()
+        && focal * focal >= ENCLOSED_MIN_SPAN * ENCLOSED_MIN_SPAN * farthest_squared
 }
 
 fn coord_center(coord: Coord) -> Vec3 {
@@ -3213,6 +3371,149 @@ mod tests {
             hidden > 2_000,
             "the corpus skipped only {hidden} bits, so it no longer exercises the test"
         );
+    }
+
+    /// The enclosed-bit cull against the unordered reference (no cull, no hidden-bit test, no
+    /// frustum culling) and against the ordered traversal without it: solid balls spanning many
+    /// chunks on both sides of zero, dense random blocks with cavities, cameras outside, close
+    /// up, grazing and inside the world, wide and narrow fields of view, tinted and plain. With
+    /// `verify_hidden_bits` on, every culled bit is also rasterised over the finished frame and
+    /// must move nothing (see `assert_enclosed_bits_write_nothing`).
+    #[test]
+    fn enclosed_bit_cull_matches_reference_traversal() {
+        let mut rng = Rng(0x00e0_c105_ed00_b175);
+        let ball = |radius: i64, offset: Coord| {
+            let mut world = World::new();
+            for x in -radius..=radius {
+                for y in -radius..=radius {
+                    for z in -radius..=radius {
+                        if x * x + y * y + z * z <= radius * radius {
+                            world.set_on(Coord::new(x + offset.x, y + offset.y, z + offset.z));
+                        }
+                    }
+                }
+            }
+            world
+        };
+        let mut worlds = vec![
+            ("ball r7", ball(7, Coord::new(0, 0, 0))),
+            ("ball r13 offset", ball(13, Coord::new(-9, 5, 17))),
+            ("ball r17", ball(17, Coord::new(3, -2, 1))),
+            ("solid 9", solid_world(9)),
+            ("shell 14", shell_world(14)),
+        ];
+        for case in 0..4 {
+            let extent = 5 + rng.below(8) as i64;
+            let density = rng.range(0.85, 0.99);
+            let mut world = World::new();
+            for x in -extent..=extent {
+                for y in -extent..=extent {
+                    for z in -extent..=extent {
+                        if rng.range(0.0, 1.0) < density {
+                            world.set_on(Coord::new(x, y - 16, z + 8));
+                        }
+                    }
+                }
+            }
+            worlds.push((["dense a", "dense b", "dense c", "dense d"][case], world));
+        }
+        let palette = [0x002f6fd6_u32, 0x00b04020, 0x00e8dcc0, 0x0040c040];
+        let tint = |c: Coord| Some(palette[(c.x + 2 * c.y + 3 * c.z).rem_euclid(4) as usize]);
+        let mut culled = 0_u64;
+        for (name, world) in &worlds {
+            let mut cameras: Vec<Camera> = views(world).into();
+            let (min, max) = bounds_aabb(world.bounds().unwrap());
+            let size = (max - min).length();
+            for _ in 0..6 {
+                let anchor = min + (max - min) * rng.range(0.2, 0.8);
+                cameras.push(Camera::from_anchor(
+                    anchor,
+                    size * rng.range(0.05, 3.0),
+                    rng.range(-PI, PI),
+                    rng.range(-1.5, 1.5),
+                    rng.range(0.3, 2.4),
+                ));
+            }
+            for (index, camera) in cameras.iter().enumerate() {
+                let (width, height) = (60 + rng.below(160) as u32, 40 + rng.below(140) as u32);
+                for tinted in [false, true] {
+                    let t: Option<BitTint<'_>> = if tinted { Some(&tint) } else { None };
+                    let mut reference = Renderer::new(width, height);
+                    reference.reference_traversal = true;
+                    reference.render_tinted(world, camera, t);
+                    let mut uncut = Renderer::new(width, height);
+                    uncut.skip_enclosed_cull = true;
+                    uncut.render_tinted(world, camera, t);
+                    let mut ordered = Renderer::new(width, height);
+                    ordered.verify_hidden_bits = true;
+                    ordered.render_tinted(world, camera, t);
+                    let at = format!("{name} camera {index} tinted {tinted} {width}x{height}");
+                    assert_eq!(uncut.enclosed_bits, 0, "{at}");
+                    for other in [&reference, &uncut] {
+                        assert!(ordered.pixels == other.pixels, "{at} pixels");
+                        let bits = |v: &[f64]| v.iter().map(|d| d.to_bits()).collect::<Vec<_>>();
+                        assert_eq!(bits(&ordered.depth), bits(&other.depth), "{at} depth");
+                        assert_eq!(
+                            ordered.world_pixel_count(),
+                            other.world_pixel_count(),
+                            "{at}"
+                        );
+                    }
+                    culled += ordered.enclosed_bits;
+                }
+            }
+        }
+        assert!(
+            culled > 100_000,
+            "the enclosed-bit cull left out only {culled} bits, so this fixture no longer exercises it"
+        );
+    }
+
+    /// The case that rules out a six-face-neighbour cull: the recursion gallery world seen
+    /// dead frontal (yaw 0, pitch 0) from the gallery camera, which puts pixel centres exactly
+    /// on concave crease lines. There a bit with all six face neighbours on ties the visible
+    /// faces in depth to the last bit and the lower-RGB rule picks its face, so leaving it out
+    /// changes 35 pixels. The 3 x 3 x 3 cull must leave every pose here identical.
+    #[test]
+    fn enclosed_bit_cull_is_exact_on_dead_frontal_creases() {
+        let mut world = World::new();
+        for line in include_str!("../../../docs/gallery/recursion.bb").lines() {
+            let v: Vec<i64> = line
+                .split_whitespace()
+                .skip(1)
+                .map(|t| t.parse().expect("recursion.bb coordinate"))
+                .collect();
+            if let [x, y, z] = v[..] {
+                world.set_on(Coord::new(x, y, z));
+            }
+        }
+        let (min, max) = bounds_aabb(world.bounds().unwrap());
+        let center = min + (max - min) * 0.5;
+        let fov = crate::camera::DEFAULT_VERTICAL_FOV_RADIANS;
+        let distance = (max - min).length() / 2.0 / (fov / 2.0).tan() * 1.28;
+        let mut culled = 0;
+        for (size, yaw, pitch) in [
+            (801_u32, 0.0_f64, 0.0_f64),
+            (401, 0.0, 0.0),
+            (801, 90.0, 0.0),
+            (801, 180.0, 0.0),
+            (801, 0.0, 45.0),
+        ] {
+            let camera =
+                Camera::from_anchor(center, distance, yaw.to_radians(), pitch.to_radians(), fov);
+            let mut reference = Renderer::new(size, size);
+            reference.reference_traversal = true;
+            reference.render(&world, &camera);
+            let mut ordered = Renderer::new(size, size);
+            ordered.verify_enclosed_bits = true;
+            ordered.render(&world, &camera);
+            let at = format!("{size} yaw {yaw} pitch {pitch}");
+            assert!(ordered.pixels == reference.pixels, "{at} pixels");
+            let bits = |v: &[f64]| v.iter().map(|d| d.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&ordered.depth), bits(&reference.depth), "{at} depth");
+            culled += ordered.enclosed_bits;
+        }
+        assert!(culled > 20_000, "only {culled} bits culled");
     }
 
     #[test]
