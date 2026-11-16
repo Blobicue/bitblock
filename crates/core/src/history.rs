@@ -803,22 +803,32 @@ impl std::error::Error for HistoryError {}
 
 /// Computes the canonical `TagKind::World` content tag over all sorted occupied coordinates in `world`.
 pub fn world_tag(world: &World) -> ContentTag {
-    let mut coords = Vec::with_capacity(world.len());
-    coords.extend(world.iter_on());
-    coords.sort_unstable();
-    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + coords.len() * 24;
+    // The same bytes as sorting `iter_on` (see `world_tag_before_preallocation`), streamed in
+    // order straight from the chunk bitsets: no coordinate vector, no sort. Encoded in blocks so
+    // the hasher sees long slices; `hash_canonical` checks the emitted length against
+    // `payload_len`.
+    const BLOCK: usize = 256;
+    let count = world.len();
+    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + count * 24;
     hash_canonical(TagKind::World, WORLD_SCHEMA, payload_len as u64, |sink| {
         let schema_len = u16::try_from(WORLD_SCHEMA.len()).expect("world schema exceeds u16");
         sink(&schema_len.to_be_bytes());
         sink(WORLD_SCHEMA);
-        sink(&(coords.len() as u64).to_be_bytes());
-        for coord in coords {
-            let mut encoded = [0_u8; 24];
+        sink(&(count as u64).to_be_bytes());
+        let mut block = [0_u8; 24 * BLOCK];
+        let mut filled = 0;
+        world.for_each_on_ordered(|coord| {
+            let encoded = &mut block[filled * 24..filled * 24 + 24];
             encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
             encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
             encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
-            sink(&encoded);
-        }
+            filled += 1;
+            if filled == BLOCK {
+                sink(&block);
+                filled = 0;
+            }
+        });
+        sink(&block[..filled * 24]);
     })
     .expect("canonical world length must match its encoder")
 }
@@ -969,6 +979,52 @@ mod tests {
             assert_eq!(world_tag(world), world_tag_before_preallocation(world));
         }
         assert_eq!(world_tag(&forward), world_tag(&reverse));
+    }
+
+    /// The ordered stream against the sorting oracle on dense random worlds that span many
+    /// chunks on both sides of zero (and a sparse scatter out to the ends of the `i64` range),
+    /// with bits switched off again so emptied words and chunks are walked too.
+    #[test]
+    fn ordered_world_tag_matches_the_sorting_oracle_on_random_worlds() {
+        let mut state = 0x0bad_5eed_1234_5678_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for case in 0..24 {
+            let mut world = World::new();
+            let extent = 4 + (next() % 30) as i64;
+            let centre = |n: u64| (n % 97) as i64 - 48;
+            let (cx, cy, cz) = (centre(next()), centre(next()), centre(next()));
+            for _ in 0..(extent * extent * 6) {
+                let mut axis = || cx + (next() % (2 * extent as u64 + 1)) as i64 - extent;
+                let coord = Coord::new(axis(), axis() - cx + cy, axis() - cx + cz);
+                world.set_on(coord);
+            }
+            if case % 3 == 0 {
+                for _ in 0..40 {
+                    world.set_on(Coord::new(next() as i64, next() as i64, next() as i64));
+                }
+                world.set_on(Coord::new(i64::MIN, i64::MAX, i64::MIN));
+                world.set_on(Coord::new(i64::MAX, i64::MIN, i64::MAX));
+            }
+            let on: Vec<Coord> = world.iter_on().collect();
+            for coord in on.iter().step_by(3) {
+                world.set_off(*coord);
+            }
+            let mut ordered = Vec::new();
+            world.for_each_on_ordered(|c| ordered.push(c));
+            let mut sorted: Vec<Coord> = world.iter_on().collect();
+            sorted.sort_unstable();
+            assert_eq!(ordered, sorted, "case {case} order");
+            assert_eq!(
+                world_tag(&world),
+                world_tag_before_preallocation(&world),
+                "case {case} tag"
+            );
+        }
     }
 
     #[test]

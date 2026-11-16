@@ -661,6 +661,37 @@ impl World {
             .iter()
             .flat_map(|(chunk_coord, chunk)| Self::iter_chunk_coords(*chunk_coord, &chunk.bits))
     }
+
+    /// Calls `f` with every on coordinate in ascending [`Coord`] order (`x`, then `y`, then
+    /// `z`, signed), without collecting or sorting the coordinates: chunks are sorted once
+    /// (`ChunkCoord` orders the same way, and `div_euclid` / `rem_euclid` keep chunk then local
+    /// order equal to global order), then walked slab by slab in `x`, row by row in `y`.
+    pub fn for_each_on_ordered(&self, mut f: impl FnMut(Coord)) {
+        let mut chunks: Vec<(ChunkCoord, &Chunk)> = self
+            .chunks
+            .iter()
+            .filter(|(_, chunk)| chunk.count > 0)
+            .map(|(coord, chunk)| (*coord, chunk))
+            .collect();
+        chunks.sort_unstable_by_key(|&(coord, _)| coord);
+        let side = CHUNK_SIDE as usize;
+        for slab in chunks.chunk_by(|a, b| a.0.x == b.0.x) {
+            for lx in 0..side {
+                for row in slab.chunk_by(|a, b| a.0.y == b.0.y) {
+                    for ly in 0..side {
+                        let shift = lx + side * (ly % 4);
+                        for &(coord, chunk) in row {
+                            for lz in 0..side {
+                                if (chunk.bits[ly / 4 + 4 * lz] >> shift) & 1 != 0 {
+                                    f(join_coord(coord, lx + side * (ly + side * lz)));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn merge_bounds(a: Bounds, b: Bounds) -> Bounds {
