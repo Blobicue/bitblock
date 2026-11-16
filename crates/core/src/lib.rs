@@ -7,6 +7,7 @@
 //! now the compiler knows it too.
 
 pub mod camera;
+pub mod chem;
 pub mod display;
 pub mod frame;
 pub mod frame_v2;

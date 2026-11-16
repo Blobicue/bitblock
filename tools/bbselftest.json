@@ -128,7 +128,7 @@
     ],
     "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion. It moved 44 -> 51 when render_policy_vectors.py, frame_chain_vectors.py, display_receipt_v1_vectors.py and composite_frame_input_vectors.py closed the seven core-crate objects below. Six of the seven already had literal tag assertions in Rust and no second implementation, so those literals were a program agreeing with itself; every one of them reproduced from the Python side unchanged. It then moved again for the research-crate objects, two of them picked up transitively: the headless replay-rules policy names the renderer profile and the crosshair overlay by digest, so reconstructing the rules payload meant reconstructing both from their own constants. The count below is re-derived from the index rather than summed from the two branches, because the transitive pair would be double counted.",
     "counts": {
-        "modules": 37,
+        "modules": 38,
         "schemas": 74,
         "schemas_fixtures": 23,
         "schemas_vectored": 74,
@@ -143,8 +143,8 @@
         },
         {
             "module": "world",
-            "dependents": 26,
-            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Gained one dependent (22 -> 23) when commit_r1 imported World for root hashing, (23 -> 24) through local_bounds transitively reaching history_store/storage, and (24 -> 26) when octree_commit and scale_assay joined."
+            "dependents": 27,
+            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Gained one dependent (22 -> 23) when commit_r1 imported World for root hashing, (23 -> 24) through local_bounds transitively reaching history_store/storage, (24 -> 26) when octree_commit and scale_assay joined, and (26 -> 27) when the chem module (planet6 chemistry world) joined and read coord/world directly."
         },
         {
             "module": "coordinate_episode",
@@ -398,8 +398,8 @@
         "sig_type_consistency": true,
         "test_fns_match_coverage": true,
         "pub_counts": {
-            "total": 1306,
-            "documented": 1306
+            "total": 1319,
+            "documented": 1319
         },
         "type_checks": [
             {

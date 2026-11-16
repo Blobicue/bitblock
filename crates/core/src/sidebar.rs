@@ -612,9 +612,25 @@ impl FrameCompositor {
         game_frame: ContentTag,
         snapshot: &SidebarSnapshot,
     ) -> SidebarRasterFacts {
+        assert_eq!(game_frame.kind(), TagKind::Frame);
+        let facts = self.compose_unbound(game_pixels, snapshot);
+        self.cached_game_frame = Some(game_frame);
+        facts
+    }
+
+    /// Full composition without binding the retained game prefix to a frame identity.
+    ///
+    /// Produces exactly the pixels [`Self::compose`] would, but leaves the cache unbound, so a
+    /// following [`Self::compose_sidebar_only`] is refused until a tagged composition runs. For
+    /// callers (the browser live loop) that recompose fully and do not want to hash the game
+    /// frame merely to name the cache.
+    pub fn compose_unbound(
+        &mut self,
+        game_pixels: &[u32],
+        snapshot: &SidebarSnapshot,
+    ) -> SidebarRasterFacts {
         self.cached_game_frame = None;
         self.last_game_prefix_copy_words = 0;
-        assert_eq!(game_frame.kind(), TagKind::Frame);
         assert_eq!(
             game_pixels.len(),
             pixel_len(self.simulation_width, self.height)
@@ -635,16 +651,14 @@ impl FrameCompositor {
         self.last_game_prefix_copy_words =
             u64::from(self.simulation_width) * u64::from(self.height);
         let sidebar_width = self.sidebar_width();
-        let facts = raster_sidebar(
+        raster_sidebar(
             &mut self.pixels,
             self.width,
             self.simulation_width,
             sidebar_width,
             self.height,
             snapshot,
-        );
-        self.cached_game_frame = Some(game_frame);
-        facts
+        )
     }
 
     /// Re-rasterizes only the sidebar after proving that the retained game prefix belongs to the
