@@ -2305,6 +2305,91 @@ High 1600×900 r24 gas: raf 13.2 fps. Presented 15 fps = the full chem cadence (
 
 **Build.** `RUSTFLAGS="-C target-feature=+simd128" CARGO_PROFILE_RELEASE_PANIC=abort cargo build --release --target wasm32-unknown-unknown -p bitblock-wasm`, copy `bitblock_wasm.wasm` to `crates/wasm/www/`, `python3 crates/wasm/build_pages.py`. www md5: wasm `857afca0d6654413813f83275ba04ab9` (1,369,598 B), play.html `dd70939bdbf5cb1fdaaca1cd532a7899`, bitblock-lab.html `1b79631728bbda6ff0020ddcd2cf4f6e`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). Soft DDA / bcc-voxel-demo / abi16 untouched; nothing committed.
 
+## 5z. Render scale: exact enclosed-bit cull + streamed world tag (2026-11-16, branch `chem/render-scale-2026-11`; Owen "continue" pt243u on the render-scale wave) — gas r32 raf 30 → 44, ocean r32 9.5 → 36 raf / 15 presented, every hash and book unchanged
+
+**0. Scope.** This is the first change to the BitBlock CPU render path (`crates/core/src/render.rs`). It was made under Owen's "continue" on the render-scale branch, and §7 rule 1 asks for that explicit OK. Soft DDA, `bcc-voxel-demo` and abi16 are untouched. Correction to §5y.7: `render.rs` is an ordered front-to-back triangle rasterizer with tile depth bounds and chunk frustum culling, not a DDA ray caster. Its cost grows with the number of *submitted bits*, which is the whole ball volume, not with pixels.
+
+**1. Profile before (7634a08).** Native play stage profile at 1600×900 with the sidebar (`scale_measure/render_scale_prof`, play defaults, chem every 4 ticks; step4 = one chem step + 4 frames):
+
+| case | chem ms | render ms | step4 ms |
+|---|---|---|---|
+| gas r20 | 2.71 | 12.20 | 15.92 |
+| gas r32 | 13.03 | 35.08 | 52.90 |
+| ocean r20 | 2.62 | 12.12 | 18.80 |
+| ocean r32 | 11.62 | 33.34 | 61.20 |
+
+`world_px` stays ~137k at every radius, so the render cost is per submitted bit. The named Chrome CPU profile at 960×540 Low, self ms over the same window, shows:
+- Gas r32: `draw_bit_with` 3540, `raster_triangle_spans` 1147, `Topology::offset` 880, `ChemWorld::step` 776, `combine2_pass` 626, `heat_pass` 414, `render_tinted` 320.
+- Ocean r32: `draw_bit_with` 2871, `sha256 compress` 1522, sort (quicksort) 1108, `raster_triangle_spans` 900, `Topology::offset` 884, `update_octree_ancestors` 779, `set_off` 623, `history::world_tag` 404.
+
+Rank: (1) per-bit hidden tests on interior bits; (2) ocean only: `world_tag` collects and sorts every coordinate on each tick that changes the world.
+
+**2. Lever 1: deeply enclosed bits are never submitted (5134b28).** `World::chunk_open_words` returns a chunk's on bits minus every bit whose full 3×3×3 neighbourhood is on. It uses a separable erosion over an 18×18 padded grid of 18-bit x rows, reads 27 chunks, and uses checked i64 ends. `render_tinted` uses these words instead of the raw chunk words when `enclosed_cull_applies`:
+- every corner of the chunk box grown by 1 is in front of the camera (view depth > 1e-3), and
+- the projected bit span stays ≥ 2·`SMALL_BIT_EXTENT`, so the single-pixel path is never taken.
+
+Why the cull is exact: a deeply enclosed cube is inside the closed union of its 26 neighbours. Under those conditions every pixel it would cover is already covered by a neighbour at strictly smaller depth, with a margin. Equal depth is impossible, so the lower-RGB tie rule never picks it.
+
+**Crease finding.** A 6-face enclosure, which was faster (r32 render 12.0 ms), is *not* exact. At a concave crease, the culled bit and the visible face tie in depth, and the tie rule then prefers the hidden bit's lower RGB (0x989898 < 0xbdbdbd). The host known answer `recursion_dead_frontal_801_matches_host_known_answer` changed on 35 diagonal pixels. The 3×3×3 rule restores it bit for bit.
+
+Tests:
+- `chunk_open_words_match_the_neighbourhood_definition`: random worlds, i64 corners.
+- `enclosed_bit_cull_matches_reference_traversal`: balls r7/13/17, a solid, a shell and dense random worlds; fixed and random cameras; tinted and plain; byte-identical frames, >100k bits culled.
+- `enclosed_bit_cull_is_exact_on_dead_frontal_creases`: recursion.bb at the 801/401 poses.
+- An end-of-frame verifier (`verify_enclosed_bits`) rasterizes every culled bit over the finished frame and asserts it writes nothing.
+
+**3. Lever 2: `world_tag` streams coordinates in order (51219ab).** `World::for_each_on_ordered` sorts the chunk keys once and walks x-slab → lx → y row → ly → z chunk → lz, giving the same ascending (x, y, z) sequence as the old collect and sort. `world_tag` hashes it in 256-coordinate blocks. The canonical bytes and every tag are unchanged. Test: `ordered_world_tag_matches_the_sorting_oracle_on_random_worlds` (24 worlds, i64 extremes, bits switched off).
+
+Native `world_tag` on a solid ball, identical tags:
+
+| radius | bits | before ms | after ms |
+|---|---|---|---|
+| r20 | 33k | 2.27 | 0.49 |
+| r32 | 137k | 9.77 | 1.90 |
+| r48 | 463k | 37.9 | 6.3 |
+
+**4. Parity.** A play harness compared 7634a08 with the new code over 13 scenarios: the default world, gallery 0–3, chem p4 r20/r32, p2 r12/r20, p1 r16, p0 r12, a 960×540 game-only view and a 640×480 gallery view. Each ran 300 audited fixed ticks with scripted look, wheel, W/A, F and cut inputs. Results:
+- Frame hashes are identical (3,900 lines, 3,719 distinct frames).
+- World tags are identical (237 distinct).
+- All 2,100 chem book checks are ok, with energy drift 0.
+
+Default play world `#bb.world.sha256.lqpba5lv…` and frame `#bb.frame.sha256.5l3xbpo3…` are unchanged. Chem semantics are untouched (no chem file changed).
+
+**5. Native after:**
+
+| case | chem ms | render ms | step4 ms |
+|---|---|---|---|
+| gas r20 | 3.18 | 7.96 | 11.66 |
+| gas r32 | 12.57 | **14.03** (35.08) | **28.14** (52.90) |
+| ocean r20 | 2.64 | 7.98 | 12.42 (18.80) |
+| ocean r32 | 11.58 | **14.20** (33.34) | **30.44** (61.20) |
+
+Mirror+commit at ocean r32 is 0.48 ms (was 1.25).
+
+**6. Browser before → after.** Chrome headless on http://127.0.0.1:8765/play.html, Low 960×540, output 1360×540, chem every 4 ticks. Averages of 5 windows each; the 7634a08 build is compared with the 07f1f40 build:
+
+| case | raf fps | presented fps | step ms | ms / presented frame | main thread busy |
+|---|---|---|---|---|---|
+| gas r20 | 59.7 → 59.7 | 15.2 → 14.8 | 4.15 → 2.77 | 16.6 → 11.5 | 25% → 17% |
+| gas r32 | 30.0 → **44.4** | 15.0 → 15.1 | 27.5 → 12.1 | 55.2 → 35.8 | 83% → 54% |
+| ocean r20 | 58.5 → 60.4 | 15.0 → 15.0 | 6.11 → 3.76 | 24.0 → 15.4 | 36% → 23% |
+| ocean r32 | 9.5 → **35.6** | 9.5 → **15.0** | 101.6 → 20.7 | 102 → 47.9 | 96% → 72% |
+
+15 presented fps is the full chem cadence (60/4), so every r32 world now presents every chem step. Books ok and energy_drift 0 in every run; only the favicon returns 404.
+
+Named profile after:
+- Gas r32: `draw_bit_with` 3540 → 602, `raster_triangle_spans` 1134. Chem is now the bulk: `Topology::offset` 831, `step` 764, `combine2` 609, `heat` 433.
+- Ocean r32: quicksort 1108 → 0, `draw_bit_with` 2871 → 719. Still high: `sha256` 1320, `raster_triangle_spans` 1143, `Topology::offset` 719, `update_octree_ancestors` 633, `set_off` 536.
+
+Screenshots: `/workspace/render_scale/{before,after}_{4,2}_r{20,32}.png`. Before and after look the same.
+
+**7. Next bottleneck.**
+- (a) At r32, chem ≈ render (~12 vs ~14 ms native). Chem levers: `Topology::offset`, combine2 and heat inner loops, or M2 dormant bricks.
+- (b) Render: what remains is the 2-layer surface shell plus back-hemisphere bits. A conservative chunk- or brick-level occlusion test is next, held to the same exactness bar.
+- (c) Ocean: `world_tag` SHA-256 is still O(N) per edit tick, plus octree ancestor upkeep and `set_off`. An incremental or Merkle world tag would change every world hash, so it is a protocol decision for Owen, not a perf patch.
+
+**Build.** As §5y, from 51219ab. www: wasm md5 `f966135c4a114ee89b843015ddea096f` (1,396,520 B, reproducible from a clean target dir), play.html `dbd39e7270ad634dfe13a646a2686809`, bitblock-lab.html `491624b074aba55c8f0fbf24ce7e021b`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). ABI 17. Commits: 5134b28 (cull), 51219ab (world_tag), 07f1f40 (www).
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
@@ -2330,6 +2415,8 @@ High 1600×900 r24 gas: raf 13.2 fps. Presented 15 fps = the full chem cadence (
 - Timings are native single-thread on a shared box; browser wasm ~1.75× slower; Chrome not checked here.
 
 ## 8. Recommended next build step
+**Update 2026-11-16 (23):** render scale (§5z). Two exact levers on branch `chem/render-scale-2026-11`. First, the renderer no longer submits bits whose whole 3×3×3 neighbourhood is on: a 6-face rule was measured and rejected as inexact at concave creases. Second, `world_tag` streams coordinates in order instead of collecting and sorting them. Frame hashes, world tags and chem books match 7634a08 on 13 play scenarios. Chrome Low 960×540: gas r32 raf 30 → 44, ocean r32 9.5 → 36 raf and 9.5 → 15 presented (the full chem cadence); native r32 render 35 → 14 ms. Next, in order: (1) chem inner loops / M2 at r32, since chem ≈ render now; (2) an exact chunk-level occlusion test; (3) Owen's call on an incremental world tag, which is a protocol change.
+
 **Update 2026-10-29 (22):** bigger scale + gas planet (§5y). Exact network skip (`net.rs`, q<250 / non-reactive cells skip the cube build) halves step cost at every radius, parity 9/9 SAME; play radius cap 20 → 32. New opt-in `convect` law (ideal-gas buoyancy swaps, books unchanged) and gas preset 4 (Fe/Ni/Si/Mg core, H2S, NH3 plumes in CH4; sun8 + Driven + core gravity) in play. Chrome: gas r20 ~52 fps raf / 15 presented, r24 ~30, r32 ~6; books ok. The bottleneck is now the CPU renderer (~18 ms at r24, ~36 ms at r32 native 1600×900), not chem. No bands/storms claimed (no rotation). Next, in order: (1) renderer dirty-region repaint (needs OK to touch render); (2) M2 dormant bricks past r32; (3) rotation/Coriolis before any band claim; (4) the §5x list (tilt under core, Full+sun8 soak baseline, multi-seed).
 
 **Update 2026-10-29 (21):** σ_h driver study (§5x) finished. Twelve paired Down vs Core soaks (e8/m1 × ocean/rocky + e8 noerode), books exact. Down σ_h is 1.6–2.2× Core because water still piles under −y (94–100% below core) and between-face height variance (`betwF` ~10 vs ~0) dominates; weather/scour ablation only partly closes the gap. The old high σ_h was mostly a −y artifact — do not tune erosion against it. Core ~2.9–3.7 (ocean) / ~2.3–2.5 (rocky) is the honest baseline. Next, in order: (1) tilt under core gravity to light the ±z caps; (2) Full + sun=8 + core as soak baseline + rocky matched; (3) multi-seed / r16; (4) opt-in play gravity/sweep toggle; (5) SED lithification / M2.
