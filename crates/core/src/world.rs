@@ -543,6 +543,12 @@ impl World {
             .map(|allocated| (allocated.count, &allocated.bits))
     }
 
+    /// The chunk holding `coord` and the coordinate's bit index in that chunk's 64-word bitset
+    /// (word `index / 64`, bit `index % 64`), the layout of [`Self::iter_chunks`].
+    pub fn chunk_of(coord: Coord) -> (ChunkCoord, usize) {
+        split_coord(coord)
+    }
+
     /// Returns the tight inclusive coordinate bounds of all on bits in an allocated chunk.
     pub fn chunk_bounds(&self, chunk: ChunkCoord) -> Option<Bounds> {
         self.chunks.get(&chunk).map(|allocated| allocated.bounds)

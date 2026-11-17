@@ -237,6 +237,22 @@ impl CameraProjection {
         relative.dot(self.basis.forward)
     }
 
+    /// Whether `other` has the same bits in every field (so projects every point identically).
+    pub(crate) fn bit_identical(&self, other: &Self) -> bool {
+        let v = |a: Vec3, b: Vec3| {
+            a.x.to_bits() == b.x.to_bits()
+                && a.y.to_bits() == b.y.to_bits()
+                && a.z.to_bits() == b.z.to_bits()
+        };
+        v(self.position, other.position)
+            && v(self.basis.forward, other.basis.forward)
+            && v(self.basis.right, other.basis.right)
+            && v(self.basis.up, other.basis.up)
+            && self.focal_length.to_bits() == other.focal_length.to_bits()
+            && self.half_width.to_bits() == other.half_width.to_bits()
+            && self.half_height.to_bits() == other.half_height.to_bits()
+    }
+
     pub(crate) fn project(self, point: Vec3) -> Option<ProjectedPoint> {
         if !point.is_finite() {
             return None;

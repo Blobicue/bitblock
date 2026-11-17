@@ -635,6 +635,13 @@ pub struct ChemColors {
 }
 
 impl ChemColors {
+    /// Whether no face colour the tinted pass can emit is black (the renderer's background),
+    /// as `Renderer::render_tinted_delta` requires: every table entry is a plain RGB and
+    /// `legal` (every shade and lit face of every entry) holds no zero.
+    pub fn never_black(&self) -> bool {
+        self.by_id.iter().all(|&rgb| rgb & !0x00ff_ffff == 0) && !self.legal.contains(&0)
+    }
+
     pub fn new() -> Self {
         let mut by_id = [0u32; 256];
         let mut legal = Vec::with_capacity(256 * 6);

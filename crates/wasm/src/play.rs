@@ -175,7 +175,18 @@ pub struct PlaySession {
     cut_view: Option<(CutViewKey, World)>,
     /// Lit-face masks of the cut faces for `cut_view` (rebuilt with it; see `ChemPlay::cut_faces`).
     cut_faces: Vec<(Coord, u8)>,
+    /// §6f delta render: `Some(tag)` while every play-world and chem-tint change since the last
+    /// game render is a chem mirror recorded in `delta_changed` and the world now has `tag`.
+    delta_chain: Option<ContentTag>,
+    /// Bits whose chem material changed since the last game render, each flagged when its
+    /// occupancy may have changed too (see `Renderer::render_tinted_delta`).
+    delta_changed: Vec<(Coord, bool)>,
+    /// Allow delta renders (on by default; a switch so fixtures can compare with full renders).
+    delta_render: bool,
 }
+
+/// Recorded changes past which the delta chain is dropped (the next render is a full one).
+const DELTA_CHANGED_MAX: usize = 1 << 20;
 
 type CutViewKey = (ContentTag, crate::play_chem::ChemCut, [i64; 3]);
 
@@ -389,7 +400,16 @@ impl PlaySession {
             chem: None,
             cut_view: None,
             cut_faces: Vec::new(),
+            delta_chain: None,
+            delta_changed: Vec::new(),
+            delta_render: true,
         }
+    }
+
+    /// Turns delta game renders on or off (on by default). Frames are identical either way.
+    pub fn set_delta_render(&mut self, on: bool) {
+        self.delta_render = on;
+        self.delta_chain = None;
     }
 
     /// Output buffer width/height (game + sidebar, or game only).
@@ -755,6 +775,10 @@ impl PlaySession {
 
         let _consumed = std::mem::take(&mut self.inputs.actions);
         let pending_edits = std::mem::take(&mut self.inputs.edits);
+        if !pending_edits.is_empty() {
+            // Dig / place change chem materials outside a mirror: the next render is full.
+            self.delta_chain = None;
+        }
         let mut transaction = self.history.begin_tick(self.tick);
         for pending in pending_edits {
             match pending {
@@ -853,8 +877,25 @@ impl PlaySession {
             let due = chem.take_due(self.tick);
             if due > 0 {
                 chem.run(due);
-                self.needs_render |=
-                    mirror_chem(chem, &self.history, &mut self.world, &mut transaction);
+                let pre = self.delta_chain.map(|_| world_tag(&self.world));
+                let (repaint, full) = mirror_chem(
+                    chem,
+                    &self.history,
+                    &mut self.world,
+                    &mut transaction,
+                    &mut self.delta_changed,
+                );
+                self.needs_render |= repaint;
+                self.delta_chain = match self.delta_chain {
+                    Some(chain)
+                        if !full
+                            && pre == Some(chain)
+                            && self.delta_changed.len() <= DELTA_CHANGED_MAX =>
+                    {
+                        Some(world_tag(&self.world))
+                    }
+                    _ => None,
+                };
             }
         }
 
@@ -953,13 +994,33 @@ impl PlaySession {
                         };
                         self.renderer.render_tinted(view, &self.camera, Some(&lit));
                     }
-                    _ => self
-                        .renderer
-                        .render_tinted(&self.world, &self.camera, Some(&tint)),
+                    _ => {
+                        if self.delta_render
+                            && chem.colors.never_black()
+                            && self.delta_chain == Some(world_tag(&self.world))
+                        {
+                            self.renderer.render_tinted_delta(
+                                &self.world,
+                                &self.camera,
+                                Some(&tint),
+                                &self.delta_changed,
+                            );
+                        } else {
+                            self.renderer
+                                .render_tinted(&self.world, &self.camera, Some(&tint));
+                        }
+                    }
                 }
             }
             None => self.renderer.render(&self.world, &self.camera),
         }
+        // The next delta starts from this frame (only the plain tinted chem view chains).
+        self.delta_changed.clear();
+        self.delta_chain = self
+            .chem
+            .as_ref()
+            .filter(|c| !c.cut.active())
+            .map(|_| world_tag(&self.world));
         self.renderer.draw_crosshair(overlay);
     }
 
@@ -1350,7 +1411,14 @@ impl PlaySession {
             1 => {
                 let chem = self.chem.as_mut().expect("chem session");
                 let mut tx = self.history.begin_tick(self.tick);
-                let r = mirror_chem(chem, &self.history, &mut self.world, &mut tx);
+                self.delta_chain = None;
+                let (r, _) = mirror_chem(
+                    chem,
+                    &self.history,
+                    &mut self.world,
+                    &mut tx,
+                    &mut self.delta_changed,
+                );
                 if let Some(receipt) = self.history.commit_tick(tx, &self.world) {
                     self.last_world_tag = receipt.post_world();
                 }
@@ -1358,10 +1426,12 @@ impl PlaySession {
                 u64::from(r)
             }
             3 => {
+                self.delta_chain = None;
                 self.renderer.render(&self.world, &self.camera);
                 self.renderer.world_pixel_count()
             }
             4 => {
+                self.delta_chain = None;
                 let c = |_: Coord| Some(0x808080u32);
                 self.renderer
                     .render_tinted(&self.world, &self.camera, Some(&c));
@@ -1438,13 +1508,16 @@ impl PlaySession {
 }
 
 /// Applies the chem occupancy diff (over the chem domain) to the play world as history edits
-/// and refreshes the material hash. Returns whether the game view must repaint.
+/// and refreshes the material hash. Returns whether the game view must repaint, and whether
+/// this was a full scan (the cache was empty or resized: `changed` is then not a full record).
+/// Every bit whose material changed is appended to `changed`, flagged when its occupancy did.
 fn mirror_chem(
     chem: &mut crate::play_chem::ChemPlay,
     history: &History,
     world: &mut World,
     transaction: &mut TickTransaction,
-) -> bool {
+    changed_bits: &mut Vec<(Coord, bool)>,
+) -> (bool, bool) {
     let mut changed = 0u32;
     // FNV-1a over the domain's material ids: a material-only change (rock ->
     // sediment, water -> ice) keeps occupancy but must still repaint the chem tint.
@@ -1467,7 +1540,11 @@ fn mirror_chem(
         }
         seen[i] = mat;
         let want = chem.world.world().is_on(coord);
-        if want != world.is_on(coord) {
+        let toggled = want != world.is_on(coord);
+        if !full {
+            changed_bits.push((coord, toggled));
+        }
+        if toggled {
             let op = if want { Operation::On } else { Operation::Off };
             if transaction.apply_edit(history, world, Edit::new(op, coord)) {
                 changed += 1;
@@ -1479,7 +1556,7 @@ fn mirror_chem(
     chem.last_step_changed = changed;
     let recolored = mat_hash != chem.material_hash;
     chem.material_hash = mat_hash;
-    changed > 0 || recolored
+    (changed > 0 || recolored, full)
 }
 
 /// Host known-answer: fold [`PLAY_INPUT_TAPE`] through a fresh session.
@@ -1883,6 +1960,66 @@ mod chem_play_tests {
     use super::*;
     use crate::play_chem::*;
     use bitblock_core::chem::MatId;
+
+    /// §6f: delta game renders change nothing. Chem sessions with and without them, driven
+    /// through chem steps, looks, wheel, dig / place clicks and a cross-section on and off,
+    /// produce the same output buffer and status (world, frame and history tags) every step,
+    /// in the sidebar and the game-only layouts.
+    #[test]
+    fn delta_render_frames_equal_full_render_frames() {
+        for (preset, radius, sidebar) in [
+            (2_u32, 14_u32, true),
+            (4, 14, true),
+            (0, 12, false),
+            (2, 16, false),
+        ] {
+            let mut runs: Vec<PlaySession> = [true, false]
+                .into_iter()
+                .map(|delta| {
+                    let mut s = PlaySession::with_chem(preset, 7, radius).expect("chem genesis");
+                    s.set_layout(320, 180, sidebar);
+                    s.set_delta_render(delta);
+                    s.set_capture(true);
+                    s
+                })
+                .collect();
+            for k in 1..=48_u32 {
+                for s in &mut runs {
+                    if k % 11 == 0 {
+                        s.look(23.0, -7.0);
+                    }
+                    if k % 17 == 0 {
+                        s.wheel(1.0);
+                    }
+                    if k == 9 || k == 30 {
+                        s.pointer_button(0, true);
+                        s.pointer_button(0, false);
+                    }
+                    if k == 21 {
+                        s.pointer_button(2, true);
+                        s.pointer_button(2, false);
+                    }
+                    if k == 24 {
+                        s.chem_set_cut(1, 0);
+                    }
+                    if k == 28 {
+                        s.chem_set_cut(0, 0);
+                    }
+                    s.step(4);
+                }
+                let at = format!("preset {preset} r{radius} sidebar {sidebar} step {k}");
+                assert!(runs[0].rgba() == runs[1].rgba(), "{at} output");
+                assert_eq!(
+                    runs[0].status_with(true),
+                    runs[1].status_with(true),
+                    "{at} status"
+                );
+            }
+            let used = runs[0].renderer.delta_frames();
+            assert!(used >= 12, "preset {preset}: only {used} delta frames");
+            assert_eq!(runs[1].renderer.delta_frames(), 0);
+        }
+    }
 
     fn chem_startup(preset: u32) -> PlaySession {
         let mut s = PlaySession::with_chem(preset, 7, CHEM_RADIUS_DEFAULT).expect("chem genesis");

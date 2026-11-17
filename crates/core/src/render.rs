@@ -299,6 +299,37 @@ pub struct Renderer {
     /// `changed_rows` can bound what differs from that frame.
     prev_dirty_rows: Vec<(u32, u32)>,
     prev_dirty_valid: bool,
+    /// The projection of the frame now in the buffers when that frame is a complete ordinary
+    /// traversal (`render_tinted_delta` may then update it in place), else `None`.
+    delta_base: Option<CameraProjection>,
+    /// Whether `draw_crosshair` has inverted its pixels since the last render.
+    crosshair_on: bool,
+    /// Per pixel, the `owner_key` of the bit whose fragment it holds. Pixels still at the
+    /// background may hold a stale key; that only ever adds pixels to a delta's reset set.
+    owner: Vec<u32>,
+    /// `owner_key` of the bit being drawn.
+    owner_key: u32,
+    /// Grown raster boxes of every bit the last full traversal reached (the first
+    /// `delta_full_len` entries) and of bits delta frames added since; see `render_tinted_delta`.
+    delta_index: Vec<DeltaEntry>,
+    delta_full_len: usize,
+    /// Whether `draw_bit_with` appends to `delta_index`, and whether every appended bit had all
+    /// eight vertices in front of the camera (else its box may not bound its writes).
+    recording: bool,
+    delta_index_ok: bool,
+    /// Per `COVER_TILE` tile, the full-traversal entries whose box touches it (CSR; built on
+    /// the first delta frame after a full one, `delta_csr_built`).
+    delta_tile_start: Vec<u32>,
+    delta_tile_items: Vec<u32>,
+    delta_csr_built: bool,
+    /// Delta scratch: per-entry and per-tile visit stamps, the reset-pixel mask and list.
+    delta_seen: Vec<u32>,
+    delta_tile_seen: Vec<u32>,
+    delta_stamp: u32,
+    delta_mask: Vec<bool>,
+    delta_pixels: Vec<usize>,
+    /// Frames `render_tinted_delta` drew as deltas (diagnostics only).
+    delta_frames: u64,
     /// Frames rendered so far; identifies which frame `changed_rows` is relative to.
     frame_serial: u64,
     /// Switch back to unordered traversal with no hidden-bit test or chunk frustum culling, so a
@@ -433,6 +464,23 @@ impl Renderer {
             all_dirty: true,
             prev_dirty_rows: Vec::new(),
             prev_dirty_valid: false,
+            delta_base: None,
+            crosshair_on: false,
+            owner: Vec::new(),
+            owner_key: 0,
+            delta_index: Vec::new(),
+            delta_full_len: 0,
+            recording: false,
+            delta_index_ok: false,
+            delta_tile_start: Vec::new(),
+            delta_tile_items: Vec::new(),
+            delta_csr_built: false,
+            delta_seen: Vec::new(),
+            delta_tile_seen: Vec::new(),
+            delta_stamp: 0,
+            delta_mask: Vec::new(),
+            delta_pixels: Vec::new(),
+            delta_frames: 0,
             frame_serial: 0,
             reference_traversal: false,
             #[cfg(test)]
@@ -465,7 +513,11 @@ impl Renderer {
             .expect("framebuffer dimensions overflow usize");
         self.pixels.resize(len, BACKGROUND);
         self.depth.resize(len, f64::INFINITY);
+        self.owner.resize(len, 0);
+        self.delta_mask.clear();
+        self.delta_mask.resize(len, false);
         self.all_dirty = true;
+        self.delta_base = None;
     }
 
     /// Restores every pixel to `BACKGROUND` and every depth to infinity: the whole buffers
@@ -581,6 +633,11 @@ impl Renderer {
         (observation, palette)
     }
 
+    /// Frames drawn as deltas by [`Self::render_tinted_delta`] so far (diagnostics only).
+    pub const fn delta_frames(&self) -> u64 {
+        self.delta_frames
+    }
+
     /// Number of non-background pixels written by the world pass, before overlays.
     pub const fn world_pixel_count(&self) -> u64 {
         self.world_pixels
@@ -604,6 +661,8 @@ impl Renderer {
     /// [`Self::render`] with an optional per-bit base colour override ([`BitTint`]).
     /// With `None` the frame is exactly what [`Self::render`] produces.
     pub fn render_tinted(&mut self, world: &World, camera: &Camera, tint: Option<BitTint<'_>>) {
+        self.delta_base = None;
+        self.crosshair_on = false;
         self.clear_frame();
         self.frame_serial += 1;
         self.world_pixels = 0;
@@ -674,6 +733,22 @@ impl Renderer {
             f64::INFINITY,
         );
 
+        self.delta_index.clear();
+        self.delta_index_ok =
+            self.width <= u32::from(u16::MAX) && self.height <= u32::from(u16::MAX);
+        self.recording = true;
+        self.traverse(world, projection, tint);
+        self.recording = false;
+        self.delta_full_len = self.delta_index.len();
+        self.delta_csr_built = false;
+        if self.delta_index_ok {
+            self.delta_base = Some(projection);
+        }
+    }
+
+    /// The ordered traversal of `render_tinted`: every bit the chunk frustum and enclosed-bit
+    /// culls keep, drawn nearest first.
+    fn traverse(&mut self, world: &World, projection: CameraProjection, tint: Option<BitTint<'_>>) {
         let mut keyed = std::mem::take(&mut self.keyed);
         keyed.clear();
         let mut nearest = f64::INFINITY;
@@ -792,6 +867,367 @@ impl Renderer {
         self.assert_enclosed_bits_write_nothing(projection, tint);
     }
 
+    /// [`Self::render_tinted`] for a frame that differs from the one now in the buffers only at
+    /// a few bits, redrawing just what those bits can affect. Returns `false` (having rendered
+    /// the whole frame with `render_tinted` instead) when the buffers do not hold a complete
+    /// ordinary frame from the same camera projection, or the change is too large.
+    ///
+    /// The caller guarantees that the previous render (full or delta) drew a world and tint
+    /// that agree with `world` and `tint` at every bit except those in `changed`, that the flag
+    /// beside each is `true` when its occupancy may have changed (not only its tint), and that
+    /// no face colour either tint produces is `BACKGROUND`, so `world_pixels` (counted on first
+    /// write) is the number of non-background pixels for every traversal order.
+    ///
+    /// Why the frame is bit-identical to `render_tinted` (pixels, depths, `world_pixels`):
+    /// that frame is, per pixel, the minimum by depth then RGB word over the fragments of every
+    /// on bit; the culls and the hidden-bit test only leave out bits that own no pixel. Write
+    /// `U` for the unchanged bits and `C` for the changed ones. At a pixel the old frame gave to
+    /// a bit of `U`, the old value is already `U`'s minimum there, so the new value is its
+    /// minimum with the new fragments of `C`: drawing the changed bits over the old frame
+    /// produces it. Every other pixel (held by a bit of `C`, per the owner buffer) is reset to
+    /// the background and every bit whose grown raster box reaches one is drawn again. Those
+    /// bits come from the full traversal's box index plus the bits added since: a bit missing
+    /// from both is deeply enclosed where the enclosed-bit cull applies (owns no pixel) or was
+    /// never reachable, and the only bits that can stop being enclosed are the on neighbours
+    /// of a bit that turned off, which are drawn and indexed here. Changed bits and those
+    /// neighbours that are enclosed in the new world own no pixel of it and are skipped.
+    pub fn render_tinted_delta(
+        &mut self,
+        world: &World,
+        camera: &Camera,
+        tint: Option<BitTint<'_>>,
+        changed: &[(Coord, bool)],
+    ) -> bool {
+        let Some(projection) = self.delta_projection(world, camera) else {
+            self.render_tinted(world, camera, tint);
+            return false;
+        };
+        if self.delta_index.len() > self.delta_full_len * 3 / 2 + 4096 {
+            self.render_tinted(world, camera, tint);
+            return false;
+        }
+        // Classify the changed bits by the new world's occupancy and deep enclosure (the
+        // enclosed-bit cull's own test, per chunk). A bit is `Quiet` when it owns no pixel in
+        // either frame: off in both, or deeply enclosed (with the cull's geometry) in both,
+        // which holds when it is enclosed now and no bit of its 3 x 3 x 3 block toggled.
+        let toggled_near: std::collections::HashSet<Coord> = changed
+            .iter()
+            .filter(|&&(_, toggled)| toggled)
+            .flat_map(|&(c, _)| neighbourhood27(c))
+            .collect();
+        let mut open_cache: std::collections::HashMap<
+            crate::world::ChunkCoord,
+            ([u64; crate::world::CHUNK_WORDS], bool),
+        > = std::collections::HashMap::new();
+        let cull_enabled = self.enclosed_cull_enabled();
+        let mut exposed = |coord: Coord, world: &World| -> bool {
+            if !world.is_on(coord) {
+                return false;
+            }
+            let (chunk, index) = World::chunk_of(coord);
+            let (open, applies) = open_cache.entry(chunk).or_insert_with(|| {
+                let applies = cull_enabled
+                    && world
+                        .chunk_bounds(chunk)
+                        .is_some_and(|b| enclosed_cull_applies(projection, b));
+                (world.chunk_open_words(chunk), applies)
+            });
+            !*applies || open[index / 64] >> (index % 64) & 1 == 1
+        };
+        // (bit, whether it is exposed in the new world, its grown box)
+        let mut loud: Vec<(Coord, bool, bool, Option<DeltaEntry>)> = Vec::new();
+        for &(coord, toggled) in changed {
+            let near = toggled || toggled_near.contains(&coord);
+            let open_now = exposed(coord, world);
+            if !near && !open_now {
+                continue; // off in both, or enclosed in both: owns no pixel in either frame
+            }
+            // Grown box; one with a vertex behind the camera is not bounded.
+            let mut extent = (
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+            );
+            for vertex in cube_vertices(coord_center(coord)) {
+                let Some(p) = projection.project(vertex) else {
+                    self.render_tinted(world, camera, tint);
+                    return false;
+                };
+                extent = (
+                    extent.0.min(p.x),
+                    extent.1.max(p.x),
+                    extent.2.min(p.y),
+                    extent.3.max(p.y),
+                );
+            }
+            let entry = self.grown_box(coord, extent.0, extent.1, extent.2, extent.3);
+            loud.push((coord, toggled, open_now, entry));
+            if loud.len() > self.delta_full_len / 2 + 4096 {
+                self.render_tinted(world, camera, tint);
+                return false;
+            }
+        }
+        let mut neighbours: Vec<Coord> = changed
+            .iter()
+            .filter(|&&(c, toggled)| toggled && !world.is_on(c))
+            .flat_map(|&(c, _)| neighbourhood27(c))
+            .collect();
+        neighbours.sort_unstable();
+        neighbours.dedup();
+        neighbours.retain(|&c| exposed(c, world));
+
+        if self.crosshair_on {
+            self.invert_crosshair();
+            self.crosshair_on = false;
+        }
+        self.frame_serial += 1;
+        #[cfg(test)]
+        {
+            self.hidden_bits = 0;
+            self.coarse_hidden = 0;
+            self.enclosed_bits = 0;
+            self.enclosed_skipped.clear();
+        }
+        self.build_delta_csr();
+        self.delta_stamp = self.delta_stamp.wrapping_add(1);
+        if self.delta_stamp == 0 {
+            self.delta_seen.fill(0);
+            self.delta_tile_seen.fill(0);
+            self.delta_stamp = 1;
+        }
+        let stamp = self.delta_stamp;
+
+        // 1. Reset every pixel a changed bit holds.
+        let width = self.width as usize;
+        self.prev_dirty_rows.clear();
+        self.prev_dirty_rows
+            .resize(self.height as usize, (u32::MAX, 0));
+        self.prev_dirty_valid = true;
+        let mut reset = std::mem::take(&mut self.delta_pixels);
+        reset.clear();
+        for &(coord, _, _, entry) in &loud {
+            let Some(entry) = entry else { continue };
+            let key = owner_key(coord);
+            for y in usize::from(entry.y0)..usize::from(entry.y1) {
+                for x in usize::from(entry.x0)..usize::from(entry.x1) {
+                    let index = y * width + x;
+                    if self.owner[index] == key && !self.delta_mask[index] {
+                        self.delta_mask[index] = true;
+                        reset.push(index);
+                    }
+                }
+            }
+        }
+        for &index in &reset {
+            let (x, y) = (index % width, index / width);
+            if self.pixels[index] != BACKGROUND {
+                self.world_pixels -= 1;
+            }
+            self.pixels[index] = BACKGROUND;
+            self.depth[index] = f64::INFINITY;
+            let tile = (y / COVER_TILE) * self.tiles_wide + x / COVER_TILE;
+            self.tile_max[tile] = f64::INFINITY;
+            let block =
+                (y / COVER_TILE / COVER_COARSE) * self.coarse_wide + x / COVER_TILE / COVER_COARSE;
+            self.coarse_max[block] = f64::INFINITY;
+            let range = &mut self.prev_dirty_rows[y];
+            range.0 = range.0.min(x as u32);
+            range.1 = range.1.max(x as u32 + 1);
+        }
+
+        // 2. Bits to draw: indexed bits reaching a reset pixel ...
+        let mut redraw: Vec<(f64, Coord)> = Vec::new();
+        let hits = |mask: &[bool], e: &DeltaEntry| {
+            (usize::from(e.y0)..usize::from(e.y1)).any(|y| {
+                mask[y * width + usize::from(e.x0)..y * width + usize::from(e.x1)]
+                    .iter()
+                    .any(|&m| m)
+            })
+        };
+        for &index in &reset {
+            let tile =
+                (index / width / COVER_TILE) * self.tiles_wide + (index % width) / COVER_TILE;
+            if self.delta_tile_seen[tile] == stamp {
+                continue;
+            }
+            self.delta_tile_seen[tile] = stamp;
+            let (lo, hi) = (
+                self.delta_tile_start[tile] as usize,
+                self.delta_tile_start[tile + 1] as usize,
+            );
+            for k in lo..hi {
+                let item = self.delta_tile_items[k] as usize;
+                if self.delta_seen[item] == stamp {
+                    continue;
+                }
+                self.delta_seen[item] = stamp;
+                let entry = self.delta_index[item];
+                if hits(&self.delta_mask, &entry) && world.is_on(entry.coord) {
+                    redraw.push((
+                        projection.view_depth(coord_center(entry.coord)),
+                        entry.coord,
+                    ));
+                }
+            }
+        }
+        if !reset.is_empty() {
+            for entry in &self.delta_index[self.delta_full_len..] {
+                if hits(&self.delta_mask, entry) && world.is_on(entry.coord) {
+                    redraw.push((
+                        projection.view_depth(coord_center(entry.coord)),
+                        entry.coord,
+                    ));
+                }
+            }
+        }
+        // ... the changed bits, and the on neighbours of every bit that turned off; less those
+        // the new world deeply encloses where the enclosed-bit cull applies. Bits that turned
+        // on and those neighbours may be missing from the index, so they are recorded into it.
+        let mut fresh: Vec<Coord> = neighbours;
+        for &(coord, toggled, open_now, _) in &loud {
+            if !open_now {
+                continue;
+            }
+            if toggled {
+                fresh.push(coord);
+            } else {
+                redraw.push((projection.view_depth(coord_center(coord)), coord));
+            }
+        }
+        reset
+            .iter()
+            .for_each(|&index| self.delta_mask[index] = false);
+        self.delta_pixels = reset;
+
+        // 3. Draw, nearest first (any order gives the same frame).
+        redraw.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+        for &(_, coord) in &redraw {
+            self.draw_bit_with(projection, coord, tint);
+        }
+        self.recording = true;
+        for &coord in &fresh {
+            self.draw_bit_with(projection, coord, tint);
+        }
+        self.recording = false;
+        self.delta_base = self.delta_index_ok.then_some(projection);
+        self.delta_frames += 1;
+        true
+    }
+
+    /// The projection a delta frame may reuse the buffers under, or `None` when it must not
+    /// (no complete ordinary frame, another projection, or a frame `render_tinted` would not
+    /// draw by the ordered traversal).
+    fn delta_projection(&self, world: &World, camera: &Camera) -> Option<CameraProjection> {
+        let base = self.delta_base?;
+        if self.width == 0
+            || self.height == 0
+            || world.is_empty()
+            || self.all_dirty
+            || !self.optimized_traversal()
+            || self.dirty_rows.len() != self.height as usize
+        {
+            return None;
+        }
+        if coord_containing(camera.position()).is_some_and(|c| world.is_on(c)) {
+            return None;
+        }
+        let projection = camera.projection_for_viewport(self.width, self.height)?;
+        if !projection.bit_identical(&base) {
+            return None;
+        }
+        if let Some(bounds) = world.bounds() {
+            let (min, max) = bounds_aabb(bounds);
+            if projection.bounds_fit_one_pixel(min, max) {
+                return None;
+            }
+        }
+        Some(projection)
+    }
+
+    /// The clamped pixel box `[floor(min) - 1, ceil(max) + 1)` of a bit whose projected
+    /// vertices span `[min, max]`, or `None` when it holds no viewport pixel. Every write the
+    /// bit makes lands inside: each face's raster box is built from a subset of those vertices
+    /// by the same `floor` / `ceil` / clamp, and the single-pixel path plots the floor of its
+    /// centre's projection, which lies in their hull; the one-pixel growth absorbs rounding.
+    fn grown_box(
+        &self,
+        coord: Coord,
+        min_x: f64,
+        max_x: f64,
+        min_y: f64,
+        max_y: f64,
+    ) -> Option<DeltaEntry> {
+        let (w, h) = (f64::from(self.width), f64::from(self.height));
+        let left = (min_x.floor() - 1.0).max(0.0);
+        let right = (max_x.ceil() + 1.0).min(w);
+        let top = (min_y.floor() - 1.0).max(0.0);
+        let bottom = (max_y.ceil() + 1.0).min(h);
+        // `!(a < b)` also rejects NaN.
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
+        if !(left < right && top < bottom) {
+            return None;
+        }
+        Some(DeltaEntry {
+            coord,
+            x0: left as u16,
+            x1: right as u16,
+            y0: top as u16,
+            y1: bottom as u16,
+        })
+    }
+
+    /// Builds the per-tile lists of the full traversal's index entries, once per full frame.
+    fn build_delta_csr(&mut self) {
+        if self.delta_csr_built {
+            return;
+        }
+        let tiles = self.tile_max.len();
+        let mut start = std::mem::take(&mut self.delta_tile_start);
+        start.clear();
+        start.resize(tiles + 1, 0);
+        let tile_range = |e: &DeltaEntry| {
+            (
+                usize::from(e.x0) / COVER_TILE..=(usize::from(e.x1) - 1) / COVER_TILE,
+                usize::from(e.y0) / COVER_TILE..=(usize::from(e.y1) - 1) / COVER_TILE,
+            )
+        };
+        let full = &self.delta_index[..self.delta_full_len];
+        for e in full {
+            let (xs, ys) = tile_range(e);
+            for ty in ys {
+                for tx in xs.clone() {
+                    start[ty * self.tiles_wide + tx + 1] += 1;
+                }
+            }
+        }
+        for t in 0..tiles {
+            start[t + 1] += start[t];
+        }
+        let mut items = std::mem::take(&mut self.delta_tile_items);
+        items.clear();
+        items.resize(start[tiles] as usize, 0);
+        let mut fill = start.clone();
+        for (i, e) in full.iter().enumerate() {
+            let (xs, ys) = tile_range(e);
+            for ty in ys {
+                for tx in xs.clone() {
+                    let slot = &mut fill[ty * self.tiles_wide + tx];
+                    items[*slot as usize] = i as u32;
+                    *slot += 1;
+                }
+            }
+        }
+        self.delta_tile_start = start;
+        self.delta_tile_items = items;
+        self.delta_seen.clear();
+        self.delta_seen.resize(self.delta_full_len, 0);
+        self.delta_tile_seen.clear();
+        self.delta_tile_seen.resize(tiles, 0);
+        self.delta_stamp = 0;
+        self.delta_csr_built = true;
+    }
+
     const fn enclosed_cull_enabled(&self) -> bool {
         #[cfg(test)]
         if self.skip_enclosed_cull {
@@ -867,6 +1303,12 @@ impl Renderer {
             crosshair_overlay_input(),
             "renderer received an unsupported crosshair overlay input"
         );
+        self.invert_crosshair();
+        self.crosshair_on = !self.crosshair_on;
+    }
+
+    /// XORs the crosshair arms (an involution: twice restores the pixels).
+    fn invert_crosshair(&mut self) {
         if self.width == 0 || self.height == 0 {
             return;
         }
@@ -924,6 +1366,16 @@ impl Renderer {
         }
         if !visible {
             return;
+        }
+        self.owner_key = owner_key(coord);
+        if self.recording {
+            if projected.iter().all(Option::is_some) {
+                if let Some(entry) = self.grown_box(coord, min_x, max_x, min_y, max_y) {
+                    self.delta_index.push(entry);
+                }
+            } else {
+                self.delta_index_ok = false;
+            }
         }
 
         if max_x - min_x <= SMALL_BIT_EXTENT && max_y - min_y <= SMALL_BIT_EXTENT {
@@ -1412,12 +1864,15 @@ impl Renderer {
             let base = y as usize * width + lo as usize;
             let pixels = &mut self.pixels[base..base + n];
             let buffer = &mut self.depth[base..base + n];
+            let owners = &mut self.owner[base..base + n];
+            let key = self.owner_key;
             let mut written = 0_u64;
-            for (((&inverse_depth, &depth), pixel), stored) in inverse
+            for ((((&inverse_depth, &depth), pixel), stored), owner) in inverse
                 .iter()
                 .zip(depths.iter())
                 .zip(pixels.iter_mut())
                 .zip(buffer.iter_mut())
+                .zip(owners.iter_mut())
             {
                 if inverse_depth <= 0.0 || !inverse_depth.is_finite() {
                     continue;
@@ -1429,6 +1884,7 @@ impl Renderer {
                     }
                     *stored = depth;
                     *pixel = color;
+                    *owner = key;
                 }
             }
             self.world_pixels += written;
@@ -1452,6 +1908,7 @@ impl Renderer {
             }
             self.depth[index] = depth;
             self.pixels[index] = color;
+            self.owner[index] = self.owner_key;
         }
     }
 }
@@ -1727,6 +2184,42 @@ fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
     }
     farthest_squared.is_finite()
         && focal * focal >= ENCLOSED_MIN_SPAN * ENCLOSED_MIN_SPAN * farthest_squared
+}
+
+/// A bit and its grown, clamped raster box `[x0, x1) x [y0, y1)` (see `Renderer::grown_box`).
+#[derive(Clone, Copy, Debug)]
+struct DeltaEntry {
+    coord: Coord,
+    x0: u16,
+    x1: u16,
+    y0: u16,
+    y1: u16,
+}
+
+/// A nonzero 32-bit key of `coord` for the per-pixel owner buffer. Collisions are harmless:
+/// they only add pixels to a delta frame's reset set.
+fn owner_key(coord: Coord) -> u32 {
+    let mut h = 0x9e37_79b9_7f4a_7c15_u64;
+    for v in [coord.x, coord.y, coord.z] {
+        h = (h ^ v as u64).wrapping_mul(0xff51_afd7_ed55_8ccd);
+        h ^= h >> 29;
+    }
+    (h >> 32) as u32 | 1
+}
+
+/// `coord` and its 26 neighbours (those inside the `i64` range).
+fn neighbourhood27(coord: Coord) -> impl Iterator<Item = Coord> {
+    (-1_i64..=1).flat_map(move |dx| {
+        (-1_i64..=1).flat_map(move |dy| {
+            (-1_i64..=1).filter_map(move |dz| {
+                Some(Coord::new(
+                    coord.x.checked_add(dx)?,
+                    coord.y.checked_add(dy)?,
+                    coord.z.checked_add(dz)?,
+                ))
+            })
+        })
+    })
 }
 
 fn coord_center(coord: Coord) -> Vec3 {
@@ -3605,6 +4098,197 @@ mod tests {
             culled += ordered.enclosed_bits;
         }
         assert!(culled > 20_000, "only {culled} bits culled");
+    }
+
+    /// §6f delta frames: after random toggles and recolourings (enclosed bits included), a
+    /// delta render over the previous frame equals a fresh full render bit for bit -- pixels,
+    /// depths and `world_pixels` -- with the crosshair drawn between frames, from far, near and
+    /// close cameras, and with every bit the hidden-bit test skips checked to write nothing.
+    #[test]
+    fn delta_render_matches_full_render() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move |n: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed % n
+        };
+        let palette = [
+            0x002f6fd6_u32,
+            0x00b04020,
+            0x00e8dcc0,
+            0x0040c060,
+            0x00909090,
+        ];
+        let mut used = 0;
+        let mut culled = 0;
+        for (case, size) in [(0_usize, 161_u32), (1, 97), (2, 161), (3, 120), (4, 161)] {
+            let mut world = World::new();
+            let mut colours: std::collections::HashMap<Coord, u32> =
+                std::collections::HashMap::new();
+            for x in -7_i64..=7 {
+                for y in -7_i64..=7 {
+                    for z in -7_i64..=7 {
+                        if x * x + y * y + z * z <= 42 {
+                            let c = Coord::new(x, y, z);
+                            world.set_on(c);
+                            colours.insert(c, palette[next(5) as usize]);
+                        }
+                    }
+                }
+            }
+            let camera = views(&world)[case].clone();
+            let mut delta = Renderer::new(size, size);
+            delta.verify_hidden_bits = size < 150;
+            {
+                let tint = |c: Coord| colours.get(&c).copied();
+                delta.render_tinted(&world, &camera, Some(&tint));
+            }
+            culled += delta.enclosed_bits;
+            delta.draw_crosshair(crosshair_overlay_input());
+            for frame in 0..10 {
+                let mut changed = Vec::new();
+                let toggles = if frame % 4 == 3 { 0 } else { 1 + next(12) };
+                for _ in 0..toggles {
+                    let c = Coord::new(
+                        next(17) as i64 - 8,
+                        next(17) as i64 - 8,
+                        next(17) as i64 - 8,
+                    );
+                    if world.is_on(c) {
+                        world.set_off(c);
+                    } else {
+                        world.set_on(c);
+                        colours.insert(c, palette[next(5) as usize]);
+                    }
+                    changed.push((c, true));
+                }
+                // A drill hole along one axis, from outside the ball to its middle: it uncovers
+                // bits that were deeply enclosed (left out of the index by the cull).
+                if frame % 3 != 2 {
+                    let (u, v) = (next(7) as i64 - 3, next(7) as i64 - 3);
+                    let sign = if next(2) == 0 { 1 } else { -1 };
+                    for d in 2..=7_i64 {
+                        let c = match frame % 3 {
+                            0 => Coord::new(u, v, sign * d),
+                            _ => Coord::new(sign * d, u, v),
+                        };
+                        if world.is_on(c) {
+                            world.set_off(c);
+                            changed.push((c, true));
+                        }
+                    }
+                }
+                for _ in 0..next(40) {
+                    let c = Coord::new(
+                        next(15) as i64 - 7,
+                        next(15) as i64 - 7,
+                        next(15) as i64 - 7,
+                    );
+                    colours.insert(c, palette[next(5) as usize]);
+                    changed.push((c, false));
+                }
+                let tint = |c: Coord| colours.get(&c).copied();
+                used +=
+                    usize::from(delta.render_tinted_delta(&world, &camera, Some(&tint), &changed));
+                delta.draw_crosshair(crosshair_overlay_input());
+                let mut full = Renderer::new(size, size);
+                full.render_tinted(&world, &camera, Some(&tint));
+                full.draw_crosshair(crosshair_overlay_input());
+                let at = format!("case {case} frame {frame}");
+                assert!(delta.pixels == full.pixels, "{at} pixels");
+                let bits = |v: &[f64]| v.iter().map(|d| d.to_bits()).collect::<Vec<_>>();
+                assert_eq!(bits(&delta.depth), bits(&full.depth), "{at} depth");
+                assert_eq!(delta.world_pixels, full.world_pixels, "{at} world pixels");
+            }
+        }
+        assert!(used >= 30, "delta path taken only {used} times");
+        assert!(culled > 0, "no case exercised the enclosed-bit cull");
+    }
+
+    /// The delta index must keep bits a delta frame uncovered: drill to the deeply enclosed
+    /// middle of a ball facing the camera, then add and later remove a plate floating in front
+    /// of the hole (not adjacent to anything), whose removal must redraw the hole's floor.
+    #[test]
+    fn delta_render_keeps_uncovered_bits_indexed() {
+        let mut world = World::new();
+        for x in -7_i64..=7 {
+            for y in -7_i64..=7 {
+                for z in -7_i64..=7 {
+                    if x * x + y * y + z * z <= 42 {
+                        world.set_on(Coord::new(x, y, z));
+                    }
+                }
+            }
+        }
+        let tint = |c: Coord| {
+            Some(if (c.x + c.y + c.z).rem_euclid(2) == 0 {
+                0x00b04020
+            } else {
+                0x002f6fd6
+            })
+        };
+        for view in 0..2 {
+            let mut world = world.clone();
+            let camera = views(&world)[view].clone();
+            let p = camera.position();
+            // The axis pointing at the camera, and the cells along it.
+            let axis = |d: i64| {
+                let (ax, ay, az) = (p.x.abs(), p.y.abs(), p.z.abs());
+                if ax >= ay && ax >= az {
+                    Coord::new(d * p.x.signum() as i64, 0, 0)
+                } else if ay >= az {
+                    Coord::new(0, d * p.y.signum() as i64, 0)
+                } else {
+                    Coord::new(0, 0, d * p.z.signum() as i64)
+                }
+            };
+            let plate = |d: i64| -> Vec<Coord> {
+                let c = axis(d);
+                let mut v = Vec::new();
+                for a in -1..=1_i64 {
+                    for b in -1..=1_i64 {
+                        v.push(if c.x != 0 {
+                            Coord::new(c.x, a, b)
+                        } else if c.y != 0 {
+                            Coord::new(a, c.y, b)
+                        } else {
+                            Coord::new(a, b, c.z)
+                        });
+                    }
+                }
+                v
+            };
+            let mut delta = Renderer::new(161, 161);
+            delta.render_tinted(&world, &camera, Some(&tint));
+            let mut steps: Vec<Vec<(Coord, bool)>> = Vec::new();
+            steps.push((2..=7).map(|d| (axis(d), true)).collect());
+            steps.push(plate(10).into_iter().map(|c| (c, true)).collect());
+            steps.push(plate(10).into_iter().map(|c| (c, true)).collect());
+            for (step, changed) in steps.iter().enumerate() {
+                for &(c, _) in changed {
+                    if world.is_on(c) {
+                        world.set_off(c);
+                    } else {
+                        world.set_on(c);
+                    }
+                }
+                assert!(
+                    delta.render_tinted_delta(&world, &camera, Some(&tint), changed),
+                    "view {view} step {step} took the full path"
+                );
+                let mut full = Renderer::new(161, 161);
+                full.render_tinted(&world, &camera, Some(&tint));
+                assert!(
+                    delta.pixels == full.pixels,
+                    "view {view} step {step} pixels"
+                );
+                assert_eq!(
+                    delta.world_pixels, full.world_pixels,
+                    "view {view} step {step}"
+                );
+            }
+        }
     }
 
     #[test]
