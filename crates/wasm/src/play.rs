@@ -214,7 +214,8 @@ impl PlaySession {
         let _ = program.apply(&mut world);
         let mut session = Self::new();
         session.history = History::new(&world);
-        session.last_world_tag = world_tag(&world);
+        // History::new already computed this genesis world's canonical tag.
+        session.last_world_tag = session.history.current_world();
         session.camera =
             crate::gallery_camera(&world, crate::GALLERY_YAW_DEG, crate::GALLERY_PITCH_DEG);
         session.world = world;
@@ -255,7 +256,8 @@ impl PlaySession {
         let world = chem.world.world().clone();
         let mut session = Self::new();
         session.history = History::new(&world);
-        session.last_world_tag = world_tag(&world);
+        // History::new already computed this genesis world's canonical tag.
+        session.last_world_tag = session.history.current_world();
         session.camera =
             crate::gallery_camera(&world, crate::GALLERY_YAW_DEG, crate::GALLERY_PITCH_DEG);
         session.world = world;
@@ -358,7 +360,7 @@ impl PlaySession {
     pub fn new() -> Self {
         let world = World::new();
         let history = History::new(&world);
-        let last_world_tag = world_tag(&world);
+        let last_world_tag = history.current_world();
         Self {
             world,
             history,
