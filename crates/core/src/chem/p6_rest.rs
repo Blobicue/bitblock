@@ -27,6 +27,29 @@ use super::vapor::{EvapTop, RainFall};
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
 
+/// Reused buffers of [`ChemWorld::convect_pass`] (the parcels gathered into rsort order and the
+/// tick's swaps), kept across steps so a step does not allocate per domain cell. The pass
+/// clears and refills every buffer before reading it.
+#[derive(Default)]
+pub(crate) struct ConvectScratch {
+    smat: Vec<MatId>,
+    sq: Vec<i32>,
+    swaps: Vec<(u32, u32)>,
+}
+
+/// A clone starts with empty scratch: the buffers hold no state between steps.
+impl Clone for ConvectScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for ConvectScratch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ConvectScratch({} parcels)", self.smat.len())
+    }
+}
+
 /// Heat a vapor pair carries aloft, released on rain (planet6 `LATENT_PAIR`).
 pub const LATENT_PAIR: i32 = 30;
 /// planet6's season length (`tick % 240`).
@@ -229,10 +252,24 @@ impl ChemWorld {
         // the swaps in scan order makes the same `set_mat` / heat-swap calls as swapping in
         // place.
         let n = topo.rsort.len();
-        let mut smat: Vec<MatId> = topo.rsort.iter().map(|&i| self.mat[i as usize]).collect();
-        let mut sq: Vec<i32> = topo.rsort.iter().map(|&i| self.q[i as usize]).collect();
-        let mut moved = vec![false; n];
-        let mut swaps: Vec<(u32, u32)> = Vec::new();
+        let mut sc = std::mem::take(&mut self.convect_scratch);
+        sc.smat.clear();
+        sc.sq.clear();
+        sc.swaps.clear();
+        for &i in &topo.rsort {
+            sc.smat.push(self.mat[i as usize]);
+            sc.sq.push(self.q[i as usize]);
+        }
+        // A parcel that moved is read no more this tick: overwriting its gathered material
+        // with a massless one skips it exactly like a moved flag (a massless parcel is
+        // skipped either way). With no massless id at all, a flag array instead.
+        let parked = mass.iter().position(|&m| m == 0).map(|m| MatId(m as u8));
+        let mut moved = if parked.is_none() {
+            vec![false; n]
+        } else {
+            Vec::new()
+        };
+        let (smat, sq, swaps) = (&mut sc.smat, &sc.sq, &mut sc.swaps);
         let convect_key = self.roll_key(SALT_CONVECT);
         // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
         // in rsort order (the same roll, read sequentially).
@@ -242,7 +279,7 @@ impl ChemWorld {
         };
         for k in (0..n).rev() {
             let mb = mass[smat[k].0 as usize];
-            if mb == 0 || moved[k] {
+            if mb == 0 || (!moved.is_empty() && moved[k]) {
                 continue;
             }
             let ku = topo.shell_up[k];
@@ -251,7 +288,7 @@ impl ChemWorld {
             }
             let ku = ku as usize;
             let ma = mass[smat[ku].0 as usize];
-            if ma == 0 || moved[ku] {
+            if ma == 0 || (!moved.is_empty() && moved[ku]) {
                 continue;
             }
             let tb = i64::from(sq[k]) + CONVECT_T0;
@@ -270,13 +307,19 @@ impl ChemWorld {
             if roll >= CONVECT_ODDS {
                 continue;
             }
-            smat.swap(k, ku);
-            sq.swap(k, ku);
-            moved[k] = true;
-            moved[ku] = true;
+            match parked {
+                Some(p) => {
+                    smat[k] = p;
+                    smat[ku] = p;
+                }
+                None => {
+                    moved[k] = true;
+                    moved[ku] = true;
+                }
+            }
             swaps.push((topo.rsort[k], topo.rsort[ku]));
         }
-        for (i, up) in swaps {
+        for &(i, up) in &sc.swaps {
             let (i, up) = (i as usize, up as usize);
             let (m_b, m_a) = (self.mat[i], self.mat[up]);
             self.set_mat(i, m_a);
@@ -284,6 +327,7 @@ impl ChemWorld {
             self.q.swap(i, up);
             rep.convected += 1;
         }
+        self.convect_scratch = sc;
     }
 
     /// §5w coreward frame for this tick: the core cell's coordinate when
