@@ -1013,15 +1013,13 @@ pub(crate) struct Topology {
     /// Every cell in coreward scan order: `r2` ascending, then planet6's
     /// `(y, x, z)` (empty with no core).
     pub(crate) rsort: Vec<u32>,
-    /// The outward neighbour of `rsort[k]` at index `k`: the domain cell one
-    /// [`outward_step`](super::p6_rest::outward_step) from it away from the
-    /// core, or `NO_SLOT` at the core or where that step leaves the domain.
-    /// Static for the topology's life (the domain and the core are fixed), so
-    /// the outermost-first gas-rise and convection scans read it in scan
-    /// order instead of recomputing the step and probing the lookup per cell.
-    pub(crate) rsort_up: Vec<u32>,
-    /// `rsort_up` as rsort positions: the position `k'` with `rsort[k'] == rsort_up[k]`, or
-    /// `NO_SLOT`. Lets a scan over parcels gathered into rsort order stay in that order.
+    /// The outward neighbour of `rsort[k]` at index `k`, as an rsort position: the `k'` with
+    /// `rsort[k']` the domain cell one [`outward_step`](super::p6_rest::outward_step) from
+    /// `rsort[k]` away from the core, or `NO_SLOT` at the core or where that step leaves the
+    /// domain. Static for the topology's life (the domain and the core are fixed), so the
+    /// outermost-first gas-rise and convection scans read it in scan order instead of
+    /// recomputing the step and probing the lookup per cell, and a scan over parcels gathered
+    /// into rsort order stays in that order.
     pub(crate) shell_up: Vec<u32>,
     /// [`wide_roll_cell`] of `rsort[k]` at index `k` under one wide-roll key (the first key
     /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
@@ -1058,7 +1056,6 @@ impl Topology {
             ysort: Vec::new(),
             r2: Vec::new(),
             rsort: Vec::new(),
-            rsort_up: Vec::new(),
             shell_up: Vec::new(),
             rsort_roll: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
@@ -1150,14 +1147,11 @@ impl Topology {
         Some(Lookup::Boxed { min: lo, dim, slot })
     }
 
-    /// Domain index of `cells[i] + d`, if that cell is in the domain.
-    #[inline]
-    /// Fill [`Topology::r2`] and [`Topology::rsort`] from the (possibly
-    /// pinned) core cell; clears them with no core.
+    /// Fill [`Topology::r2`], [`Topology::rsort`] and [`Topology::shell_up`] from the
+    /// (possibly pinned) core cell; clears them with no core.
     pub(crate) fn radial_frame(&mut self, cells: &[Coord]) {
         self.r2.clear();
         self.rsort.clear();
-        self.rsort_up.clear();
         self.shell_up.clear();
         let Some(o) = self.core else { return };
         let o = cells[o as usize];
@@ -1173,7 +1167,7 @@ impl Topology {
             let c = cells[i as usize];
             (self.r2[i as usize], c.y, c.x, c.z)
         });
-        self.rsort_up = rs
+        let up: Vec<u32> = rs
             .iter()
             .map(|&i| {
                 let c = cells[i as usize];
@@ -1189,8 +1183,7 @@ impl Topology {
         for (k, &i) in rs.iter().enumerate() {
             rank[i as usize] = k as u32;
         }
-        self.shell_up = self
-            .rsort_up
+        self.shell_up = up
             .iter()
             .map(|&up| {
                 if up == NO_SLOT {
@@ -1203,9 +1196,6 @@ impl Topology {
         self.rsort = rs;
     }
 
-    /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
-    /// neighbour `None` at the core or where the outward step leaves the domain.
-    #[inline]
     /// [`wide_roll_cell`] of every rsort entry under `key`, in rsort order; `None` when the
     /// cached table was built for another key (the caller then rolls per cell).
     pub(crate) fn rsort_roll_cells(&self, key: u64, cells: &[Coord]) -> Option<&[u64]> {
@@ -1220,12 +1210,30 @@ impl Topology {
         (*k == key).then_some(table.as_slice())
     }
 
+    /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
+    /// neighbour `None` at the core or where the outward step leaves the domain.
     pub(crate) fn rsort_outward_first(&self) -> impl Iterator<Item = (usize, Option<usize>)> + '_ {
         self.rsort
             .iter()
-            .zip(&self.rsort_up)
+            .zip(&self.shell_up)
             .rev()
-            .map(|(&i, &up)| (i as usize, (up != NO_SLOT).then_some(up as usize)))
+            .map(|(&i, &ku)| {
+                (
+                    i as usize,
+                    (ku != NO_SLOT).then(|| self.rsort[ku as usize] as usize),
+                )
+            })
+    }
+
+    /// The outward neighbour of `rsort[k]` as a cell index, or `NO_SLOT`.
+    #[cfg(test)]
+    pub(crate) fn rsort_up(&self, k: usize) -> u32 {
+        let ku = self.shell_up[k];
+        if ku == NO_SLOT {
+            NO_SLOT
+        } else {
+            self.rsort[ku as usize]
+        }
     }
 
     /// The cell index of `c`, or `None` when `c` is not a domain cell: the same answer as a
@@ -1246,6 +1254,7 @@ impl Topology {
         }
     }
 
+    /// Domain index of `cells[i] + d`, if that cell is in the domain.
     pub(crate) fn offset(&self, cells: &[Coord], i: usize, d: (i64, i64, i64)) -> Option<usize> {
         let c = cells[i];
         let (x, y, z) = (
@@ -2333,7 +2342,7 @@ impl ChemWorld {
         if self.params.gas_rise {
             // §5w: under Gravity::Core gas rises along the outward step,
             // outermost first (planet6's +y list otherwise)
-            // (the outward neighbours are precomputed in `Topology::rsort_up`)
+            // (the outward neighbours are precomputed in `Topology::shell_up`)
             let pairs: Box<dyn Iterator<Item = (usize, usize)>> = if self.grav_core(topo).is_some()
             {
                 Box::new(

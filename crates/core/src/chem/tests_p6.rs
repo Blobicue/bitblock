@@ -4615,7 +4615,7 @@ fn convect_is_opt_in_and_conserves() {
     assert_eq!(on.lane_drift(), [0; NE]);
 }
 
-/// §6a: `Topology::nb6` (box-index fast path) and `Topology::rsort_up` (precomputed outward
+/// §6a: `Topology::nb6` (box-index fast path) and `Topology::shell_up` (precomputed outward
 /// neighbours) must answer exactly what the per-lookup `offset` path answers, on boxed,
 /// hashed and i64-edge domains.
 #[test]
@@ -4744,16 +4744,7 @@ fn topology_fast_paths_match_offset_lookups() {
             topo.core = Some(core as u32);
             topo.radial_frame(cells);
             let o = cells[core];
-            assert_eq!(topo.rsort_up.len(), topo.rsort.len());
             assert_eq!(topo.shell_up.len(), topo.rsort.len());
-            for (k, &up) in topo.rsort_up.iter().enumerate() {
-                let ku = topo.shell_up[k];
-                if up == u32::MAX {
-                    assert_eq!(ku, u32::MAX);
-                } else {
-                    assert_eq!(topo.rsort[ku as usize], up, "domain {d} rsort {k}");
-                }
-            }
             for (k, &i) in topo.rsort.iter().enumerate() {
                 let c = cells[i as usize];
                 let st = (
@@ -4765,7 +4756,7 @@ fn topology_fast_paths_match_offset_lookups() {
                 let want = (st != (0, 0, 0))
                     .then(|| topo.offset(cells, i as usize, st))
                     .flatten();
-                let got = (topo.rsort_up[k] != u32::MAX).then_some(topo.rsort_up[k] as usize);
+                let got = (topo.rsort_up(k) != u32::MAX).then_some(topo.rsort_up(k) as usize);
                 assert_eq!(got, want, "domain {d} core {core} rank {k}");
             }
             let pairs: Vec<_> = topo.rsort_outward_first().collect();
