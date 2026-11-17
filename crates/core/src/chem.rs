@@ -542,6 +542,8 @@ pub struct ChemWorld {
     table: Arc<MatTable>,
     net: Option<Arc<ChemNet>>,
     topo: Option<Arc<p6::Topology>>,
+    /// Reused per-cell buffers of the network law (no state between steps).
+    net_scratch: net::NetScratch,
     /// Per-tick surface-activity marks ([`WaterCycle::Driven`] only; not in
     /// any book or the fingerprint; cleared at the start of every tick).
     pub(crate) marks: Vec<u8>,
@@ -613,6 +615,7 @@ impl ChemWorld {
             table: Arc::new(MatTable::base()),
             net: None,
             topo: None,
+            net_scratch: net::NetScratch::default(),
             marks: Vec::new(),
             sky_height: 0,
             core_pin: None,

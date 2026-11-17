@@ -209,9 +209,9 @@ impl ChemWorld {
         if !self.params.convect {
             return;
         }
-        let Some(o) = self.grav_core(topo) else {
+        if self.grav_core(topo).is_none() {
             return;
-        };
+        }
         let mut mass = [0i64; 256];
         for (m, slot) in mass.iter_mut().enumerate() {
             let id = MatId(m as u8);
@@ -221,20 +221,14 @@ impl ChemWorld {
                 *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
             }
         }
-        let len = topo.rsort.len();
         let mut moved = vec![false; self.cells.len()];
-        for k in 0..len {
-            let i = topo.rsort[len - 1 - k] as usize;
+        // outermost first; the outward neighbour is precomputed (`Topology::rsort_up`)
+        for (i, up) in topo.rsort_outward_first() {
             let mb = mass[self.mat[i].0 as usize];
             if mb == 0 || moved[i] {
                 continue;
             }
-            let p = self.cells[i];
-            let st = outward_step((p.x - o.x, p.y - o.y, p.z - o.z));
-            if st == (0, 0, 0) {
-                continue;
-            }
-            let Some(up) = topo.offset(&self.cells, i, st) else {
+            let Some(up) = up else {
                 continue;
             };
             let ma = mass[self.mat[up].0 as usize];

@@ -4614,3 +4614,102 @@ fn convect_is_opt_in_and_conserves() {
     assert_eq!(on.energy_drift(), 0);
     assert_eq!(on.lane_drift(), [0; NE]);
 }
+
+/// §6a: `Topology::nb6` (box-index fast path) and `Topology::rsort_up` (precomputed outward
+/// neighbours) must answer exactly what the per-lookup `offset` path answers, on boxed,
+/// hashed and i64-edge domains.
+#[test]
+fn topology_fast_paths_match_offset_lookups() {
+    use super::p6::{NB6, Topology};
+    use super::p6_rest::outward_step;
+    let mut seed = 0x6a_70b0_u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let mut domains: Vec<Vec<Coord>> = Vec::new();
+    // a solid ball (boxed lookup)
+    let mut ball = Vec::new();
+    for x in -9..=9_i64 {
+        for y in -9..=9_i64 {
+            for z in -9..=9_i64 {
+                if x * x + y * y + z * z <= 81 {
+                    ball.push(Coord::new(x + 3, y - 40, z + 11));
+                }
+            }
+        }
+    }
+    domains.push(ball);
+    // a holey block (boxed, many missing neighbours)
+    let mut holey = Vec::new();
+    for x in 0..14_i64 {
+        for y in 0..9_i64 {
+            for z in 0..11_i64 {
+                if next() % 3 != 0 {
+                    holey.push(Coord::new(x - 7, y, z * 2 - 5));
+                }
+            }
+        }
+    }
+    domains.push(holey);
+    // scattered over a huge range (hashed lookup)
+    let mut sparse = Vec::new();
+    for _ in 0..600 {
+        let c = Coord::new(
+            (next() % 2001) as i64 - 1000,
+            (next() % 2001) as i64 * 1_000_003,
+            (next() % 7) as i64,
+        );
+        sparse.push(c);
+        sparse.push(Coord::new(c.x + 1, c.y, c.z));
+    }
+    domains.push(sparse);
+    // a small box against both i64 ends on every axis (boxed; checked_add overflow at MAX)
+    for edge in [i64::MAX - 4, i64::MIN] {
+        let mut b = Vec::new();
+        for x in 0..5 {
+            for y in 0..5 {
+                for z in 0..5 {
+                    if (x + y + z) % 4 != 1 {
+                        b.push(Coord::new(edge + x, edge + y, edge + z));
+                    }
+                }
+            }
+        }
+        domains.push(b);
+    }
+    for (d, cells) in domains.iter_mut().enumerate() {
+        cells.sort();
+        cells.dedup();
+        let mut topo = Topology::build(cells);
+        for i in 0..cells.len() {
+            let slow = NB6.map(|step| topo.offset(cells, i, step));
+            assert_eq!(topo.nb6(cells, i), slow, "domain {d} cell {i}");
+        }
+        for core in [0, cells.len() / 2, cells.len() - 1] {
+            topo.core = Some(core as u32);
+            topo.radial_frame(cells);
+            let o = cells[core];
+            assert_eq!(topo.rsort_up.len(), topo.rsort.len());
+            for (k, &i) in topo.rsort.iter().enumerate() {
+                let c = cells[i as usize];
+                let st = (
+                    c.x.wrapping_sub(o.x),
+                    c.y.wrapping_sub(o.y),
+                    c.z.wrapping_sub(o.z),
+                );
+                let st = outward_step(st);
+                let want = (st != (0, 0, 0))
+                    .then(|| topo.offset(cells, i as usize, st))
+                    .flatten();
+                let got = (topo.rsort_up[k] != u32::MAX).then_some(topo.rsort_up[k] as usize);
+                assert_eq!(got, want, "domain {d} core {core} rank {k}");
+            }
+            let pairs: Vec<_> = topo.rsort_outward_first().collect();
+            assert_eq!(pairs.len(), cells.len());
+            assert_eq!(pairs[0].0, *topo.rsort.last().unwrap() as usize);
+        }
+    }
+}

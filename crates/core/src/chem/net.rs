@@ -631,6 +631,56 @@ impl ChemNet {
 const FRESH: i32 = -1;
 const UNCLAIMED: u32 = u32::MAX;
 
+/// Per-cell scratch of [`ChemWorld::network_pass`], kept across steps so a step does not
+/// allocate and initialise ~55 bytes per domain cell.
+///
+/// Reuse is exact. [`NetScratch::prepare`] clears `prov` and `done`, the only buffers that pass A
+/// reads before writing in a step (from round 1 on). Every other buffer is written before it is
+/// read. In round 0 every cell takes the `start` path, and both of its branches (the exact
+/// skip and the cube build) write `nnbs`, `vis_id` and `cursor`. `fids[i]` is read only below
+/// `nnbs[i]`, and only after the same `start` wrote it. `claim` and `intent` are reset for every
+/// cell at the top of every round's pass A, before any later pass reads them.
+#[derive(Default)]
+pub(crate) struct NetScratch {
+    prov: Vec<u8>,
+    done: Vec<bool>,
+    cursor: Vec<i32>,
+    vis_id: Vec<MatId>,
+    fids: Vec<[MatId; 26]>,
+    nnbs: Vec<u8>,
+    intent: Vec<Option<Intent>>,
+    claim: Vec<u32>,
+}
+
+impl NetScratch {
+    /// Sizes every buffer to `n` cells and clears the step state (`prov`, `done`).
+    fn prepare(&mut self, n: usize) {
+        self.prov.clear();
+        self.prov.resize(n, 0);
+        self.done.clear();
+        self.done.resize(n, false);
+        self.cursor.resize(n, FRESH);
+        self.vis_id.resize(n, MatId::AIR);
+        self.fids.resize(n, [MatId::AIR; 26]);
+        self.nnbs.resize(n, 0);
+        self.intent.resize(n, None);
+        self.claim.resize(n, UNCLAIMED);
+    }
+}
+
+/// A clone starts with empty scratch: the buffers hold no state between steps.
+impl Clone for NetScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl fmt::Debug for NetScratch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NetScratch({} cells)", self.prov.len())
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Intent {
     row: u32,
@@ -648,15 +698,30 @@ impl ChemWorld {
         topo: &Topology,
         net: &ChemNet,
     ) -> Result<(u32, u32), StepError> {
+        let mut scratch = std::mem::take(&mut self.net_scratch);
+        scratch.prepare(self.cells.len());
+        let out = self.network_pass_in(topo, net, &mut scratch);
+        self.net_scratch = scratch;
+        out
+    }
+
+    fn network_pass_in(
+        &mut self,
+        topo: &Topology,
+        net: &ChemNet,
+        scratch: &mut NetScratch,
+    ) -> Result<(u32, u32), StepError> {
         let n = self.cells.len();
-        let mut prov = vec![0u8; n];
-        let mut done = vec![false; n];
-        let mut cursor = vec![FRESH; n];
-        let mut vis_id = vec![MatId::AIR; n];
-        let mut fids: Vec<[MatId; 26]> = vec![[MatId::AIR; 26]; n];
-        let mut nnbs = vec![0u8; n];
-        let mut intent: Vec<Option<Intent>> = vec![None; n];
-        let mut claim = vec![UNCLAIMED; n];
+        let NetScratch {
+            prov,
+            done,
+            cursor,
+            vis_id,
+            fids,
+            nnbs,
+            intent,
+            claim,
+        } = scratch;
         let mut cube = Vec::with_capacity(26);
         let reactive: [bool; 256] = std::array::from_fn(|m| net.is_reactive(MatId(m as u8)));
         let tick = self.tick;

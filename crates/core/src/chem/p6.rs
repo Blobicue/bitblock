@@ -814,6 +814,13 @@ pub(crate) struct Topology {
     /// Every cell in coreward scan order: `r2` ascending, then planet6's
     /// `(y, x, z)` (empty with no core).
     pub(crate) rsort: Vec<u32>,
+    /// The outward neighbour of `rsort[k]` at index `k`: the domain cell one
+    /// [`outward_step`](super::p6_rest::outward_step) from it away from the
+    /// core, or `NO_SLOT` at the core or where that step leaves the domain.
+    /// Static for the topology's life (the domain and the core are fixed), so
+    /// the outermost-first gas-rise and convection scans read it in scan
+    /// order instead of recomputing the step and probing the lookup per cell.
+    pub(crate) rsort_up: Vec<u32>,
 }
 
 pub(crate) const NB6: [(i64, i64, i64); 6] = [
@@ -843,6 +850,7 @@ impl Topology {
             ysort: Vec::new(),
             r2: Vec::new(),
             rsort: Vec::new(),
+            rsort_up: Vec::new(),
             space_faces: Vec::new(),
             core: None,
         };
@@ -938,6 +946,7 @@ impl Topology {
     pub(crate) fn radial_frame(&mut self, cells: &[Coord]) {
         self.r2.clear();
         self.rsort.clear();
+        self.rsort_up.clear();
         let Some(o) = self.core else { return };
         let o = cells[o as usize];
         self.r2 = cells
@@ -952,7 +961,30 @@ impl Topology {
             let c = cells[i as usize];
             (self.r2[i as usize], c.y, c.x, c.z)
         });
+        self.rsort_up = rs
+            .iter()
+            .map(|&i| {
+                let c = cells[i as usize];
+                let st = super::p6_rest::outward_step((c.x - o.x, c.y - o.y, c.z - o.z));
+                if st == (0, 0, 0) {
+                    return NO_SLOT;
+                }
+                self.offset(cells, i as usize, st)
+                    .map_or(NO_SLOT, |j| j as u32)
+            })
+            .collect();
         self.rsort = rs;
+    }
+
+    /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
+    /// neighbour `None` at the core or where the outward step leaves the domain.
+    #[inline]
+    pub(crate) fn rsort_outward_first(&self) -> impl Iterator<Item = (usize, Option<usize>)> + '_ {
+        self.rsort
+            .iter()
+            .zip(&self.rsort_up)
+            .rev()
+            .map(|(&i, &up)| (i as usize, (up != NO_SLOT).then_some(up as usize)))
     }
 
     pub(crate) fn offset(&self, cells: &[Coord], i: usize, d: (i64, i64, i64)) -> Option<usize> {
@@ -978,6 +1010,31 @@ impl Topology {
     /// The 6 face neighbours in planet6 order.
     #[inline]
     pub(crate) fn nb6(&self, cells: &[Coord], i: usize) -> [Option<usize>; 6] {
+        if let Lookup::Boxed { min, dim, slot } = &self.lookup {
+            // The same six `offset` lookups, with the box index built once. `cells[i]` lies in
+            // the box, so `r*` is in `0..dim` and no step below can overflow. A face step
+            // leaves the box exactly when `offset`'s range test fails (an absolute coordinate
+            // whose `checked_add` overflows is outside the box too).
+            let c = cells[i];
+            let (rx, ry, rz) = (c.x - min[0], c.y - min[1], c.z - min[2]);
+            let (sy, sx) = (dim[2], dim[1] * dim[2]);
+            let base = (rx * dim[1] + ry) * dim[2] + rz;
+            let at = |inside: bool, k: i64| {
+                if !inside {
+                    return None;
+                }
+                let s = slot[k as usize];
+                (s != NO_SLOT).then_some(s as usize)
+            };
+            return [
+                at(rx > 0, base - sx),
+                at(rx + 1 < dim[0], base + sx),
+                at(ry > 0, base - sy),
+                at(ry + 1 < dim[1], base + sy),
+                at(rz > 0, base - 1),
+                at(rz + 1 < dim[2], base + 1),
+            ];
+        }
         NB6.map(|d| self.offset(cells, i, d))
     }
 
@@ -1925,34 +1982,17 @@ impl ChemWorld {
         if self.params.gas_rise {
             // §5w: under Gravity::Core gas rises along the outward step,
             // outermost first (planet6's +y list otherwise)
-            let gc = self.grav_core(topo);
-            let len = if gc.is_some() {
-                topo.rsort.len()
+            // (the outward neighbours are precomputed in `Topology::rsort_up`)
+            let pairs: Box<dyn Iterator<Item = (usize, usize)>> = if self.grav_core(topo).is_some()
+            {
+                Box::new(
+                    topo.rsort_outward_first()
+                        .filter_map(|(i, up)| up.map(|up| (i, up))),
+                )
             } else {
-                topo.rise.len()
+                Box::new(topo.rise.iter().map(|&(i, up)| (i as usize, up as usize)))
             };
-            for k in 0..len {
-                let (i, up) = match gc {
-                    Some(o) => {
-                        let i = topo.rsort[len - 1 - k] as usize;
-                        if !self.is_rising(self.mat[i]) {
-                            continue;
-                        }
-                        let p = self.cells[i];
-                        let st = super::p6_rest::outward_step((p.x - o.x, p.y - o.y, p.z - o.z));
-                        let Some(up) = (st != (0, 0, 0))
-                            .then(|| topo.offset(&self.cells, i, st))
-                            .flatten()
-                        else {
-                            continue;
-                        };
-                        (i, up)
-                    }
-                    None => {
-                        let (i, up) = topo.rise[k];
-                        (i as usize, up as usize)
-                    }
-                };
+            for (i, up) in pairs {
                 if !self.is_rising(self.mat[i]) {
                     continue;
                 }
