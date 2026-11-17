@@ -704,7 +704,33 @@ impl ChemWorld {
 
     /// Number of non-air cells.
     pub fn material_count(&self) -> usize {
-        self.mat.iter().filter(|m| **m != MatId::AIR).count()
+        self.mat.len() - self.mat_histogram()[usize::from(MatId::AIR.0)] as usize
+    }
+
+    /// Every domain cell's material, in domain order (index `i` is `domain().nth(i)`).
+    pub fn mats(&self) -> &[MatId] {
+        &self.mat
+    }
+
+    /// Every domain cell's coordinate, in domain order.
+    pub fn cells(&self) -> &[Coord] {
+        &self.cells
+    }
+
+    /// Cells per material id (four interleaved counters, so repeated ids do not serialise).
+    fn mat_histogram(&self) -> [u64; 256] {
+        let mut part = [[0_u32; 256]; 4];
+        let mut quads = self.mat.chunks_exact(4);
+        for q in &mut quads {
+            part[0][usize::from(q[0].0)] += 1;
+            part[1][usize::from(q[1].0)] += 1;
+            part[2][usize::from(q[2].0)] += 1;
+            part[3][usize::from(q[3].0)] += 1;
+        }
+        for m in quads.remainder() {
+            part[0][usize::from(m.0)] += 1;
+        }
+        std::array::from_fn(|m| part.iter().map(|p| u64::from(p[m])).sum())
     }
 
     /// Number of domain cells (air included).
@@ -877,13 +903,16 @@ impl ChemWorld {
         let mut lanes = self.inv;
         lanes[0] += self.vapor * 4;
         lanes[1] += self.vapor * 2;
-        for m in &self.mat {
-            if *m == MatId::AIR {
+        // Per material, count x composition: the same i64 terms as a per-cell sum, regrouped
+        // (integer addition is exact and order-free).
+        for (id, &count) in self.mat_histogram().iter().enumerate() {
+            let m = MatId(id as u8);
+            if count == 0 || m == MatId::AIR {
                 continue;
             }
-            if let Some(c) = self.table.comp(*m) {
+            if let Some(c) = self.table.comp(m) {
                 for k in 0..NE {
-                    lanes[k] += c[k];
+                    lanes[k] += c[k] * count as i64;
                 }
             }
         }
@@ -903,10 +932,12 @@ impl ChemWorld {
     pub fn energy_total(&self) -> i64 {
         let mut e = self.space_q - self.input_q
             + self.vapor * i64::from(LATENT_PAIR - self.table.bind(MatId::WATER));
-        for (m, q) in self.mat.iter().zip(&self.q) {
-            e += i64::from(*q);
-            if *m != MatId::AIR {
-                e -= i64::from(self.table.bind(*m));
+        // The same i64 terms as a per-cell sum, regrouped: all heat, then BIND per material.
+        e += self.q.iter().map(|&q| i64::from(q)).sum::<i64>();
+        for (id, &count) in self.mat_histogram().iter().enumerate() {
+            let m = MatId(id as u8);
+            if count != 0 && m != MatId::AIR {
+                e -= i64::from(self.table.bind(m)) * count as i64;
             }
         }
         e
@@ -926,11 +957,12 @@ impl ChemWorld {
 
     /// Verifies the structural invariants, zero lane drift and zero energy drift.
     pub fn check_books(&self) -> Result<(), BooksError> {
+        let mut probe = self.world.probe();
         for (c, m) in self.cells.iter().zip(&self.mat) {
             if self.table.comp(*m).is_none() {
                 return Err(BooksError::BadMaterial(*c, *m));
             }
-            if *m != MatId::AIR && !self.world.is_on(*c) {
+            if *m != MatId::AIR && !probe.is_on(*c) {
                 return Err(BooksError::MaterialOnOffBit(*c));
             }
         }

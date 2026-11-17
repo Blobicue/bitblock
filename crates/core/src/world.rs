@@ -303,6 +303,15 @@ impl World {
             .is_some_and(|chunk| chunk.is_on(local_index))
     }
 
+    /// A reader for [`Self::is_on`] that keeps the last chunk it looked up, for scans whose
+    /// consecutive coordinates mostly share a chunk.
+    pub fn probe(&self) -> BitProbe<'_> {
+        BitProbe {
+            world: self,
+            last: None,
+        }
+    }
+
     /// Returns the 6-bit exposed-face mask for `coord` (`0` if `coord` is off).
     pub fn exposed_faces(&self, coord: Coord) -> u8 {
         let (chunk_coord, local_index) = split_coord(coord);
@@ -929,6 +938,31 @@ fn word_and_mask(index: usize) -> (usize, u64) {
         index / u64::BITS as usize,
         1_u64 << (index % u64::BITS as usize),
     )
+}
+
+/// [`World::is_on`] with the last chunk lookup kept (see [`World::probe`]).
+pub struct BitProbe<'a> {
+    world: &'a World,
+    last: Option<(ChunkCoord, Option<&'a [u64; CHUNK_WORDS]>)>,
+}
+
+impl BitProbe<'_> {
+    /// Exactly [`World::is_on`].
+    pub fn is_on(&mut self, coord: Coord) -> bool {
+        let (chunk_coord, local_index) = split_coord(coord);
+        let bits = match self.last {
+            Some((c, bits)) if c == chunk_coord => bits,
+            _ => {
+                let bits = self.world.chunks.get(&chunk_coord).map(|chunk| &chunk.bits);
+                self.last = Some((chunk_coord, bits));
+                bits
+            }
+        };
+        bits.is_some_and(|b| {
+            let (word, mask) = word_and_mask(local_index);
+            b[word] & mask != 0
+        })
+    }
 }
 
 fn split_coord(coord: Coord) -> (ChunkCoord, usize) {
