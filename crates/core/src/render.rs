@@ -1688,18 +1688,26 @@ pub fn bounds_aabb(bounds: Bounds) -> (Vec3, Vec3) {
 /// Least view depth, in world units, of every point of a chunk (and its neighbours) for
 /// the enclosed-bit cull. Far above rounding in `view_depth`, far below any useful view.
 const ENCLOSED_MIN_DEPTH: f64 = 1.0e-3;
-/// Least projected width, in pixels, of every bit near a chunk for the enclosed-bit cull: twice
-/// `SMALL_BIT_EXTENT`, so the single-pixel path is out of reach with a wide margin.
-const ENCLOSED_MIN_SPAN: f64 = 2.0 * SMALL_BIT_EXTENT;
+/// Least projected width, in pixels, of every bit near a chunk for the enclosed-bit cull.
+///
+/// The single-pixel path needs *both* raster extents `<= SMALL_BIT_EXTENT`. Every bit in the
+/// grown box has both extents above `focal / d` (see [`enclosed_cull_applies`]), so any bound
+/// `>= SMALL_BIT_EXTENT` keeps it out. The extra quarter pixel absorbs rounding in the
+/// projection. (§5z used `2 * SMALL_BIT_EXTENT`; §6a tightened it so the cull also runs on the
+/// 1.25-2 px bits of r64-r96 planets.)
+const ENCLOSED_MIN_SPAN: f64 = 1.25 * SMALL_BIT_EXTENT;
 
 /// Whether the enclosed-bit cull may run over a chunk with tight bounds `bounds`.
 ///
 /// Every bit of the chunk and its whole 3 x 3 x 3 neighbourhood lies in the chunk's cube box
 /// grown by one unit. If all eight corners of that box are at view depth above `ENCLOSED_MIN_DEPTH`, so
 /// is every vertex inside it (depth is affine), and every face of those bits is rasterised. A
-/// unit cube holds a ball of radius 1/2, whose image at distance `d` is at least `focal / d`
-/// pixels across in every direction; the box's farthest corner bounds `d`, so if
-/// `focal / d >= ENCLOSED_MIN_SPAN` no bit there takes the single-pixel path.
+/// unit cube holds a ball of radius 1/2. Its image under the pinhole projection (one focal
+/// length for both axes) is an ellipse with minor semi-axis `focal * (1/2) / sqrt(D^2 - 1/4)`,
+/// where `D` is the camera-to-centre distance. That is more than `focal / (2 D)`, so the
+/// cube's raster box is more than `focal / D` pixels wide and tall. The box's farthest corner
+/// bounds `D` from above, so if `focal / d >= ENCLOSED_MIN_SPAN` (`d` = that corner's distance),
+/// no bit there takes the single-pixel path.
 fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
     let (min, max) = bounds_aabb(bounds);
     let (min, max) = (min - Vec3::splat(1.0), max + Vec3::splat(1.0));
@@ -3466,6 +3474,89 @@ mod tests {
         assert!(
             culled > 100_000,
             "the enclosed-bit cull left out only {culled} bits, so this fixture no longer exercises it"
+        );
+    }
+
+    /// §6a tightened `ENCLOSED_MIN_SPAN` from 2 px to 1.25 px. Here every camera sees each
+    /// world at 1.3-1.9 px per bit at its centre, so nearly every culled bit comes from the
+    /// tightened band. Frames must still match the reference and
+    /// uncut traversals bit for bit, and the end-of-frame check confirms every culled bit is
+    /// rasterised (not single-pixel) and writes nothing.
+    #[test]
+    fn enclosed_bit_cull_is_exact_on_one_to_two_pixel_bits() {
+        let mut rng = Rng(0x0001_25b1_75ec_a1e5);
+        let ball = |radius: i64, offset: Coord| {
+            let mut world = World::new();
+            for x in -radius..=radius {
+                for y in -radius..=radius {
+                    for z in -radius..=radius {
+                        if x * x + y * y + z * z <= radius * radius {
+                            world.set_on(Coord::new(x + offset.x, y + offset.y, z + offset.z));
+                        }
+                    }
+                }
+            }
+            world
+        };
+        let mut dense = World::new();
+        for x in -18..=18_i64 {
+            for y in -18..=18_i64 {
+                for z in -18..=18_i64 {
+                    if rng.range(0.0, 1.0) < 0.93 {
+                        dense.set_on(Coord::new(x + 40, y, z - 7));
+                    }
+                }
+            }
+        }
+        let worlds = [
+            ("ball r24", ball(24, Coord::new(0, 0, 0))),
+            ("ball r30 offset", ball(30, Coord::new(-21, 13, 5))),
+            ("dense 18", dense),
+        ];
+        let palette = [0x002f6fd6_u32, 0x00b04020, 0x00e8dcc0, 0x0040c040];
+        let tint = |c: Coord| Some(palette[(c.x + 2 * c.y + 3 * c.z).rem_euclid(4) as usize]);
+        let mut culled = 0_u64;
+        for (name, world) in &worlds {
+            let (min, max) = bounds_aabb(world.bounds().unwrap());
+            let centre = (min + max) * 0.5;
+            for index in 0..8 {
+                let (width, height) = (150 + rng.below(80) as u32, 110 + rng.below(60) as u32);
+                let (yaw, pitch, fov) = (
+                    rng.range(-PI, PI),
+                    rng.range(-1.2, 1.2),
+                    rng.range(0.5, 1.6),
+                );
+                let focal = Camera::from_anchor(centre, 1.0, yaw, pitch, fov)
+                    .projection_for_viewport(width, height)
+                    .unwrap()
+                    .focal_length();
+                let scale = rng.range(1.3, 1.9);
+                let camera = Camera::from_anchor(centre, focal / scale, yaw, pitch, fov);
+                for tinted in [false, true] {
+                    let t: Option<BitTint<'_>> = if tinted { Some(&tint) } else { None };
+                    let mut reference = Renderer::new(width, height);
+                    reference.reference_traversal = true;
+                    reference.render_tinted(world, &camera, t);
+                    let mut uncut = Renderer::new(width, height);
+                    uncut.skip_enclosed_cull = true;
+                    uncut.render_tinted(world, &camera, t);
+                    let mut ordered = Renderer::new(width, height);
+                    ordered.verify_enclosed_bits = true;
+                    ordered.render_tinted(world, &camera, t);
+                    let at = format!("{name} camera {index} scale {scale:.2} tinted {tinted}");
+                    for other in [&reference, &uncut] {
+                        assert!(ordered.pixels == other.pixels, "{at} pixels");
+                        let bits = |v: &[f64]| v.iter().map(|d| d.to_bits()).collect::<Vec<_>>();
+                        assert_eq!(bits(&ordered.depth), bits(&other.depth), "{at} depth");
+                    }
+                    culled += ordered.enclosed_bits;
+                }
+            }
+        }
+        // ~1.41M bits culled at 1.25 px; the old 2 px bound culled ~15k (near-side chunks only).
+        assert!(
+            culled > 500_000,
+            "the 1.25-2 px band culled only {culled} bits, so this fixture no longer exercises it"
         );
     }
 
