@@ -15,7 +15,8 @@ use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::BEDROCK_COORD;
 use crate::world::{Coord, World, is_bedrock};
 
-const WORLD_SCHEMA: &[u8] = b"bitblock/world/sorted-i64-be/v1";
+const WORLD_SCHEMA: &[u8] = b"bitblock/world/chunk-merkle-sha256/v2";
+const WORLD_CHUNK_SCHEMA: &[u8] = b"bitblock/world/chunk-bits-i64-be/v2";
 /// Canonical schema identifier for a coordinate-history genesis receipt.
 pub const GENESIS_SCHEMA: &[u8] = b"bitblock/history/genesis/v1";
 const EVENT_SCHEMA: &[u8] = b"bitblock/history/event/v1";
@@ -816,57 +817,82 @@ impl fmt::Display for HistoryError {
 
 impl std::error::Error for HistoryError {}
 
-/// Computes the canonical `TagKind::World` content tag over all sorted occupied coordinates in `world`.
+/// Computes the v2 world fingerprint with cached SHA-256 chunk leaves and root.
+///
+/// Each leaf canonically hashes the chunk's signed coordinates (i64 big-endian) followed by
+/// its 64 occupancy words (u64 big-endian, index x + 16*(y + 16*z)). The root canonically
+/// hashes the u64 big-endian non-empty chunk count followed by sorted (coordinate, digest)
+/// pairs. Leaf and root schemas are distinct. This is a two-level Merkle commitment, not a
+/// linear XOR/sum accumulator: generic collision strength is SHA-256's ~128 bits, subject to
+/// SHA-256 collision resistance and the injective encodings. It is for deterministic tests and
+/// local replay, not an authenticated service or an upgrade of historical v1 receipts.
+///
+/// Unchanged world: O(1). After edits: O(changed chunks * 512 bytes + allocated chunks), with
+/// a sort of chunk keys at the root; no occupied-coordinate scan. Genesis computes all leaves
+/// once. No-op edits, clones, deferred octree upkeep and negative/extreme coordinates preserve
+/// exactly the same tag as a full recomputation from occupied coordinates.
 pub fn world_tag(world: &World) -> ContentTag {
-    // The same bytes as sorting `iter_on` (see `world_tag_before_preallocation`), streamed in
-    // order straight from the chunk bitsets: no coordinate vector, no sort. Encoded in blocks so
-    // the hasher sees long slices; `hash_canonical` checks the emitted length against
-    // `payload_len`.
-    const BLOCK: usize = 256;
-    let count = world.len();
-    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + count * 24;
-    hash_canonical(TagKind::World, WORLD_SCHEMA, payload_len as u64, |sink| {
-        let schema_len = u16::try_from(WORLD_SCHEMA.len()).expect("world schema exceeds u16");
-        sink(&schema_len.to_be_bytes());
-        sink(WORLD_SCHEMA);
-        sink(&(count as u64).to_be_bytes());
-        let mut block = [0_u8; 24 * BLOCK];
-        let mut filled = 0;
-        world.for_each_on_ordered(|coord| {
-            let encoded = &mut block[filled * 24..filled * 24 + 24];
-            encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
-            encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
-            encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
-            filled += 1;
-            if filled == BLOCK {
-                sink(&block);
-                filled = 0;
-            }
-        });
-        sink(&block[..filled * 24]);
-    })
-    .expect("canonical world length must match its encoder")
+    world.fingerprint(world_chunk_digest, world_root_tag)
 }
 
+fn encode_chunk_coord(coord: crate::world::ChunkCoord) -> [u8; 24] {
+    let mut encoded = [0; 24];
+    encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
+    encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
+    encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
+    encoded
+}
+
+fn world_chunk_digest(coord: crate::world::ChunkCoord, bits: &[u64; 64]) -> [u8; 32] {
+    hash_canonical(TagKind::World, WORLD_CHUNK_SCHEMA, 24 + 512, |sink| {
+        sink(&encode_chunk_coord(coord));
+        let mut bytes = [0_u8; 512];
+        for (word, encoded) in bits.iter().zip(bytes.chunks_exact_mut(8)) {
+            encoded.copy_from_slice(&word.to_be_bytes());
+        }
+        sink(&bytes);
+    })
+    .expect("fixed world chunk length")
+    .digest()
+}
+
+fn world_root_tag(leaves: &[(crate::world::ChunkCoord, [u8; 32])]) -> ContentTag {
+    hash_canonical(
+        TagKind::World,
+        WORLD_SCHEMA,
+        8 + 56 * leaves.len() as u64,
+        |sink| {
+            sink(&(leaves.len() as u64).to_be_bytes());
+            for &(coord, digest) in leaves {
+                sink(&encode_chunk_coord(coord));
+                sink(&digest);
+            }
+        },
+    )
+    .expect("world root length matches encoder")
+}
+
+/// Independent full rebuild from occupied coordinates, never consulting chunk/root caches.
 #[cfg(test)]
 fn world_tag_before_preallocation(world: &World) -> ContentTag {
-    let mut coords: Vec<_> = world.iter_on().collect();
-    coords.sort_unstable();
-    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + coords.len() * 24;
-    hash_canonical(TagKind::World, WORLD_SCHEMA, payload_len as u64, |sink| {
-        let schema_len = u16::try_from(WORLD_SCHEMA.len()).expect("world schema exceeds u16");
-        sink(&schema_len.to_be_bytes());
-        sink(WORLD_SCHEMA);
-        sink(&(coords.len() as u64).to_be_bytes());
-        for coord in coords {
-            let mut encoded = [0_u8; 24];
-            encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
-            encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
-            encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
-            sink(&encoded);
-        }
-    })
-    .expect("canonical world length must match its encoder")
+    use crate::world::ChunkCoord;
+    let mut chunks = std::collections::BTreeMap::<ChunkCoord, [u64; 64]>::new();
+    for coord in world.iter_on() {
+        let key = ChunkCoord {
+            x: coord.x.div_euclid(16),
+            y: coord.y.div_euclid(16),
+            z: coord.z.div_euclid(16),
+        };
+        let index = coord.x.rem_euclid(16) as usize
+            + 16 * (coord.y.rem_euclid(16) as usize + 16 * coord.z.rem_euclid(16) as usize);
+        chunks.entry(key).or_insert([0; 64])[index / 64] |= 1 << (index % 64);
+    }
+    world_root_tag(
+        &chunks
+            .into_iter()
+            .map(|(key, bits)| (key, world_chunk_digest(key, &bits)))
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn genesis_tag(genesis_world: ContentTag) -> ContentTag {
@@ -1029,6 +1055,60 @@ mod tests {
                 ..
             } => "already-off",
         }
+    }
+
+    #[test]
+    fn incremental_world_tag_matches_full_recompute_after_random_edits() {
+        let mut world = World::new();
+        let mut seed = 0x6e5e_ed12_89ab_cdef_u64;
+        for step in 0..2000 {
+            let mut next = || {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                seed
+            };
+            let coord = if step % 23 == 0 {
+                Coord::new(i64::MIN, 0, i64::MAX)
+            } else if step % 29 == 0 {
+                BEDROCK_COORD
+            } else {
+                Coord::new(
+                    (next() % 65) as i64 - 32,
+                    (next() % 65) as i64 - 32,
+                    (next() % 65) as i64 - 32,
+                )
+            };
+            // Prime root and chunk caches before each edit, including no-ops and removals.
+            let before = world_tag(&world);
+            if step % 7 == 0 {
+                world.defer_octree();
+            }
+            if step % 3 == 0 {
+                world.set_off(coord);
+            } else {
+                world.set_on(coord);
+            }
+            let after = world_tag(&world);
+            assert_eq!(after, world_tag_before_preallocation(&world), "step {step}");
+            let mut clone = world.clone();
+            clone.set_off(coord);
+            assert_eq!(world_tag(&clone), world_tag_before_preallocation(&clone));
+            assert_eq!(world_tag(&world), after);
+            if step % 7 == 0 {
+                world.flush_octree();
+            }
+            assert_eq!(world_tag(&world), after);
+            let _ = before;
+        }
+        // Removing the last bit of a non-bedrock chunk must remove its leaf.
+        let mut small = World::new();
+        let original = world_tag(&small);
+        let p = Coord::new(-33, 65, -100);
+        small.set_on(p);
+        assert_ne!(world_tag(&small), original);
+        small.set_off(p);
+        assert_eq!(world_tag(&small), original);
     }
 
     #[test]

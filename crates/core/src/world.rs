@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::OnceLock;
+
+use crate::protocol::ContentTag;
 
 /// Fast deterministic hasher for the chunk and octant maps (Fx-style multiply-rotate over the
 /// coordinate words). Their keys are small integer coordinates, not attacker-chosen strings, and
@@ -142,6 +145,9 @@ struct Chunk {
     bits: [u64; CHUNK_WORDS],
     count: u16,
     bounds: Bounds,
+    /// Leaf digest of this chunk for the incremental world fingerprint, computed on first use
+    /// and dropped by any bit change (see [`World::fingerprint`]).
+    digest: OnceLock<[u8; 32]>,
 }
 
 impl Chunk {
@@ -153,6 +159,7 @@ impl Chunk {
                 min: BEDROCK_COORD,
                 max: BEDROCK_COORD,
             },
+            digest: OnceLock::new(),
         }
     }
 
@@ -169,6 +176,7 @@ impl Chunk {
 
         let was_empty = self.count == 0;
         self.bits[word] |= mask;
+        self.digest = OnceLock::new();
         self.count += 1;
         if was_empty {
             self.bounds = Bounds {
@@ -194,6 +202,7 @@ impl Chunk {
         }
 
         self.bits[word] &= !mask;
+        self.digest = OnceLock::new();
         self.count -= 1;
         if self.count > 0 && bounds_touch(self.bounds, coord) {
             self.bounds = tight_bounds(chunk_coord, &self.bits);
@@ -240,6 +249,9 @@ pub struct World {
     /// Octree upkeep deferred by [`World::defer_octree`]: each changed chunk with the revision
     /// of its latest edit, plus whether the world bounds must be recomputed at the flush.
     deferred: Option<DeferredOctree>,
+    /// The world fingerprint of the current bits, computed on first use and dropped by any
+    /// change (see [`World::fingerprint`]).
+    fingerprint: OnceLock<ContentTag>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -264,6 +276,7 @@ impl World {
             len: 0,
             bounds: None,
             deferred: None,
+            fingerprint: OnceLock::new(),
         };
         let inserted = world.set_on(BEDROCK_COORD);
         debug_assert!(inserted);
@@ -393,6 +406,29 @@ impl World {
         mask
     }
 
+    /// The two-level fingerprint of the occupied bits: `root` over every non-empty chunk in
+    /// ascending [`ChunkCoord`] order with its `leaf` digest. Leaf digests are kept per chunk and
+    /// the root per world, each dropped when a bit under it changes, so after an edit only the
+    /// changed chunks are rehashed and the root rereads one digest per chunk. `leaf` and `root`
+    /// must be pure functions of their arguments (the canonical encoders in `history`), so a
+    /// cached value is the value a fresh computation would produce.
+    pub(crate) fn fingerprint(
+        &self,
+        leaf: impl Fn(ChunkCoord, &[u64; CHUNK_WORDS]) -> [u8; 32],
+        root: impl FnOnce(&[(ChunkCoord, [u8; 32])]) -> ContentTag,
+    ) -> ContentTag {
+        *self.fingerprint.get_or_init(|| {
+            let mut leaves: Vec<(ChunkCoord, [u8; 32])> = self
+                .chunks
+                .iter()
+                .filter(|(_, chunk)| chunk.count > 0)
+                .map(|(&key, chunk)| (key, *chunk.digest.get_or_init(|| leaf(key, &chunk.bits))))
+                .collect();
+            leaves.sort_unstable_by_key(|&(key, _)| key);
+            root(&leaves)
+        })
+    }
+
     /// Turns a coordinate on. Returns true only when the world changed.
     pub fn set_on(&mut self, coord: Coord) -> bool {
         let (chunk_coord, local_index) = split_coord(coord);
@@ -404,6 +440,7 @@ impl World {
 
         if changed {
             self.revision_counter += 1;
+            self.fingerprint = OnceLock::new();
             self.len += 1;
             self.extend_bounds(coord);
             self.octree_changed(chunk_coord);
@@ -430,6 +467,7 @@ impl World {
         let touched_bounds = changed && self.coord_touches_bounds(coord);
         if changed {
             self.revision_counter += 1;
+            self.fingerprint = OnceLock::new();
             self.len -= 1;
         }
         if chunk_is_empty {
