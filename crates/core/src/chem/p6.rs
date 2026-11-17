@@ -1211,7 +1211,9 @@ impl Topology {
     }
 
     /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
-    /// neighbour `None` at the core or where the outward step leaves the domain.
+    /// neighbour `None` at the core or where the outward step leaves the domain (the tests
+    /// check it against the offset lookups; the scans read `shell_up` directly).
+    #[cfg(test)]
     pub(crate) fn rsort_outward_first(&self) -> impl Iterator<Item = (usize, Option<usize>)> + '_ {
         self.rsort
             .iter()
@@ -2343,32 +2345,28 @@ impl ChemWorld {
             // §5w: under Gravity::Core gas rises along the outward step,
             // outermost first (planet6's +y list otherwise)
             // (the outward neighbours are precomputed in `Topology::shell_up`)
-            let pairs: Box<dyn Iterator<Item = (usize, usize)>> = if self.grav_core(topo).is_some()
-            {
-                Box::new(
-                    topo.rsort_outward_first()
-                        .filter_map(|(i, up)| up.map(|up| (i, up))),
-                )
+            if self.grav_core(topo).is_some() {
+                self.gas_rise_outward(topo, rep);
             } else {
-                Box::new(topo.rise.iter().map(|&(i, up)| (i as usize, up as usize)))
-            };
-            for (i, up) in pairs {
-                if !self.is_rising(self.mat[i]) {
-                    continue;
-                }
-                let above = self.mat[up];
-                if above != MatId::AIR && above != MatId::WATER {
-                    continue;
-                }
-                // §5u: displaced WATER may not be pushed down into a radial-only shell cell
-                if above == MatId::WATER && self.shell_blocked(i) {
-                    continue;
-                }
-                if self.roll(topo, 0xb0b81e, i) < 500 {
-                    let below = self.mat[i];
-                    self.set_mat(up, below);
-                    self.set_mat(i, above);
-                    rep.rose += 1;
+                for &(i, up) in &topo.rise {
+                    let (i, up) = (i as usize, up as usize);
+                    if !self.is_rising(self.mat[i]) {
+                        continue;
+                    }
+                    let above = self.mat[up];
+                    if above != MatId::AIR && above != MatId::WATER {
+                        continue;
+                    }
+                    // §5u: displaced WATER may not be pushed down into a radial-only shell cell
+                    if above == MatId::WATER && self.shell_blocked(i) {
+                        continue;
+                    }
+                    if self.roll(topo, 0xb0b81e, i) < 500 {
+                        let below = self.mat[i];
+                        self.set_mat(up, below);
+                        self.set_mat(i, above);
+                        rep.rose += 1;
+                    }
                 }
             }
         }

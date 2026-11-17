@@ -35,6 +35,9 @@ pub(crate) struct ConvectScratch {
     smat: Vec<MatId>,
     sq: Vec<i32>,
     swaps: Vec<(u32, u32)>,
+    /// The tick whose outward gas rise left `smat` and `sq` gathered for that tick's
+    /// convection (the two passes run back to back, and the rise moves no heat).
+    gathered: Option<u64>,
 }
 
 /// A clone starts with empty scratch: the buffers hold no state between steps.
@@ -253,12 +256,9 @@ impl ChemWorld {
         // place.
         let n = topo.rsort.len();
         let mut sc = std::mem::take(&mut self.convect_scratch);
-        sc.smat.clear();
-        sc.sq.clear();
         sc.swaps.clear();
-        for &i in &topo.rsort {
-            sc.smat.push(self.mat[i as usize]);
-            sc.sq.push(self.q[i as usize]);
+        if sc.gathered.take() != Some(self.tick) {
+            self.gather_parcels(topo, &mut sc, true);
         }
         // A parcel that moved is read no more this tick: overwriting its gathered material
         // with a massless one skips it exactly like a moved flag (a massless parcel is
@@ -327,6 +327,72 @@ impl ChemWorld {
             self.q.swap(i, up);
             rep.convected += 1;
         }
+        self.convect_scratch = sc;
+    }
+
+    /// Gathers the domain's materials (and, with `heat`, its heat) into rsort order.
+    fn gather_parcels(&self, topo: &Topology, sc: &mut ConvectScratch, heat: bool) {
+        sc.smat.clear();
+        sc.sq.clear();
+        if heat {
+            for &i in &topo.rsort {
+                sc.smat.push(self.mat[i as usize]);
+                sc.sq.push(self.q[i as usize]);
+            }
+        } else {
+            sc.smat
+                .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
+        }
+    }
+
+    /// planet6's gas rise under Gravity::Core: outermost first over rsort, a rising cell
+    /// trades places with the AIR or WATER one outward step above it.
+    ///
+    /// The scan reads the materials gathered into rsort order (its outward neighbour is an
+    /// rsort position, [`Topology::shell_up`]) and makes each trade there as well, so every
+    /// test sees the materials an in-place scan would see; the trades are then replayed in
+    /// scan order, the same `set_mat` calls with the same values. The rise moves no heat, so
+    /// when this tick's convection follows, the gathered parcels are handed on to it.
+    pub(crate) fn gas_rise_outward(&mut self, topo: &Topology, rep: &mut StepReport) {
+        let mut sc = std::mem::take(&mut self.convect_scratch);
+        let hand_on = self.params.cycle == WaterCycle::Driven && self.params.convect;
+        self.gather_parcels(topo, &mut sc, hand_on);
+        sc.swaps.clear();
+        let rising: [bool; 256] = std::array::from_fn(|m| self.is_rising(MatId(m as u8)));
+        let key = self.roll_key(0xb0b81e);
+        for k in (0..topo.rsort.len()).rev() {
+            let below = sc.smat[k];
+            if !rising[below.0 as usize] {
+                continue;
+            }
+            let ku = topo.shell_up[k];
+            if ku == NO_SLOT {
+                continue;
+            }
+            let ku = ku as usize;
+            let above = sc.smat[ku];
+            if above != MatId::AIR && above != MatId::WATER {
+                continue;
+            }
+            let i = topo.rsort[k] as usize;
+            // §5u: displaced WATER may not be pushed down into a radial-only shell cell
+            if above == MatId::WATER && self.shell_blocked(i) {
+                continue;
+            }
+            if self.roll_keyed(topo, key, i) < 500 {
+                sc.smat[ku] = below;
+                sc.smat[k] = above;
+                sc.swaps.push((i as u32, topo.rsort[ku]));
+            }
+        }
+        for &(i, up) in &sc.swaps {
+            let (i, up) = (i as usize, up as usize);
+            let (below, above) = (self.mat[i], self.mat[up]);
+            self.set_mat(up, below);
+            self.set_mat(i, above);
+            rep.rose += 1;
+        }
+        sc.gathered = hand_on.then_some(self.tick);
         self.convect_scratch = sc;
     }
 
