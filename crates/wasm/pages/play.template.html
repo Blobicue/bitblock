@@ -52,7 +52,7 @@
     </optgroup>
   </select></label>
   <span id="playChemOpts" hidden title="Chem world: genesis spends the preset's element budget into a sphere; the planet6 tick (heat, phase, reactions, water cycle, surface laws) runs while you play. LMB digs (needs heat ≥ bond energy; atoms go to the bag), RMB places the last dug material paid from the bag.">seed <input id="playChemSeed" type="number" value="7" min="0" max="4294967295" style="width:6em">
-    radius <input id="playChemRadius" type="number" value="12" min="2" max="32" title="sphere radius 2–32 (§5y: was 20). Bigger = slower: in Chrome at Low, gas r20 ~50 fps, r24 ~30 fps, r32 ~6 fps (the CPU renderer is the cap)" style="width:3.5em">
+    radius <input id="playChemRadius" type="number" value="12" min="2" max="36" title="sphere radius 2–36 (§6a). Chrome Low r36: gas 45 raf / 15 presented, ocean 28 raf / 15 presented; r38 ocean falls below the 15 Hz chem cadence" style="width:3.5em">
     chem step every <input id="playChemEvery" type="number" value="4" min="0" max="600" style="width:3.5em"> ticks (0 = paused)
     <button type="button" id="playChemStep">step chem</button>
     <span id="playChemCutOpts" title="Cross-section (view only — atoms, books and the chem tick are untouched): hides the camera-facing octant (wedge) or the camera-facing half beyond an x / y / z plane through the core, so metal core, mantle, crust and ocean bands show on the cut faces. LMB/RMB act on what you see. Keys while playing: C cycles the mode, [ / ] move the plane.">· <b>cross-section</b> <select id="playChemCut">

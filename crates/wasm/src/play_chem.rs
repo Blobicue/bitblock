@@ -38,10 +38,11 @@ pub const CHEM_ATOM_CAP: i64 = 1 << 32;
 
 pub const CHEM_RADIUS_MIN: u32 = 2;
 pub const CHEM_RADIUS_DEFAULT: u32 = 12;
-/// Browser cap. §5y: after the exact network skip a native chem step is ~1.7–2.0 ms at r=20
-/// (33k cells) and ~7.6–8.4 ms classic / ~11.6 ms gas at r=32 (137k cells), so r=32 fits the
-/// 15 Hz chem cadence (was 20 when r=20 already cost ~5 ms).
-pub const CHEM_RADIUS_MAX: u32 = 32;
+/// Browser cap. §6a measured Chrome Low 960x540 after the exact large-radius chem and render
+/// passes: r36 gas presents 15.0 fps (45 raf) and r36 ocean 14.9 fps (27.9 raf); r38 ocean
+/// falls to 13.1 fps and r40 to 7.3 fps. Ocean pays the unchanged SHA-256 `world_tag` on edit
+/// ticks, so r36 is the largest radius that holds the 15 Hz chem cadence on both presets.
+pub const CHEM_RADIUS_MAX: u32 = 36;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
