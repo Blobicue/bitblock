@@ -4745,6 +4745,15 @@ fn topology_fast_paths_match_offset_lookups() {
             topo.radial_frame(cells);
             let o = cells[core];
             assert_eq!(topo.rsort_up.len(), topo.rsort.len());
+            assert_eq!(topo.shell_up.len(), topo.rsort.len());
+            for (k, &up) in topo.rsort_up.iter().enumerate() {
+                let ku = topo.shell_up[k];
+                if up == u32::MAX {
+                    assert_eq!(ku, u32::MAX);
+                } else {
+                    assert_eq!(topo.rsort[ku as usize], up, "domain {d} rsort {k}");
+                }
+            }
             for (k, &i) in topo.rsort.iter().enumerate() {
                 let c = cells[i as usize];
                 let st = (

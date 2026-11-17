@@ -815,7 +815,7 @@ enum Lookup {
     Hashed(HashMap<Coord, u32>),
 }
 
-const NO_SLOT: u32 = u32::MAX;
+pub(crate) const NO_SLOT: u32 = u32::MAX;
 
 /// A salt's precomputed part of a [`ChemWorld::roll`] (see [`ChemWorld::roll_key`]).
 #[derive(Clone, Copy, Debug)]
@@ -989,6 +989,9 @@ pub(crate) struct Topology {
     /// the outermost-first gas-rise and convection scans read it in scan
     /// order instead of recomputing the step and probing the lookup per cell.
     pub(crate) rsort_up: Vec<u32>,
+    /// `rsort_up` as rsort positions: the position `k'` with `rsort[k'] == rsort_up[k]`, or
+    /// `NO_SLOT`. Lets a scan over parcels gathered into rsort order stay in that order.
+    pub(crate) shell_up: Vec<u32>,
     /// [`wide_roll_cell`] of `rsort[k]` at index `k` under one wide-roll key (the first key
     /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
     /// every tick, read one sequential word per cell instead of the cell's coordinate.
@@ -1025,6 +1028,7 @@ impl Topology {
             r2: Vec::new(),
             rsort: Vec::new(),
             rsort_up: Vec::new(),
+            shell_up: Vec::new(),
             rsort_roll: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
             space_faces: Vec::new(),
@@ -1123,6 +1127,7 @@ impl Topology {
         self.r2.clear();
         self.rsort.clear();
         self.rsort_up.clear();
+        self.shell_up.clear();
         let Some(o) = self.core else { return };
         let o = cells[o as usize];
         self.r2 = cells
@@ -1147,6 +1152,21 @@ impl Topology {
                 }
                 self.offset(cells, i as usize, st)
                     .map_or(NO_SLOT, |j| j as u32)
+            })
+            .collect();
+        let mut rank = vec![NO_SLOT; cells.len()];
+        for (k, &i) in rs.iter().enumerate() {
+            rank[i as usize] = k as u32;
+        }
+        self.shell_up = self
+            .rsort_up
+            .iter()
+            .map(|&up| {
+                if up == NO_SLOT {
+                    NO_SLOT
+                } else {
+                    rank[up as usize]
+                }
             })
             .collect();
         self.rsort = rs;

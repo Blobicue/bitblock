@@ -20,7 +20,9 @@
 //! is y ascending, then x, then z over the whole domain (on planet6's grid
 //! that is exactly its `for y, for x, for z` with the MASK test).
 
-use super::p6::{NB6, RollKey, StepReport, Topology, WaterCycle, wide_roll, wide_roll_finish};
+use super::p6::{
+    NB6, NO_SLOT, RollKey, StepReport, Topology, WaterCycle, wide_roll, wide_roll_finish,
+};
 use super::vapor::{EvapTop, RainFall};
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
@@ -221,8 +223,16 @@ impl ChemWorld {
                 *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
             }
         }
-        let mut moved = vec![false; self.cells.len()];
-        // outermost first; the outward neighbour is precomputed (`Topology::rsort_up`)
+        // Outermost first over rsort, with the parcels gathered into rsort order so the scan
+        // and its outward neighbour (`Topology::shell_up`) read memory in sequence. A parcel
+        // moves at most once per tick, so every swap sees the gathered values, and replaying
+        // the swaps in scan order makes the same `set_mat` / heat-swap calls as swapping in
+        // place.
+        let n = topo.rsort.len();
+        let mut smat: Vec<MatId> = topo.rsort.iter().map(|&i| self.mat[i as usize]).collect();
+        let mut sq: Vec<i32> = topo.rsort.iter().map(|&i| self.q[i as usize]).collect();
+        let mut moved = vec![false; n];
+        let mut swaps: Vec<(u32, u32)> = Vec::new();
         let convect_key = self.roll_key(SALT_CONVECT);
         // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
         // in rsort order (the same roll, read sequentially).
@@ -230,20 +240,22 @@ impl ChemWorld {
             RollKey::Wide(key) => topo.rsort_roll_cells(key, &self.cells),
             RollKey::Lattice(_) => None,
         };
-        for (k, (i, up)) in topo.rsort_outward_first().enumerate() {
-            let mb = mass[self.mat[i].0 as usize];
-            if mb == 0 || moved[i] {
+        for k in (0..n).rev() {
+            let mb = mass[smat[k].0 as usize];
+            if mb == 0 || moved[k] {
                 continue;
             }
-            let Some(up) = up else {
-                continue;
-            };
-            let ma = mass[self.mat[up].0 as usize];
-            if ma == 0 || moved[up] {
+            let ku = topo.shell_up[k];
+            if ku == NO_SLOT {
                 continue;
             }
-            let tb = i64::from(self.q[i]) + CONVECT_T0;
-            let ta = i64::from(self.q[up]) + CONVECT_T0;
+            let ku = ku as usize;
+            let ma = mass[smat[ku].0 as usize];
+            if ma == 0 || moved[ku] {
+                continue;
+            }
+            let tb = i64::from(sq[k]) + CONVECT_T0;
+            let ta = i64::from(sq[ku]) + CONVECT_T0;
             if tb <= 0 || ta <= 0 {
                 continue;
             }
@@ -252,19 +264,24 @@ impl ChemWorld {
                 continue;
             }
             let roll = match roll_cells {
-                // `rsort_outward_first` walks rsort backwards
-                Some(cells) => wide_roll_finish(cells[cells.len() - 1 - k], self.tick) % 1000,
-                None => self.roll_keyed(topo, convect_key, i),
+                Some(cells) => wide_roll_finish(cells[k], self.tick) % 1000,
+                None => self.roll_keyed(topo, convect_key, topo.rsort[k] as usize),
             };
             if roll >= CONVECT_ODDS {
                 continue;
             }
+            smat.swap(k, ku);
+            sq.swap(k, ku);
+            moved[k] = true;
+            moved[ku] = true;
+            swaps.push((topo.rsort[k], topo.rsort[ku]));
+        }
+        for (i, up) in swaps {
+            let (i, up) = (i as usize, up as usize);
             let (m_b, m_a) = (self.mat[i], self.mat[up]);
             self.set_mat(i, m_a);
             self.set_mat(up, m_b);
             self.q.swap(i, up);
-            moved[i] = true;
-            moved[up] = true;
             rep.convected += 1;
         }
     }
