@@ -181,6 +181,15 @@ pub struct World {
     revision_counter: u64,
     len: usize,
     bounds: Option<Bounds>,
+    /// Octree upkeep deferred by [`World::defer_octree`]: each changed chunk with the revision
+    /// of its latest edit, plus whether the world bounds must be recomputed at the flush.
+    deferred: Option<DeferredOctree>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct DeferredOctree {
+    chunks: Vec<(ChunkCoord, u64)>,
+    bounds_stale: bool,
 }
 
 impl Default for World {
@@ -198,6 +207,7 @@ impl World {
             revision_counter: 0,
             len: 0,
             bounds: None,
+            deferred: None,
         };
         let inserted = world.set_on(BEDROCK_COORD);
         debug_assert!(inserted);
@@ -340,7 +350,7 @@ impl World {
             self.revision_counter += 1;
             self.len += 1;
             self.extend_bounds(coord);
-            self.update_octree_ancestors(chunk_coord);
+            self.octree_changed(chunk_coord);
         }
         changed
     }
@@ -370,6 +380,13 @@ impl World {
             self.chunks.remove(&chunk_coord);
         }
         if changed {
+            if let Some(deferred) = &mut self.deferred {
+                // The world bounds are rebuilt from the octree roots, which are stale until the
+                // flush; recompute them there (they are a function of the final bits alone).
+                deferred.bounds_stale |= touched_bounds;
+                self.octree_changed(chunk_coord);
+                return changed;
+            }
             self.update_octree_ancestors(chunk_coord);
             self.bounds = if self.len == 0 {
                 None
@@ -418,6 +435,10 @@ impl World {
 
     /// Exact inclusive bounds of the on coordinates.
     pub fn bounds(&self) -> Option<Bounds> {
+        assert!(
+            !self.deferred.as_ref().is_some_and(|d| d.bounds_stale),
+            "World::bounds read while deferred octree upkeep has stale bounds; flush_octree first"
+        );
         self.bounds
     }
 
@@ -541,6 +562,7 @@ impl World {
 
     /// Returns the summary for an active octant at depth `1..=OCTREE_MAX_DEPTH`.
     pub fn octant_summary(&self, coord: OctantCoord) -> Option<OctantSummary> {
+        self.assert_octree_current();
         if coord.depth == 0 || coord.depth > OCTREE_MAX_DEPTH {
             return None;
         }
@@ -549,72 +571,155 @@ impl World {
 
     /// Iterates over all active macro-octant roots at `OCTREE_MAX_DEPTH`.
     pub fn root_octants(&self) -> impl Iterator<Item = (OctantCoord, OctantSummary)> + '_ {
+        self.assert_octree_current();
         self.octree[(OCTREE_MAX_DEPTH - 1) as usize]
             .iter()
             .map(|(coord, summary)| (*coord, *summary))
     }
 
+    /// Starts deferring octree upkeep. Until [`Self::flush_octree`], every bit, count, chunk
+    /// bound and `len` stays current (so `is_on`, chunk reads and ordered iteration are exact),
+    /// but the octree pyramid and, after a boundary deletion, the world bounds are rebuilt only
+    /// at the flush; reading either before then panics. Nested calls are a no-op.
+    ///
+    /// The flush leaves the world exactly as the same edits applied one by one would: every
+    /// octant summary and the world bounds are functions of the final bits alone, and the
+    /// revision an eager update stamps on an octant is that of the last edit beneath it, which
+    /// is the largest pending revision beneath it.
+    pub fn defer_octree(&mut self) {
+        if self.deferred.is_none() {
+            self.deferred = Some(DeferredOctree::default());
+        }
+    }
+
+    /// Applies the octree upkeep deferred since [`Self::defer_octree`] (see there) and resumes
+    /// eager upkeep. Each changed chunk and each of its ancestors is recomputed once.
+    pub fn flush_octree(&mut self) {
+        let Some(DeferredOctree {
+            chunks: mut level,
+            bounds_stale,
+        }) = self.deferred.take()
+        else {
+            return;
+        };
+        for depth in 1..=OCTREE_MAX_DEPTH {
+            // `level` holds depth - 1 coordinates (chunks at depth 1); map them to parents.
+            for entry in &mut level {
+                entry.0 = ChunkCoord::new(
+                    entry.0.x.div_euclid(2),
+                    entry.0.y.div_euclid(2),
+                    entry.0.z.div_euclid(2),
+                );
+            }
+            level.sort_unstable();
+            level.dedup_by(|later, kept| {
+                if later.0 == kept.0 {
+                    kept.1 = kept.1.max(later.1);
+                    true
+                } else {
+                    false
+                }
+            });
+            for &(parent, revision) in &level {
+                self.update_octant(depth, parent, revision);
+            }
+        }
+        if bounds_stale {
+            self.bounds = if self.len == 0 {
+                None
+            } else {
+                self.recompute_bounds()
+            };
+        }
+    }
+
+    fn assert_octree_current(&self) {
+        assert!(
+            self.deferred.is_none(),
+            "World octree read while its upkeep is deferred; flush_octree first"
+        );
+    }
+
+    fn octree_changed(&mut self, chunk_coord: ChunkCoord) {
+        let revision = self.revision_counter;
+        match &mut self.deferred {
+            Some(deferred) => match deferred.chunks.last_mut() {
+                Some(last) if last.0 == chunk_coord => last.1 = revision,
+                _ => deferred.chunks.push((chunk_coord, revision)),
+            },
+            None => self.update_octree_ancestors(chunk_coord),
+        }
+    }
+
     fn update_octree_ancestors(&mut self, chunk_coord: ChunkCoord) {
         for depth in 1..=OCTREE_MAX_DEPTH {
             let divisor = 1_i64 << depth;
-            let px = chunk_coord.x.div_euclid(divisor);
-            let py = chunk_coord.y.div_euclid(divisor);
-            let pz = chunk_coord.z.div_euclid(divisor);
-            let parent = OctantCoord {
-                depth,
-                x: px,
-                y: py,
-                z: pz,
+            let parent = ChunkCoord::new(
+                chunk_coord.x.div_euclid(divisor),
+                chunk_coord.y.div_euclid(divisor),
+                chunk_coord.z.div_euclid(divisor),
+            );
+            self.update_octant(depth, parent, self.revision_counter);
+        }
+    }
+
+    /// Recomputes the depth-`depth` octant at `at` from its eight children, stamping `revision`.
+    fn update_octant(&mut self, depth: u8, at: ChunkCoord, revision: u64) {
+        let (px, py, pz) = (at.x, at.y, at.z);
+        let parent = OctantCoord {
+            depth,
+            x: px,
+            y: py,
+            z: pz,
+        };
+
+        let mut occupied_bits = 0_usize;
+        let mut child_mask = 0_u8;
+        let mut combined_bounds: Option<Bounds> = None;
+
+        for child_idx in 0..8_u8 {
+            let cx = px * 2 + i64::from((child_idx >> 2) & 1);
+            let cy = py * 2 + i64::from((child_idx >> 1) & 1);
+            let cz = pz * 2 + i64::from(child_idx & 1);
+
+            let child_info = if depth == 1 {
+                self.chunks
+                    .get(&ChunkCoord::new(cx, cy, cz))
+                    .map(|chunk| (usize::from(chunk.count), chunk.bounds))
+            } else {
+                let child_coord = OctantCoord {
+                    depth: depth - 1,
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                };
+                self.octree[(depth - 2) as usize]
+                    .get(&child_coord)
+                    .map(|summary| (summary.occupied_bits, summary.bounds))
             };
 
-            let mut occupied_bits = 0_usize;
-            let mut child_mask = 0_u8;
-            let mut combined_bounds: Option<Bounds> = None;
-
-            for child_idx in 0..8_u8 {
-                let cx = px * 2 + i64::from((child_idx >> 2) & 1);
-                let cy = py * 2 + i64::from((child_idx >> 1) & 1);
-                let cz = pz * 2 + i64::from(child_idx & 1);
-
-                let child_info = if depth == 1 {
-                    self.chunks
-                        .get(&ChunkCoord::new(cx, cy, cz))
-                        .map(|chunk| (usize::from(chunk.count), chunk.bounds))
-                } else {
-                    let child_coord = OctantCoord {
-                        depth: depth - 1,
-                        x: cx,
-                        y: cy,
-                        z: cz,
-                    };
-                    self.octree[(depth - 2) as usize]
-                        .get(&child_coord)
-                        .map(|summary| (summary.occupied_bits, summary.bounds))
-                };
-
-                if let Some((child_bits, child_bounds)) = child_info {
-                    occupied_bits += child_bits;
-                    child_mask |= 1_u8 << child_idx;
-                    combined_bounds = Some(match combined_bounds {
-                        Some(existing) => merge_bounds(existing, child_bounds),
-                        None => child_bounds,
-                    });
-                }
+            if let Some((child_bits, child_bounds)) = child_info {
+                occupied_bits += child_bits;
+                child_mask |= 1_u8 << child_idx;
+                combined_bounds = Some(match combined_bounds {
+                    Some(existing) => merge_bounds(existing, child_bounds),
+                    None => child_bounds,
+                });
             }
+        }
 
-            if let Some(bounds) = combined_bounds {
-                self.octree[(depth - 1) as usize].insert(
-                    parent,
-                    OctantSummary {
-                        occupied_bits,
-                        child_mask,
-                        bounds,
-                        revision: self.revision_counter,
-                    },
-                );
-            } else {
-                self.octree[(depth - 1) as usize].remove(&parent);
-            }
+        if let Some(bounds) = combined_bounds {
+            self.octree[(depth - 1) as usize].insert(
+                parent,
+                OctantSummary {
+                    occupied_bits,
+                    child_mask,
+                    bounds,
+                    revision,
+                },
+            );
+        } else {
+            self.octree[(depth - 1) as usize].remove(&parent);
         }
     }
 
@@ -1375,5 +1480,111 @@ mod tests {
         assert!(world.set_off(sibling_chunk_point));
         assert!(world.set_off(negative_macro_point));
         assert_bedrock_only(&world);
+    }
+
+    /// Every observable part of a world, in a canonical order: chunks (count, bounds, bits),
+    /// every octant summary with its revision, bounds, len and the revision counter.
+    #[allow(clippy::type_complexity)]
+    fn snapshot(
+        world: &World,
+    ) -> (
+        Vec<(ChunkCoord, u16, Bounds, [u64; CHUNK_WORDS])>,
+        Vec<Vec<(OctantCoord, OctantSummary)>>,
+        Option<Bounds>,
+        usize,
+        u64,
+    ) {
+        let mut chunks: Vec<_> = world
+            .chunks
+            .iter()
+            .map(|(c, k)| (*c, k.count, k.bounds, k.bits))
+            .collect();
+        chunks.sort_unstable_by_key(|e| e.0);
+        let octree = world
+            .octree
+            .iter()
+            .map(|level| {
+                let mut v: Vec<_> = level.iter().map(|(c, s)| (*c, *s)).collect();
+                v.sort_unstable_by_key(|e| e.0);
+                v
+            })
+            .collect();
+        (
+            chunks,
+            octree,
+            world.bounds(),
+            world.len(),
+            world.revision_counter,
+        )
+    }
+
+    #[test]
+    fn deferred_octree_flush_matches_eager_upkeep_exactly() {
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let far = i64::MAX - 40;
+        for round in 0..48_u64 {
+            let mut eager = World::new();
+            let mut deferred = World::new();
+            let mut touched = Vec::new();
+            // Small rounds stay inside a few chunks (heavy boundary deletion, chunks emptying
+            // and refilling); later rounds spread over macro-octants and the i64 extremes.
+            let span = [6_i64, 20, 70, 300][(round % 4) as usize];
+            for batch in 0..6 {
+                deferred.defer_octree();
+                if batch % 2 == 1 {
+                    deferred.defer_octree(); // nesting is a no-op
+                }
+                for _ in 0..(next() % 400) {
+                    let r = next();
+                    let pick = |shift: u32| ((r >> shift) % (2 * span as u64 + 1)) as i64 - span;
+                    let mut c = Coord::new(pick(0), pick(16), pick(32));
+                    if round % 8 == 7 && r % 5 == 0 {
+                        c = Coord::new(far + c.x.abs() % 40, -far - c.y.abs() % 40, c.z);
+                    }
+                    let op = r >> 60;
+                    touched.push(c);
+                    let (a, b) = match op {
+                        0..=6 => (eager.set_on(c), deferred.set_on(c)),
+                        7..=13 => (eager.set_off(c), deferred.set_off(c)),
+                        _ => (eager.toggle(c), deferred.toggle(c)),
+                    };
+                    assert_eq!(a, b);
+                    assert_eq!(eager.is_on(c), deferred.is_on(c));
+                    assert_eq!(eager.len(), deferred.len());
+                }
+                if batch % 3 == 2 {
+                    // Clear most of what was ever touched: extreme planes empty, so the
+                    // world bounds must shrink at the flush.
+                    for &c in &touched {
+                        if next() % 10 != 0 {
+                            assert_eq!(eager.set_off(c), deferred.set_off(c));
+                        }
+                    }
+                }
+                deferred.flush_octree();
+                deferred.flush_octree(); // a second flush is a no-op
+                assert_eq!(
+                    snapshot(&eager),
+                    snapshot(&deferred),
+                    "round {round} batch {batch}"
+                );
+                assert_internal_invariants(&deferred);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "deferred")]
+    fn deferred_octree_reads_fail_closed() {
+        let mut world = World::new();
+        world.defer_octree();
+        world.set_on(Coord::new(3, 4, 5));
+        let _ = world.root_octants().count();
     }
 }
