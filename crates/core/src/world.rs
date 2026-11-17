@@ -151,25 +151,36 @@ impl Chunk {
         self.bits[word] &= !mask;
         self.count -= 1;
         if self.count > 0 && bounds_touch(self.bounds, coord) {
-            let mut coords = World::iter_chunk_coords(chunk_coord, &self.bits);
-            if let Some(first) = coords.next() {
-                let mut bounds = Bounds {
-                    min: first,
-                    max: first,
-                };
-                for remaining in coords {
-                    bounds = merge_bounds(
-                        bounds,
-                        Bounds {
-                            min: remaining,
-                            max: remaining,
-                        },
-                    );
-                }
-                self.bounds = bounds;
-            }
+            self.bounds = tight_bounds(chunk_coord, &self.bits);
         }
         true
+    }
+}
+
+/// The tight inclusive bounds of a non-empty chunk bitset, read off whole words instead of
+/// visiting every on bit. Index `x + 16 (y + 16 z)` puts word `w` at `z = w / 4` holding the
+/// four 16-bit `x` rows `y = 4 (w % 4) + 0..4`, so `z` comes from the first and last non-zero
+/// word, `y` from the lowest and highest non-zero row of each word, and `x` from the union of
+/// all rows.
+fn tight_bounds(chunk: ChunkCoord, bits: &[u64; CHUNK_WORDS]) -> Bounds {
+    let first = bits.iter().position(|&w| w != 0).expect("non-empty chunk");
+    let last = bits.iter().rposition(|&w| w != 0).expect("non-empty chunk");
+    let (mut y_lo, mut y_hi, mut rows) = (usize::MAX, 0, 0_u64);
+    for (w, &word) in bits.iter().enumerate().take(last + 1).skip(first) {
+        if word == 0 {
+            continue;
+        }
+        let base = 4 * (w % 4);
+        y_lo = y_lo.min(base + word.trailing_zeros() as usize / 16);
+        y_hi = y_hi.max(base + (63 - word.leading_zeros() as usize) / 16);
+        rows |= word | word >> 16 | word >> 32 | word >> 48;
+    }
+    let rows = rows & 0xffff;
+    let side = CHUNK_SIDE as usize;
+    let at = |x: usize, y: usize, z: usize| join_coord(chunk, x + side * (y + side * z));
+    Bounds {
+        min: at(rows.trailing_zeros() as usize, y_lo, first / 4),
+        max: at(15 - (rows.leading_zeros() as usize - 48), y_hi, last / 4),
     }
 }
 
@@ -1586,5 +1597,42 @@ mod tests {
         world.defer_octree();
         world.set_on(Coord::new(3, 4, 5));
         let _ = world.root_octants().count();
+    }
+
+    #[test]
+    fn word_level_chunk_bounds_match_bit_iteration() {
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for round in 0..4000 {
+            let chunk = ChunkCoord::new(
+                (next() % 7) as i64 - 3,
+                if round % 2 == 0 {
+                    i64::MAX / CHUNK_SIDE
+                } else {
+                    -1
+                },
+                i64::MIN / CHUNK_SIDE,
+            );
+            let mut bits = [0_u64; CHUNK_WORDS];
+            for _ in 0..1 + next() % [1, 3, 40, 900][round % 4] {
+                let index = (next() % (CHUNK_WORDS as u64 * 64)) as usize;
+                bits[index / 64] |= 1 << (index % 64);
+            }
+            let mut coords = World::iter_chunk_coords(chunk, &bits);
+            let first = coords.next().unwrap();
+            let expected = coords.fold(
+                Bounds {
+                    min: first,
+                    max: first,
+                },
+                |b, c| merge_bounds(b, Bounds { min: c, max: c }),
+            );
+            assert_eq!(tight_bounds(chunk, &bits), expected, "round {round}");
+        }
     }
 }
