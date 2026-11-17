@@ -2670,6 +2670,124 @@ Every run ends `books=ok energy_drift=0 error=none`.
 
 **Build.** wasm (661ffea, ABI 17) md5 `d145f12e7f606ac8b97f4d95fa535b34` (1,416,268 B), play.html `3f485d24a255fc858779c48b3c4a9296`, bitblock-lab.html `96fc0f2d897ee3cf28482975e2c50962`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged); www commit 7d47569. Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean and gas r44 `books=ok energy_drift=0 error=none`; ABI 17; only the favicon returns 404. Screenshots: `/workspace/render_scale/s6d/ship/{ship_2_r44,ship_4_r44,ship_2_r48}.png` and the sweep shots `/workspace/render_scale/s6d/chrome/{ref,new,rep}_*.png`. Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
 
+## 6e. Incremental world fingerprint (v2 `world_tag`); play cap 44 → 54 (2026-11-17, branch `chem/render-scale-2026-11`; Owen: "Switch the world fingerprint to incremental, hashes can change once")
+
+Owen allowed world hash values to change once. Everything else had to stay exact: game frame pixels, books, energy drift, chem state, and native/wasm parity. Before = 712d5a3 (§6d). After = 64bf815 (fingerprint and rebaseline), f571790 (index), 19291c6 (cap), 8a7d03b (www).
+
+**1. Construction (`bitblock/world/chunk-merkle-sha256/v2`).** This is a two-level SHA-256 Merkle commitment over the occupied set, keyed by the world's own 16³ chunks:
+- **Leaf.** `hash_canonical(World, "bitblock/world/chunk-bits-i64-be/v2", 536 B)` over the chunk coordinate (3 × i64 BE) and its 64 occupancy words (u64 BE, bit index `x + 16(y + 16z)`).
+- **Root.** `hash_canonical(World, "bitblock/world/chunk-merkle-sha256/v2")` over the u64 BE count of non-empty chunks, then each non-empty chunk in ascending `(cx, cy, cz)` order as its coordinate (24 B) and leaf digest (32 B).
+- **Canonical.** The tag is a pure function of the occupied coordinate set. Only non-empty chunks appear, coordinates are unique and sorted, both lengths are fixed per entry, and leaf and root use distinct schemas under the content-tag domain/length framing.
+- **Caching.** Each chunk caches its leaf in a `OnceLock<[u8; 32]>` and the world caches its root in a `OnceLock<ContentTag>`. `Chunk::set_on/set_off` drop the leaf and `World::set_on/set_off` drop the root, but only when a bit actually changes. These are the only bit writers, so a cached value is always the value a fresh computation would give. Clones carry the caches, which is valid because the bits are copied with them.
+- **Cost.** An unchanged world costs O(1). After edits it costs (changed chunks × one 536 B leaf) plus (one sort and one 56 B entry per allocated chunk). It never scans occupied coordinates; v1 hashed 24 B per occupied bit.
+- **Strength.** Collision resistance reduces to SHA-256's, about 2^128 generic, through the injective framing. This is a Merkle tree, not an additive or XOR multiset hash, so there is no generalized-birthday weakness. It is the same assumption the content tags already make. It is not a signature or an authenticated-storage scheme, and historical v1 receipts are not re-verifiable under v2.
+- **Determinism.** It uses only integer encodings and SHA-256, with no float, platform hasher order or pointer input. Rust ubuntu and windows CI, wasm (node and Chrome) and the two stdlib Python reimplementations (`tools/semantic_batch_vectors.py`, `tools/headless_replay_policy_vectors.py`) all agree.
+
+**2. Tests.**
+- `incremental_world_tag_matches_full_recompute_after_random_edits` runs 2,000 random on/off edits over 65³ around the origin, including no-ops, bedrock, `i64` extreme coordinates and deferred octree upkeep. After every edit it checks the cached tag against `world_tag_full_recompute`, which rebuilds the chunks from `iter_on()` with no cache, and checks a clone after a further edit. A separate case checks that emptying a chunk restores the original root.
+- The existing insertion-order and dense random-world oracle tests now compare against the full recompute.
+- Genesis (`History::new` over a fresh world), ocean upkeep and chem mirrors, and edits all go through the same `World::set_*`. The parity, play and big harnesses below exercise all three.
+
+**3. Rebaseline (once).** Every pinned value derived from a world tag moved: world, genesis/receipt/event heads, evidence, the headless-replay genesis policy, frame-input tags that bind a world, and composite frames whose sidebar prints `WORLD ROOT` / `COORD HEAD` as text.
+- Game frames are unchanged: every `game=` / gallery / demo frame tag and every render KAT kept its value. The 960×540 sidebar parity check hashes game pixels and sidebar pixels separately on 80 frames. Game pixels are identical 80/80. The sidebar differs 80/80, only through the printed tags.
+- The default play frame `5l3xbpo3…` → `nx4b62u5…` (and symbol `araktfzr…` → `djgq2svf…`) for that reason, and only that reason.
+- p6 goldens pin chem fingerprints, not world tags, so they pass unchanged (3/3, no rebaseline needed).
+- The optimization v3 "rejected v2" negative control now pins its own frozen v1-world fields, so its historical tags (`yclrpejh…`, `wxmct7gi…`) stay put.
+- `docs/cost-1-measurement-v1.json` is a dated v1 measurement and is left as recorded.
+
+| old (v1) | new (v2) |
+|---|---|
+| `#bb.policy.sha256.eibnyx3zeig5myau5wyq5y4qsmp2pp6chclpeapjaiz5xojz7zcq` | `#bb.policy.sha256.sgtpi7mozzgscwu7naqghepq37pko4lrz4ka63kdhw5qmty3fnrq` |
+| `#bb.receipt.sha256.6feyyp2ttluxp572qxdyfdzmwkgp4i3ad72usqvm32p3lc6ozo5a` | `#bb.receipt.sha256.os4co4gqd6jed4ttwmbkjozviqpb6ly2xtczuuizobzcc7fcsplq` |
+| `#bb.receipt.sha256.46s52obcil7tsnn2cqngubtvosl4cy7ytkjpzls524y2ebefd4eq` | `#bb.receipt.sha256.ujbrxwlq6ovljlrmaqd2bpohvh2ezw2ypeytz6byh245erwgs3nq` |
+| `#bb.world.sha256.lqpba5lvzmm5bnj2jfoa7dgtdnm2adv5eborbtvaquic36mtno2q` | `#bb.world.sha256.pmbj7za55emc3mjtjvom5domewgjf2rr7qezwpxaxyoohzs5e6gq` |
+| `#bb.frame.sha256.5l3xbpo3zj2x65tqjinaliydy7qchd2kw6gsy3yi4gm6awvjrraa` | `#bb.frame.sha256.nx4b62u5ozefqrb5m5snhkhcvdtcwsljdgsvzhez5fppgv27unaa` |
+| `#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq` | `#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba` |
+| `#bb.frame.sha256.araktfzrajbhvmmwo7zgywisgcrbmaewtdxhdl3ebrbaw5syncka` | `#bb.frame.sha256.djgq2svfynmviug6ngvgsxcga7nhpjlj5qxkeu3wf5isqz5hg4yq` |
+| `#bb.world.sha256.bnf5w54xbhb7qlshwchoac67vkzn5mt4vzrhvnoakys72slg43ua` | `#bb.world.sha256.xm3rmpec5pzo5h4dfxu2oa35lest5fizzdigrj3xlfbg3caarflq` |
+| `#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq` | `#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa` |
+| `#bb.world.sha256.xplotpuf27scr7i25aabwijert6g6444ntkh2qqvtjpu3qme7cka` | `#bb.world.sha256.65vcqxuxnd4gzf3msg37cr5tuj6u2ytkugbjmnle3ywta5wssqeq` |
+| `#bb.receipt.sha256.ezntrdbxgwqvwwond4rm7oarrzqkktoowuky6uicisbk5l7tybia` | `#bb.receipt.sha256.efbx3lzitz3hfpjp23urtnsqqqwmnfkjzsx7dtfisqcnh2n5mklq` |
+| `#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq` | `#bb.world.sha256.4qebqribdfmkf53kxbzjwfe3vrfhmyddlv2emjmbhexvwtxpt2gq` |
+| `#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca` | `#bb.world.sha256.lpqtwwq5lo3dbyid2hrdvmdr3r6wfy5t5xnhd3grwcis5bhu4nra` |
+| `#bb.receipt.sha256.qyjgyjutxxfupm6rfp33zm6wrr2i5g5z4z7vhyqqweob6krqf7ra` | `#bb.receipt.sha256.5cobj7m7rn4g3oysvktolank4g3io3iucunk5743plnrbxak6vua` |
+| `#bb.receipt.sha256.vbevj4vyjwjk3ume6vkxkigm7vioe6ox65c4ws6r6ly5jqwg73ga` | `#bb.receipt.sha256.62we6nvy5lmpwoxfyl2fgiw3nyrfvpa6u5obnptd7er5nksizqtq` |
+| `#bb.world.sha256.w6wlo572rc3u5v4mvsopcl7gxvkfxl6ntni7rk6qgr2ja5bdblzq` | `#bb.world.sha256.iy5q2bopf2llw4samvn5ifsbup3adpxu2lupt2vjp4qqqgx4s6iq` |
+| `#bb.frame.sha256.fscl5apfua6xbkp7776f2rqtka2nknilpxcfyoznzjcxhw675woq` | `#bb.frame.sha256.eqvpp636o2wtilipgbginnmnpa3zyohkoyh7eab65c27pk7a5zoq` |
+| `#bb.receipt.sha256.psal6njm4ndyap7wclfv55gnlxwwou4eq2rvfotazrxzragceusa` | `#bb.receipt.sha256.d7qzlret5ep47ewjymdfylx3lelasfvp5s6tmt72qjjh34bqwmea` |
+| `#bb.receipt.sha256.fakwjpoid3eqaztgfahmlepmfawgi7yffed345eovjysn2izuf5a` | `#bb.receipt.sha256.iozg4ylucv37oyjoceamtnvaqwdavpfk366dlo44kividto2q32a` |
+| `#bb.receipt.sha256.v4rixvqu53nkaraowd4z26s2r55fv4rnz6qnq2dbtjaccxiljffq` | `#bb.receipt.sha256.6bkjjhs2qprx3dfgkuamon5dei5v6gqcnqk6k7ugsjxnx4nc4l4a` |
+| `#bb.receipt.sha256.kdqtkvuuljhq4xjmkft44bk46rd4rqnty2h6sbozjwg2o4nnjgmq` | `#bb.receipt.sha256.rmfiy36x6e4kisgi5n6qemrpa3o6lpnbtrfqmmkohzlrixezmbaq` |
+| `#bb.receipt.sha256.li2iopqyi652bk4hdt75ad356z5iqryugxmxkefhfroxvhtpetja` | `#bb.receipt.sha256.rong4dap7mwzs2zztqioqo56ix2rmnjheutosombipvzgnt7dgiq` |
+| `#bb.receipt.sha256.amsihpcd2ydi5243jdzuoa2g3a5tbh726k5zru6dfmyargeul6ja` | `#bb.receipt.sha256.exlpidihytljgbcr2vbgazsmifshk52eveiet5bfa32fzv6hfq6a` |
+| `#bb.receipt.sha256.dzihycw2ucnfjaulmme6pqlgv3n4u65gn4bqi36xvzkmxymzn22q` | `#bb.receipt.sha256.suix4q6f7pj7qakempurczmewpjzq6hruzblpcueyezmiqwephha` |
+| `#bb.event.sha256.znebuddob7z4u2vwyqe7bwhclvyeqtgya7252fm5qq7hewauh2kq` | `#bb.event.sha256.7juld2z7wmvaol3xbf2kdlniwzy4tcbr7gfy5yojwaofqkmgws3a` |
+| `#bb.event.sha256.6kcbq6sgg7zr5nymes5da5ksm4kt2y6fpytmfwlbs3xmn4zdsx5q` | `#bb.event.sha256.qk4stjl5xesq72glgtz7thj4lk4s4zsbb6fp7oljjsp45xfylmtq` |
+| `#bb.event.sha256.h7rmaq3zvlig2btqavazt37nhrk7el2pwulowcvhzmzbm245i6ua` | `#bb.event.sha256.qhwms7spp3gkyjy5534zvkknwlwzbcwjoizszruhokslatavip5q` |
+| `#bb.event.sha256.zr3ehfiz5xxheosxvxydb27m4vpfibfbpjkg7cicuob6tsf46cja` | `#bb.event.sha256.c2aidqhefgmovroufymmonnh2yzk77dgg7z55xiw4cag54euht2q` |
+| `#bb.event.sha256.gibrybl5w6zs3bq73t3e3qg6qjrhifcf2ce6xhnxyttsnukxvwma` | `#bb.event.sha256.j7h56ji37pgsj3s672a532cdm3eb3vu6zstx6pqehpwx36wbobwa` |
+| `#bb.receipt.sha256.mragjur2xbgilfa66fdcrn33bklxh36s7xpem5lik466yfk3jgca` | `#bb.receipt.sha256.hezcoouaqcsgagnn2nsnrxgopeizt3tuzpgvddlhexupbo2jz4ka` |
+| `#bb.world.sha256.5ar4um5zfetdzaeb34e4c4m6a5oevi5u3fo4id36pm3oye6atvpq` | `#bb.world.sha256.7wmhw54fbbgtuuf3hrgx6hdfqzeppt4excfkbh5yjef6iuavw3ga` |
+| `#bb.world.sha256.sfnrtxhwwyni22q2b4xbw34gxhkhxtkbdofsrkfiaoq7qonlohda` | `#bb.world.sha256.7hwue53b53xdgouajkonocanl2j76nuecnavh5lhxyneykow2a5a` |
+| `#bb.receipt.sha256.jj6zjbfciew3ep5o5erslaedi64s7ly2nyq6ksmal5wwfojnscta` | `#bb.receipt.sha256.7irgt5dkmlj3hasbl7s47arg6mf5g3yz6gq2chdhkfnnvbxto7aa` |
+| `#bb.receipt.sha256.kbcaytlz5pwi7nz4dk6esnpgsdfdmow4azrya7rxdtyn4yg3qkcq` | `#bb.receipt.sha256.gdquf5jw6wpi3qzim3cp2b3qmq2m6qloxy7qcbgthpvcrrlzqwpq` |
+
+(The default play world is `lqpba5lv…` → `pmbj7za5…`. The lab page known answers, the Python vectors, `tools/bbselftest.json` counts (+1 schema, protocol +2 dependents) and PROTOCOL.md were updated with the same mapping.)
+
+**4. Exactness evidence.**
+- Parity vs 712d5a3 with only world tags masked: chem (242 lines) and play (180) are byte-identical. On big (80), only the sidebar-bearing composite frames differ, with game pixels identical as above.
+- Native == wasm on 7 cases (oc/gas r12–r44, ash r24: world, frame, books, drift).
+- `books=ok energy_drift=0` everywhere.
+- Every world tag differs from v1 in every line, as expected.
+
+**5. world_tag time (native release, ms; cold = fresh world, after step = first tag after a chem step, repeat = unchanged).**
+
+| case | v1 per tag | v2 cold | v2 after step | v2 repeat |
+|---|---|---|---|---|
+| ocean r44 | 5.28 | 0.13 | 0.053 | 0.000 |
+| ocean r48 | 6.80 | 0.13 | 0.059 | 0.000 |
+| ocean r56 | 10.86 | 0.18 | 0.098 | 0.000 |
+| ocean r64 | 16.10 | 0.25 | 0.131 | 0.000 |
+| ocean r96 | 54.4 | 0.75 | 0.346 | 0.000 |
+| gas r44 / r96 | 5.30 / 53.9 | 0.10 / 0.73 | 0 (no bit change) | 0 |
+
+Ocean changes occupancy on every chem tick (12/12) and gas on none (0/12). Native has SHA-NI. In wasm (software SHA-256) the v1 tag dominated the ocean step, as the Chrome table shows.
+
+**6. Chrome (headless, Low 960×540, chem every 4 ticks; raf / presented fps, step ms; same session, v1 study build vs v2 study build).**
+
+| case | before (712d5a3) | after |
+|---|---|---|
+| ocean r42 | 20.2 / 15.3, 48.7 | 45.1 / 15.1, 11.9 |
+| ocean r44 | 12.0 / 11.4, 81.7 | 44.4 / 15.0, 12.5 |
+| ocean r46 | 12.1, 77.0 | 33.3 / 15.7, 21.4 |
+| ocean r48 | 8.4, 110.5 | 36.1–36.8 / 14.97 (2 runs), 17.5–19.1 |
+| ocean r52 | 5.5, 165 | 26–36 / 15.0–15.2 (4 runs), 20–30 |
+| **ocean r54** | — | **19–27 / 15.0–15.07 (4 runs), 30–44** |
+| ocean r56 | 4.7, 198 | 12.0, 73.5 |
+| ocean r64 | 3.40, 269 | 7.37, 112 |
+| ocean r96 | 0.70, 1345 | 1.20, 770 |
+| gas r42 | 48.8 / 15.0, 10.0 | 42.4 / 15.2, 13.7 |
+| gas r44 | 43.2 / 14.8, 13.1 | 42.5 / 15.0, 13.5 |
+| gas r48 | 35.3 / 14.3, 19.8 | 35.6–37.4 / 14.97–15.27 (2 runs), 16.7–19.2 |
+| gas r52 | 24.7 / 15.2, 34.8 | 24–31 / 14.5–15.1 (4 runs), 25–38 |
+| **gas r54** | — | **20–23 / 14.93–15.17 (4 runs), 36–43** |
+| gas r56 | 12.2, 72.1 | 14.3, 61.2 |
+| gas r64 | 5.73, 151 | 6.00, 141 |
+| gas r96 | 1.00, 930 | 1.00, 887 |
+
+Every run ends `books=ok energy_drift=0 error=none`. Ocean r44 step falls from 81.7 to 12.5 ms. Gas never changes occupancy, so v1 hashed nothing on its ticks either, and it is unchanged within noise.
+
+**7. Cap: `CHEM_RADIUS_MAX` 44 → 54 (19291c6).** At r54 both presets hold about 15 presented fps on 3 study runs plus 1 shipped run each: ocean 15.00–15.07 and gas 14.93–15.17, at 52–57 ms per presented frame. r56 falls to 12.0 (ocean) and 14.3 (gas). The slider (`max="54"`), `playNum(…, 2, 54)` and the Rust clamp match, and an r60 request clamps to 54 on :8765.
+
+**8. Next wall.** At r54 the ocean step is chem (convect/heat/combine) plus render. Past r56 both presets are bounded by the chem passes §6d named (convect gather, heat, combine2), not by hashing. The world tag is now about 0.1 ms native even at r96.
+
+**Build.** wasm (8a7d03b, ABI 17) md5 `75007f8ee124e0ec04b94e063ba680ea` (1,424,935 B), play.html `c5524cd8ef3c60d613b091179b6ff57a`, bitblock-lab.html `ccb2e9a74e3f41a38ece6f6a0042a68e`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). Served at 127.0.0.1:8765 and self-playtested:
+- Default play `world=pmbj7za5… frame=nx4b62u5…`.
+- Ocean and gas `books=ok energy_drift=0 error=none`, ABI 17. The lab page's load-time match flags are identical to the 712d5a3 page, and its only errors are favicon 404s.
+- Screenshots: `/workspace/render_scale/s6e/ship/{ship_2_r54,ship_4_r54,ship_2_r60,smoke_gas_r12_8765}.png` and the sweep shots `/workspace/render_scale/s6e/chrome/{ref,new,rep}_*.png`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
