@@ -488,14 +488,29 @@ pub enum WaterCycle {
 /// Wide deterministic roll for the driven mode: a splitmix64 chain over the
 /// seed/salt, the full cell coordinate and the full 64-bit time key.
 pub fn wide_roll(s: u32, c: Coord, t: u64) -> u32 {
-    #[inline]
-    fn mix(mut z: u64) -> u64 {
-        z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    }
-    let mut h = mix(u64::from(s) ^ 0x5bd1_e995);
+    wide_roll_keyed(wide_roll_key(s), c, t)
+}
+
+#[inline]
+fn wide_mix(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
+/// The first link of [`wide_roll`]'s chain, which depends on the seed/salt alone: a scan
+/// that rolls many cells under one salt computes it once.
+#[inline]
+pub(crate) fn wide_roll_key(s: u32) -> u64 {
+    wide_mix(u64::from(s) ^ 0x5bd1_e995)
+}
+
+/// [`wide_roll`] from its precomputed [`wide_roll_key`].
+#[inline]
+pub(crate) fn wide_roll_keyed(key: u64, c: Coord, t: u64) -> u32 {
+    let mix = wide_mix;
+    let mut h = key;
     h = mix(h ^ c.x as u64);
     h = mix(h ^ c.y as u64);
     h = mix(h ^ c.z as u64);
@@ -790,6 +805,13 @@ enum Lookup {
 }
 
 const NO_SLOT: u32 = u32::MAX;
+
+/// A salt's precomputed part of a [`ChemWorld::roll`] (see [`ChemWorld::roll_key`]).
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum RollKey {
+    Lattice(u32),
+    Wide(u64),
+}
 
 /// Cached domain topology (rebuilt when the domain changes).
 #[derive(Debug)]
@@ -1129,6 +1151,24 @@ impl ChemWorld {
     #[inline]
     pub(crate) fn roll(&self, topo: &Topology, salt: u32, i: usize) -> u32 {
         self.roll_at(topo, salt, i, self.tick)
+    }
+
+    /// [`Self::roll`] for a scan that rolls many cells under one salt: the salt's part of the
+    /// roll is computed once by [`Self::roll_key`].
+    #[inline]
+    pub(crate) fn roll_keyed(&self, topo: &Topology, key: RollKey, i: usize) -> u32 {
+        match key {
+            RollKey::Lattice(s) => lattice(s, topo.keys[i], self.tick as u32) % 1000,
+            RollKey::Wide(k) => wide_roll_keyed(k, self.cells[i], self.tick) % 1000,
+        }
+    }
+
+    /// The per-salt part of [`Self::roll`], for [`Self::roll_keyed`].
+    pub(crate) fn roll_key(&self, salt: u32) -> RollKey {
+        match self.params.cycle {
+            WaterCycle::Classic => RollKey::Lattice(self.params.seed ^ salt),
+            WaterCycle::Driven => RollKey::Wide(wide_roll_key(self.params.seed ^ salt)),
+        }
     }
 
     /// A roll in `0..1000` on an explicit time key (evaporation uses

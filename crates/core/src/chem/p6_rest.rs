@@ -223,6 +223,7 @@ impl ChemWorld {
         }
         let mut moved = vec![false; self.cells.len()];
         // outermost first; the outward neighbour is precomputed (`Topology::rsort_up`)
+        let convect_key = self.roll_key(SALT_CONVECT);
         for (i, up) in topo.rsort_outward_first() {
             let mb = mass[self.mat[i].0 as usize];
             if mb == 0 || moved[i] {
@@ -244,7 +245,7 @@ impl ChemWorld {
             if mb * ta * (1000 + CONVECT_MARGIN_PERMILLE) >= ma * tb * 1000 {
                 continue;
             }
-            if self.roll(topo, SALT_CONVECT, i) >= CONVECT_ODDS {
+            if self.roll_keyed(topo, convect_key, i) >= CONVECT_ODDS {
                 continue;
             }
             let (m_b, m_a) = (self.mat[i], self.mat[up]);

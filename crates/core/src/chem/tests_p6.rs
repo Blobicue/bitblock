@@ -4740,3 +4740,41 @@ fn topology_fast_paths_match_offset_lookups() {
         }
     }
 }
+
+#[test]
+fn keyed_wide_roll_matches_the_five_link_chain() {
+    use super::p6::{wide_roll, wide_roll_key, wide_roll_keyed};
+    // The original chain, written out: mix(s ^ K), then x, y, z and the time key.
+    fn reference(s: u32, c: Coord, t: u64) -> u32 {
+        fn mix(mut z: u64) -> u64 {
+            z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+        let mut h = mix(u64::from(s) ^ 0x5bd1_e995);
+        for v in [c.x as u64, c.y as u64, c.z as u64, t] {
+            h = mix(h ^ v);
+        }
+        (h >> 32) as u32
+    }
+    let mut seed = 0x77_1d_e5_u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    for _ in 0..20_000 {
+        let s = next() as u32;
+        let c = Coord::new(
+            next() as i64 >> (next() % 64),
+            next() as i64 % 300,
+            -(next() as i64 % 70),
+        );
+        let t = next() >> (next() % 64);
+        let want = reference(s, c, t);
+        assert_eq!(wide_roll(s, c, t), want);
+        assert_eq!(wide_roll_keyed(wide_roll_key(s), c, t), want);
+    }
+}
