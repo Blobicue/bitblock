@@ -1255,6 +1255,7 @@ impl ChemWorld {
         profiled
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn step_profiled_fine_laws(&mut self) -> Result<(StepReport, [u64; 18]), StepError> {
         use std::time::Instant;
         assert_eq!(self.params.cycle, WaterCycle::Driven);
@@ -1329,6 +1330,7 @@ impl ChemWorld {
         profiled
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn step_profiled_laws(&mut self) -> Result<(StepReport, [u64; 9]), StepError> {
         use std::time::Instant;
         let mut ns = [0u64; 9];
