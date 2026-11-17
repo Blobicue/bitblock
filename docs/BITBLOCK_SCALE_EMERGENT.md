@@ -2460,6 +2460,78 @@ Result: gas combine2 at r64 went 149 → 39 ms and heat 28 → 18 ms. The new te
 
 **Build.** wasm (bc8d9ec, ABI 17) md5 `50eb47dd86da1468a855f6653e651829` (1,397,658 B), play.html `f1df94b6e8f66e9c97c5f983c9308d0e`, bitblock-lab.html `4d49429b1a52cced634782c72d7e610d`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean r12, gas r20 and gas/ocean r36 all `books=ok energy_drift=0 error=none`; only the favicon returns 404. Screenshots: `/workspace/render_scale/scaling/ship_{4,2}_r36.png`, `{base,new2}_*.png`, `smoke_gas_r20_8765_bc8d9ec.png`. Commits: be4f403 (chem), 4226569 (render cull), bc8d9ec (cap), a837795 (www). Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy of this wave (Owen to decide); main untouched.
 
+## 6b. Exact speedups under the unchanged world_tag: edit upkeep, init/memory, heat and convect; play cap 36 → 40 (2026-11-16, branch `chem/render-scale-2026-11`; Owen: "keep world_tag hashing semantics as they are … do exact speedups first") — every hash and book unchanged
+
+The brief built on §6a's next walls (b), (c) and (e). world_tag hashing semantics stay as they are: no incremental tag and no hash changes. The brief asked for exact speedups to ocean edit upkeep, gas convect/heat, and memory/init at large radii, then a re-measure at r32–r96 and a cap raise only if both presets hold about 15 presented fps. Before = 6475973 (§6a). After = e01710c/5a8393a.
+
+**1. Changes (all exact; code commits are separate from docs).**
+- e2ee74a, 0d5647a, 0e71f88 — **deferred octree upkeep.** `World::defer_octree` / `flush_octree`: bits, counts, chunk bounds and `len` stay eager, while octree ancestors and stale world bounds are rebuilt once per changed chunk at the flush. Each level maps to parent octants, sorts, dedupes and keeps the max revision, which is the stamp eager upkeep would have left. While deferred, reading the octree or `bounds()` panics (fail closed). Used around a chem step (including the profiled steps), genesis, `from_cells` and the play mirror. Tests: `deferred_octree_flush_matches_eager_upkeep_exactly` (snapshot compare, including ~90% mass-delete batches; mutation-checked) and `deferred_octree_reads_fail_closed`.
+- 69684b9 — a chunk's tight bounds are recomputed from whole words when a boundary bit is deleted (`word_level_chunk_bounds_match_bit_iteration`).
+- 1415028 — **fast deterministic hasher** (Fx-style `CoordHasher`) for World's private chunk and octant maps. Iteration order cannot reach any output. `world_tag` and `for_each_on_ordered` sort chunks first. `recompute_bounds` is a commutative min/max merge. Render resolves equal-depth fragments by the lower RGB word, which render.rs documents as being so that unspecified world order cannot change a pixel. The other `iter_on` / `iter_chunks` callers sort, count or are tests. Native std `HashMap` order was already random per process while every golden held.
+- 02bafc7 — **genesis mint provenance as a bitset baseline plus exceptions.** History keeps the genesis mints as a `World` bitset, plus a canonical override map and a `circulating` counter instead of one map entry per bit. `active_mint` falls back to the baseline, and verify compares the overrides and the counter (`genesis_baseline_mints_match_the_full_mint_map`).
+- cac05a8 — play reuses the genesis world tag that History already computed (it used to hash the world a second time at 3 sites).
+- a7cf068 — `ChemWorld::index_of` uses the cached topology box (`Topology::locate`, an O(1) probe) instead of a binary search. It was hot because the render tint looks up every drawn bit's material. The test checks it against the binary search on and off the domain and at i64 extremes; mutation-checked.
+- 827981e — heat pass: the rim mask comes from the static `Topology::space_faces` (same masks, index order) instead of a per-step `surface` vector, and neighbours are probed only for cells that emit (`o > 0`).
+- 372b4e8 — convection rolls reuse the salt's precomputed first link of the `wide_roll` chain (`wide_roll_key` / `roll_keyed`). The test `keyed_wide_roll_matches_the_five_link_chain` runs 20k random inputs against the written-out chain.
+- e01710c — cap 36 → 40. 5a8393a — wasm-only dead-code gate on the profiled-step bodies.
+
+**2. SHA-256 itself (the ocean wall) could not be made faster exactly.** In V8, sha2 0.10.9's software path runs about 376 MB/s warm. A hand scalar compress managed 302 MB/s, and a SIMD message schedule took 33.9 ms vs sha2's 29.2 ms on 10.6 MB. The tag is already computed once per edit tick and was never recomputed when nothing changed. A byte-identical cache is not possible because each edit tick changes the bytes. So sha2 stays, and `sha256::compress256` is still about 26% of ocean wasm time at r40.
+
+**3. Native (`radius_study`, ms per round; step4 = tag + chem + mirror + render).**
+
+| case | genesis ms | session init ms | chem ms | mirror+commit ms | step4 ms | session RSS MB | RSS hwm MB |
+|---|---|---|---|---|---|---|---|
+| ocean r32 | 166 → 33 | 280 → 116 | 8.2 → 6.8 | 2.4 → 2.3 | 27.6 → 24.4 | 61 → 42 | 72 → 56 |
+| ocean r40 | 323 → 68 | 469 → 160 | 18.2 → 13.5 | 4.9 → 4.6 | 46.1 → 40.0 | 98 → 58 | 109 → 78 |
+| ocean r48 | 598 → 106 | 751 → 200 | 27.0 → 22.0 | 7.9 → 7.5 | 72.1 → 65.0 | 137 → 61 | 170 → 104 |
+| ocean r64 | 1366 → 284 | 1711 → 417 | 65.2 → 54.6 | 18.6 → 17.9 | 153.9 → 130.9 | 209 → 75 | 328 → 198 |
+| ocean r96 | 4671 → 1011 | 5870 → 1225 | 226 → 200 | 66.7 → 62.2 | 446 → 379 | 674 → 156 | 1093 → 573 |
+| gas r32 | 164 → 37 | 278 → 127 | 7.3 → 7.0 | 0.7 → 0.4 | 23.6 → 23.5 | 61 → 42 | 73 → 56 |
+| gas r40 | 326 → 64 | 451 → 148 | 14.2 → 14.2 | 1.2 → 0.7 | 38.1 → 37.9 | 98 → 58 | 110 → 77 |
+| gas r48 | 584 → 125 | 781 → 212 | 31.1 → 27.8 | 1.6 → 1.0 | 63.6 → 59.0 | 137 → 61 | 170 → 104 |
+| gas r64 | 1398 → 287 | 1744 → 420 | 74.5 → 70.2 | 2.7 → 1.8 | 141.6 → 121.7 | 209 → 75 | 327 → 196 |
+| gas r96 | 4830 → 1011 | 6061 → 1261 | 331 → 312 | 11.1 → 10.7 | 427 → 415 | 674 → 156 | 1090 → 568 |
+
+r36 is within noise in both runs: ocean step4 34.5 → 38.0 and gas 29.5 → 29.5 ms. Native SHA uses hardware SHA-NI, so the native world_tag (2–52 ms) is not the browser wall.
+
+**4. Chrome (headless, Low 960×540; raf / presented fps, step ms; init s).**
+
+| case | before (6475973) | after |
+|---|---|---|
+| ocean r32 | 44.7 / 15.1, 14.1; 0.36 | 45.0 / 15.0, 11.7; 0.14 |
+| ocean r36 | 28.1 / 15.0, 30.6; 0.50 | 31.3–41.8 / 15.0, 16.6–26.1; 0.19 |
+| ocean r38 | 12.4 / 12.4, 75.0; 0.56 | 29.5 / 15.1, 26.1; 0.22 |
+| **ocean r40** | 7.6 / 7.6, 122; 0.66 | **24.3–30.0 / 14.8–15.0, 28.8–38.7; 0.26** |
+| ocean r42 | — | 13.3 / 13.3, 71.1; 0.28 |
+| ocean r48 | 4.43, 208; 1.16 | 6.00, 156; 0.43 |
+| ocean r64 | 1.93, 471; 2.6 | 2.53, 372; 1.1 |
+| ocean r96 | 0.47, 2003; 10.6 | 0.60, 1620; 4.6 |
+| gas r32 | 58.8 / 15.0, 7.0; 0.34 | 60.0 / 15.0, 6.4; 0.14 |
+| gas r36 | 43.6 / 14.9, 12.3; 0.50 | 45.3–50.5 / 14.9–15.0, 9.9–11.3; 0.18 |
+| **gas r40** | 35.3 / 14.8, 19.7; 0.71 | **39.4–44.4 / 15.0, 14.0–17.2; 0.24–0.28** |
+| gas r44 | 17.1 / 15.3, 51.4; 0.91 | 30.0 / 15.0, 26.2; 0.32 |
+| gas r48 | 8.27, 106; 1.17 | 13.6, 67.9; 0.43 |
+| gas r64 | 3.17, 278; 2.8 | 3.57, 258; 1.1 |
+| gas r96 | 0.60, 1562; 10.8 | 0.70, 1420; 4.5 |
+
+Ranges are repeat runs (sweep, repeat, and the shipped :8765 build). Every run ends `books=ok energy_drift=0 error=none`. node/V8 step4 (wasm, warm 8, n 16) before → after: ocean r38 61.7 → 51.4, ocean r40 69.5 → 58.5, gas r40 45.5 → 41.7, gas r48 71.2 → 67.9 ms. Browser init is 2.5–2.7× faster at every radius.
+
+**5. Cap: `CHEM_RADIUS_MAX` 36 → 40 (e01710c).** Under the §6a rule, ocean is still the binding preset: it holds about 15 presented fps through r40 (14.8–15.0 across four runs, 58–61 ms per presented frame, the same margin r36 had at 6475973) and drops to 13.3 at r42. Gas holds 15 through r44. The slider (`max="40"`), `playNum(…, 2, 40)` and the Rust clamp match.
+
+**6. Exactness evidence.**
+- p6 goldens: `cargo test -p bitblock-core --release -- --ignored` passes (3/3).
+- The parity harness (`render_scale/parity6b`, cap lifted in a scratch copy) compares 6475973 against this wave byte for byte: chem (242 lines), play (180) and big (80) are all identical (md5 4e28b61e… / 654b17e5… / 706eb371…), re-run after every code commit.
+- A wasm parity script compares world, frame and books between the 6475973 and current wasm builds on 7 cases (ocean/gas r12–r48, default world): all SAME.
+- The default play hashes on :8765 are unchanged: world `lqpba5lv…`, frame `5l3xbpo3…`.
+
+**7. Next wall.**
+- (a) Ocean in the browser: software SHA-256 `world_tag` is about 26% of ocean wasm time at r40 and grows with N. An incremental or Merkle tag remains Owen's protocol call.
+- (b) Render, about 26% at r40: `raster_triangle_spans` plus `draw_bit_with`. Below 1 px the enclosed cull is not exact, so further gains there are LOD (non-exact, opt-in only).
+- (c) Gas past r44: convect swaps and heat/nb6 per-cell work are now cache-bound, not branch-bound. The next exact step would be a locality reorder (rsort-ordered gather) or a static neighbour table (+24 B/cell, which conflicts with memory).
+- (d) Genesis is still capped at r103 (`MAX_GENESIS_RADIUS`). r96 now runs in about 0.57 GB native hwm and 4.5 s browser init.
+
+**Build.** wasm (5a8393a, ABI 17) md5 `fd7b983cfbfe7cea19478689cc770ea0` (1,402,147 B), play.html `89f14f23ef48cda68dccf68d314b4d7c`, bitblock-lab.html `0935072f3f9069d0487241a6693df5db`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged); www commit 9b8fc5a. Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean r12, gas r20 and ocean/gas r36/r40 all `books=ok energy_drift=0 error=none`; the lab reports ABI 17; only the favicon returns 404. Screenshots: `/workspace/render_scale/s6b/ship/{ship_2_r40,ship_4_r40,ship_2_r36,ship_4_r36,smoke_gas_r20_8765_9b8fc5a}.png` and the sweep shots `/workspace/render_scale/s6b/chrome/{ref,cur}_*.png`. Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
