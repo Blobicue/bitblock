@@ -509,13 +509,24 @@ pub(crate) fn wide_roll_key(s: u32) -> u64 {
 /// [`wide_roll`] from its precomputed [`wide_roll_key`].
 #[inline]
 pub(crate) fn wide_roll_keyed(key: u64, c: Coord, t: u64) -> u32 {
+    wide_roll_finish(wide_roll_cell(key, c), t)
+}
+
+/// The links of [`wide_roll`]'s chain that depend on the salt and the cell alone: static for a
+/// cell under one salt, so a scan repeated every tick can keep them.
+#[inline]
+pub(crate) fn wide_roll_cell(key: u64, c: Coord) -> u64 {
     let mix = wide_mix;
     let mut h = key;
     h = mix(h ^ c.x as u64);
     h = mix(h ^ c.y as u64);
-    h = mix(h ^ c.z as u64);
-    h = mix(h ^ t);
-    (h >> 32) as u32
+    mix(h ^ c.z as u64)
+}
+
+/// The last link of [`wide_roll`]'s chain: the time key over [`wide_roll_cell`].
+#[inline]
+pub(crate) fn wide_roll_finish(cell: u64, t: u64) -> u32 {
+    (wide_mix(cell ^ t) >> 32) as u32
 }
 
 impl Default for EnergyInput {
@@ -843,6 +854,10 @@ pub(crate) struct Topology {
     /// the outermost-first gas-rise and convection scans read it in scan
     /// order instead of recomputing the step and probing the lookup per cell.
     pub(crate) rsort_up: Vec<u32>,
+    /// [`wide_roll_cell`] of `rsort[k]` at index `k` under one wide-roll key (the first key
+    /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
+    /// every tick, read one sequential word per cell instead of the cell's coordinate.
+    rsort_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
 }
 
 pub(crate) const NB6: [(i64, i64, i64); 6] = [
@@ -873,6 +888,7 @@ impl Topology {
             r2: Vec::new(),
             rsort: Vec::new(),
             rsort_up: Vec::new(),
+            rsort_roll: std::sync::OnceLock::new(),
             space_faces: Vec::new(),
             core: None,
         };
@@ -1001,6 +1017,20 @@ impl Topology {
     /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
     /// neighbour `None` at the core or where the outward step leaves the domain.
     #[inline]
+    /// [`wide_roll_cell`] of every rsort entry under `key`, in rsort order; `None` when the
+    /// cached table was built for another key (the caller then rolls per cell).
+    pub(crate) fn rsort_roll_cells(&self, key: u64, cells: &[Coord]) -> Option<&[u64]> {
+        let (k, table) = self.rsort_roll.get_or_init(|| {
+            let table = self
+                .rsort
+                .iter()
+                .map(|&i| wide_roll_cell(key, cells[i as usize]))
+                .collect();
+            (key, table)
+        });
+        (*k == key).then_some(table.as_slice())
+    }
+
     pub(crate) fn rsort_outward_first(&self) -> impl Iterator<Item = (usize, Option<usize>)> + '_ {
         self.rsort
             .iter()

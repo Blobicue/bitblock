@@ -4776,5 +4776,48 @@ fn keyed_wide_roll_matches_the_five_link_chain() {
         let want = reference(s, c, t);
         assert_eq!(wide_roll(s, c, t), want);
         assert_eq!(wide_roll_keyed(wide_roll_key(s), c, t), want);
+        let cell = super::p6::wide_roll_cell(wide_roll_key(s), c);
+        assert_eq!(super::p6::wide_roll_finish(cell, t), want);
     }
+}
+
+#[test]
+fn rsort_roll_table_matches_per_cell_rolls() {
+    use super::p6::{Topology, wide_roll, wide_roll_cell, wide_roll_key};
+    let mut cells = Vec::new();
+    for x in -6..=6_i64 {
+        for y in -6..=6_i64 {
+            for z in -6..=6_i64 {
+                if x * x + y * y + z * z <= 30 {
+                    cells.push(Coord::new(x, y, z));
+                }
+            }
+        }
+    }
+    cells.sort();
+    let mut topo = Topology::build(&cells);
+    topo.core = Some(cells.len() as u32 / 2);
+    topo.radial_frame(&cells);
+    let (s, other) = (0x51_7a17_u32, 0x0bad_u32);
+    let table = topo
+        .rsort_roll_cells(wide_roll_key(s), &cells)
+        .expect("first key builds the table")
+        .to_vec();
+    assert_eq!(table.len(), topo.rsort.len());
+    for (k, &i) in topo.rsort.iter().enumerate() {
+        let c = cells[i as usize];
+        assert_eq!(table[k], wide_roll_cell(wide_roll_key(s), c));
+        for t in [0, 1, 77, u64::MAX] {
+            assert_eq!(super::p6::wide_roll_finish(table[k], t), wide_roll(s, c, t));
+        }
+    }
+    // another key never reads the cached table
+    assert!(
+        topo.rsort_roll_cells(wide_roll_key(other), &cells)
+            .is_none()
+    );
+    assert_eq!(
+        topo.rsort_roll_cells(wide_roll_key(s), &cells).unwrap(),
+        &table[..]
+    );
 }

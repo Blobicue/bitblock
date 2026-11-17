@@ -20,7 +20,7 @@
 //! is y ascending, then x, then z over the whole domain (on planet6's grid
 //! that is exactly its `for y, for x, for z` with the MASK test).
 
-use super::p6::{NB6, StepReport, Topology, WaterCycle, wide_roll};
+use super::p6::{NB6, RollKey, StepReport, Topology, WaterCycle, wide_roll, wide_roll_finish};
 use super::vapor::{EvapTop, RainFall};
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
@@ -224,7 +224,13 @@ impl ChemWorld {
         let mut moved = vec![false; self.cells.len()];
         // outermost first; the outward neighbour is precomputed (`Topology::rsort_up`)
         let convect_key = self.roll_key(SALT_CONVECT);
-        for (i, up) in topo.rsort_outward_first() {
+        // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
+        // in rsort order (the same roll, read sequentially).
+        let roll_cells = match convect_key {
+            RollKey::Wide(key) => topo.rsort_roll_cells(key, &self.cells),
+            RollKey::Lattice(_) => None,
+        };
+        for (k, (i, up)) in topo.rsort_outward_first().enumerate() {
             let mb = mass[self.mat[i].0 as usize];
             if mb == 0 || moved[i] {
                 continue;
@@ -245,7 +251,12 @@ impl ChemWorld {
             if mb * ta * (1000 + CONVECT_MARGIN_PERMILLE) >= ma * tb * 1000 {
                 continue;
             }
-            if self.roll_keyed(topo, convect_key, i) >= CONVECT_ODDS {
+            let roll = match roll_cells {
+                // `rsort_outward_first` walks rsort backwards
+                Some(cells) => wide_roll_finish(cells[cells.len() - 1 - k], self.tick) % 1000,
+                None => self.roll_keyed(topo, convect_key, i),
+            };
+            if roll >= CONVECT_ODDS {
                 continue;
             }
             let (m_b, m_a) = (self.mat[i], self.mat[up]);
