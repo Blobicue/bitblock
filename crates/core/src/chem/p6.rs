@@ -1190,6 +1190,14 @@ impl ChemWorld {
     #[cfg(not(target_arch = "wasm32"))]
     #[doc(hidden)]
     pub fn step_profiled_fine(&mut self) -> Result<(StepReport, [u64; 18]), StepError> {
+        // Same deferred octree upkeep as [`Self::step`], so the stage times match it.
+        self.world.defer_octree();
+        let profiled = self.step_profiled_fine_laws();
+        self.world.flush_octree();
+        profiled
+    }
+
+    fn step_profiled_fine_laws(&mut self) -> Result<(StepReport, [u64; 18]), StepError> {
         use std::time::Instant;
         assert_eq!(self.params.cycle, WaterCycle::Driven);
         let mut ns = [0u64; 18];
@@ -1256,6 +1264,14 @@ impl ChemWorld {
     #[cfg(not(target_arch = "wasm32"))]
     #[doc(hidden)]
     pub fn step_profiled(&mut self) -> Result<(StepReport, [u64; 9]), StepError> {
+        // Same deferred octree upkeep as [`Self::step`], so the stage times match it.
+        self.world.defer_octree();
+        let profiled = self.step_profiled_laws();
+        self.world.flush_octree();
+        profiled
+    }
+
+    fn step_profiled_laws(&mut self) -> Result<(StepReport, [u64; 9]), StepError> {
         use std::time::Instant;
         let mut ns = [0u64; 9];
         let mut t = Instant::now();
