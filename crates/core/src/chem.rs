@@ -544,6 +544,8 @@ pub struct ChemWorld {
     topo: Option<Arc<p6::Topology>>,
     /// Reused per-cell buffers of the network law (no state between steps).
     net_scratch: net::NetScratch,
+    /// Reused per-cell buffers of the heat law (no state between steps).
+    heat_scratch: p6::HeatScratch,
     /// Per-tick surface-activity marks ([`WaterCycle::Driven`] only; not in
     /// any book or the fingerprint; cleared at the start of every tick).
     pub(crate) marks: Vec<u8>,
@@ -616,6 +618,7 @@ impl ChemWorld {
             net: None,
             topo: None,
             net_scratch: net::NetScratch::default(),
+            heat_scratch: p6::HeatScratch::default(),
             marks: Vec::new(),
             sky_height: 0,
             core_pin: None,

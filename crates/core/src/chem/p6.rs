@@ -824,6 +824,14 @@ pub(crate) enum RollKey {
     Wide(u64),
 }
 
+/// `dst[k] += src[k]` wrapping, the heat law's share additions over one row slice.
+#[inline]
+fn add_shares(dst: &mut [i32], src: &[i32]) {
+    for (d, s) in dst.iter_mut().zip(src) {
+        *d = d.wrapping_add(*s);
+    }
+}
+
 /// `o / live` for a face-neighbour count `live` in `1..=6`, with each divisor a constant (the
 /// same truncating quotient; a constant divisor compiles to a multiply instead of a division).
 #[inline]
@@ -836,6 +844,29 @@ pub(crate) fn div_by_live(o: i64, live: usize) -> i64 {
         5 => o / 5,
         6 => o / 6,
         _ => o / live as i64,
+    }
+}
+
+/// Per-cell buffers of [`ChemWorld::heat_pass`], kept across steps so a step does not
+/// allocate (and fault in) a fresh heat field. Every entry is written before it is read in
+/// a step: the z-run path writes each cell's `nq` and `per` in its first sweep, the general
+/// path clears `nq`. After the pass `nq` holds the previous heat field, which nothing reads.
+#[derive(Default)]
+pub(crate) struct HeatScratch {
+    nq: Vec<i32>,
+    per: Vec<i32>,
+}
+
+/// A clone starts with empty scratch: the buffers hold no state between steps.
+impl Clone for HeatScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for HeatScratch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HeatScratch({} cells)", self.nq.len())
     }
 }
 
@@ -931,8 +962,8 @@ impl ZRuns {
     }
 
     /// The face neighbours of cell `(run.x, run.y, z)` (index `i`), in `NB6` order, as the
-    /// first `n` entries of the array.
-    #[inline]
+    /// first `n` entries of the array (the tests check the rows against the offset lookups).
+    #[cfg(test)]
     pub(crate) fn neighbours(
         run: &ZRun,
         beside: &[Option<ZRun>; 4],
@@ -1856,34 +1887,63 @@ impl ChemWorld {
             Greenhouse::Off => 0,
             _ => self.mat.iter().filter(|m| **m == MatId::CO2).count() as i64,
         };
-        let mut nq = vec![0i32; n];
+        let mut nq = std::mem::take(&mut self.heat_scratch.nq);
         // Each emitting cell adds the same `per` to each face neighbour and keeps the rest;
         // the additions wrap in `i32`, so their order does not matter.
         if let Some(rows) = &topo.zruns {
-            // Row by row: the neighbour indices are arithmetic on the four rows beside it.
+            // Gathered: every cell's share `per` first, then each cell takes its own rest plus
+            // the shares of its face neighbours (the face relation is symmetric), row slice by
+            // row slice. Every cell lies in exactly one run, so the first sweep writes all of
+            // `nq` and `per`.
+            let mut per = std::mem::take(&mut self.heat_scratch.per);
+            if nq.len() != n {
+                nq.clear();
+                nq.resize(n, 0);
+            }
+            if per.len() != n {
+                per.clear();
+                per.resize(n, 0);
+            }
             for run in &rows.runs {
                 let beside = rows.beside(run);
                 for z in run.z0..=run.z1 {
                     let i = run.start + (z - run.z0) as usize;
                     let qi = self.q[i];
                     let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
-                    let mut deg: i64 = 0;
+                    let mut p: i64 = 0;
+                    let mut live = usize::from(z > run.z0) + usize::from(z < run.z1);
                     if o > 0 {
-                        let (js, live) = ZRuns::neighbours(run, &beside, z, i);
+                        for r in beside.iter().flatten() {
+                            live += usize::from(z >= r.z0 && z <= r.z1);
+                        }
                         if live > 0 {
-                            let per = div_by_live(o, live);
-                            if per != 0 {
-                                for &j in &js[..live] {
-                                    nq[j] = nq[j].wrapping_add(per as i32);
-                                }
-                                deg = per * live as i64;
-                            }
+                            p = div_by_live(o, live);
                         }
                     }
-                    nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
+                    per[i] = p as i32;
+                    nq[i] = (i64::from(qi) - p * live as i64) as i32;
                 }
             }
+            for run in &rows.runs {
+                let s = run.start;
+                let len = (run.z1 - run.z0 + 1) as usize;
+                add_shares(&mut nq[s + 1..s + len], &per[s..s + len - 1]);
+                add_shares(&mut nq[s..s + len - 1], &per[s + 1..s + len]);
+                for r in rows.beside(run).iter().flatten() {
+                    let (lo, hi) = (run.z0.max(r.z0), run.z1.min(r.z1));
+                    if lo > hi {
+                        continue;
+                    }
+                    let m = (hi - lo + 1) as usize;
+                    let a = s + (lo - run.z0) as usize;
+                    let b = r.start + (lo - r.z0) as usize;
+                    add_shares(&mut nq[a..a + m], &per[b..b + m]);
+                }
+            }
+            self.heat_scratch.per = per;
         } else {
+            nq.clear();
+            nq.resize(n, 0);
             for i in 0..n {
                 let qi = self.q[i];
                 let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
@@ -1988,7 +2048,7 @@ impl ChemWorld {
         }
         self.space_q += leaked;
         self.trapped_q += trapped;
-        self.q = nq;
+        self.heat_scratch.nq = std::mem::replace(&mut self.q, nq);
         (leaked, trapped)
     }
 
