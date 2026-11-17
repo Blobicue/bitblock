@@ -639,6 +639,7 @@ impl ChemWorld {
         w.table = table;
         w.params = params;
         w.inv = inv;
+        w.world.defer_octree();
         for (k, &(c, m, q)) in cells.iter().enumerate() {
             if k > 0 && cells[k - 1].0 == c {
                 return Err(BooksError::DuplicateCell(c));
@@ -653,6 +654,7 @@ impl ChemWorld {
                 w.world.set_on(c);
             }
         }
+        w.world.flush_octree();
         w.pin_t0();
         w.check_books()?;
         Ok(w)
@@ -1629,6 +1631,7 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
         cells.push((Coord::new(c.x + dx, c.y + dy, c.z + dz), MatId::AIR, 0));
     }
     cells.sort_unstable_by_key(|e| e.0);
+    out.world.defer_octree();
     for (coord, m, q) in cells {
         out.cells.push(coord);
         out.mat.push(m);
@@ -1637,6 +1640,7 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
             out.world.set_on(coord);
         }
     }
+    out.world.flush_octree();
 
     // Whatever the shape could not hold settles into the bag.
     out.inv = rem;

@@ -1128,6 +1128,16 @@ impl ChemWorld {
     /// combine, combine2 (hand families, network law, netBurn, condense, gas
     /// rise), water cycle, erode, dissolve, settle, flow.
     pub fn step(&mut self) -> Result<StepReport, StepError> {
+        // Laws flip occupancy bits through `set_mat`; the occupancy world's octree is rebuilt
+        // once per changed chunk at the end instead of on every flip (exact, see
+        // `World::defer_octree`). No law reads the octree or the world bounds.
+        self.world.defer_octree();
+        let report = self.step_laws();
+        self.world.flush_octree();
+        report
+    }
+
+    fn step_laws(&mut self) -> Result<StepReport, StepError> {
         self.tick += 1;
         let topo = self.topology();
         if self.params.cycle == WaterCycle::Driven {

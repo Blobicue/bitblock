@@ -1451,6 +1451,9 @@ fn mirror_chem(
     // edits as the full scan; the full scan runs when the cache is empty / resized).
     let mut seen = std::mem::take(&mut chem.mirror_mats);
     let full = seen.len() != chem.world.domain_len();
+    // Octree upkeep of the play world runs once per changed chunk at the end (exact, see
+    // `World::defer_octree`); `apply_edit` reads only bits.
+    world.defer_octree();
     if full {
         seen.clear();
         seen.resize(chem.world.domain_len(), bitblock_core::chem::MatId::AIR);
@@ -1469,6 +1472,7 @@ fn mirror_chem(
             }
         }
     }
+    world.flush_octree();
     chem.mirror_mats = seen;
     chem.last_step_changed = changed;
     let recolored = mat_hash != chem.material_hash;
