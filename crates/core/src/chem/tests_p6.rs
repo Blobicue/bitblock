@@ -4688,7 +4688,11 @@ fn topology_fast_paths_match_offset_lookups() {
             let slow = NB6.map(|step| topo.offset(cells, i, step));
             assert_eq!(topo.nb6(cells, i), slow, "domain {d} cell {i}");
             for (k, want) in slow.iter().enumerate() {
-                assert_eq!(topo.face(cells, i, k), *want, "domain {d} cell {i} face {k}");
+                assert_eq!(
+                    topo.face(cells, i, k),
+                    *want,
+                    "domain {d} cell {i} face {k}"
+                );
             }
             // `locate` answers exactly the sorted-list binary search, on and off the domain.
             let c = cells[i];
@@ -4866,4 +4870,39 @@ fn constant_divisor_split_matches_the_plain_quotient() {
             assert_eq!(div_by_live(o, live), o / live as i64, "{o} / {live}");
         }
     }
+}
+
+/// §6d: block searches visit exactly the same current materials as a cell-by-cell scan,
+/// including a visit that creates a matching material ahead of (or behind) its cursor.
+#[test]
+fn block_material_search_matches_current_slice() {
+    use super::p6::find_mat;
+    let mut seed = 7u32;
+    let mut mats: Vec<MatId> = (0..1027)
+        .map(|_| {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            MatId((seed >> 24) as u8)
+        })
+        .collect();
+    for m in [0, 1, 13, 127, 255] {
+        for from in 0..=mats.len() {
+            let want = mats[from..].iter().position(|x| x.0 == m).map(|k| from + k);
+            assert_eq!(find_mat(&mats, from, MatId(m)), want);
+        }
+    }
+    mats.fill(MatId::AIR);
+    mats[63] = MatId::SED;
+    let mut next = 0;
+    let mut got = Vec::new();
+    while let Some(i) = find_mat(&mats, next, MatId::SED) {
+        got.push(i);
+        mats[i] = MatId::AIR;
+        mats[0] = MatId::SED; // behind the cursor: not revisited
+        if i + 65 < mats.len() {
+            mats[i + 65] = MatId::SED;
+        }
+        next = i + 1;
+    }
+    let want: Vec<_> = (63..mats.len()).step_by(65).collect();
+    assert_eq!(got, want);
 }

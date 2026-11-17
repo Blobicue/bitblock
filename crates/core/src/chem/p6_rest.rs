@@ -21,7 +21,7 @@
 //! that is exactly its `for y, for x, for z` with the MASK test).
 
 use super::p6::{
-    NB6, NO_SLOT, RollKey, StepReport, Topology, WaterCycle, wide_roll, wide_roll_finish,
+    NB6, NO_SLOT, RollKey, StepReport, Topology, WaterCycle, find_mat, wide_roll, wide_roll_finish,
 };
 use super::vapor::{EvapTop, RainFall};
 use super::{ChemWorld, MatId, NE};
@@ -866,12 +866,10 @@ impl ChemWorld {
         if !self.params.dissolve {
             return;
         }
-        let n = self.cells.len();
         let mut intents: Vec<(usize, usize)> = Vec::new();
-        for i in 0..n {
-            if self.mat[i] != MatId::GYP {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::GYP) {
+            next = i + 1;
             let mut wet = 0u8;
             let mut air = None;
             for j in topo.nb6(&self.cells, i).into_iter().flatten() {
@@ -916,10 +914,9 @@ impl ChemWorld {
         if !self.params.settle {
             return;
         }
-        for i in 0..self.cells.len() {
-            if self.mat[i] != MatId::SED {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::SED) {
+            next = i + 1;
             let yi = self.cells[i].y;
             // §5w: "its own level or below" in r2 (one-unit tangent slack)
             let core = self.coreward() && !topo.r2.is_empty();
@@ -1038,10 +1035,9 @@ impl ChemWorld {
         let tick = self.tick;
         // §5w: "below" and "level" toward the core under Gravity::Core
         let gc = self.grav_core(topo);
-        for i in 0..self.cells.len() {
-            if self.mat[i] != MatId::SED {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::SED) {
+            next = i + 1;
             let below = match gc {
                 Some(o) => {
                     let (set, k) = Self::inward_support(o, self.cells[i]);
@@ -1819,13 +1815,11 @@ impl ChemWorld {
         if !self.params.dissolve || !self.storm() {
             return;
         }
-        let n = self.cells.len();
         // pass A - intent (pure snapshot reads)
         let mut intents: Vec<(usize, usize)> = Vec::new();
-        for i in 0..n {
-            if self.mat[i] != MatId::GYP {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::GYP) {
+            next = i + 1;
             let mut wet = false;
             let mut air = None;
             for j in topo.nb6(&self.cells, i).into_iter().flatten() {

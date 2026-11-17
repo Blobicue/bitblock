@@ -824,6 +824,25 @@ pub(crate) enum RollKey {
     Wide(u64),
 }
 
+/// The first index at or after `from` whose material is `m`. A scan that walks the cells of one
+/// material in index order calls it again after each visit, so a visit's writes are seen
+/// exactly as a cell-by-cell scan would see them (the cells it skips are not `m` and nothing
+/// writes between the call and the visit). Blocks of cells are tested at once.
+#[inline]
+pub(crate) fn find_mat(mat: &[MatId], from: usize, m: MatId) -> Option<usize> {
+    const BLOCK: usize = 64;
+    let mut i = from;
+    while i < mat.len() {
+        let end = (i + BLOCK).min(mat.len());
+        let block = &mat[i..end];
+        if block.iter().fold(false, |hit, &x| hit | (x == m)) {
+            return block.iter().position(|&x| x == m).map(|k| i + k);
+        }
+        i = end;
+    }
+    None
+}
+
 /// `dst[k] += src[k]` wrapping, the heat law's share additions over one row slice.
 #[inline]
 fn add_shares(dst: &mut [i32], src: &[i32]) {
@@ -2119,8 +2138,10 @@ impl ChemWorld {
         }
         let mut hs = Vec::new();
         let mut cube = Vec::new();
-        for i in 0..self.cells.len() {
-            if self.mat[i] != MatId::O || self.q[i] < 300 {
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::O) {
+            next = i + 1;
+            if self.q[i] < 300 {
                 continue;
             }
             let Some(partner) = topo
@@ -2165,12 +2186,13 @@ impl ChemWorld {
         if !self.params.elements {
             return Ok(());
         }
-        let n = self.cells.len();
         let mut cube = Vec::new();
         if self.params.combine {
             // C + 2 O -> CO2
-            for i in 0..n {
-                if self.mat[i] != MatId::C || self.q[i] < 300 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::C) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 let os: Vec<usize> = topo
@@ -2191,8 +2213,10 @@ impl ChemWorld {
                 }
             }
             // Ca + S + 4 O -> ROCK (O from the +-2 cube)
-            for i in 0..n {
-                if self.mat[i] != MatId::CA || self.q[i] < 300 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 let Some(sj) = self.first_nb6(topo, i, |j| self.mat[j] == MatId::S) else {
@@ -2219,8 +2243,10 @@ impl ChemWorld {
                 }
             }
             // N + 3 H -> NH3
-            for i in 0..n {
-                if self.mat[i] != MatId::N || self.q[i] < 250 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::N) {
+                next = i + 1;
+                if self.q[i] < 250 {
                     continue;
                 }
                 topo.cube(&self.cells, i, 1, &mut cube);
@@ -2243,8 +2269,10 @@ impl ChemWorld {
                 }
             }
             // Ca + C + 3 O -> CARB (C and O from the +-2 cube)
-            for i in 0..n {
-                if self.mat[i] != MatId::CA || self.q[i] < 300 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 topo.cube(&self.cells, i, 2, &mut cube);
@@ -2271,8 +2299,10 @@ impl ChemWorld {
                 }
             }
             // O + O -> O2
-            for i in 0..n {
-                if self.mat[i] != MatId::O || self.q[i] < 250 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::O) {
+                next = i + 1;
+                if self.q[i] < 250 {
                     continue;
                 }
                 let Some(p) =
@@ -2288,8 +2318,10 @@ impl ChemWorld {
                 }
             }
             // Ca + O -> CAO
-            for i in 0..n {
-                if self.mat[i] != MatId::CA || self.q[i] < 300 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 let Some(oj) = self.first_nb6(topo, i, |j| self.mat[j] == MatId::O) else {
@@ -2311,8 +2343,10 @@ impl ChemWorld {
                 rep.net_rounds = rounds;
             }
             if self.params.net_burn && net.net_row().is_some() {
-                for i in 0..n {
-                    if self.mat[i] != MatId::C || self.q[i] < 250 {
+                let mut next = 0;
+                while let Some(i) = find_mat(&self.mat, next, MatId::C) {
+                    next = i + 1;
+                    if self.q[i] < 250 {
                         continue;
                     }
                     topo.cube(&self.cells, i, 1, &mut cube);
@@ -2348,8 +2382,10 @@ impl ChemWorld {
         }
 
         if self.params.condense {
-            for i in 0..n {
-                if self.mat[i] != MatId::STEAM || self.q[i] >= 150 {
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::STEAM) {
+                next = i + 1;
+                if self.q[i] >= 150 {
                     continue;
                 }
                 let Some(j) =
