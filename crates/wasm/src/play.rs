@@ -1769,7 +1769,7 @@ mod tests {
         let tape = play_input_tape_status();
         assert!(
             tape.contains(
-                "tick=5 world=#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca"
+                "tick=5 world=#bb.world.sha256.lpqtwwq5lo3dbyid2hrdvmdr3r6wfy5t5xnhd3grwcis5bhu4nra"
             ),
             "{tape}"
         );
@@ -1790,9 +1790,9 @@ mod tests {
 mod start_world_tests {
     use super::*;
 
-    const ARCH_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.lqpba5lvzmm5bnj2jfoa7dgtdnm2adv5eborbtvaquic36mtno2q frame=#bb.frame.sha256.5l3xbpo3zj2x65tqjinaliydy7qchd2kw6gsy3yi4gm6awvjrraa pos=-5.838272203333,19.213048230119,-25.261618887543 yaw=0.610865238198 pitch=-0.383972435439 dist=32.602331204992 last=world:architecture sidebar=1 captured=0 output=2000x900";
+    const ARCH_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.pmbj7za55emc3mjtjvom5domewgjf2rr7qezwpxaxyoohzs5e6gq frame=#bb.frame.sha256.nx4b62u5ozefqrb5m5snhkhcvdtcwsljdgsvzhez5fppgv27unaa pos=-5.838272203333,19.213048230119,-25.261618887543 yaw=0.610865238198 pitch=-0.383972435439 dist=32.602331204992 last=world:architecture sidebar=1 captured=0 output=2000x900";
     const ARCH_HIGH_GAME_NON_BACKGROUND: u32 = 123_265;
-    const SYMBOL_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.araktfzrajbhvmmwo7zgywisgcrbmaewtdxhdl3ebrbaw5syncka pos=-5.208389634264,21.791351208024,-30.502793385755 yaw=0.610865238198 pitch=-0.383972435439 dist=40.819759920901 last=world:symbol sidebar=1 captured=0 output=2000x900";
+    const SYMBOL_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.djgq2svfynmviug6ngvgsxcga7nhpjlj5qxkeu3wf5isqz5hg4yq pos=-5.208389634264,21.791351208024,-30.502793385755 yaw=0.610865238198 pitch=-0.383972435439 dist=40.819759920901 last=world:symbol sidebar=1 captured=0 output=2000x900";
     const SYMBOL_HIGH_GAME_NON_BACKGROUND: u32 = 82_409;
 
     fn client_startup(world_id: u32) -> PlaySession {

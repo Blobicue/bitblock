@@ -874,7 +874,7 @@ fn world_root_tag(leaves: &[(crate::world::ChunkCoord, [u8; 32])]) -> ContentTag
 
 /// Independent full rebuild from occupied coordinates, never consulting chunk/root caches.
 #[cfg(test)]
-fn world_tag_before_preallocation(world: &World) -> ContentTag {
+fn world_tag_full_recompute(world: &World) -> ContentTag {
     use crate::world::ChunkCoord;
     let mut chunks = std::collections::BTreeMap::<ChunkCoord, [u64; 64]>::new();
     for coord in world.iter_on() {
@@ -1090,10 +1090,10 @@ mod tests {
                 world.set_on(coord);
             }
             let after = world_tag(&world);
-            assert_eq!(after, world_tag_before_preallocation(&world), "step {step}");
+            assert_eq!(after, world_tag_full_recompute(&world), "step {step}");
             let mut clone = world.clone();
             clone.set_off(coord);
-            assert_eq!(world_tag(&clone), world_tag_before_preallocation(&clone));
+            assert_eq!(world_tag(&clone), world_tag_full_recompute(&clone));
             assert_eq!(world_tag(&world), after);
             if step % 7 == 0 {
                 world.flush_octree();
@@ -1146,7 +1146,7 @@ mod tests {
         assert!(reverse.set_off(P));
 
         for world in [&World::new(), &forward, &reverse] {
-            assert_eq!(world_tag(world), world_tag_before_preallocation(world));
+            assert_eq!(world_tag(world), world_tag_full_recompute(world));
         }
         assert_eq!(world_tag(&forward), world_tag(&reverse));
     }
@@ -1191,7 +1191,7 @@ mod tests {
             assert_eq!(ordered, sorted, "case {case} order");
             assert_eq!(
                 world_tag(&world),
-                world_tag_before_preallocation(&world),
+                world_tag_full_recompute(&world),
                 "case {case} tag"
             );
         }
@@ -1505,15 +1505,15 @@ mod tests {
         let cold = &cold_history.receipts()[0];
         assert_eq!(
             cold.tag(),
-            parse_tag("#bb.receipt.sha256.psal6njm4ndyap7wclfv55gnlxwwou4eq2rvfotazrxzragceusa")
+            parse_tag("#bb.receipt.sha256.d7qzlret5ep47ewjymdfylx3lelasfvp5s6tmt72qjjh34bqwmea")
         );
         assert_eq!(
             cold.effects()[0].event(),
-            parse_tag("#bb.event.sha256.znebuddob7z4u2vwyqe7bwhclvyeqtgya7252fm5qq7hewauh2kq")
+            parse_tag("#bb.event.sha256.7juld2z7wmvaol3xbf2kdlniwzy4tcbr7gfy5yojwaofqkmgws3a")
         );
         assert_eq!(
             cold.effects()[4].event(),
-            parse_tag("#bb.event.sha256.6kcbq6sgg7zr5nymes5da5ksm4kt2y6fpytmfwlbs3xmn4zdsx5q")
+            parse_tag("#bb.event.sha256.qk4stjl5xesq72glgtz7thj4lk4s4zsbb6fp7oljjsp45xfylmtq")
         );
         assert_eq!(
             cold.effects()
@@ -1544,15 +1544,15 @@ mod tests {
         let reuse = &reuse_history.receipts()[0];
         assert_eq!(
             reuse.tag(),
-            parse_tag("#bb.receipt.sha256.fakwjpoid3eqaztgfahmlepmfawgi7yffed345eovjysn2izuf5a")
+            parse_tag("#bb.receipt.sha256.iozg4ylucv37oyjoceamtnvaqwdavpfk366dlo44kividto2q32a")
         );
         assert_eq!(
             reuse.effects()[0].event(),
-            parse_tag("#bb.event.sha256.h7rmaq3zvlig2btqavazt37nhrk7el2pwulowcvhzmzbm245i6ua")
+            parse_tag("#bb.event.sha256.qhwms7spp3gkyjy5534zvkknwlwzbcwjoizszruhokslatavip5q")
         );
         assert_eq!(
             reuse.effects()[2].event(),
-            parse_tag("#bb.event.sha256.zr3ehfiz5xxheosxvxydb27m4vpfibfbpjkg7cicuob6tsf46cja")
+            parse_tag("#bb.event.sha256.c2aidqhefgmovroufymmonnh2yzk77dgg7z55xiw4cag54euht2q")
         );
         assert_eq!(
             reuse
@@ -1583,11 +1583,11 @@ mod tests {
         let warm = &warm_history.receipts()[0];
         assert_eq!(
             warm.tag(),
-            parse_tag("#bb.receipt.sha256.v4rixvqu53nkaraowd4z26s2r55fv4rnz6qnq2dbtjaccxiljffq")
+            parse_tag("#bb.receipt.sha256.6bkjjhs2qprx3dfgkuamon5dei5v6gqcnqk6k7ugsjxnx4nc4l4a")
         );
         assert_eq!(
             warm.effects()[0].event(),
-            parse_tag("#bb.event.sha256.gibrybl5w6zs3bq73t3e3qg6qjrhifcf2ce6xhnxyttsnukxvwma")
+            parse_tag("#bb.event.sha256.j7h56ji37pgsj3s672a532cdm3eb3vu6zstx6pqehpwx36wbobwa")
         );
         assert!(matches!(
             warm.effects()[0],
@@ -1605,7 +1605,7 @@ mod tests {
         let noop = &noop_history.receipts()[0];
         assert_eq!(
             noop.tag(),
-            parse_tag("#bb.receipt.sha256.kdqtkvuuljhq4xjmkft44bk46rd4rqnty2h6sbozjwg2o4nnjgmq")
+            parse_tag("#bb.receipt.sha256.rmfiy36x6e4kisgi5n6qemrpa3o6lpnbtrfqmmkohzlrixezmbaq")
         );
         assert_eq!(
             noop.effects()
@@ -1634,7 +1634,7 @@ mod tests {
         let toggle = &toggle_history.receipts()[0];
         assert_eq!(
             toggle.tag(),
-            parse_tag("#bb.receipt.sha256.li2iopqyi652bk4hdt75ad356z5iqryugxmxkefhfroxvhtpetja")
+            parse_tag("#bb.receipt.sha256.rong4dap7mwzs2zztqioqo56ix2rmnjheutosombipvzgnt7dgiq")
         );
         assert_eq!(
             toggle
@@ -1661,7 +1661,7 @@ mod tests {
         let bedrock = &bedrock_history.receipts()[0];
         assert_eq!(
             bedrock.tag(),
-            parse_tag("#bb.receipt.sha256.amsihpcd2ydi5243jdzuoa2g3a5tbh726k5zru6dfmyargeul6ja")
+            parse_tag("#bb.receipt.sha256.exlpidihytljgbcr2vbgazsmifshk52eveiet5bfa32fzv6hfq6a")
         );
         assert_eq!(
             bedrock
@@ -1686,7 +1686,7 @@ mod tests {
         let edge_receipt = &edge_history.receipts()[0];
         assert_eq!(
             edge_receipt.tag(),
-            parse_tag("#bb.receipt.sha256.dzihycw2ucnfjaulmme6pqlgv3n4u65gn4bqi36xvzkmxymzn22q")
+            parse_tag("#bb.receipt.sha256.suix4q6f7pj7qakempurczmewpjzq6hruzblpcueyezmiqwephha")
         );
         assert_eq!(effect_name(edge_receipt.effects()[0]), "mint");
         assert!(edge_world.is_on(edge));

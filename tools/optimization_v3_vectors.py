@@ -15,17 +15,17 @@ OUTPUT_SCHEMA = b"bitblock/optimization-equivalence/output/v3"
 RECEIPT_SCHEMA = b"bitblock/optimization-equivalence/bounded-corpus/v3"
 
 FIELDS = {
-    "final_world": "#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq",
-    "history": "#bb.receipt.sha256.awdyznfll2hsuap4u24kcrzg3tmuxy3bjox5wd2wumgvihial2fa",
-    "frame_input": "#bb.frame-input.sha256.iu5e3slyn3txqtd5adk4ca7im2e3tcgo5q4qy5dhmvivzvdgg4wq",
+    "final_world": "#bb.world.sha256.4qebqribdfmkf53kxbzjwfe3vrfhmyddlv2emjmbhexvwtxpt2gq",
+    "history": "#bb.receipt.sha256.ng5zw7d65wvoa3ubvil7icjcnqjhbculbqnur2j4rawt4day6rfa",
+    "frame_input": "#bb.frame-input.sha256.6vibj2cn2a2z5ww5wjuyw5clfpsnkb4z2teijhqcbzby6nabn6pa",
     "game_frame": "#bb.frame.sha256.s2qnppnpaon4brmeosrufpurexk7mfctbiuy2rep6cckv5gxos7a",
-    "game_evidence": "#bb.receipt.sha256.46s52obcil7tsnn2cqngubtvosl4cy7ytkjpzls524y2ebefd4eq",
-    "composite_input": "#bb.frame-input.sha256.yfmxsloxa2tg5voxvetd6ygyfflquqfpmqidz6qcpszjgesf4mca",
+    "game_evidence": "#bb.receipt.sha256.ujbrxwlq6ovljlrmaqd2bpohvh2ezw2ypeytz6byh245erwgs3nq",
+    "composite_input": "#bb.frame-input.sha256.2hbweng2rg663z4xe2r2ihfbpthwr5aynyvuhou6hjo6b2zzjo3a",
     "composite_frame": "#bb.frame.sha256.isqpvp4w6kox3bcrmr53hvkfqqnnsvxgdy6yb77dwqwxjdwd2wha",
-    "composite_evidence": "#bb.receipt.sha256.mragjur2xbgilfa66fdcrn33bklxh36s7xpem5lik466yfk3jgca",
-    "display_receipt": "#bb.display-receipt.sha256.ybllx74nnvr4unlz2thx57b3pfwhvawiffi5ixkmdyhwfvrhhlrq",
+    "composite_evidence": "#bb.receipt.sha256.hezcoouaqcsgagnn2nsnrxgopeizt3tuzpgvddlhexupbo2jz4ka",
+    "display_receipt": "#bb.display-receipt.sha256.ae64qe4s7pvbxwovjho5wppb6iy2smit3lej5y5fnsyb5sm3xxza",
     "case": "#bb.registry.sha256.6d5golms4a3vk7vqvbmvhjksrw4vaihnmnkzjg3er7fekeky67aa",
-    "initial_world": "#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca",
+    "initial_world": "#bb.world.sha256.lpqtwwq5lo3dbyid2hrdvmdr3r6wfy5t5xnhd3grwcis5bhu4nra",
     "reference_impl": "#bb.registry.sha256.f26hjlfme5czij7hgkwel2dyusknugmnaqk6v2rkt24lhd4uut3a",
     "reference_policy": "#bb.policy.sha256.rkozy4jf4fvgvlu2xysp5ryoppcs5c6i6yegb2whrhiethcse7ua",
     "candidate_impl": "#bb.registry.sha256.wo3abxyl7d6vt6wmsqxscexoyfttry2vxjnp3ikqrkah2w4jmxja",
@@ -34,14 +34,19 @@ FIELDS = {
 
 REJECTED_V2_FIELDS = {
     **FIELDS,
+    # The rejected v2 domain is a frozen negative control over the v1 world fingerprint.
+    "final_world": "#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq",
+    "history": "#bb.receipt.sha256.awdyznfll2hsuap4u24kcrzg3tmuxy3bjox5wd2wumgvihial2fa",
+    "frame_input": "#bb.frame-input.sha256.iu5e3slyn3txqtd5adk4ca7im2e3tcgo5q4qy5dhmvivzvdgg4wq",
+    "initial_world": "#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca",
     "game_evidence": "#bb.receipt.sha256.4ek6h3w4pzrxqy4xyq346eak7yjdqebncr52u57q76wzxt76agwq",
     "composite_input": "#bb.frame-input.sha256.fkf3ssmqb3jwku2dnhpsuedymkq6ehzvudynclkyrtueek7j7wia",
     "composite_evidence": "#bb.receipt.sha256.2dcwjak2vw437crjudmbywsjspl5qkfqmx7j7ncoaakwtflv67ia",
     "display_receipt": "#bb.display-receipt.sha256.zo52e2varem4pr4hz3sajgkweouvrhnfg3fmdby3esuvxjixnunq",
 }
 
-EXPECTED_OUTPUT = "#bb.receipt.sha256.vbevj4vyjwjk3ume6vkxkigm7vioe6ox65c4ws6r6ly5jqwg73ga"
-EXPECTED_RECEIPT = "#bb.receipt.sha256.qyjgyjutxxfupm6rfp33zm6wrr2i5g5z4z7vhyqqweob6krqf7ra"
+EXPECTED_OUTPUT = "#bb.receipt.sha256.62we6nvy5lmpwoxfyl2fgiw3nyrfvpa6u5obnptd7er5nksizqtq"
+EXPECTED_RECEIPT = "#bb.receipt.sha256.5cobj7m7rn4g3oysvktolank4g3io3iucunk5743plnrbxak6vua"
 REJECTED_V2_OUTPUT = "#bb.receipt.sha256.yclrpejhfo4pop4ldvowaomk4ywsfbodxj7436iil5amq7n7mkyq"
 REJECTED_V2_RECEIPT = "#bb.receipt.sha256.wxmct7gif5ygiueryxymilcsfdlwoncaya5ucxqj65tuvxqr5zta"
 
@@ -92,9 +97,9 @@ def output_payload(fields: dict[str, str] = FIELDS) -> bytes:
     return payload
 
 
-def receipt_payload(output: str) -> bytes:
+def receipt_payload(output: str, fields: dict[str, str] = FIELDS) -> bytes:
     payload = b"".join(
-        digest(FIELDS[name])
+        digest(fields[name])
         for name in (
             "case",
             "initial_world",
@@ -129,7 +134,7 @@ def main() -> None:
     assert content_tag(
         b"bitblock/optimization-equivalence/bounded-corpus/v1", receipt_bytes
     ) != receipt
-    rejected_v2_receipt_bytes = receipt_payload(REJECTED_V2_OUTPUT)
+    rejected_v2_receipt_bytes = receipt_payload(REJECTED_V2_OUTPUT, REJECTED_V2_FIELDS)
     assert (
         content_tag(
             b"bitblock/optimization-equivalence/bounded-corpus/v2",

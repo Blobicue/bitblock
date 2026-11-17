@@ -44,7 +44,8 @@ GENESIS_POLICY_SCHEMA = b"bitblock/local-replay-genesis/headless-v1"
 RULES_POLICY_SCHEMA = b"bitblock/local-replay-rules/headless-v1"
 ADMISSION_POLICY_SCHEMA = b"bitblock/local-replay-admission-policy/headless-v1"
 
-WORLD_SCHEMA = b"bitblock/world/sorted-i64-be/v1"
+WORLD_SCHEMA = b"bitblock/world/chunk-merkle-sha256/v2"
+WORLD_CHUNK_SCHEMA = b"bitblock/world/chunk-bits-i64-be/v2"
 HISTORY_GENESIS_SCHEMA = b"bitblock/history/genesis/v1"
 RENDERER_PROFILE_SCHEMA = b"bitblock/renderer-profile/host-f64/v1"
 CROSSHAIR_POLICY_SCHEMA = b"bitblock/overlay-policy/crosshair/v1"
@@ -61,7 +62,7 @@ POLICY_REVISION = 1
 # closes the other direction -- a wrong constant in this file now fails here rather than
 # printing a plausible digest nobody reads. Nothing below is derived from these values.
 PINNED_IN_MAIN_RS = {
-    "genesis": "#bb.policy.sha256.eibnyx3zeig5myau5wyq5y4qsmp2pp6chclpeapjaiz5xojz7zcq",
+    "genesis": "#bb.policy.sha256.sgtpi7mozzgscwu7naqghepq37pko4lrz4ka63kdhw5qmty3fnrq",
     "rules": "#bb.policy.sha256.abg53isb3svtuxvxo2yq6mymbwnkv4rkwfzpg2euenjj3ug57yxq",
     "admission": "#bb.policy.sha256.f5mg62hs64szq5f4xumd76tpjd5dcmtxbqufwn2jnoxsmylzbrga",
 }
@@ -179,12 +180,28 @@ def f64(value: float) -> bytes:
 # --- upstream objects the three policies name --------------------------------------------
 
 
+def _chunk_merkle_payload(coords, encode_digest):
+    """v2 world fingerprint root payload: count of non-empty 16^3 chunks, then per chunk in
+    ascending (cx, cy, cz) order its i64-be coordinate and the SHA-256 leaf digest over the same
+    coordinate plus 64 u64-be occupancy words (bit index x + 16 (y + 16 z))."""
+    chunks = {}
+    for x, y, z in set(coords):
+        key = (x // 16, y // 16, z // 16)
+        index = x % 16 + 16 * (y % 16 + 16 * (z % 16))
+        words = chunks.setdefault(key, [0] * 64)
+        words[index // 64] |= 1 << (index % 64)
+    payload = struct.pack(">Q", len(chunks))
+    for key in sorted(chunks):
+        encoded_key = struct.pack(">qqq", *key)
+        leaf = encoded_key + b"".join(struct.pack(">Q", w) for w in chunks[key])
+        payload += encoded_key + encode_digest(leaf)
+    return payload
+
+
 def world_digest(coords: tuple[tuple[int, int, int], ...]) -> bytes:
-    """Sorted i64-be coordinates. The schema is repeated inside the payload, then the count."""
-    ordered = sorted(coords)
-    payload = u16(len(WORLD_SCHEMA)) + WORLD_SCHEMA + u64(len(ordered))
-    for x, y, z in ordered:
-        payload += struct.pack(">qqq", x, y, z)
+    payload = _chunk_merkle_payload(
+        coords, lambda leaf: content_digest(b"world", WORLD_CHUNK_SCHEMA, leaf)
+    )
     return content_digest(b"world", WORLD_SCHEMA, payload)
 
 

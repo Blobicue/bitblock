@@ -1039,7 +1039,7 @@ mod tests {
         );
         assert_eq!(
             evidence.tag().to_string(),
-            "#bb.receipt.sha256.6feyyp2ttluxp572qxdyfdzmwkgp4i3ad72usqvm32p3lc6ozo5a"
+            "#bb.receipt.sha256.os4co4gqd6jed4ttwmbkjozviqpb6ly2xtczuuizobzcc7fcsplq"
         );
         assert_eq!(evidence.encoded_len(), Ok(371));
         evidence

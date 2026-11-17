@@ -4024,7 +4024,7 @@ mod tests {
     fn headless_local_replay_policy_tags_are_pinned() {
         assert_eq!(
             headless_local_replay_genesis_policy_tag().to_string(),
-            "#bb.policy.sha256.eibnyx3zeig5myau5wyq5y4qsmp2pp6chclpeapjaiz5xojz7zcq"
+            "#bb.policy.sha256.sgtpi7mozzgscwu7naqghepq37pko4lrz4ka63kdhw5qmty3fnrq"
         );
         assert_eq!(
             headless_local_replay_rules_policy_tag().to_string(),

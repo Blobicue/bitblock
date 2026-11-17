@@ -2126,16 +2126,16 @@ mod tests {
     }
 
     // Filled after first host run of play_input_tape_status().
-    const PLAY_TAPE_KNOWN: &str = "bitblock_browser_play ok tick=5 world=#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca frame=#bb.frame.sha256.vyn2woic4slbg5vo6xxqj4qbx3pg4fsueskewrrh57j7sayknpya pos=-162.524169187683,0.000000000000,-801.756897628926 yaw=0.200000000000 pitch=0.000000000000 dist=818.063706850332 last=key:F sidebar=0 captured=1 output=1201x801";
+    const PLAY_TAPE_KNOWN: &str = "bitblock_browser_play ok tick=5 world=#bb.world.sha256.lpqtwwq5lo3dbyid2hrdvmdr3r6wfy5t5xnhd3grwcis5bhu4nra frame=#bb.frame.sha256.vyn2woic4slbg5vo6xxqj4qbx3pg4fsueskewrrh57j7sayknpya pos=-162.524169187683,0.000000000000,-801.756897628926 yaw=0.200000000000 pitch=0.000000000000 dist=818.063706850332 last=key:F sidebar=0 captured=1 output=1201x801";
 
-    const DEMO_KNOWN: &str = "bitblock_browser_demo ok world=#bb.world.sha256.bnf5w54xbhb7qlshwchoac67vkzn5mt4vzrhvnoakys72slg43ua frame=#bb.frame.sha256.o7wdaz7rq6t65kl52qsep6gn4owffz2qjlgz7ujqfnwdh3npox4q tick_receipt=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=3 viewport=32x32";
+    const DEMO_KNOWN: &str = "bitblock_browser_demo ok world=#bb.world.sha256.xm3rmpec5pzo5h4dfxu2oa35lest5fizzdigrj3xlfbg3caarflq frame=#bb.frame.sha256.o7wdaz7rq6t65kl52qsep6gn4owffz2qjlgz7ujqfnwdh3npox4q tick_receipt=#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa on_bits=3 viewport=32x32";
 
-    const EDIT_KNOWN: &str = "bitblock_browser_edit ok world=#bb.world.sha256.xplotpuf27scr7i25aabwijert6g6444ntkh2qqvtjpu3qme7cka frame=#bb.frame.sha256.dmriyhj56rpkgozbvlh7ooiirbdvylkytklabgdsxmkky6soo2oa tick_receipt=#bb.receipt.sha256.ezntrdbxgwqvwwond4rm7oarrzqkktoowuky6uicisbk5l7tybia on_bits=4 toggle=2,0,0 viewport=32x32";
+    const EDIT_KNOWN: &str = "bitblock_browser_edit ok world=#bb.world.sha256.65vcqxuxnd4gzf3msg37cr5tuj6u2ytkugbjmnle3ywta5wssqeq frame=#bb.frame.sha256.dmriyhj56rpkgozbvlh7ooiirbdvylkytklabgdsxmkky6soo2oa tick_receipt=#bb.receipt.sha256.efbx3lzitz3hfpjp23urtnsqqqwmnfkjzsx7dtfisqcnh2n5mklq on_bits=4 toggle=2,0,0 viewport=32x32";
 
     const DEMO_FRAME: &str =
         "#bb.frame.sha256.o7wdaz7rq6t65kl52qsep6gn4owffz2qjlgz7ujqfnwdh3npox4q";
     const DEMO_WORLD: &str =
-        "#bb.world.sha256.bnf5w54xbhb7qlshwchoac67vkzn5mt4vzrhvnoakys72slg43ua";
+        "#bb.world.sha256.xm3rmpec5pzo5h4dfxu2oa35lest5fizzdigrj3xlfbg3caarflq";
     const LIVE_OFF_FRAME: &str =
         "#bb.frame.sha256.mzekzp6zf7zka64agpi2nvc33qm7y33zeqfuazejnshqldtl7zaq";
     const DOLLY_IN_FRAME: &str =
@@ -2240,7 +2240,7 @@ mod tests {
         );
         assert_eq!(
             status,
-            "bitblock_browser_gallery ok program=symbol size=81x81 applied=336 on_bits=337 non_background=671 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a yaw_deg=35 pitch_deg=-22"
+            "bitblock_browser_gallery ok program=symbol size=81x81 applied=336 on_bits=337 non_background=671 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a yaw_deg=35 pitch_deg=-22"
         );
     }
 
@@ -2262,7 +2262,7 @@ mod tests {
         assert_eq!(raster.non_background, 65_279);
         assert_eq!(
             status,
-            "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22"
+            "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22"
         );
     }
 
@@ -2274,28 +2274,28 @@ mod tests {
                 336,
                 337,
                 65_279u32,
-                "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22",
             ),
             (
                 1,
                 552,
                 553,
                 58_291,
-                "bitblock_browser_gallery ok program=recognition size=801x801 applied=552 on_bits=553 non_background=58291 world=#bb.world.sha256.5ar4um5zfetdzaeb34e4c4m6a5oevi5u3fo4id36pm3oye6atvpq frame=#bb.frame.sha256.rweaqbffsx4w3hkqrfhpuslcm2qh4xwpte6gayumdwvd5ej4ggiq yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=recognition size=801x801 applied=552 on_bits=553 non_background=58291 world=#bb.world.sha256.7wmhw54fbbgtuuf3hrgx6hdfqzeppt4excfkbh5yjef6iuavw3ga frame=#bb.frame.sha256.rweaqbffsx4w3hkqrfhpuslcm2qh4xwpte6gayumdwvd5ej4ggiq yaw_deg=35 pitch_deg=-22",
             ),
             (
                 2,
                 662,
                 663,
                 97_621,
-                "bitblock_browser_gallery ok program=architecture size=801x801 applied=662 on_bits=663 non_background=97621 world=#bb.world.sha256.lqpba5lvzmm5bnj2jfoa7dgtdnm2adv5eborbtvaquic36mtno2q frame=#bb.frame.sha256.742hhk3ynavw4sbzockrnbskk2o3re3kfcf7pht3cbq6n4hku2na yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=architecture size=801x801 applied=662 on_bits=663 non_background=97621 world=#bb.world.sha256.pmbj7za55emc3mjtjvom5domewgjf2rr7qezwpxaxyoohzs5e6gq frame=#bb.frame.sha256.742hhk3ynavw4sbzockrnbskk2o3re3kfcf7pht3cbq6n4hku2na yaw_deg=35 pitch_deg=-22",
             ),
             (
                 3,
                 25_600,
                 25_601,
                 225_815,
-                "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=225815 world=#bb.world.sha256.w6wlo572rc3u5v4mvsopcl7gxvkfxl6ntni7rk6qgr2ja5bdblzq frame=#bb.frame.sha256.z42oiltqmx6ltwyx4d6fi4znenzd76yonyowzbwhdng75hv3gjla yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=225815 world=#bb.world.sha256.iy5q2bopf2llw4samvn5ifsbup3adpxu2lupt2vjp4qqqgx4s6iq frame=#bb.frame.sha256.z42oiltqmx6ltwyx4d6fi4znenzd76yonyowzbwhdng75hv3gjla yaw_deg=35 pitch_deg=-22",
             ),
         ];
         for (id, applied, on_bits, non_background, status) in expected {
@@ -2330,7 +2330,7 @@ mod tests {
     fn research_coordinate_episode_matches_host_fixture() {
         assert_eq!(
             research_episode_status(),
-            "bitblock_browser_research ok module=coordinate_episode episodes=3 encoded=371 policy=#bb.policy.sha256.qjswilslbl4opnwl7npgkycn3lapzdlovmqphgj3cvlwugkr7rbq tag=#bb.receipt.sha256.6feyyp2ttluxp572qxdyfdzmwkgp4i3ad72usqvm32p3lc6ozo5a"
+            "bitblock_browser_research ok module=coordinate_episode episodes=3 encoded=371 policy=#bb.policy.sha256.qjswilslbl4opnwl7npgkycn3lapzdlovmqphgj3cvlwugkr7rbq tag=#bb.receipt.sha256.os4co4gqd6jed4ttwmbkjozviqpb6ly2xtczuuizobzcc7fcsplq"
         );
     }
 
@@ -2389,7 +2389,7 @@ mod tests {
         assert!(composite.glyphs > 0, "sidebar raster drew no glyphs");
         assert_eq!(
             status,
-            "bitblock_browser_sidebar ok output=1201x801 simulation=801x801 sidebar=400 frame=#bb.frame.sha256.fscl5apfua6xbkp7776f2rqtka2nknilpxcfyoznzjcxhw675woq non_background=320401 rgba_bytes=3848004 game=#bb.frame.sha256.euedfghziucycgzshgwo2ewvvxpigjf6t5psktrjk7pk5pwom6va glyphs=1013 lit=8745"
+            "bitblock_browser_sidebar ok output=1201x801 simulation=801x801 sidebar=400 frame=#bb.frame.sha256.eqvpp636o2wtilipgbginnmnpa3zyohkoyh7eab65c27pk7a5zoq non_background=320401 rgba_bytes=3848004 game=#bb.frame.sha256.euedfghziucycgzshgwo2ewvvxpigjf6t5psktrjk7pk5pwom6va glyphs=1013 lit=8796"
         );
     }
 
@@ -2400,7 +2400,7 @@ mod tests {
         assert_eq!(rgba.len(), 81 * 81 * 4);
         assert_eq!(
             status,
-            "bitblock_browser_program ok world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq applied=336 on_bits=337 preview=81x81 non_background=671 frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a"
+            "bitblock_browser_program ok world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba applied=336 on_bits=337 preview=81x81 non_background=671 frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a"
         );
     }
 
@@ -2427,7 +2427,7 @@ mod tests {
         assert!(status.contains("on_bits=2"));
         assert!(
             !status
-                .contains("#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq")
+                .contains("#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba")
         );
         assert_eq!(rgba.len(), 81 * 81 * 4);
         assert!(status.len() <= RESULT_CAP);
@@ -2449,7 +2449,7 @@ mod tests {
         );
         assert_eq!(
             status,
-            "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=230196 world=#bb.world.sha256.w6wlo572rc3u5v4mvsopcl7gxvkfxl6ntni7rk6qgr2ja5bdblzq frame=#bb.frame.sha256.w3rcr6bhynecdm3ocifx3hkcxfloijyj7ar4d4hp5hnprlwweiqa yaw_deg=0 pitch_deg=0"
+            "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=230196 world=#bb.world.sha256.iy5q2bopf2llw4samvn5ifsbup3adpxu2lupt2vjp4qqqgx4s6iq frame=#bb.frame.sha256.w3rcr6bhynecdm3ocifx3hkcxfloijyj7ar4d4hp5hnprlwweiqa yaw_deg=0 pitch_deg=0"
         );
     }
 
@@ -2474,11 +2474,11 @@ mod tests {
         );
         assert_eq!(
             hw,
-            "bitblock_browser_storage ok store=history op=write records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461"
+            "bitblock_browser_storage ok store=history op=write records=2 world=#bb.world.sha256.4qebqribdfmkf53kxbzjwfe3vrfhmyddlv2emjmbhexvwtxpt2gq head=#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa on_bits=2 bytes=461"
         );
         assert_eq!(
             hv,
-            "bitblock_browser_storage ok store=history op=verify scan=clean records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461 valid_prefix=461"
+            "bitblock_browser_storage ok store=history op=verify scan=clean records=2 world=#bb.world.sha256.4qebqribdfmkf53kxbzjwfe3vrfhmyddlv2emjmbhexvwtxpt2gq head=#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa on_bits=2 bytes=461 valid_prefix=461"
         );
         assert_eq!(
             dw,
@@ -2496,7 +2496,7 @@ mod tests {
         assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
         assert_eq!(
             status,
-            "bitblock_browser_research ok module=optimization receipt=#bb.receipt.sha256.qyjgyjutxxfupm6rfp33zm6wrr2i5g5z4z7vhyqqweob6krqf7ra case=#bb.registry.sha256.6d5golms4a3vk7vqvbmvhjksrw4vaihnmnkzjg3er7fekeky67aa output=#bb.receipt.sha256.vbevj4vyjwjk3ume6vkxkigm7vioe6ox65c4ws6r6ly5jqwg73ga"
+            "bitblock_browser_research ok module=optimization receipt=#bb.receipt.sha256.5cobj7m7rn4g3oysvktolank4g3io3iucunk5743plnrbxak6vua case=#bb.registry.sha256.6d5golms4a3vk7vqvbmvhjksrw4vaihnmnkzjg3er7fekeky67aa output=#bb.receipt.sha256.62we6nvy5lmpwoxfyl2fgiw3nyrfvpa6u5obnptd7er5nksizqtq"
         );
     }
 
