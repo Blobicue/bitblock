@@ -1141,6 +1141,13 @@ impl ChemWorld {
         if !self.params.settle || self.params.energy_in.core <= 0 {
             return;
         }
+        // A candidate needs a surface fluid slot in the domain, and this pass only
+        // permutes the existing materials: with no AIR or WATER no candidate can fire.
+        if find_mat(&self.mat, 0, MatId::AIR).is_none()
+            && find_mat(&self.mat, 0, MatId::WATER).is_none()
+        {
+            return;
+        }
         let seed = self.params.seed;
         let tick = self.tick;
         let mut fired = 0u32;
@@ -1293,6 +1300,13 @@ impl ChemWorld {
     /// [`PLUME_REPOSE`] step bound against the neighbour tops.
     pub(crate) fn plume_pass(&mut self, topo: &Topology, rep: &mut StepReport) {
         if !self.params.settle || self.params.energy_in.core <= 0 {
+            return;
+        }
+        // A candidate needs a surface fluid slot in the domain, and this pass only
+        // permutes the existing materials: with no AIR or WATER no candidate can fire.
+        if find_mat(&self.mat, 0, MatId::AIR).is_none()
+            && find_mat(&self.mat, 0, MatId::WATER).is_none()
+        {
             return;
         }
         let seed = self.params.seed;
@@ -1674,6 +1688,11 @@ impl ChemWorld {
     /// against it below the equator would bounce grains between the two.
     pub(crate) fn collapse_pass(&mut self, topo: &Topology, rep: &mut StepReport) {
         if !self.params.settle {
+            return;
+        }
+        // Collapse only swaps a solid with an AIR in the domain; with no AIR it cannot
+        // change anything (the roll is cell-keyed, with no mutable RNG state).
+        if find_mat(&self.mat, 0, MatId::AIR).is_none() {
             return;
         }
         let Some(o) = topo.core else { return };
