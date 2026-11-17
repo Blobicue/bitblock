@@ -824,6 +824,126 @@ pub(crate) enum RollKey {
     Wide(u64),
 }
 
+/// One `(x, y)` row of the domain: cells `start..=start + (z1 - z0)` are `(x, y, z0..=z1)`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ZRun {
+    pub(crate) x: i64,
+    pub(crate) y: i64,
+    pub(crate) z0: i64,
+    pub(crate) z1: i64,
+    pub(crate) start: usize,
+}
+
+/// The domain as z-runs, when every `(x, y)` row of it is one contiguous z range (a ball or a
+/// box): a cell's face neighbours are then plain index arithmetic on four neighbouring rows.
+#[derive(Debug)]
+pub(crate) struct ZRuns {
+    pub(crate) runs: Vec<ZRun>,
+    x0: i64,
+    y0: i64,
+    nx: i64,
+    ny: i64,
+    /// `(x - x0) * ny + (y - y0)` to the run index, or `NO_SLOT`.
+    at: Vec<u32>,
+}
+
+impl ZRuns {
+    fn build(cells: &[Coord]) -> Option<Self> {
+        let first = cells.first()?;
+        let mut runs: Vec<ZRun> = Vec::new();
+        for (i, c) in cells.iter().enumerate() {
+            match runs.last_mut() {
+                Some(r) if r.x == c.x && r.y == c.y => {
+                    // cells are sorted and distinct, so the row continues iff z steps by one
+                    if r.z1.checked_add(1) != Some(c.z) {
+                        return None;
+                    }
+                    r.z1 = c.z;
+                }
+                _ => runs.push(ZRun {
+                    x: c.x,
+                    y: c.y,
+                    z0: c.z,
+                    z1: c.z,
+                    start: i,
+                }),
+            }
+        }
+        let (mut x1, mut y0, mut y1) = (first.x, first.y, first.y);
+        for r in &runs {
+            x1 = x1.max(r.x);
+            y0 = y0.min(r.y);
+            y1 = y1.max(r.y);
+        }
+        let nx = x1.checked_sub(first.x)?.checked_add(1)?;
+        let ny = y1.checked_sub(y0)?.checked_add(1)?;
+        let area = nx.checked_mul(ny)?;
+        if area > 4 * runs.len() as i64 + 64 || runs.len() >= NO_SLOT as usize {
+            return None;
+        }
+        let mut at = vec![NO_SLOT; area as usize];
+        for (k, r) in runs.iter().enumerate() {
+            at[((r.x - first.x) * ny + (r.y - y0)) as usize] = k as u32;
+        }
+        Some(Self {
+            runs,
+            x0: first.x,
+            y0,
+            nx,
+            ny,
+            at,
+        })
+    }
+
+    /// The run of row `(x, y)`, if the domain has one.
+    pub(crate) fn row(&self, x: Option<i64>, y: Option<i64>) -> Option<ZRun> {
+        let (rx, ry) = (x?.checked_sub(self.x0)?, y?.checked_sub(self.y0)?);
+        if rx < 0 || ry < 0 || rx >= self.nx || ry >= self.ny {
+            return None;
+        }
+        let k = self.at[(rx * self.ny + ry) as usize];
+        (k != NO_SLOT).then(|| self.runs[k as usize])
+    }
+
+    /// The four rows beside `run` in `NB6` order: `x - 1`, `x + 1`, `y - 1`, `y + 1`.
+    pub(crate) fn beside(&self, run: &ZRun) -> [Option<ZRun>; 4] {
+        [
+            self.row(run.x.checked_sub(1), Some(run.y)),
+            self.row(run.x.checked_add(1), Some(run.y)),
+            self.row(Some(run.x), run.y.checked_sub(1)),
+            self.row(Some(run.x), run.y.checked_add(1)),
+        ]
+    }
+
+    /// The face neighbours of cell `(run.x, run.y, z)` (index `i`), in `NB6` order, as the
+    /// first `n` entries of the array.
+    #[inline]
+    pub(crate) fn neighbours(
+        run: &ZRun,
+        beside: &[Option<ZRun>; 4],
+        z: i64,
+        i: usize,
+    ) -> ([usize; 6], usize) {
+        let mut js = [0usize; 6];
+        let mut n = 0;
+        for r in beside.iter().flatten() {
+            if z >= r.z0 && z <= r.z1 {
+                js[n] = r.start + (z - r.z0) as usize;
+                n += 1;
+            }
+        }
+        if z > run.z0 {
+            js[n] = i - 1;
+            n += 1;
+        }
+        if z < run.z1 {
+            js[n] = i + 1;
+            n += 1;
+        }
+        (js, n)
+    }
+}
+
 /// Cached domain topology (rebuilt when the domain changes).
 #[derive(Debug)]
 pub(crate) struct Topology {
@@ -858,6 +978,8 @@ pub(crate) struct Topology {
     /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
     /// every tick, read one sequential word per cell instead of the cell's coordinate.
     rsort_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
+    /// The domain's rows as z-runs, when each row is one contiguous run.
+    pub(crate) zruns: Option<ZRuns>,
 }
 
 pub(crate) const NB6: [(i64, i64, i64); 6] = [
@@ -889,6 +1011,7 @@ impl Topology {
             rsort: Vec::new(),
             rsort_up: Vec::new(),
             rsort_roll: std::sync::OnceLock::new(),
+            zruns: ZRuns::build(cells),
             space_faces: Vec::new(),
             core: None,
         };
@@ -1699,24 +1822,52 @@ impl ChemWorld {
             _ => self.mat.iter().filter(|m| **m == MatId::CO2).count() as i64,
         };
         let mut nq = vec![0i32; n];
-        for i in 0..n {
-            let qi = self.q[i];
-            let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
-            let mut deg: i64 = 0;
-            if o > 0 {
-                let nbs = topo.nb6(&self.cells, i);
-                let live = nbs.iter().filter(|j| j.is_some()).count() as i64;
-                if live > 0 {
-                    let per = o / live;
-                    if per != 0 {
-                        for j in nbs.into_iter().flatten() {
-                            nq[j] = nq[j].wrapping_add(per as i32);
-                            deg += per;
+        // Each emitting cell adds the same `per` to each face neighbour and keeps the rest;
+        // the additions wrap in `i32`, so their order does not matter.
+        if let Some(rows) = &topo.zruns {
+            // Row by row: the neighbour indices are arithmetic on the four rows beside it.
+            for run in &rows.runs {
+                let beside = rows.beside(run);
+                for z in run.z0..=run.z1 {
+                    let i = run.start + (z - run.z0) as usize;
+                    let qi = self.q[i];
+                    let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
+                    let mut deg: i64 = 0;
+                    if o > 0 {
+                        let (js, live) = ZRuns::neighbours(run, &beside, z, i);
+                        if live > 0 {
+                            let per = o / live as i64;
+                            if per != 0 {
+                                for &j in &js[..live] {
+                                    nq[j] = nq[j].wrapping_add(per as i32);
+                                }
+                                deg = per * live as i64;
+                            }
+                        }
+                    }
+                    nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
+                }
+            }
+        } else {
+            for i in 0..n {
+                let qi = self.q[i];
+                let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
+                let mut deg: i64 = 0;
+                if o > 0 {
+                    let nbs = topo.nb6(&self.cells, i);
+                    let live = nbs.iter().filter(|j| j.is_some()).count() as i64;
+                    if live > 0 {
+                        let per = o / live;
+                        if per != 0 {
+                            for j in nbs.into_iter().flatten() {
+                                nq[j] = nq[j].wrapping_add(per as i32);
+                                deg += per;
+                            }
                         }
                     }
                 }
+                nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
             }
-            nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
         }
         let gh_on =
             self.params.cycle == WaterCycle::Driven && self.params.greenhouse != Greenhouse::Off;

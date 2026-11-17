@@ -4704,6 +4704,31 @@ fn topology_fast_paths_match_offset_lookups() {
                 }
             }
         }
+        // z-runs: present exactly when every (x, y) row is one contiguous z range, and then
+        // the same neighbours, in NB6 order, as `nb6`.
+        let contiguous = cells
+            .windows(2)
+            .all(|w| (w[0].x, w[0].y) != (w[1].x, w[1].y) || w[0].z.checked_add(1) == Some(w[1].z));
+        if d == 0 {
+            assert!(topo.zruns.is_some(), "the solid ball is one run per row");
+        }
+        // `None` (a holey row, or a row table too sparse to be worth it) keeps `nb6`.
+        if let Some(rows) = &topo.zruns {
+            assert!(contiguous, "domain {d}");
+            let mut seen = 0;
+            for run in &rows.runs {
+                let beside = rows.beside(run);
+                for z in run.z0..=run.z1 {
+                    let i = run.start + (z - run.z0) as usize;
+                    assert_eq!(cells[i], Coord::new(run.x, run.y, z), "domain {d}");
+                    let (js, n) = super::p6::ZRuns::neighbours(run, &beside, z, i);
+                    let want: Vec<usize> = topo.nb6(cells, i).into_iter().flatten().collect();
+                    assert_eq!(&js[..n], &want[..], "domain {d} cell {i}");
+                    seen += 1;
+                }
+            }
+            assert_eq!(seen, cells.len(), "domain {d}");
+        }
         for p in [
             Coord::new(i64::MIN, 0, 0),
             Coord::new(i64::MAX, i64::MAX, i64::MAX),
