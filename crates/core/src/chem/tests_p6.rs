@@ -4687,6 +4687,33 @@ fn topology_fast_paths_match_offset_lookups() {
         for i in 0..cells.len() {
             let slow = NB6.map(|step| topo.offset(cells, i, step));
             assert_eq!(topo.nb6(cells, i), slow, "domain {d} cell {i}");
+            // `locate` answers exactly the sorted-list binary search, on and off the domain.
+            let c = cells[i];
+            for (dx, dy, dz) in [(0, 0, 0), (2, -1, 0), (-3, 0, 1), (0, 0, 7), (-1, 5, -2)] {
+                if let (Some(x), Some(y), Some(z)) = (
+                    c.x.checked_add(dx),
+                    c.y.checked_add(dy),
+                    c.z.checked_add(dz),
+                ) {
+                    let p = Coord::new(x, y, z);
+                    assert_eq!(
+                        topo.locate(p),
+                        cells.binary_search(&p).ok(),
+                        "domain {d} {p:?}"
+                    );
+                }
+            }
+        }
+        for p in [
+            Coord::new(i64::MIN, 0, 0),
+            Coord::new(i64::MAX, i64::MAX, i64::MAX),
+            Coord::new(0, i64::MIN, i64::MAX),
+        ] {
+            assert_eq!(
+                topo.locate(p),
+                cells.binary_search(&p).ok(),
+                "domain {d} {p:?}"
+            );
         }
         for core in [0, cells.len() / 2, cells.len() - 1] {
             topo.core = Some(core as u32);

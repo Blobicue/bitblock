@@ -665,7 +665,11 @@ impl ChemWorld {
     }
 
     pub(crate) fn index_of(&self, coord: Coord) -> Option<usize> {
-        self.cells.binary_search(&coord).ok()
+        // The cached topology indexes exactly `cells` (every domain change drops it).
+        match &self.topo {
+            Some(t) => t.locate(coord),
+            None => self.cells.binary_search(&coord).ok(),
+        }
     }
 
     /// Material at a coordinate (`AIR` outside the domain or for air cells).

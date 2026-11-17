@@ -987,6 +987,24 @@ impl Topology {
             .map(|(&i, &up)| (i as usize, (up != NO_SLOT).then_some(up as usize)))
     }
 
+    /// The cell index of `c`, or `None` when `c` is not a domain cell: the same answer as a
+    /// binary search of the sorted cell list, in one box probe.
+    pub(crate) fn locate(&self, c: Coord) -> Option<usize> {
+        match &self.lookup {
+            Lookup::Boxed { min, dim, slot } => {
+                let rx = c.x.checked_sub(min[0])?;
+                let ry = c.y.checked_sub(min[1])?;
+                let rz = c.z.checked_sub(min[2])?;
+                if rx < 0 || ry < 0 || rz < 0 || rx >= dim[0] || ry >= dim[1] || rz >= dim[2] {
+                    return None;
+                }
+                let s = slot[((rx * dim[1] + ry) * dim[2] + rz) as usize];
+                (s != NO_SLOT).then_some(s as usize)
+            }
+            Lookup::Hashed(m) => m.get(&c).map(|s| *s as usize),
+        }
+    }
+
     pub(crate) fn offset(&self, cells: &[Coord], i: usize, d: (i64, i64, i64)) -> Option<usize> {
         let c = cells[i];
         let (x, y, z) = (
