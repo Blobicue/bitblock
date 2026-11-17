@@ -398,8 +398,8 @@
         "sig_type_consistency": true,
         "test_fns_match_coverage": true,
         "pub_counts": {
-            "total": 1323,
-            "documented": 1323
+            "total": 1326,
+            "documented": 1326
         },
         "type_checks": [
             {

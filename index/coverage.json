@@ -36,7 +36,7 @@
  ],
  "schemas_uncovered": [],
  "schemas_vectored": 75,
- "source_lines": 65783,
- "tests": 482,
+ "source_lines": 66489,
+ "tests": 484,
  "tools": 44
 }
