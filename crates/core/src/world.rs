@@ -1,6 +1,51 @@
 //! Sparse 16x16x16 chunked voxel world, immutable origin bedrock, exposed-face masks, and 8-level sparse octree pyramid.
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+/// Fast deterministic hasher for the chunk and octant maps (Fx-style multiply-rotate over the
+/// coordinate words). Their keys are small integer coordinates, not attacker-chosen strings, and
+/// nothing observable depends on map iteration order: ordered iteration sorts, bounds are
+/// min/max folds, and with SipHash's per-process random keys the order already varied per run.
+#[derive(Clone, Copy, Default)]
+struct CoordHasher(u64);
+
+impl CoordHasher {
+    #[inline]
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl Hasher for CoordHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0_u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.add(u64::from_le_bytes(word));
+        }
+    }
+    #[inline]
+    fn write_u8(&mut self, v: u8) {
+        self.add(u64::from(v));
+    }
+    #[inline]
+    fn write_u64(&mut self, v: u64) {
+        self.add(v);
+    }
+    #[inline]
+    fn write_i64(&mut self, v: i64) {
+        self.add(v as u64);
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        // The table indexes buckets by the low bits; fold the well-mixed high bits down.
+        self.0.rotate_left(26)
+    }
+}
+
+type CoordMap<K, V> = HashMap<K, V, BuildHasherDefault<CoordHasher>>;
 
 /// Number of coordinates along each axis of one sparse chunk.
 pub const CHUNK_SIDE: i64 = 16;
@@ -187,8 +232,8 @@ fn tight_bounds(chunk: ChunkCoord, bits: &[u64; CHUNK_WORDS]) -> Bounds {
 /// A sparse bit world. Coordinates not present in an allocated chunk are off.
 #[derive(Clone, Debug)]
 pub struct World {
-    chunks: HashMap<ChunkCoord, Chunk>,
-    octree: [HashMap<OctantCoord, OctantSummary>; OCTREE_MAX_DEPTH as usize],
+    chunks: CoordMap<ChunkCoord, Chunk>,
+    octree: [CoordMap<OctantCoord, OctantSummary>; OCTREE_MAX_DEPTH as usize],
     revision_counter: u64,
     len: usize,
     bounds: Option<Bounds>,
@@ -213,8 +258,8 @@ impl World {
     /// Creates a world containing exactly the permanent bedrock bit.
     pub fn new() -> Self {
         let mut world = Self {
-            chunks: HashMap::new(),
-            octree: std::array::from_fn(|_| HashMap::new()),
+            chunks: CoordMap::default(),
+            octree: std::array::from_fn(|_| CoordMap::default()),
             revision_counter: 0,
             len: 0,
             bounds: None,
