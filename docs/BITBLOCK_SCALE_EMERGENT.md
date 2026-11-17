@@ -2388,7 +2388,77 @@ Screenshots: `/workspace/render_scale/{before,after}_{4,2}_r{20,32}.png`. Before
 - (b) Render: what remains is the 2-layer surface shell plus back-hemisphere bits. A conservative chunk- or brick-level occlusion test is next, held to the same exactness bar.
 - (c) Ocean: `world_tag` SHA-256 is still O(N) per edit tick, plus octree ancestor upkeep and `set_off`. An incremental or Merkle world tag would change every world hash, so it is a protocol decision for Owen, not a perf patch.
 
-**Build.** As §5y, from 51219ab. www: wasm md5 `f966135c4a114ee89b843015ddea096f` (1,396,520 B, reproducible from a clean target dir), play.html `dbd39e7270ad634dfe13a646a2686809`, bitblock-lab.html `491624b074aba55c8f0fbf24ce7e021b`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). ABI 17. Commits: 5134b28 (cull), 51219ab (world_tag), 07f1f40 (www).
+**Build.** As §5y, from 51219ab. www: wasm md5 `f966135c4a114ee89b843015ddea096f` (1,396,520 B, reproducible from a clean target dir), play.html `dbd39e7270ad634dfe13a646a2686809`, bitblock-lab.html `491624b074aba55c8f0fbf24ce7e021b`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). ABI 17. Commits: 5134b28 (cull), 51219ab (world_tag), 07f1f40 (www). Desktop: b17d0cd copied to `C:\Users\Owen\Desktop\bitblock\` on 2026-11-16 (Owen OK pt244u), md5s verified against the above (wasm `f966135c…`, play.html `dbd39e72…`, bitblock-lab.html `491624b0…`, bitblock.html `814320ae…`).
+
+## 6a. Radius scaling past r32: cache-miss-free chem + 1.25 px enclosed cull; play cap 32 → 36 (2026-11-16, branch `chem/render-scale-2026-11`; Owen "yes" pt246u) — every hash and book unchanged
+
+Continues the §5 series after §5z. The brief was to measure gas (preset 4, Driven) and ocean (preset 2, Classic) at r32/48/64/96, fix the first wall exactly, and raise the play cap to the largest radius that still plays.
+
+**1. Method.**
+- Native: `scale_measure/radius_study <preset> <r> <n>`. Each run does genesis, session init, 2 warm-up chem steps (the first step builds the topology, so it is excluded), then n timed rounds of world_tag, chem step, mirror commit, render (1600×900) and a full step4. It also records RSS and the high-water mark. The play cap was raised to 256 in a scratch copy only.
+- Browser: headless Chrome via `perf2.mjs` on play.html, Low quality at 960×540, about 15 s per world. It records raf fps, presented fps (one frame per chem step; 15 is the full 60/4 cadence), step ms and wasm memory.
+- Before = b17d0cd (§5z). After = this wave. Every run ends `books=ok energy_drift=0 error=none`. r128 is refused because `MAX_GENESIS_RADIUS = 103` in core `chem.rs` is a hard wall, which was left unchanged.
+
+**2. Native (ms per chem step; step4 = chem + mirror + render + tag).**
+
+| case | cells | chem ms | render ms | world_tag ms | step4 ms | init s | RSS hwm MB |
+|---|---|---|---|---|---|---|---|
+| gas r32 | 137k | 13.0 → 7.2 | 15.1 → 13.9 | 2.0 | 30.8 → 23.1 | 0.27 | 72 |
+| gas r48 | 463k | 58.7 → 28.4 | 31.2 → 31.0 | 6.5 | 97.2 → 61.4 | 0.77 | 170 |
+| gas r64 | 1.10M | 206 → 70.6 | 52.4 → 48.6 | 15.2 | 254 → 126 | 1.7 | 318 → 327 |
+| gas r96 | 3.71M | 925 → 322 | 453 → 103 | 51 | 1487 → 443 | 6.0 | 1156 → 1090 |
+| ocean r32 | 137k | 9.8 → 7.5 | 14.2 → 14.4 | 2.0 | 29.8 → 26.9 | 0.27 | 73 |
+| ocean r48 | 463k | 33.6 → 25.6 | 31.5 → 31.3 | 7 | 80.6 → 71.3 | 0.80 | 170 |
+| ocean r64 | 1.10M | 99.2 → 59.7 | 49.6 → 50.2 | 15.2 | 184 → 145 | 1.7 | 327 |
+| ocean r96 | 3.71M | 399 → 225 | 431 → 115 | 51 | 922 → 438 | 5.9 | 1092 |
+
+Chunks by radius (r32/48/64/96): 70 / 195 / 414 / 1253. Genesis at r96 takes 4.7–4.9 s.
+
+**3. Chrome (raf / presented fps, step ms).**
+
+| case | before (b17d0cd) | after | wasm MB | init s |
+|---|---|---|---|---|
+| gas r32 | 45.6 / 15.0, 10.8 | 58.8 / 15.0, 6.8 | 80 | 0.33 |
+| ocean r32 | 40.0 / 15.0, 16.9 | 44.9 / 15.0, 14.0 | 72 | 0.35 |
+| gas r36 (shipped) | — | 45.0 / 15.0, 11.6 | 86 | 0.46 |
+| ocean r36 (shipped) | — | 24.4–27.9 / 14.9–15.0, 30.5–40.8 | 78 | 0.47 |
+| ocean r38 | — | 13.1 / 13.1, 71 | 110 | 0.57 |
+| gas r40 | — | 36.9 / 15.0, 17.8 | 128 | 0.64 |
+| ocean r40 | — | 7.3 / 7.3, 126 | 120 | 0.65 |
+| gas r48 | 5.1, 180 | 9.4, 93 | 205 | 1.1 |
+| ocean r48 | 4.0, 230 | 4.6, 199 | 197 | 1.2 |
+| gas r64 | 1.37, 676 | 3.37, 260 | 402 | 2.7 |
+| ocean r64 | 1.37, 686 | 1.97, 470 | 393–427 | 2.7 |
+| gas r96 | 0.30, 2854 | 0.60, 1511 | 1292 | 10.3 |
+| ocean r96 | 0.40, 2445 | 0.50, 1941 | 1284–1395 | 10.3 |
+
+**4. First wall: chem combine2 grows superlinearly from cache misses.** A per-stage profile at r64 gas showed combine2 at 149 ms out of a 206 ms step. The cost went beyond O(N): gas rise and `convect_pass` walk the coreward `rsort` order and look up each cell's outward neighbour through `Topology::offset` (a hashed or boxed lookup per cell). The network law also reallocated about 55 B/cell of scratch on every step. Three exact fixes (be4f403):
+- `Topology::rsort_up`: a precomputed outward-neighbour slot per rsort entry (`NO_SLOT` at the core or off-domain), built once in `radial_frame`, plus `rsort_outward_first()`. Gas rise and convect visit the same cells in the same order, with the same outward slot, as the offset lookup. Without a core they fall back to the old `rise` list.
+- `nb6` fast path for `Lookup::Boxed`: base index ±sx/±sy/±1 with per-axis bounds. It returns the same slot as `offset()`, including on holey and edge boxes.
+- `net::NetScratch`: the network pass's prov/done/cursor/vis_id/fids/nnbs/intent/claim buffers are kept on `Chem` and reused. `prepare(n)` clears every buffer whose contents are read before they are written, and resizes the rest. Because every read sees exactly what a fresh allocation would hold, the output is identical. `Clone` returns empty scratch so a cloned Chem does not share or leak state.
+
+Result: gas combine2 at r64 went 149 → 39 ms and heat 28 → 18 ms. The new test `topology_fast_paths_match_offset_lookups` checks boxed, holey and hashed topologies and i64 edges against `offset()`, plus `rsort_up`.
+
+**5. Render wall at r96: enclosed cull disabled below 2 px.** With a world this large on screen, most bits project to 1–2 px, so the §5z cull (which needed span ≥ 2 px) was off for almost the whole volume, and render cost 453 ms. The bound can be tightened exactly. A bit at distance D whose bounding sphere has radius ρ projects to an image whose minor axis is at least fρ/√(D²−ρ²) > f/(2D) times its extent. At ≥ 1.25 px, the 3×3×3 neighbours' splats still cover the centre bit's full footprint, so hiding it changes no pixel. Below 1 px, single-pixel splats can leave gaps, so the cull is **not** exact there and stays off. `ENCLOSED_MIN_SPAN = 1.25 · SMALL_BIT_EXTENT` (4226569). The new test `enclosed_bit_cull_is_exact_on_one_to_two_pixel_bits` culls about 1.41M bits (the old bound culled about 15k) and asserts pixels and depth bit-for-bit against both the reference traversal and the uncut renderer. Render at r96 went 453 → 103 ms (gas) and 431 → 115 ms (ocean).
+
+**6. Exactness evidence.**
+- p6 goldens: `cargo test -p bitblock-core --release -- --ignored` passes.
+- The chemparity harness (`render_scale/chemparity`) compares base b17d0cd against this wave byte for byte in three modes: `chem` (242 lines: per-step world tags and books over presets and radii), `play` (180 lines: play-session world and frame hashes) and `big` (80 lines: 68 distinct frames at r48–r96). All three are identical. The default play hashes are unchanged: world `lqpba5lv…`, frame `5l3xbpo3…`.
+- world_tag hashing semantics are untouched (Owen's call).
+
+**7. Cap: `CHEM_RADIUS_MAX` 32 → 36 (bc8d9ec).** The rule is that a radius is playable if both presets keep presented fps at about 15 (every chem step shown) in headless Chrome at Low.
+- Gas holds 15 up to r40 (36.9 raf).
+- Ocean is the binding preset: r34 30.7/15.0, r36 24.4–27.9/14.9–15.0, r38 drops to 13.1, r40 to 7.3.
+- 36 is therefore the largest radius where both presets play at full cadence. The slider (`play.template.html` max=36) and `playNum(…, 2, 36)` match the Rust clamp.
+
+**8. Next wall.**
+- (a) Ocean in the browser: the SHA-256 `world_tag` runs on every history commit with edits (history.rs:602), and ocean edits every chem step. wasm SHA-256 is software, about 11 MB hashed per edit tick at r48. An incremental or Merkle tag changes every world hash, so it is Owen's protocol call.
+- (b) Ocean edit upkeep: `update_octree_ancestors` plus `set_off`/`set_on` on both Worlds per edit.
+- (c) Gas: convect performs real swaps (about 215k per step at r64), and heat is now the largest per-cell law. M2 dormant bricks would need a proof or a flag-gated equivalence test.
+- (d) Render below 1 px is not exactly cullable, so LOD there would be non-exact and opt-in only.
+- (e) Memory and init: r96 is about 1.3 GB wasm and 10 s init (genesis 4.7 s native). Genesis is capped at r103.
+
+**Build.** wasm (bc8d9ec, ABI 17) md5 `50eb47dd86da1468a855f6653e651829` (1,397,658 B), play.html `f1df94b6e8f66e9c97c5f983c9308d0e`, bitblock-lab.html `4d49429b1a52cced634782c72d7e610d`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean r12, gas r20 and gas/ocean r36 all `books=ok energy_drift=0 error=none`; only the favicon returns 404. Screenshots: `/workspace/render_scale/scaling/ship_{4,2}_r36.png`, `{base,new2}_*.png`, `smoke_gas_r20_8765_bc8d9ec.png`. Commits: be4f403 (chem), 4226569 (render cull), bc8d9ec (cap), a837795 (www). Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy of this wave (Owen to decide); main untouched.
 
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
@@ -2415,6 +2485,8 @@ Screenshots: `/workspace/render_scale/{before,after}_{4,2}_r{20,32}.png`. Before
 - Timings are native single-thread on a shared box; browser wasm ~1.75× slower; Chrome not checked here.
 
 ## 8. Recommended next build step
+**Update 2026-11-16 (24):** radius scaling (§6a). The first wall past r32 was chem combine2 growing superlinearly from cache misses. Exact fixes: a precomputed outward slot per rsort entry (`rsort_up`), a boxed `nb6` fast path, and a reused network-law scratch (`NetScratch`). Gas chem at r64 went 206 → 71 ms native. The enclosed cull now applies exactly down to 1.25 px bits (r96 render 453 → 103 ms). Browser gas r64 went 1.37 → 3.37 fps. Play cap 32 → 36: ocean is the binding preset, holding 15 presented fps at r36 and dropping to 13 at r38. Every hash and book is unchanged (chemparity chem/play/big byte-identical, p6 goldens pass). Next wall: ocean SHA-256 world_tag per edit tick in wasm (a protocol decision for Owen), then octree edit upkeep.
+
 **Update 2026-11-16 (23):** render scale (§5z). Two exact levers on branch `chem/render-scale-2026-11`. First, the renderer no longer submits bits whose whole 3×3×3 neighbourhood is on: a 6-face rule was measured and rejected as inexact at concave creases. Second, `world_tag` streams coordinates in order instead of collecting and sorting them. Frame hashes, world tags and chem books match 7634a08 on 13 play scenarios. Chrome Low 960×540: gas r32 raf 30 → 44, ocean r32 9.5 → 36 raf and 9.5 → 15 presented (the full chem cadence); native r32 render 35 → 14 ms. Next, in order: (1) chem inner loops / M2 at r32, since chem ≈ render now; (2) an exact chunk-level occlusion test; (3) Owen's call on an incremental world tag, which is a protocol change.
 
 **Update 2026-10-29 (22):** bigger scale + gas planet (§5y). Exact network skip (`net.rs`, q<250 / non-reactive cells skip the cube build) halves step cost at every radius, parity 9/9 SAME; play radius cap 20 → 32. New opt-in `convect` law (ideal-gas buoyancy swaps, books unchanged) and gas preset 4 (Fe/Ni/Si/Mg core, H2S, NH3 plumes in CH4; sun8 + Driven + core gravity) in play. Chrome: gas r20 ~52 fps raf / 15 presented, r24 ~30, r32 ~6; books ok. The bottleneck is now the CPU renderer (~18 ms at r24, ~36 ms at r32 native 1600×900), not chem. No bands/storms claimed (no rotation). Next, in order: (1) renderer dirty-region repaint (needs OK to touch render); (2) M2 dormant bricks past r32; (3) rotation/Coriolis before any band claim; (4) the §5x list (tilt under core, Full+sun8 soak baseline, multi-seed).
