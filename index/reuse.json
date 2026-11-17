@@ -8,6 +8,12 @@
     ]
    },
    {
+    "item": "BitProbe",
+    "modules": [
+     "world"
+    ]
+   },
+   {
     "item": "COMMIT_R1_ASSAY_REPORT_SCHEMA",
     "modules": [
      "commit_r1"
@@ -590,7 +596,7 @@
     ]
    }
   ],
-  "pub_items": 851,
+  "pub_items": 855,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -614,7 +620,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 35302,
+   "code_lines": 35329,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -795,7 +801,7 @@
    ]
   },
   "test": {
-   "code_lines": 23250,
+   "code_lines": 23273,
    "duplicated_lines": 341,
    "regions": [
     {
