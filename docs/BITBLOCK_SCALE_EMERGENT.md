@@ -2603,6 +2603,73 @@ Every run ends `books=ok energy_drift=0 error=none`.
 
 **Build.** wasm (fe536d3, ABI 17) md5 `0d59b9c6ee910ade3b532cbfc7f33ce5` (1,408,310 B), play.html `ab854c889305bcb03ac0840245b2a250`, bitblock-lab.html `42957f733018105e5a3103a6d8cbddbc`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged); www commit 7326102. Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean r12, gas r20, ocean r40/r42 and gas r42 all `books=ok energy_drift=0 error=none`; the lab reports ABI 17; only the favicon returns 404. Screenshots: `/workspace/render_scale/s6c/ship/{ship_2_r42,ship_4_r42,ship_2_r40,smoke_gas_r20_8765_7326102}.png` and the sweep shots `/workspace/render_scale/s6c/chrome/{ref,cur,rep}_*.png`. Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
 
+## 6d. Exact chem speedups for gas past r48 and ocean outside hashing/render; play cap 42 → 44 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "continue" pt248u) — every hash and book unchanged
+
+The brief covered gas past r48 (network law, relief passes, heat), trimming the convection tables, and exact ocean chem/edit wins outside hashing and render. It asked for r42–r96 to be re-measured, with a cap raise only if both presets hold about 15 presented fps (ocean is the limiter). world_tag and frame semantics are unchanged. Before = f71454f (§6c). After = 82ff68d (code), 661ffea (cap).
+
+**1. Changes (all exact).**
+- b2c16ea — **network law.** Intents go into a per-round list (pass B/C walk it, claims are reset by slot), and the per-cell scratch is sized only when some cell builds its cube. The round-0 skip state (`nnbs`, `vis_id`, `cursor`) is filled only when that round posted an intent. Both play presets have no hot reactive cell so a step touches no per-cell network scratch. That accounts for most of the RSS drop.
+- 136bbed — **heat gathers.** The z-run path computes every cell's share `per` first, then adds the face neighbours' shares over contiguous row slices (`i ± 1` and the four beside rows). The face relation is symmetric and the sums wrap in i32. The heat field and share buffers are reused across steps (no per-tick 4 B/cell allocation). Test: `gathered_heat_matches_general_scatter` (row path vs the general scatter over extreme `dq` and random heat, four steps).
+- 2ce3197 — **convection scratch.** The gathers and the swap list are reused across steps. A moved parcel is overwritten with a massless id, so the scan skips it exactly as the moved flag did (with a flag array kept as fallback when no id is massless).
+- 951b215 — **topology trim.** `rsort_up[k] == rsort[shell_up[k]]`, so the cell-index copy is dropped (−4 B/cell of §6c's +12). The rsort roll table (8 B/cell) stays: rolling from the coordinate instead is a random 24 B read per candidate.
+- b3151e8 — **gathered outward gas rise.** The Gravity::Core rise scans rsort-ordered materials with `shell_up`, trades in the gathered array, and replays its trades in scan order. It moves no heat, so in Driven mode it hands the gathered materials and heat to that tick's convection (one gather per tick instead of two).
+- 962636c — **face lookups.** `Topology::face(i, k)` is `nb6(i)[k]`. Classic `stepFlow` takes down and sides from one `nb6`, and the water-cycle buried test and `stepSettle` use `face`. The topology test checks `face` against `offset` on every domain.
+- ba61feb — **block material search.** Single-material index scans (hand reactions, net burn, condense, GYP/SED) ask `find_mat` for the next matching cell at or beyond the cursor. The block test is vectorisable. Each call happens after the previous visit's writes and nothing writes between a call and its visit, so the visits are exactly the cell-by-cell ones. Test: `block_material_search_matches_current_slice` (including writes ahead of and behind the cursor).
+- 0d3a46d — **relief gates.** Uplift and plume need an in-domain AIR or WATER slot and only permute materials. Collapse needs an in-domain AIR. With none in the domain (the gas preset), the pass cannot fire, and its rolls are cell-keyed with no mutable RNG state.
+- 82ff68d — the heat test. 661ffea — cap 42 → 44. 7d47569 — www.
+
+**2. Native (`radius_study`, before → after, same session).**
+
+| case | chem ms | step4 ms | RSS hwm MB |
+|---|---|---|---|
+| ocean r42 | 13.4 → 8.8 | 40.0 → 36.3 | 84 → 63 |
+| ocean r44 | 15.1 → 10.7 | 45.5 → 40.4 | 93 → 69 |
+| ocean r48 | 19.5 → 15.3 | 59.1 → 51.8 | 105 → 76 |
+| ocean r56 | 30.7 → 20.0 | 83.7 → 70.9 | 147 → 99 |
+| ocean r64 | 48.8 → 30.4 | 118.7 → 95.7 | 202 → 128 |
+| ocean r96 | 178 → 115 | 337 → 282 | 584 → 415 |
+| gas r42 | 14.0 → 8.4 | 37.0 → 31.3 | 86 → 67 |
+| gas r44 | 16.2 → 15.1* | 44.3 → 36.6 | 95 → 74 |
+| gas r48 | 22.9 → 12.8 | 54.6 → 44.2 | 111 → 82 |
+| gas r56 | 36.0 → 20.9 | 80.0 → 63.2 | 155 → 109 |
+| gas r64 | 53.5 → 31.1 | 105.9 → 81.8 | 214 → 145 |
+| gas r96 | 213 → 128 | 320 → 241 | 639 → 415 |
+
+\* Noisy sample (step4 and the neighbouring radii agree with the trend). Gas r96 fine stages after: heat 52 → 28, network 46 → 7, uplift + plume + collapse 26 → 0.6, convect + rise about 100 → 75 ms.
+
+**3. Chrome (headless, Low 960×540; raf / presented fps, step ms; same session).**
+
+| case | before (f71454f) | after |
+|---|---|---|
+| ocean r42 | 21.3 / 15.1, 43.4 | 29.5 / 15.0, 26.8 |
+| **ocean r44** | 10.9, 88.4 | **29.4 / 15.0 (15.0 on 4 of 4 runs), 28.5–29.5** |
+| ocean r46 | — | 13.8–14.3, 65–67 |
+| ocean r48 | 6.2, 151 | 9.6, 98.0 |
+| ocean r56 | 4.2, 224 | 5.2, 178 |
+| ocean r64 | 2.83, 331 | 3.37, 278 |
+| ocean r96 | 0.60, 1501 | 0.73, 1293 |
+| gas r42 | 43.1 / 15.0, 14.7 | 52.1 / 15.1, 9.0 |
+| **gas r44** | 30.0 / 14.9, 26.0 | **45.1 / 15.0, 11.7** |
+| gas r48 | 29.4 / 15.0, 28.9 | 36.9 / 15.0, 17.0 |
+| gas r52 | 9.9, 92.8 | 34.4 / 15.0, 21.6 |
+| gas r56 | 6.6, 138 | 15.7 / 15.1, 56.0 |
+| gas r64 | 4.37, 209 | 6.93, 123 |
+| gas r96 | 0.80, 1156 | 1.03, 891 |
+
+Every run ends `books=ok energy_drift=0 error=none`.
+
+**4. Cap: `CHEM_RADIUS_MAX` 42 → 44 (661ffea).** Ocean r44 holds 15.0 presented fps on four of four runs (57–58 ms per presented frame), and on the shipped :8765 build too (15.07). Ocean r46 drops to 13.8–14.3. Gas now holds 15 through r56 (was r48). The slider (`max="44"`), `playNum(…, 2, 44)` and the Rust clamp match, and an r48 request on :8765 clamps to 44.
+
+**5. Exactness evidence.** p6 goldens (`--ignored`) pass (3/3). Parity vs f71454f is byte-identical on chem (242 lines), play (180) and big (80), re-run after every code commit and at the tip. wasm parity is SAME on 7 cases (ship) plus ocean/gas r56/r64 (study builds). The default play hashes on :8765 are unchanged: world `lqpba5lv…`, frame `5l3xbpo3…`.
+
+**6. Next wall.**
+- (a) Ocean in the browser past r44: chem is now a small part of the ocean frame. The software SHA-256 `world_tag` and render dominate. r46 needs about 10% off a 65 ms step. Both are outside exact chem: the tag is Owen's protocol call, and render has no exact gain left at the 1 px floor (§6c).
+- (b) Gas past r56: convection plus the rise (one random rsort gather per tick) and heat lead. The remaining exact levers are small (layout of the gather, branch-heavy density test).
+- (c) Memory: the rsort roll table (8 B/cell) remains. Peak RSS is 25–35% below §6c anyway.
+- Exact chem gains are close to exhausted for ocean: what is left in ocean chem is a few ms at r44.
+
+**Build.** wasm (661ffea, ABI 17) md5 `d145f12e7f606ac8b97f4d95fa535b34` (1,416,268 B), play.html `3f485d24a255fc858779c48b3c4a9296`, bitblock-lab.html `96fc0f2d897ee3cf28482975e2c50962`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged); www commit 7d47569. Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean and gas r44 `books=ok energy_drift=0 error=none`; ABI 17; only the favicon returns 404. Screenshots: `/workspace/render_scale/s6d/ship/{ship_2_r44,ship_4_r44,ship_2_r48}.png` and the sweep shots `/workspace/render_scale/s6d/chrome/{ref,new,rep}_*.png`. Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
