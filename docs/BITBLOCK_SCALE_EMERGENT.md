@@ -2532,6 +2532,77 @@ Ranges are repeat runs (sweep, repeat, and the shipped :8765 build). Every run e
 
 **Build.** wasm (5a8393a, ABI 17) md5 `fd7b983cfbfe7cea19478689cc770ea0` (1,402,147 B), play.html `89f14f23ef48cda68dccf68d314b4d7c`, bitblock-lab.html `0935072f3f9069d0487241a6693df5db`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged); www commit 9b8fc5a. Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean r12, gas r20 and ocean/gas r36/r40 all `books=ok energy_drift=0 error=none`; the lab reports ABI 17; only the favicon returns 404. Screenshots: `/workspace/render_scale/s6b/ship/{ship_2_r40,ship_4_r40,ship_2_r36,ship_4_r36,smoke_gas_r20_8765_9b8fc5a}.png` and the sweep shots `/workspace/render_scale/s6b/chrome/{ref,cur}_*.png`. Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
 
+## 6c. Exact chem locality: rsort-ordered convection, z-run heat; render left at its exact floor; play cap 40 → 42 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "continue" pt247u) — every hash and book unchanged
+
+The brief built on §6b's next walls: reorder chem storage for locality (gas past r44), exact render speedups above the 1 px floor, re-measure r40–r96, and raise the cap only if both presets hold about 15 presented fps. world_tag semantics are unchanged (Owen's standing choice). Before = 5a032e9 (§6b). After = fe536d3.
+
+**1. Why not a global Morton or shell relayout of the cell arrays.** Every chem law that mutates while it scans (combine, combine2's hand families and network law, settle, flow) defines its result through index order 0..n, and each such scan draws its rolls in that order. Renumbering the cells would force each of those scans through a permutation back to the old order, giving back the locality. So this wave reorders data per pass instead, and only where the pass's own order is a separate array (convection walks `rsort`) or where order cannot matter (heat sums commute).
+
+**2. Changes (all exact).**
+- 2d9c7af — **convection roll table.** `wide_roll` is split into `wide_roll_cell(key, c)` (the salt and coordinate links, static for a cell under one salt) and `wide_roll_finish(cell, t)`. The topology keeps `wide_roll_cell` for every rsort entry under the convection key (`rsort_roll_cells`, built on first use; another key gets `None` and rolls per cell). Convection then reads one sequential word per roll instead of a random 24 B coordinate plus three mixes. Tests: `keyed_wide_roll_matches_the_five_link_chain` (extended) and `rsort_roll_table_matches_per_cell_rolls`.
+- e66eb19 — **z-run heat.** When every `(x, y)` row of the domain is one contiguous z range (true for the ball; checked at build, with a density guard), `Topology::zruns` lists the rows. The heat pass walks them and finds face neighbours by arithmetic on the four rows beside each row plus `i ± 1`, in `NB6` order, with no slot-box probes. Holey or sparse domains keep `nb6`. The heat additions wrap in `i32`, so order cannot change a sum. The test checks every cell of every topology-test domain against `nb6` (mutation-checked).
+- 26aab39 — heat divides by the face count through constant divisors (`div_by_live`: the same truncating quotient; V8 otherwise emits a trapping `i64.div_s`). Test: `constant_divisor_split_matches_the_plain_quotient`.
+- fe6d0ca — **shell-ordered convection.** Material and heat are gathered into rsort order once per tick. `Topology::shell_up` holds the outward neighbour as an rsort position, so the scan reads memory in sequence. A parcel moves at most once per tick, so every swap sees the gathered values; the swaps are recorded and replayed in scan order, making the identical `set_mat` / heat-swap call sequence. The test checks `rsort[shell_up[k]] == rsort_up[k]`.
+- fe536d3 — cap 40 → 42. 7326102 — www.
+
+**3. Render: no exact change this wave.** A render-only profile (r40 ocean, 960×540) shows 30k bits keyed after the enclosed cull: 21.6k (72%) rejected by the hidden-bit test, 8.4k drawn, about 49.6k world pixels at every radius. Span rasterisation is 45% of render, `draw_bit_with` (projection, bounds, hidden test) 30%, and allocations under 0.5%. The three candidates the brief named were each checked:
+- (a) **Chunk-level hidden cull:** needs a lower bound on every depth a chunk's bits can write. The per-bit bound (`nearest_possible_depth`) must include each bit's smallest drawable triangle area, because rounding on sliver triangles can produce a depth below the nearest vertex. An edge-on face sends that bound to 0, and a chunk-wide area bound would need a new floating-point proof.
+- (b) **Skipping a face whose neighbour across it is on:** the crease-tie case already documented at the enclosed cull (an exact depth tie lets the lower-RGB rule pick its face).
+- (c) **Fewer allocations:** nothing material left.
+- Natively, the hottest render line is `f64::ceil` as a libm call (x86-64 baseline without SSE4.1); wasm has a native `f64.ceil`, so this does not affect the browser.
+
+**4. Native (`radius_study`, ms; before → after).**
+
+| case | chem ms | render ms | step4 ms | RSS hwm MB |
+|---|---|---|---|---|
+| ocean r40 | 13.1 → 12.7 | 18.8 → 25.6* | 38.9 → 37.7 | 78 → 79 |
+| ocean r44 | 21.1 → 15.7 | 23.4 → 22.8 | 52.0 → 51.0 | 90 → 92 |
+| ocean r48 | 22.7 → 20.3 | 29.3 → 28.1 | 64.8 → 65.9 | 104 → 105 |
+| ocean r56 | 37.1 → 36.1 | 37.3 → 38.8 | 98.8 → 92.5 | 145 → 147 |
+| ocean r64 | 58.0 → 53.2 | 46.1 → 43.7 | 129.8 → 137.2 | 198 → 201 |
+| ocean r96 | 192 → 193 | 84.5 → 89.4 | 397 → 353 | 566 → 584 |
+| gas r40 | 14.3 → 12.1 | 17.9 → 17.9 | 36.5 → 33.6 | 77 → 81 |
+| gas r44 | 19.2 → 16.4 | 22.1 → 26.6* | 44.6 → 44.3 | 90 → 95 |
+| gas r48 | 26.1 → 22.5 | 27.6 → 29.0 | 59.6 → 55.2 | 104 → 111 |
+| gas r56 | 44.3 → 35.2 | 47.1 → 35.9 | 90.2 → 79.3 | 144 → 155 |
+| gas r64 | 69.4 → 53.6 | 43.9 → 43.5 | 129.6 → 112.7 | 196 → 214 |
+| gas r96 | 328 → 245 | 86.5 → 88.8 | 429 → 339 | 568 → 639 |
+
+\* Render code is unchanged; single-sample render noise. Gas combine2+convect stage at r96: 193 → 122 ms; heat stage 66.7 → 53.0 ms. Peak RSS rises by up to 71 MB at r96 gas (rsort roll table and `shell_up`, 12 B/cell, plus per-tick gather scratch).
+
+**5. Chrome (headless, Low 960×540; raf / presented fps, step ms).**
+
+| case | before (5a032e9) | after |
+|---|---|---|
+| ocean r40 | 25.7 / 13.8, 34.8 | 29.4–30.0 / 15.0, 26.8–28.1 |
+| **ocean r42** | 13.7 / 13.7, 68.7 | **19.6–21.5 / 15.0–15.2, 44–63** |
+| ocean r44 | 8.4, 114 | 10.8, 86.4 |
+| ocean r48 | 5.6, 168 | 6.2, 152 |
+| ocean r56 | 3.8, 248 | 4.1, 231 |
+| ocean r64 | 2.57, 365 | 2.67, 350 |
+| ocean r96 | 0.60, 1600 | 0.60, 1576 |
+| gas r40 | 41.8 / 15.0, 15.8 | 44.7 / 15.5, 13.1 |
+| gas r44 | 29.1 / 15.2, 28.6 | 37.5 / 15.0, 18.3 |
+| **gas r48** | 11.7 / 11.7, 78.5 | **24.5 / 15.1, 36.0** |
+| gas r52 | 6.9, 134 | 10.5, 88.1 |
+| gas r56 | 5.3, 174 | 6.4, 142 |
+| gas r64 | 3.23, 284 | 4.20, 215 |
+| gas r96 | 0.63, 1461 | 0.80, 1189 |
+
+Every run ends `books=ok energy_drift=0 error=none`.
+
+**6. Cap: `CHEM_RADIUS_MAX` 40 → 42 (fe536d3).** Ocean is still the binding preset: r42 holds 15.0–15.2 presented fps over five runs (sweep, three repeats and the shipped :8765 build), at 60.7–62.8 ms per presented frame, the margin r40 shipped with in §6b. r44 drops to 10.8. Gas now holds 15 through r48 (was r44). The slider (`max="42"`), `playNum(…, 2, 42)` and the Rust clamp match, and an r48 request on :8765 clamps to 42.
+
+**7. Exactness evidence.** p6 goldens (`--ignored`) pass (3/3). Parity vs 5a032e9 (identical to the 6475973 reference) is byte-identical on chem (242 lines), play (180) and big (80), re-run after every code commit. wasm parity (7 cases: world, frame and books) is SAME. The default play hashes on :8765 are unchanged: world `lqpba5lv…`, frame `5l3xbpo3…`.
+
+**8. Next wall.**
+- (a) Ocean in the browser: the software SHA-256 `world_tag` (about 28% of ocean wasm at r44) plus render (about 23%). r44 ocean needs about 25% off its 86 ms step. The tag is Owen's protocol call (an incremental or Merkle tag).
+- (b) Render: exact gains need a proof of a chunk-level depth bound that handles sliver triangles, or a cheaper exact rasteriser for one-to-two-pixel triangles (about 50k per frame at r40). Below 1 px only LOD remains, which would be non-exact and opt-in.
+- (c) Gas past r48: combine2's network law and the relief passes now lead the gas chem profile, together with heat's per-cell work.
+- (d) Memory: +12 B/cell for the convection tables; genesis is still capped at r103.
+
+**Build.** wasm (fe536d3, ABI 17) md5 `0d59b9c6ee910ade3b532cbfc7f33ce5` (1,408,310 B), play.html `ab854c889305bcb03ac0840245b2a250`, bitblock-lab.html `42957f733018105e5a3103a6d8cbddbc`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged); www commit 7326102. Served at 127.0.0.1:8765 and self-playtested: default hashes unchanged; ocean r12, gas r20, ocean r40/r42 and gas r42 all `books=ok energy_drift=0 error=none`; the lab reports ABI 17; only the favicon returns 404. Screenshots: `/workspace/render_scale/s6c/ship/{ship_2_r42,ship_4_r42,ship_2_r40,smoke_gas_r20_8765_7326102}.png` and the sweep shots `/workspace/render_scale/s6c/chrome/{ref,cur,rep}_*.png`. Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
