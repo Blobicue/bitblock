@@ -4906,3 +4906,52 @@ fn block_material_search_matches_current_slice() {
     let want: Vec<_> = (63..mats.len()).step_by(65).collect();
     assert_eq!(got, want);
 }
+
+/// §6d: row-slice heat gathering is the same wrapping sum as the general per-cell scatter,
+/// even for negative / extreme heat and dq, across repeated steps (scratch reuse).
+#[test]
+fn gathered_heat_matches_general_scatter() {
+    use super::p6::Topology;
+    let mut cells = Vec::new();
+    let mut rng = 7u32;
+    for x in -3i64..=3 {
+        for y in -3i64..=3 {
+            for z in -3i64..=3 {
+                if x * x + y * y + z * z > 12 {
+                    continue;
+                }
+                rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
+                cells.push((Coord::new(x, y, z), MatId::ROCK, rng as i32));
+            }
+        }
+    }
+    for dq in [i32::MIN, -1, 0, 1, 1_000, 6_000, i32::MAX] {
+        let mut row = ChemWorld::from_cells(
+            cells.clone(),
+            [0; NE],
+            Arc::new(MatTable::base()),
+            P6Params {
+                heat: true,
+                dq,
+                greenhouse: Greenhouse::Off,
+                ..chem_only()
+            },
+        )
+        .unwrap();
+        let mut general = row.clone();
+        let mut t = Topology::build(&general.cells);
+        assert!(t.zruns.is_some());
+        t.zruns = None; // same topology, only the face lookups instead of row slices
+        general.topo = Some(Arc::new(t));
+        for _ in 0..4 {
+            let a = row.step().unwrap();
+            let b = general.step().unwrap();
+            assert_eq!(format!("{a:?}"), format!("{b:?}"), "dq={dq}");
+            assert_eq!(row.q, general.q, "dq={dq}");
+            assert_eq!(row.space_q(), general.space_q(), "dq={dq}");
+            assert_eq!(row.trapped_q(), general.trapped_q(), "dq={dq}");
+        }
+        assert!(general.topo.as_ref().unwrap().zruns.is_none());
+        assert!(row.topo.as_ref().unwrap().zruns.is_some());
+    }
+}
