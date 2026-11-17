@@ -417,7 +417,13 @@ pub struct History {
     genesis_world: ContentTag,
     head: ContentTag,
     receipts: Vec<Receipt>,
-    active_mints: HashMap<Coord, ContentTag>,
+    // Every mutable genesis bit starts with the *same* mint tag. Keep that baseline as a
+    // sparse bitset, not one (Coord, ContentTag) hash-map entry per bit. The overlay records
+    // only changes from the baseline: Some(tag) for a later mint, None for a burned genesis
+    // bit. All active_mint results and receipt bytes remain unchanged.
+    genesis_mints: World,
+    active_mints: HashMap<Coord, Option<ContentTag>>,
+    circulating: usize,
 }
 
 impl History {
@@ -425,17 +431,17 @@ impl History {
     pub fn new(initial_world: &World) -> Self {
         let genesis_world = world_tag(initial_world);
         let genesis = genesis_tag(genesis_world);
-        let active_mints = initial_world
-            .iter_on()
-            .filter(|&coord| !is_bedrock(coord))
-            .map(|coord| (coord, genesis))
-            .collect();
+        let genesis_mints = initial_world.clone();
+        let circulating = initial_world.len().saturating_sub(1);
+        let active_mints = HashMap::new();
         Self {
             genesis,
             genesis_world,
             head: genesis,
             receipts: Vec::new(),
+            genesis_mints,
             active_mints,
+            circulating,
         }
     }
 
@@ -476,12 +482,16 @@ impl History {
 
     /// Looks up the active mint provenance tag for an occupied mutable coordinate.
     pub fn active_mint(&self, coord: Coord) -> Option<ContentTag> {
-        self.active_mints.get(&coord).copied()
+        match self.active_mints.get(&coord) {
+            Some(mint) => *mint,
+            None if !is_bedrock(coord) && self.genesis_mints.is_on(coord) => Some(self.genesis),
+            None => None,
+        }
     }
 
     /// Returns the count of currently occupied mutable coordinates with active mint provenance.
     pub fn circulating_supply(&self) -> usize {
-        self.active_mints.len()
+        self.circulating
     }
 
     /// Opens a staged coordinate-history transaction for `tick` parented at the current head.
@@ -558,17 +568,22 @@ impl History {
             );
         }
         for (coord, mint) in prepared.provenance_updates {
-            match mint {
-                Some(mint) => {
-                    self.active_mints.insert(coord, mint);
-                }
-                None => {
-                    self.active_mints.remove(&coord);
-                }
+            let was_active = self.active_mint(coord).is_some();
+            self.circulating =
+                self.circulating + usize::from(mint.is_some()) - usize::from(was_active);
+            let baseline = if !is_bedrock(coord) && self.genesis_mints.is_on(coord) {
+                Some(self.genesis)
+            } else {
+                None
+            };
+            if mint == baseline {
+                self.active_mints.remove(&coord);
+            } else {
+                self.active_mints.insert(coord, mint);
             }
         }
         assert_eq!(
-            self.active_mints.len(),
+            self.circulating,
             world.len().saturating_sub(1),
             "active mint provenance must equal mutable occupied supply"
         );
@@ -648,7 +663,7 @@ impl History {
         if rebuilt.head != self.head {
             return Err(HistoryError::HeadMismatch);
         }
-        if rebuilt.active_mints != self.active_mints {
+        if rebuilt.active_mints != self.active_mints || rebuilt.circulating != self.circulating {
             return Err(HistoryError::ProvenanceMismatch);
         }
         Ok(world)
@@ -912,6 +927,81 @@ mod tests {
 
     fn parse_tag(text: &str) -> ContentTag {
         ContentTag::parse_full(text).expect("known-answer tag must parse canonically")
+    }
+
+    /// The genesis-baseline mint store answers exactly as the old one-entry-per-bit map would:
+    /// every genesis bit minted at genesis, then each committed Mint / Burn effect applied.
+    #[test]
+    fn genesis_baseline_mints_match_the_full_mint_map() {
+        let mut state = 0x6a09_e667_f3bc_c908_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let span = 3_i64;
+        let mut initial = World::new();
+        for x in -span..=span {
+            for y in -span..=span {
+                for z in -span..=span {
+                    if next() % 3 != 0 {
+                        initial.set_on(Coord::new(x, y, z));
+                    }
+                }
+            }
+        }
+        let mut world = initial.clone();
+        let mut history = History::new(&initial);
+        let mut full: HashMap<Coord, ContentTag> = initial
+            .iter_on()
+            .filter(|&c| !is_bedrock(c))
+            .map(|c| (c, history.genesis()))
+            .collect();
+        for tick in 0..300_u64 {
+            let mut transaction = history.begin_tick(tick);
+            for _ in 0..1 + next() % 12 {
+                let r = next();
+                let pick = |shift: u32| ((r >> shift) % (2 * span as u64 + 3)) as i64 - span - 1;
+                let op = [Operation::On, Operation::Off, Operation::Toggle][(r >> 60) as usize % 3];
+                transaction.apply_edit(
+                    &history,
+                    &mut world,
+                    Edit::new(op, Coord::new(pick(0), pick(16), pick(32))),
+                );
+            }
+            let Some(receipt) = history.commit_tick(transaction, &world) else {
+                continue;
+            };
+            for effect in receipt.effects() {
+                match *effect {
+                    TransitionEffect::Mint { coord, event } => {
+                        assert!(full.insert(coord, event).is_none());
+                    }
+                    TransitionEffect::Burn {
+                        coord,
+                        consumed_mint,
+                        ..
+                    } => assert_eq!(full.remove(&coord), Some(consumed_mint)),
+                    TransitionEffect::NoOp { .. } => {}
+                }
+            }
+            assert_eq!(history.circulating_supply(), full.len());
+            for x in -span - 1..=span + 1 {
+                for y in -span - 1..=span + 1 {
+                    for z in -span - 1..=span + 1 {
+                        let c = Coord::new(x, y, z);
+                        assert_eq!(
+                            history.active_mint(c),
+                            full.get(&c).copied(),
+                            "tick {tick} {c:?}"
+                        );
+                    }
+                }
+            }
+        }
+        let replayed = history.verify(&initial).expect("baseline history verifies");
+        assert_eq!(world_tag(&replayed), world_tag(&world));
     }
 
     fn apply_one_receipt(initial: &World, tick: u64, edits: &[Edit]) -> (World, History) {
