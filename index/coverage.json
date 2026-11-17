@@ -23,7 +23,7 @@
  },
  "modules_undocumented": [],
  "proofs": 9,
- "schemas": 74,
+ "schemas": 75,
  "schemas_fixtures": 23,
  "schemas_tool_local": [
   "bitblock/history-mode/open-local/v2",
@@ -35,8 +35,8 @@
   "bitblock/reference-renderer/analytic-six-face/v1"
  ],
  "schemas_uncovered": [],
- "schemas_vectored": 74,
- "source_lines": 65665,
- "tests": 481,
+ "schemas_vectored": 75,
+ "source_lines": 65783,
+ "tests": 482,
  "tools": 44
 }

@@ -614,7 +614,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 34835,
+   "code_lines": 34874,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -698,7 +698,7 @@
      "right": "frame_v2:79"
     },
     {
-     "left": "history:369",
+     "left": "history:370",
      "lines": 10,
      "right": "interaction:1328"
     },
@@ -795,7 +795,7 @@
    ]
   },
   "test": {
-   "code_lines": 23020,
+   "code_lines": 23071,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -844,7 +844,7 @@
      "right": "main:4107"
     },
     {
-     "left": "history:1126",
+     "left": "history:1206",
      "lines": 12,
      "right": "history_store:1573"
     },
