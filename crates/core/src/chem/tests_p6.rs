@@ -4846,3 +4846,21 @@ fn rsort_roll_table_matches_per_cell_rolls() {
         &table[..]
     );
 }
+
+#[test]
+fn constant_divisor_split_matches_the_plain_quotient() {
+    use super::p6::div_by_live;
+    let mut seed = 0x0d17_u64.wrapping_mul(0x9e37_79b9) | 1;
+    for live in 1..=6_usize {
+        for o in [0, 1, 5, 6, 7, 1 << 31, i64::MAX, i64::MIN + 1, -1, -6, -7] {
+            assert_eq!(div_by_live(o, live), o / live as i64, "{o} / {live}");
+        }
+        for _ in 0..10_000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let o = seed as i64 >> (seed % 40);
+            assert_eq!(div_by_live(o, live), o / live as i64, "{o} / {live}");
+        }
+    }
+}

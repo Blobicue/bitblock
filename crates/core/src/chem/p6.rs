@@ -824,6 +824,21 @@ pub(crate) enum RollKey {
     Wide(u64),
 }
 
+/// `o / live` for a face-neighbour count `live` in `1..=6`, with each divisor a constant (the
+/// same truncating quotient; a constant divisor compiles to a multiply instead of a division).
+#[inline]
+pub(crate) fn div_by_live(o: i64, live: usize) -> i64 {
+    match live {
+        1 => o,
+        2 => o / 2,
+        3 => o / 3,
+        4 => o / 4,
+        5 => o / 5,
+        6 => o / 6,
+        _ => o / live as i64,
+    }
+}
+
 /// One `(x, y)` row of the domain: cells `start..=start + (z1 - z0)` are `(x, y, z0..=z1)`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ZRun {
@@ -1836,7 +1851,7 @@ impl ChemWorld {
                     if o > 0 {
                         let (js, live) = ZRuns::neighbours(run, &beside, z, i);
                         if live > 0 {
-                            let per = o / live as i64;
+                            let per = div_by_live(o, live);
                             if per != 0 {
                                 for &j in &js[..live] {
                                     nq[j] = nq[j].wrapping_add(per as i32);
