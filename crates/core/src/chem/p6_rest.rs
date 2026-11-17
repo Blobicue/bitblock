@@ -212,6 +212,8 @@ const SALT_FLOW: u32 = 0xf10_c0de;
 
 /// Fixed sideways order of `stepFlow`: `(dx, dz)`.
 const FLOW_SIDE: [(i64, i64); 4] = [(0, -1), (-1, 0), (0, 1), (1, 0)];
+/// [`FLOW_SIDE`] as [`NB6`] indices.
+const FLOW_SIDE_NB6: [usize; 4] = [4, 0, 5, 1];
 
 /// §5y gas convection temperature offset: `T = Q + CONVECT_T0` in the
 /// ideal-gas density test (Q is 0-based heat, so T must stay positive).
@@ -1747,7 +1749,7 @@ impl ChemWorld {
             if self.mat[i] != MatId::WATER {
                 continue;
             }
-            if let Some(up) = topo.offset(&self.cells, i, (0, 1, 0))
+            if let Some(up) = topo.face(&self.cells, i, 3)
                 && self.mat[up] == MatId::WATER
             {
                 continue; // buried: not surface
@@ -1874,7 +1876,7 @@ impl ChemWorld {
             if self.mat[i] != MatId::SED {
                 continue;
             }
-            let Some(j) = topo.offset(&self.cells, i, (0, -1, 0)) else {
+            let Some(j) = topo.face(&self.cells, i, 2) else {
                 continue;
             };
             let below = self.mat[j];
@@ -1901,13 +1903,13 @@ impl ChemWorld {
             if self.mat[i] != MatId::WATER {
                 continue;
             }
-            let down = topo
-                .offset(&self.cells, i, (0, -1, 0))
-                .filter(|&b| self.mat[b] == MatId::AIR && !self.shell_blocked(b));
+            // the face neighbours from one box probe: down is NB6[2], the sides in
+            // FLOW_SIDE order (-z, -x, +z, +x) are NB6[4], NB6[0], NB6[5], NB6[1]
+            let nb = topo.nb6(&self.cells, i);
+            let down = nb[2].filter(|&b| self.mat[b] == MatId::AIR && !self.shell_blocked(b));
             let target = down.or_else(|| {
-                FLOW_SIDE.iter().find_map(|&(dx, dz)| {
-                    topo.offset(&self.cells, i, (dx, 0, dz))
-                        .filter(|&s| self.mat[s] == MatId::AIR && !self.shell_blocked(s))
+                FLOW_SIDE_NB6.iter().find_map(|&k| {
+                    nb[k].filter(|&s| self.mat[s] == MatId::AIR && !self.shell_blocked(s))
                 })
             });
             if let Some(t) = target {

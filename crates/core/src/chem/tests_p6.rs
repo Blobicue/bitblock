@@ -4615,7 +4615,7 @@ fn convect_is_opt_in_and_conserves() {
     assert_eq!(on.lane_drift(), [0; NE]);
 }
 
-/// §6a: `Topology::nb6` (box-index fast path) and `Topology::shell_up` (precomputed outward
+/// §6a: `Topology::nb6` and `Topology::face` (box-index fast paths) and `Topology::shell_up` (precomputed outward
 /// neighbours) must answer exactly what the per-lookup `offset` path answers, on boxed,
 /// hashed and i64-edge domains.
 #[test]
@@ -4687,6 +4687,9 @@ fn topology_fast_paths_match_offset_lookups() {
         for i in 0..cells.len() {
             let slow = NB6.map(|step| topo.offset(cells, i, step));
             assert_eq!(topo.nb6(cells, i), slow, "domain {d} cell {i}");
+            for (k, want) in slow.iter().enumerate() {
+                assert_eq!(topo.face(cells, i, k), *want, "domain {d} cell {i} face {k}");
+            }
             // `locate` answers exactly the sorted-list binary search, on and off the domain.
             let c = cells[i];
             for (dx, dy, dz) in [(0, 0, 0), (2, -1, 0), (-3, 0, 1), (0, 0, 7), (-1, 5, -2)] {

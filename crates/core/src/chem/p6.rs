@@ -1308,6 +1308,32 @@ impl Topology {
         NB6.map(|d| self.offset(cells, i, d))
     }
 
+    /// Face neighbour `k` of cell `i` ([`NB6`] order): `nb6(cells, i)[k]`, the same answer as
+    /// `offset(cells, i, NB6[k])`, with the one box probe.
+    #[inline]
+    pub(crate) fn face(&self, cells: &[Coord], i: usize, k: usize) -> Option<usize> {
+        if let Lookup::Boxed { min, dim, slot } = &self.lookup {
+            // As in `nb6`: `cells[i]` lies in the box, so no step below can overflow.
+            let c = cells[i];
+            let (rx, ry, rz) = (c.x - min[0], c.y - min[1], c.z - min[2]);
+            let base = (rx * dim[1] + ry) * dim[2] + rz;
+            let (inside, at) = match k {
+                0 => (rx > 0, base - dim[1] * dim[2]),
+                1 => (rx + 1 < dim[0], base + dim[1] * dim[2]),
+                2 => (ry > 0, base - dim[2]),
+                3 => (ry + 1 < dim[1], base + dim[2]),
+                4 => (rz > 0, base - 1),
+                _ => (rz + 1 < dim[2], base + 1),
+            };
+            if !inside {
+                return None;
+            }
+            let s = slot[at as usize];
+            return (s != NO_SLOT).then_some(s as usize);
+        }
+        self.offset(cells, i, NB6[k])
+    }
+
     /// The in-domain cells of the `(2r+1)^3 - 1` cube in planet6 order.
     pub(crate) fn cube(&self, cells: &[Coord], i: usize, r: i64, out: &mut Vec<usize>) {
         out.clear();
