@@ -1627,19 +1627,12 @@ impl ChemWorld {
             _ => self.mat.iter().filter(|m| **m == MatId::CO2).count() as i64,
         };
         let mut nq = vec![0i32; n];
-        // bit k set = the cell's NB6[k] face borders space (0 = interior)
-        let mut surface = vec![0u8; n];
         for i in 0..n {
             let qi = self.q[i];
-            let nbs = topo.nb6(&self.cells, i);
-            for (k, j) in nbs.iter().enumerate() {
-                if j.is_none() {
-                    surface[i] |= 1 << k;
-                }
-            }
             let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
             let mut deg: i64 = 0;
             if o > 0 {
+                let nbs = topo.nb6(&self.cells, i);
                 let live = nbs.iter().filter(|j| j.is_some()).count() as i64;
                 if live > 0 {
                     let per = o / live;
@@ -1665,20 +1658,17 @@ impl ChemWorld {
                 .zip(&g.rim)
                 .map(|(&v, &r)| vapor_trap(v, r))
                 .collect(),
-            _ if gh_on => vec![vapor_trap(
-                self.vapor,
-                surface.iter().filter(|s| **s != 0).count() as i64,
-            )],
+            _ if gh_on => vec![vapor_trap(self.vapor, topo.space_faces.len() as i64)],
             _ => vec![0],
         };
         let local = traps.len() > 1;
         let mut leaked: i64 = 0;
         let mut trapped: i64 = 0;
         let mut back: Vec<(usize, usize, i64)> = Vec::new();
-        for i in 0..n {
-            if surface[i] == 0 {
-                continue;
-            }
+        // The rim cells (a face on space) in index order, with their space-face masks (bit k
+        // set = the NB6[k] face borders space): static for the topology's life.
+        for &(i, m) in &topo.space_faces {
+            let i = i as usize;
             let v = i64::from(nq[i]);
             let mut leak = i64::from(self.params.leak_q) + v * 2 / 1000;
             if co2n > 0 {
@@ -1712,7 +1702,6 @@ impl ChemWorld {
                     // cell, but downward, to the first non-AIR cell inward from
                     // one of its space faces: faces tried in an order rotating
                     // by tick and cell, first one whose column is not all AIR.
-                    let m = surface[i];
                     let faces: Vec<usize> = (0..6).filter(|k| m & (1 << k) != 0).collect();
                     let r0 = (self.tick as usize + i) % faces.len();
                     let t = (0..faces.len())
