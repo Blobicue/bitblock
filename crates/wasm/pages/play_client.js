@@ -259,7 +259,7 @@
     }
     function playChemEveryTicks() { return playNum(playChemEvery, 4, 0, 600); }
     function playChemSeedVal() { return playNum(playChemSeed, 7, 0, 4294967295) >>> 0; }
-    function playChemRadiusVal() { return playNum(playChemRadius, 12, 2, 40); }
+    function playChemRadiusVal() { return playNum(playChemRadius, 12, 2, 42); }
     // The wasm-side 12 x i64 budget buffer (view re-made each use: memory may have grown).
     function playChemBudgetView() {
       return new BigInt64Array(instance.exports.memory.buffer, instance.exports.bitblock_play_chem_budget_ptr(), CHEM_LANES.length);
