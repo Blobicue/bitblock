@@ -2956,6 +2956,80 @@ Every run ends `books=ok energy_drift=0 error=none`. The §6f build at r72 swing
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy (Owen's Desktop is handled outside this branch), and main is untouched.
 
+## 6h. Exact material-search gates for the quiet passes and the network law; play cap 72 → 74 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass. Its first priority was real headroom for gas at r72, where §6g's lowest run was 14.40 at 73–85% busy. The exactness bar is the same as §6g, against 35e428c. No hash changed, and no win needed a hash change.
+
+**1. Changes (all exact).**
+- e8cca67 — **quiet-pass gates and lighter writes.**
+  - Several passes walked every cell to test one material:
+    - phase (WATER / ICE);
+    - Driven evaporation and degas (WATER);
+    - erode and weather (ROCK / MIN).
+  - They now visit those cells through `find_mat` / new `find_mat2`, the block search that §6d proved visits exactly the cell-by-cell set: each call happens after the previous visit's writes.
+  - weather builds its per-cell sky mask only when a ROCK/MIN exists.
+  - Coreward flow and settle return when no WATER / SED exists. Only those cells move, the passes create none, and so a gas planet no longer allocates their per-cell flags.
+  - `set_mat` reads the 24-byte coordinate only when occupancy changes. A material-to-material write, like every convection swap, reads none.
+  - The convection candidate buffer only grows: every slot below `len` is written before it is read.
+  - Test `block_two_material_search_matches_current_slice`.
+- 1bcddba — **network gate.**
+  - In round 0 every cell is a fresh start. A cold cell (q < 250), or one whose material reacts in no mounted row, posts nothing and writes no scratch.
+  - So with no hot reactive cell the round posts no intent and the pass returns `(0 firings, 1 round)` with no other change. A 64-cell block search answers that first, and any hot reactive cell runs the original pass.
+- cad821c — cap 72 → 74 and www refresh.
+
+**2. Native (`chem_fine`, r72).**
+
+| item | 35e428c | 1bcddba |
+|---|---|---|
+| gas chem step | 26.5 ms | 21.4 ms |
+| gas quiet passes (phase, water, flow, erode, weather, degas, settle) | 5.9 ms | ~0.8 ms (erode and weather 0.4 each; the rest under 0.3) |
+| gas network | 2.3 ms | 0.8 ms |
+| gas convection swap replay | 3.15 ms | 1.92 ms |
+| ocean combine2 stage | 5.7–6.3 ms | 4.3 ms |
+| ocean chem step | 32.5–34.0 ms | 32.7 ms (ocean has water and rock, so its quiet passes are not quiet) |
+
+**3. Chrome (headless, Low 960×540, chem every 4 ticks; presented fps, step ms, busy).**
+
+| case | §6g ship (0a5bae2) | 1bcddba study build |
+|---|---|---|
+| ocean r72 | 14.67–15.13, 13–20 ms, 60–70% | 14.57–15.27 (4 runs), 12.8–15.6 ms, 56–64% |
+| **gas r72** | 14.40–15.40, 21–34 ms, **73–85%** | **14.97–15.10 (4 runs), 9.1–11.4 ms, 47–53%** |
+| **ocean r74** | — | **14.53–15.40 (4 runs), 15.5–16.4 ms, 63–66%** |
+| **gas r74** | 13.2, 60 ms, 90% | **15.00–15.87 (4 runs), 11.5–12.2 ms, 53–55%** |
+| ocean r76 | — | 14.43–15.57 (4 runs), 15–30 ms, 65–81% |
+| gas r76 | — | 14.87–15.03 (4 runs), 12.5–14.8 ms, 57–63% |
+| ocean r78 | — | 13.10–15.03 (4 runs), 19–37 ms, 70–83% |
+| gas r78 | — | 14.93–15.03 (4 runs), 15–16 ms, 64–66% |
+| ocean / gas r80 | — | 14.90 / 15.27, 25 / 22 ms, 77 / 73% |
+| ocean / gas r84 | — | 10.97 / 10.07, 86 / 108 ms |
+
+Every run ends `books=ok energy_drift=0 error=none`.
+
+**4. Cap: `CHEM_RADIUS_MAX` 72 → 74 (cad821c).**
+- Gas now has wide headroom: at r72 busy fell from about 80% to about 50%, and gas holds 15 through r78.
+- Ocean is the limiter again. Its lowest r74 run (14.53) is the same as its lowest r72 run on this build (14.57), at about the same load (63–66% vs 56–64%). So the dips under 15 do not track CPU load, and r74 adds no ocean risk over r72.
+- r76 ocean dips to 14.43 at up to 81% busy, and r78 to 13.10.
+- The slider (`max="74"`, title updated), `playNum(…, 2, 74)` and the Rust clamp all match, and an r80 request on :8765 clamps to 74.
+- This is a judgment call against the "prefer lowest ≥ 14.7" guideline: no ocean radius from r72 up meets 14.7 on every run, either before or after this pass.
+
+**5. Exactness evidence.**
+- Parity vs 35e428c is byte-identical after each code commit: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`. The chem set covers the rocky and ocean presets, so water, ice and rock all go through the gated passes.
+- p6 goldens 3/3; core 324 (+1 new) and wasm 78 tests pass.
+- Ship wasm == native world and frame on ocean r60, gas r60, gas r48, ocean r74 and gas r74.
+- Chrome on :8765 reads the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page reports `match_expected=true`.
+
+**6. Next wall.**
+- (a) Ocean past r74: the chem step (32 ms native at r72) is dominated by heat, flow, erode/dissolve and the water cycle, all with real work on an ocean planet. The mirror walk adds to it. A per-chunk activity bitset is the next exact lever.
+- (b) Gas past r78: convection (phase-1 density test 4.5 ms, gather 2.9 ms), heat 4.3 ms, the gas rise. Persistent radius-ordered materials would remove the gather.
+- (c) The incremental mirror material hash is still skipped, as Owen asked.
+
+**Build.** wasm (cad821c, ABI 17) md5 `8b806315e5cc5253bf8847d3f458c5f0` (1,463,021 B), play.html `99998a6d39f320f111e0baf56358b4d6`, bitblock-lab.html `25d607f48711ffa5c2ee6533e8b73f39`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r74 `books=ok energy_drift=0 error=none`, r80 clamps to 74, and only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6h/playtest/{default,chem2_r74,chem4_r74,chem4_r80}.png`.
+- Sweep shots: `/workspace/render_scale/s6h/chrome/`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
