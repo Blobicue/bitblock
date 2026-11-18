@@ -3093,6 +3093,83 @@ Every run ends `books=ok energy_drift=0 error=none`.
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6j. Exact gas-rise gate, row-wise evaporation, branch-free heat shares; play cap stays 76 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass on what stops both presets at r78. Exactness is checked against 4a88cfb. No hash changed, and no win needed a hash change. Every pushed commit was checked locally first: `cargo fmt --check`, clippy `-D warnings`, debug workspace tests, the goldens and the index selftest.
+
+**1. Changes (all exact; 76de3d2).**
+- **Gas-rise gate.** The outward gas rise trades a rising cell only with AIR or WATER, and a trade keeps both counts. With neither in the domain (the gas planet) the scan trades nothing, so it and its gather are skipped. Convection then gathers the same parcels itself.
+- **Row-wise Classic evaporation.** For each z-run, a row's surface WATER (WATER whose cell above, in the next row up, is not WATER) comes from the two row slices before the row's first visit. Only surface WATER reads its heat and rolls. A visit writes only its own cell, which is neither another cell of the row nor a cell above one.
+- **Heat shares.** One branch-free sweep shares every cell as if it had six neighbours. Then the rim cells (`space_faces`, exactly the cells with fewer than six) are re-shared by their live count before any share is read. This covers every `dq` that divides 6000; other `dq` keep the general path.
+- **Tests.**
+  - New `gas_rise_gate_matches_the_full_scan`, run with and without an AIR cell.
+  - `sparse_air_and_row_scans_match_the_whole_domain_loops` now covers the row-wise evaporation.
+  - `gathered_heat_matches_general_scatter` gains dq 300 and 2000.
+  - Skipping the rim patch fails the heat test. Breaking the buried test fails the scan test.
+- 516cf53 — www refresh (the cap is unchanged).
+
+**Tried and dropped (slower, reverted):**
+- Fusing the convection gather with its density test, run outermost first: gas combine2 went from 17.7 to 23.5 ms.
+- A scatter-order gather through an inverse rsort: 15.4 → 17.6 ms.
+- The +y gas rise over z-runs instead of the rise list: ocean combine2 went from 4.3 to 5.3–6.1 ms. Its cost is the trades, not the list.
+
+**2. Native (`season_prof` r78, cap lifted, 150 ticks; calm window ms).**
+
+| stage | 4a88cfb | 76de3d2 |
+|---|---|---|
+| ocean heat | 5.32 | 4.42 |
+| ocean water cycle | 3.94 | 2.43 (rain window 3.97 → 2.18) |
+| ocean chem step | 23.0 | 20.6 |
+| gas heat | 6.15 | 5.29 |
+| gas combine2 + convection | 16.85 | 15.58 |
+| gas chem step | 25.1 | 22.9 |
+
+- Gas phases at r78 on 4a88cfb:
+  - rise gather 4.2 ms and rise scan 2.5 ms. The scan is now gone on a gas planet.
+  - convection density 5.5, preroll 1.0, survivor scan 0.9, replay 2.2 ms (423 k candidates, 200 k swaps).
+- Ocean combine2: hand families 0.4, network 0.9, burn/condense 0.1, +y rise 3.2 ms (trades).
+- Ocean flow: about 2.2 ms of its 6.3 ms is the ~15 k moves' occupancy writes and 1.1 ms is building the AIR-face candidates.
+- `play_loop_prof` r78: ocean 47.0 → 46.0 ms, gas 37.6 → 35.0 ms.
+
+**3. Chrome (headless, Low 960×540, chem every 4 ticks; presented fps / busy). New and 4a88cfb study builds interleaved in one session.**
+
+| case | 4a88cfb (4 runs) | 76de3d2 (4 runs) | 76de3d2 second set |
+|---|---|---|---|
+| ocean r78 | 15.90, 15.80, 15.30, 15.57; 57–62% | 15.07, 15.00, **13.40**, 14.90; 54–63% | 15.00, 15.20, 15.00, 15.03; 54–61% |
+| gas r78 | 15.00, 15.03, 15.03, 15.03; 59–65% | 15.03, 15.03, 15.03, 15.03; 54–59% | 15.00, 15.07, 15.03, 15.03; 55–56% |
+| ocean r80 | 13.83, 15.47, 13.97, 14.37; 63–75% | 13.93, 15.37, 13.60, 14.33; 63–72% | — |
+| gas r80 | 15.13, 15.07, 15.03, 15.17; 66–71% | 15.30, 15.10, 15.10, 14.80; 60–66% | — |
+
+Every run ends `books=ok energy_drift=0 error=none`.
+
+**4. Cap: stays at 76.**
+- The pass cuts the load: busy at r78 is 54–59% vs 57–65% on 4a88cfb. But ocean's first r78 set has a 13.40 run, below the ~14.5 floor.
+- This session runs faster than §6i's: 4a88cfb itself holds r78, where §6i measured 13.20 for ocean and 12.93 for gas. So ocean's presented dips track neither load nor build.
+- r78 is an option for Owen: 7 of 8 runs on this build are at or above 14.90 for ocean, and all 8 hold for gas. It is not taken, because the four-run rule failed.
+
+**5. Exactness evidence.**
+- Parity vs 4a88cfb is byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 match 1bcd506 / 4a88cfb.
+- p6 goldens 3/3. Debug and release tests pass.
+- Ship wasm == native world and frame on:
+  - ocean and gas r76;
+  - ocean r40 over 1,100 steps and gas r30 over 600 steps;
+  - presets 0 and 1 at r30.
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17.
+- The lab page prints the same match lines as every earlier build (`match_expected=true` twice; the `match_after_*` / `dolly` / `pitch` lines are false on load by design).
+
+**6. Next wall.**
+- (a) Ocean's presented dips: they do not track busy, and fewer chem ms did not remove them. Next is the frame cadence and renderer: draw_bit, the delta index, the 10 Hz status books (check_books, book totals and energy sum are about 300 samples per profile).
+- (b) Gas convection: gather 4.2 ms plus density 5.5 ms. Persistent radius-ordered materials remain the lever; q is rewritten by heat every tick, so only the material half can persist.
+- (c) Flow's moves: two occupancy writes each. The chunk bounds after a write sequence depend on its order, so a batch needs care.
+
+**Build.** wasm (516cf53, ABI 17) md5 `93a7888c057e85d1da3973df2bd6d155` (1,475,369 B), play.html `abd5705119193a462c5d09a762ab613f`, bitblock-lab.html `e3c24a7bb3a2b4230bbe25b0f4feab50`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r76 `books=ok energy_drift=0 error=none`, r80 clamps to 76, and only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6j/playtest/{default,chem2_r76,chem4_r76,chem4_r80}.png`.
+- Sweep shots: `/workspace/render_scale/s6j/chrome/`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
