@@ -951,16 +951,22 @@ pub(crate) struct ZRun {
     pub(crate) start: usize,
 }
 
-/// The domain as z-runs, when every `(x, y)` row of it is one contiguous z range (a ball or a
-/// box): a cell's face neighbours are then plain index arithmetic on four neighbouring rows.
+/// The domain as z-runs: each `(x, y)` row of it is one or more contiguous z ranges, in index
+/// order (a ball or a box has one per row). A cell's face neighbours are then plain index
+/// arithmetic on the runs of four neighbouring rows. §6x: a row may hold several runs (a
+/// domain-growing place off the end of a row leaves a gap), so such a domain keeps the row
+/// slices instead of every cell's face lookups; passes that read a row as one run check
+/// [`Self::contiguous`].
 #[derive(Clone, Debug)]
 pub(crate) struct ZRuns {
     pub(crate) runs: Vec<ZRun>,
+    /// Runs that follow another run of the same row (0 when every row is one z range).
+    split: usize,
     x0: i64,
     y0: i64,
     nx: i64,
     ny: i64,
-    /// `(x - x0) * ny + (y - y0)` to the run index, or `NO_SLOT`.
+    /// `(x - x0) * ny + (y - y0)` to the index of the row's first run, or `NO_SLOT`.
     at: Vec<u32>,
     /// Per cell (domain order), its number of face neighbours in the domain (`0..=6`).
     pub(crate) live: Vec<u8>,
@@ -976,7 +982,7 @@ impl ZRuns {
     /// `nbrs` the new cell's face neighbours by new index), exactly as [`Self::build`] makes
     /// them for `cells`: the new cell extends its row at one end or starts a row of its own,
     /// later rows start one cell later, and the new cell and its neighbours count each other.
-    /// Falls back to `build` where the row box would change.
+    /// Falls back to `build` where the row box would change or the row has or gets a gap.
     fn inserted(mut self, cells: &[Coord], at: usize, nbrs: &[Option<usize>]) -> Option<Self> {
         let c = cells[at];
         let (rx, ry) = (c.x - self.x0, c.y - self.y0);
@@ -1012,13 +1018,20 @@ impl ZRuns {
             }
             k => {
                 let k = k as usize;
+                if self
+                    .runs
+                    .get(k + 1)
+                    .is_some_and(|n| (n.x, n.y) == (c.x, c.y))
+                {
+                    return Self::build(cells); // a row of several runs
+                }
                 let r = &mut self.runs[k];
                 if c.z.checked_add(1) == Some(r.z0) {
                     r.z0 = c.z;
                 } else if r.z1.checked_add(1) == Some(c.z) {
                     r.z1 = c.z;
                 } else {
-                    return None; // a gap in the row, as `build` finds it
+                    return Self::build(cells); // a gap in the row: a second run, as `build` makes it
                 }
                 k
             }
@@ -1036,14 +1049,22 @@ impl ZRuns {
     fn build(cells: &[Coord]) -> Option<Self> {
         let first = cells.first()?;
         let mut runs: Vec<ZRun> = Vec::new();
+        let mut split = 0;
         for (i, c) in cells.iter().enumerate() {
             match runs.last_mut() {
-                Some(r) if r.x == c.x && r.y == c.y => {
-                    // cells are sorted and distinct, so the row continues iff z steps by one
-                    if r.z1.checked_add(1) != Some(c.z) {
-                        return None;
-                    }
+                // cells are sorted and distinct, so the run continues iff z steps by one
+                Some(r) if r.x == c.x && r.y == c.y && r.z1.checked_add(1) == Some(c.z) => {
                     r.z1 = c.z;
+                }
+                Some(r) if r.x == c.x && r.y == c.y => {
+                    split += 1; // a gap: the row's next run
+                    runs.push(ZRun {
+                        x: c.x,
+                        y: c.y,
+                        z0: c.z,
+                        z1: c.z,
+                        start: i,
+                    });
                 }
                 _ => runs.push(ZRun {
                     x: c.x,
@@ -1067,11 +1088,12 @@ impl ZRuns {
             return None;
         }
         let mut at = vec![NO_SLOT; area as usize];
-        for (k, r) in runs.iter().enumerate() {
-            at[((r.x - first.x) * ny + (r.y - y0)) as usize] = k as u32;
+        for (k, r) in runs.iter().enumerate().rev() {
+            at[((r.x - first.x) * ny + (r.y - y0)) as usize] = k as u32; // the row's first run
         }
         let mut rows = Self {
             runs,
+            split,
             x0: first.x,
             y0,
             nx,
@@ -1084,7 +1106,7 @@ impl ZRuns {
             let beside = rows.beside(run);
             for z in run.z0..=run.z1 {
                 let mut n = u8::from(z > run.z0) + u8::from(z < run.z1);
-                for r in beside.iter().flatten() {
+                for r in beside.iter().copied().flatten() {
                     n += u8::from(z >= r.z0 && z <= r.z1);
                 }
                 live[run.start + (z - run.z0) as usize] = n;
@@ -1094,23 +1116,51 @@ impl ZRuns {
         Some(rows)
     }
 
-    /// The run of row `(x, y)`, if the domain has one.
-    pub(crate) fn row(&self, x: Option<i64>, y: Option<i64>) -> Option<ZRun> {
-        let (rx, ry) = (x?.checked_sub(self.x0)?, y?.checked_sub(self.y0)?);
-        if rx < 0 || ry < 0 || rx >= self.nx || ry >= self.ny {
-            return None;
-        }
-        let k = self.at[(rx * self.ny + ry) as usize];
-        (k != NO_SLOT).then(|| self.runs[k as usize])
+    /// Whether every row is one z range, so [`Self::row`] is the whole row.
+    pub(crate) fn contiguous(&self) -> bool {
+        self.split == 0
     }
 
-    /// The four rows beside `run` in `NB6` order: `x - 1`, `x + 1`, `y - 1`, `y + 1`.
-    pub(crate) fn beside(&self, run: &ZRun) -> [Option<ZRun>; 4] {
+    /// The first run of row `(x, y)`, if the domain has one: the whole row when
+    /// [`Self::contiguous`].
+    pub(crate) fn row(&self, x: Option<i64>, y: Option<i64>) -> Option<ZRun> {
+        self.row_runs(x, y).first().copied()
+    }
+
+    /// The runs of row `(x, y)` in z order (empty if the domain has none there).
+    pub(crate) fn row_runs(&self, x: Option<i64>, y: Option<i64>) -> &[ZRun] {
+        let (Some(rx), Some(ry)) = (
+            x.and_then(|x| x.checked_sub(self.x0)),
+            y.and_then(|y| y.checked_sub(self.y0)),
+        ) else {
+            return &[];
+        };
+        if rx < 0 || ry < 0 || rx >= self.nx || ry >= self.ny {
+            return &[];
+        }
+        let k = self.at[(rx * self.ny + ry) as usize];
+        if k == NO_SLOT {
+            return &[];
+        }
+        let k = k as usize;
+        let (x, y) = (self.runs[k].x, self.runs[k].y);
+        let mut end = k + 1;
+        if self.split > 0 {
+            while self.runs.get(end).is_some_and(|r| (r.x, r.y) == (x, y)) {
+                end += 1;
+            }
+        }
+        &self.runs[k..end]
+    }
+
+    /// The runs of the four rows beside `run` in `NB6` order: `x - 1`, `x + 1`, `y - 1`,
+    /// `y + 1`.
+    pub(crate) fn beside(&self, run: &ZRun) -> [&[ZRun]; 4] {
         [
-            self.row(run.x.checked_sub(1), Some(run.y)),
-            self.row(run.x.checked_add(1), Some(run.y)),
-            self.row(Some(run.x), run.y.checked_sub(1)),
-            self.row(Some(run.x), run.y.checked_add(1)),
+            self.row_runs(run.x.checked_sub(1), Some(run.y)),
+            self.row_runs(run.x.checked_add(1), Some(run.y)),
+            self.row_runs(Some(run.x), run.y.checked_sub(1)),
+            self.row_runs(Some(run.x), run.y.checked_add(1)),
         ]
     }
 
@@ -1119,13 +1169,13 @@ impl ZRuns {
     #[cfg(test)]
     pub(crate) fn neighbours(
         run: &ZRun,
-        beside: &[Option<ZRun>; 4],
+        beside: &[&[ZRun]; 4],
         z: i64,
         i: usize,
     ) -> ([usize; 6], usize) {
         let mut js = [0usize; 6];
         let mut n = 0;
-        for r in beside.iter().flatten() {
+        for r in beside.iter().copied().flatten() {
             if z >= r.z0 && z <= r.z1 {
                 js[n] = r.start + (z - r.z0) as usize;
                 n += 1;
@@ -2582,7 +2632,7 @@ impl ChemWorld {
                 let len = (run.z1 - run.z0 + 1) as usize;
                 add_shares(&mut nq[s + 1..s + len], &per[s..s + len - 1]);
                 add_shares(&mut nq[s..s + len - 1], &per[s + 1..s + len]);
-                for r in rows.beside(run).iter().flatten() {
+                for r in rows.beside(run).into_iter().flatten() {
                     let (lo, hi) = (run.z0.max(r.z0), run.z1.min(r.z1));
                     if lo > hi {
                         continue;

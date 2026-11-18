@@ -2109,12 +2109,14 @@ impl ChemWorld {
         // Only WATER with Q > 200 can evaporate and a visit writes only its own cell, so a
         // block's candidates are known before its first visit (the surface test and the roll
         // are pure reads of other cells' materials and of the cell's key).
-        if let Some(zr) = &topo.zruns
+        // The row passes read each row as one run.
+        let rows = topo.zruns.as_ref().filter(|zr| zr.contiguous());
+        if let Some(zr) = rows
             && !full_scans()
         {
             self.evaporate_rows(topo, zr, tkey, rep);
         }
-        let mut base = if topo.zruns.is_some() && !full_scans() {
+        let mut base = if rows.is_some() && !full_scans() {
             n
         } else {
             0
@@ -2233,7 +2235,7 @@ impl ChemWorld {
         if !self.params.erode || !self.storm() {
             return;
         }
-        if let Some(zr) = &topo.zruns
+        if let Some(zr) = topo.zruns.as_ref().filter(|zr| zr.contiguous())
             && !full_scans()
         {
             self.erode_runs(topo, zr, rep);
@@ -2284,7 +2286,7 @@ impl ChemWorld {
                 }
             }
             for b in zr.beside(run) {
-                let Some(b) = b else {
+                let Some(&b) = b.first() else {
                     exposed.fill(true);
                     break;
                 };

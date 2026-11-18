@@ -4711,17 +4711,17 @@ fn topology_fast_paths_match_offset_lookups() {
                 }
             }
         }
-        // z-runs: present exactly when every (x, y) row is one contiguous z range, and then
-        // the same neighbours, in NB6 order, as `nb6`.
+        // z-runs: contiguous exactly when every (x, y) row is one contiguous z range, and
+        // (§6x, rows of several runs too) the same neighbours, in NB6 order, as `nb6`.
         let contiguous = cells
             .windows(2)
             .all(|w| (w[0].x, w[0].y) != (w[1].x, w[1].y) || w[0].z.checked_add(1) == Some(w[1].z));
         if d == 0 {
             assert!(topo.zruns.is_some(), "the solid ball is one run per row");
         }
-        // `None` (a holey row, or a row table too sparse to be worth it) keeps `nb6`.
+        // `None` (a row table too sparse to be worth it) keeps `nb6`.
         if let Some(rows) = &topo.zruns {
-            assert!(contiguous, "domain {d}");
+            assert_eq!(rows.contiguous(), contiguous, "domain {d}");
             let mut seen = 0;
             for run in &rows.runs {
                 let beside = rows.beside(run);
@@ -4917,11 +4917,13 @@ fn block_material_search_matches_current_slice() {
 }
 
 /// §6d: row-slice heat gathering is the same wrapping sum as the general per-cell scatter,
-/// even for negative / extreme heat and dq, across repeated steps (scratch reuse).
+/// even for negative / extreme heat and dq, across repeated steps (scratch reuse). §6x: also
+/// with rows of several runs (cells off the ends of rows, past a gap, as a domain-growing
+/// place leaves them).
 #[test]
 fn gathered_heat_matches_general_scatter() {
     use super::p6::Topology;
-    let mut cells = Vec::new();
+    let mut base = Vec::new();
     let mut rng = 7u32;
     for x in -3i64..=3 {
         for y in -3i64..=3 {
@@ -4930,38 +4932,62 @@ fn gathered_heat_matches_general_scatter() {
                     continue;
                 }
                 rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
-                cells.push((Coord::new(x, y, z), MatId::ROCK, rng as i32));
+                base.push((Coord::new(x, y, z), MatId::ROCK, rng as i32));
             }
         }
     }
-    for dq in [i32::MIN, -1, 0, 1, 300, 1_000, 2_000, 6_000, i32::MAX] {
-        let mut row = ChemWorld::from_cells(
-            cells.clone(),
-            [0; NE],
-            Arc::new(MatTable::base()),
-            P6Params {
-                heat: true,
-                dq,
-                greenhouse: Greenhouse::Off,
-                ..chem_only()
-            },
-        )
-        .unwrap();
-        let mut general = row.clone();
-        let mut t = Topology::build(&general.cells);
-        assert!(t.zruns.is_some());
-        t.zruns = None; // same topology, only the face lookups instead of row slices
-        general.topo = Some(Arc::new(t));
-        for _ in 0..4 {
-            let a = row.step().unwrap();
-            let b = general.step().unwrap();
-            assert_eq!(format!("{a:?}"), format!("{b:?}"), "dq={dq}");
-            assert_eq!(row.q, general.q, "dq={dq}");
-            assert_eq!(row.space_q(), general.space_q(), "dq={dq}");
-            assert_eq!(row.trapped_q(), general.trapped_q(), "dq={dq}");
+    for gapped in [false, true] {
+        let mut cells = base.clone();
+        if gapped {
+            // Two runs in row (0, 0), three in row (1, 0) beside it, one past the rim of (0, 3).
+            for (k, c) in [
+                (0, 0, 5),
+                (0, 0, 6),
+                (1, 0, 5),
+                (1, 0, 7),
+                (0, 3, 2),
+                (0, 0, -6),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                cells.push((
+                    Coord::new(c.0, c.1, c.2),
+                    MatId::ROCK,
+                    1_000 + 77 * k as i32,
+                ));
+            }
         }
-        assert!(general.topo.as_ref().unwrap().zruns.is_none());
-        assert!(row.topo.as_ref().unwrap().zruns.is_some());
+        for dq in [i32::MIN, -1, 0, 1, 300, 1_000, 2_000, 6_000, i32::MAX] {
+            let mut row = ChemWorld::from_cells(
+                cells.clone(),
+                [0; NE],
+                Arc::new(MatTable::base()),
+                P6Params {
+                    heat: true,
+                    dq,
+                    greenhouse: Greenhouse::Off,
+                    ..chem_only()
+                },
+            )
+            .unwrap();
+            let mut general = row.clone();
+            let mut t = Topology::build(&general.cells);
+            assert!(t.zruns.is_some());
+            t.zruns = None; // same topology, only the face lookups instead of row slices
+            general.topo = Some(Arc::new(t));
+            for _ in 0..4 {
+                let a = row.step().unwrap();
+                let b = general.step().unwrap();
+                assert_eq!(format!("{a:?}"), format!("{b:?}"), "dq={dq}");
+                assert_eq!(row.q, general.q, "dq={dq}");
+                assert_eq!(row.space_q(), general.space_q(), "dq={dq}");
+                assert_eq!(row.trapped_q(), general.trapped_q(), "dq={dq}");
+            }
+            assert!(general.topo.as_ref().unwrap().zruns.is_none());
+            let rows = row.topo.as_ref().unwrap().zruns.as_ref().unwrap();
+            assert_eq!(rows.contiguous(), !gapped);
+        }
     }
 }
 
