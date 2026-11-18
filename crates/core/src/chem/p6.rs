@@ -3067,8 +3067,13 @@ impl ChemWorld {
                 let (fired, rounds) = self.network_pass(topo, &net)?;
                 rep.net_fired = fired;
                 rep.net_rounds = rounds;
-                let [c, .., steam] = present(&self.mat, IDS);
-                (has_c, has_steam) = (c, steam);
+                // §6aa: without a firing the network wrote neither a material nor heat, so
+                // the presence bits from before it are still true. Test-only full scans still
+                // re-check (and report every id present).
+                if fired != 0 || super::p6_rest::full_scans() {
+                    let [c, .., steam] = present(&self.mat, IDS);
+                    (has_c, has_steam) = (c, steam);
+                }
             }
             if self.params.net_burn && net.net_row().is_some() {
                 let mut next = from(has_c);
