@@ -334,7 +334,9 @@ pub struct Renderer {
     /// ties the stored depth of a pixel its own bit holds, with a higher RGB word, replaces the
     /// stored colour and records the pixel in `recolour_marks` instead of losing.
     marking: bool,
-    /// Strictly hidden bits proved during recolour. Tint-only frames keep the same depths;
+    /// Strictly hidden bits proved during recolour or, §6x, during a toggling delta frame's
+    /// redraws (after its resets, so every later write that frame only nears a depth). Tint-only
+    /// frames keep the same depths;
     /// full renders discard these proofs before any reuse, and a delta frame that toggles bits
     /// drops those whose box may meet a pixel it resets (§6x, `drop_proofs_over`). §6v: per-chunk
     /// bit words rather than a hash set of coordinates, so a busy gas tick neither hashes each
@@ -374,6 +376,12 @@ pub struct Renderer {
     /// Proved bits a toggling delta frame kept (tests only, §6x).
     #[cfg(test)]
     recolour_kept: u64,
+    /// Changed bits a toggling delta frame dropped as proved hidden, and proofs its redraws
+    /// made (tests only, §6x).
+    #[cfg(test)]
+    toggle_skipped: u64,
+    #[cfg(test)]
+    toggle_proved: u64,
     delta_index_ok: bool,
     /// The bits holding an entry in `delta_index`, when `delta_members_ok` (built on the first
     /// delta frame that records, kept by compaction, dropped by a full traversal).
@@ -558,6 +566,10 @@ impl Renderer {
             recolour_reused: 0,
             #[cfg(test)]
             recolour_kept: 0,
+            #[cfg(test)]
+            toggle_skipped: 0,
+            #[cfg(test)]
+            toggle_proved: 0,
             delta_index_ok: false,
             delta_members: IndexedBits::default(),
             toggled_near: IndexedBits::default(),
@@ -1133,7 +1145,24 @@ impl Renderer {
         #[cfg(test)]
         let mut proved_skips: Vec<Coord> = Vec::new();
         for &(coord, toggled) in changed {
+            // §6x: a toggling frame drops a changed bit proved strictly hidden that no toggle
+            // is near: it holds no pixel, its proof still stands (its box meets no reset pixel
+            // yet, and a reset it meets drops it below), and a reset pixel it may now win
+            // brings it back as a redraw candidate through the index, like any unchanged bit.
             let near = toggled || (!tint_only && toggled_near.contains(coord));
+            if !tint_only && !near && {
+                let (chunk, index) = World::chunk_of(coord);
+                hidden
+                    .chunk_words(chunk)
+                    .is_some_and(|w| w[index / 64] >> (index % 64) & 1 == 1)
+            } {
+                #[cfg(test)]
+                {
+                    proved_skips.push(coord);
+                    self.toggle_skipped += 1;
+                }
+                continue;
+            }
             let open_now = exposed(coord, world);
             if !near && !open_now {
                 #[cfg(test)]
@@ -1914,8 +1943,12 @@ impl Renderer {
             if let Some(covering) = covering
                 && covering < nearest_possible
             {
-                if self.marking {
+                if self.marking || (self.delta_redraw && !self.marks_only) {
                     self.recolour_hidden.insert(coord);
+                    #[cfg(test)]
+                    if !self.marking {
+                        self.toggle_proved += 1;
+                    }
                 }
                 #[cfg(test)]
                 {
@@ -4972,6 +5005,7 @@ mod tests {
         let mut marked = 0;
         let mut reused = 0;
         let mut kept = 0;
+        let (mut toggle_skipped, mut toggle_proved) = (0, 0);
         for (shape, case, size) in [
             (0, 0_usize, 161_u32),
             (0, 3, 97),
@@ -5057,8 +5091,12 @@ mod tests {
             marked += delta.recolour_marked;
             reused += delta.recolour_reused;
             kept += delta.recolour_kept;
+            toggle_skipped += delta.toggle_skipped;
+            toggle_proved += delta.toggle_proved;
         }
         assert!(kept > 0, "no toggling frame kept a hidden proof");
+        assert!(toggle_skipped > 0, "no toggling frame dropped a proved bit");
+        assert!(toggle_proved > 0, "no toggling redraw proved a bit hidden");
         assert!(
             recolours >= 100,
             "recolour pass taken only {recolours} times"
