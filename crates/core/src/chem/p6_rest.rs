@@ -156,8 +156,6 @@ pub(crate) struct ConvectScratch {
     cand: Vec<u64>,
     /// One bit per domain cell: it and its outward neighbour swap this tick.
     swapped: Vec<u64>,
-    /// One bit per domain cell: its pair with its outward neighbour passes the density test.
-    pass: Vec<u64>,
     /// One bit per `ysort` position still to visit in the sparse flow scan (see
     /// [`ChemWorld::flow_pass`]).
     flow_queue: Vec<u64>,
@@ -386,7 +384,8 @@ impl ChemWorld {
         // has already written its trades back), and so does any test the scan reaches before
         // either parcel moved. The tests therefore run first, once per domain cell in domain
         // order against its outward neighbour (`Topology::cell_up`, a few rows or planes away,
-        // so the reads stay near each other), into one bit per cell. The scan then visits, in
+        // so the reads stay near each other), 64 cells to a word whose passing pairs are
+        // rolled at once (§6u: one pass, no per-cell bit array). The scan then visits, in
         // the original order, only the rsort positions whose bit is set, and skips a pair one
         // of whose parcels already moved (the test could have read nothing else that differs).
         // The roll is a pure function of the cell and tick, so rolling only those pairs is the
@@ -399,28 +398,6 @@ impl ChemWorld {
         let mut sc = std::mem::take(&mut self.convect_scratch);
         let cell_up = topo.cell_up();
         let words = n.div_ceil(64);
-        sc.pass.clear();
-        sc.pass.resize(words, 0);
-        for (w, word) in sc.pass.iter_mut().enumerate() {
-            let mut bits = 0u64;
-            for i in w * 64..(w * 64 + 64).min(n) {
-                let u = cell_up[i];
-                let has_up = u != NO_SLOT;
-                let u = if has_up { u as usize } else { i };
-                let mb = below_mass[self.mat[i].0 as usize];
-                let ma = above_mass[self.mat[u].0 as usize];
-                let tb = i64::from(self.q[i]) + CONVECT_T0;
-                let ta = i64::from(self.q[u]) + CONVECT_T0;
-                let pass = has_up
-                    & (mass[self.mat[i].0 as usize] != 0)
-                    & (mass[self.mat[u].0 as usize] != 0)
-                    & (tb > 0)
-                    & (ta > 0)
-                    & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
-                bits |= u64::from(pass) << (i - w * 64);
-            }
-            *word = bits;
-        }
         let convect_key = self.roll_key(SALT_CONVECT);
         // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
         // in domain order, so the pairs that pass the density test are rolled right here and
@@ -433,14 +410,39 @@ impl ChemWorld {
         };
         let rsort_pos = topo.rsort_pos();
         let tick = self.tick;
-        let (pass, cand, moved, swapped) =
-            (&mut sc.pass, &mut sc.cand, &mut sc.moved, &mut sc.swapped);
+        let (cand, moved, swapped) = (&mut sc.cand, &mut sc.moved, &mut sc.swapped);
         cand.clear();
         cand.resize(words, 0);
-        for (w, word) in pass.iter().enumerate() {
-            let mut bits = *word;
+        let rising: [bool; 256] = std::array::from_fn(|m| mass[m] != 0);
+        let (mat, q) = (&self.mat[..n], &self.q[..n]);
+        let cell_up = &cell_up[..n];
+        for w in 0..words {
+            let lo = w * 64;
+            let hi = (lo + 64).min(n);
+            let mut bits = 0u64;
+            for (j, ((&u, &mi), &qi)) in cell_up[lo..hi]
+                .iter()
+                .zip(&mat[lo..hi])
+                .zip(&q[lo..hi])
+                .enumerate()
+            {
+                let has_up = u != NO_SLOT;
+                let u = if has_up { u as usize } else { lo + j };
+                let mu = mat[u];
+                let mb = below_mass[mi.0 as usize];
+                let ma = above_mass[mu.0 as usize];
+                let tb = i64::from(qi) + CONVECT_T0;
+                let ta = i64::from(q[u]) + CONVECT_T0;
+                let pass = has_up
+                    & rising[mi.0 as usize]
+                    & rising[mu.0 as usize]
+                    & (tb > 0)
+                    & (ta > 0)
+                    & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
+                bits |= u64::from(pass) << j;
+            }
             while bits != 0 {
-                let i = w * 64 + bits.trailing_zeros() as usize;
+                let i = lo + bits.trailing_zeros() as usize;
                 bits &= bits - 1;
                 let rolled = roll_cells
                     .is_none_or(|cells| wide_roll_finish(cells[i], tick) % 1000 < CONVECT_ODDS);
