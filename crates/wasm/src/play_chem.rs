@@ -533,6 +533,21 @@ impl ChemPlay {
     /// refilled with it before the next mirror was skipped, leaving the play world off there.
     /// A place that grows the domain leaves the cache short, which makes the next mirror a
     /// full scan.
+    /// §6t: a place outside the chem domain inserts one cell into it (`ChemWorld::place`, at
+    /// its sorted index). The mirror cache gets the same slot, so it keeps matching the domain
+    /// cell for cell and the next mirror stays incremental (before, the length mismatch forced
+    /// a full scan of every domain cell and a full re-render: a ~1.3-1.5 s step at r90). The
+    /// slot holds air, the cell's material before the place (outside the domain the play world
+    /// had its bit off, as for air); `edited_in_mirror_cache` then records the placed material,
+    /// as for any place, since the play session applies the same edit to the play world.
+    fn joined_mirror_cache(&mut self, coord: Coord, cells: usize) {
+        if self.mirror_mats.len() == cells
+            && let Some(i) = self.world.index_of(coord)
+        {
+            self.mirror_mats.insert(i, MatId::AIR);
+        }
+    }
+
     fn edited_in_mirror_cache(&mut self, coord: Coord) {
         if self.mirror_mats.len() == self.world.domain_len()
             && let Some(i) = self.world.index_of(coord)
@@ -543,7 +558,11 @@ impl ChemPlay {
 
     pub fn place(&mut self, coord: Coord) -> bool {
         for m in [self.place_mat, MatId::ROCK] {
+            let cells = self.world.domain_len();
             if self.world.place(coord, m) {
+                if self.world.domain_len() == cells + 1 {
+                    self.joined_mirror_cache(coord, cells);
+                }
                 self.edited_in_mirror_cache(coord);
                 self.last = format!("place:{}", mat_name(m));
                 return true;

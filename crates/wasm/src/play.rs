@@ -2109,8 +2109,10 @@ mod chem_play_tests {
     /// §6s: dig / place frames go through the delta path (no full re-render) and equal the
     /// full-render frames, on ticks with and without a chem step; a still-camera full render
     /// builds the delta tile lists before the first delta frame, a moving one leaves them to it.
+    /// §6t: a place outside the chem domain (which grows it) is a delta frame too.
     #[test]
     fn edit_frames_are_deltas_equal_to_full_frames() {
+        let mut growths = 0;
         for (preset, radius) in [(2_u32, 14_u32), (0, 12), (4, 14)] {
             let mut runs: Vec<PlaySession> = [true, false]
                 .into_iter()
@@ -2130,11 +2132,7 @@ mod chem_play_tests {
                 "the first (still) full frame builds the tile lists"
             );
             let (mut edit_frames, mut edit_deltas) = (0, 0);
-            // A place outside the domain grows it; the next mirror is then a full scan and its
-            // frame a full render, as before. Those frames are not counted.
-            let mut grown = false;
             for k in 1..=40_u32 {
-                let steps = runs[0].chem.as_ref().unwrap().steps_run;
                 let edit = k % 3 != 0;
                 let deltas = runs[0].renderer.delta_frames();
                 let renders = runs[0].renders();
@@ -2161,13 +2159,8 @@ mod chem_play_tests {
                     );
                 }
                 let chem = runs[0].chem.as_ref().unwrap();
-                let grew = chem.world.domain_len() != domain;
-                let skip = grown || grew;
-                if chem.steps_run != steps && !grew {
-                    grown = false;
-                }
-                grown |= grew;
-                if k != 26 && !skip && edit && runs[0].last_world_tag != tag && k != 27 {
+                growths += usize::from(chem.world.domain_len() != domain);
+                if k != 26 && edit && runs[0].last_world_tag != tag && k != 27 {
                     edit_frames += 1;
                     assert!(runs[0].renders() > renders, "{at}: an edit repaints");
                     if runs[0].renderer.delta_frames() > deltas {
@@ -2186,6 +2179,7 @@ mod chem_play_tests {
             );
             assert_eq!(runs[1].renderer.delta_frames(), 0);
         }
+        assert!(growths >= 2, "only {growths} places grew the chem domain");
     }
 
     /// Digs on ticks without a chem step, then chem steps that refill the dug cells (ocean
