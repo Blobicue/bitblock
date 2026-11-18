@@ -38,12 +38,13 @@ pub const CHEM_ATOM_CAP: i64 = 1 << 32;
 
 pub const CHEM_RADIUS_MIN: u32 = 2;
 pub const CHEM_RADIUS_DEFAULT: u32 = 12;
-/// Browser cap. §6h measured Chrome Low 960x540 (chem every 4 ticks) after the exact
-/// material-search gates and the network gate: r74 ocean presents 14.53-15.40 fps (busy
-/// 63-66%) and gas 15.00-15.87 (busy 53-55%) over four runs each. Ocean's lowest run is the
-/// same as at r72 on this build (14.57), at the same load; r76 ocean dips to 14.43 and r78 to
-/// 13.10. So r74 is the largest tested radius that holds the 15 Hz chem cadence on both presets.
-pub const CHEM_RADIUS_MAX: u32 = 74;
+/// Browser cap. §6i measured Chrome Low 960x540 (chem every 4 ticks) after the exact
+/// AIR-driven sparse flow/dissolve scans, the row-wise erode and the block-masked phase and
+/// evaporation scans: r76 ocean presents 14.93-15.60 fps (busy 66-76%) and gas 14.90-15.27
+/// (busy 65-69%) over four runs each, ocean's lowest run above the r72/r74 noise floor (~14.5);
+/// r78 ocean dips to 13.20 and gas to 12.93. So r76 is the largest tested radius that holds the
+/// 15 Hz chem cadence on both presets (§6h: r74).
+pub const CHEM_RADIUS_MAX: u32 = 76;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
