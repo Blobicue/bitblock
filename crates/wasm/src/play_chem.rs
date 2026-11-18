@@ -38,12 +38,11 @@ pub const CHEM_ATOM_CAP: i64 = 1 << 32;
 
 pub const CHEM_RADIUS_MIN: u32 = 2;
 pub const CHEM_RADIUS_DEFAULT: u32 = 12;
-/// Browser cap. §6f measured Chrome Low 960x540 (chem every 4 ticks) after the exact delta
-/// render, mirror, heat and convection work: r70 ocean presents 14.93-15.23 fps and gas
-/// 14.97-15.03 over four runs each (r68: 14.57-15.77 / 14.97-15.03); r72 falls to 13.3
-/// (ocean) and 12.7-13.0 (gas). So r70 is the largest tested radius that holds the 15 Hz chem
-/// cadence on both presets.
-pub const CHEM_RADIUS_MAX: u32 = 70;
+/// Browser cap. §6g measured Chrome Low 960x540 (chem every 4 ticks) after the one-pass status
+/// books and the straight convection gathers: r72 ocean presents 14.67-15.13 fps and gas
+/// 14.40-15.40 over four runs each; r74 gas falls to 13.2. So r72 is the largest tested radius
+/// that holds the 15 Hz chem cadence on both presets (§6f: r70).
+pub const CHEM_RADIUS_MAX: u32 = 72;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
