@@ -357,6 +357,10 @@ pub struct Renderer {
     #[cfg(test)]
     recolour_reused: u64,
     delta_index_ok: bool,
+    /// The bits holding an entry in `delta_index`, when `delta_members_ok` (built on the first
+    /// delta frame that records, kept by compaction, dropped by a full traversal).
+    delta_members: IndexedBits,
+    delta_members_ok: bool,
     /// Per `COVER_TILE` tile, the full-traversal entries whose box touches it (CSR; built on
     /// the first delta frame after a full one, `delta_csr_built`).
     delta_tile_start: Vec<u32>,
@@ -525,6 +529,8 @@ impl Renderer {
             #[cfg(test)]
             recolour_reused: 0,
             delta_index_ok: false,
+            delta_members: IndexedBits::default(),
+            delta_members_ok: false,
             delta_tile_start: Vec::new(),
             delta_tile_items: Vec::new(),
             delta_csr_built: false,
@@ -795,6 +801,7 @@ impl Renderer {
         );
 
         self.delta_index.clear();
+        self.delta_members_ok = false;
         self.delta_index_ok =
             self.width <= u32::from(u16::MAX) && self.height <= u32::from(u16::MAX);
         self.recording = true;
@@ -1156,6 +1163,21 @@ impl Renderer {
         for &(_, coord) in &redraw {
             self.draw_bit_with(projection, coord, tint);
         }
+        if !self.delta_members_ok {
+            let mut members = std::mem::take(&mut self.delta_members);
+            members.slot.clear();
+            members.words.clear();
+            members.last = None;
+            for e in &self.delta_index {
+                members.insert(e.coord);
+            }
+            self.delta_members = members;
+            self.delta_members_ok = true;
+        }
+        // A bit already indexed is not recorded again: its entry would repeat the one held
+        // (an entry depends only on its bit and this projection), and compaction keeps only a
+        // bit's first entry anyway. A delta frame reads entries only for on bits and draws a bit
+        // that two entries reach twice to the same effect as once.
         self.recording = true;
         for &coord in &fresh {
             self.draw_bit_with(projection, coord, tint);
@@ -1414,21 +1436,15 @@ impl Renderer {
     /// holds a box for every on bit the old index did and the frames drawn from it are the same.
     fn compact_delta_index(&mut self, world: &World) {
         let mut probe = world.probe();
-        let mut kept: crate::world::CoordMap<
-            crate::world::ChunkCoord,
-            [u64; crate::world::CHUNK_WORDS],
-        > = crate::world::CoordMap::default();
-        self.delta_index.retain(|e| {
-            if !probe.is_on(e.coord) {
-                return false;
-            }
-            let (chunk, index) = World::chunk_of(e.coord);
-            let words = kept.entry(chunk).or_insert([0; crate::world::CHUNK_WORDS]);
-            let bit = 1_u64 << (index % 64);
-            let fresh = words[index / 64] & bit == 0;
-            words[index / 64] |= bit;
-            fresh
-        });
+        let mut kept = std::mem::take(&mut self.delta_members);
+        kept.slot.clear();
+        kept.words.clear();
+        kept.last = None;
+        self.delta_index
+            .retain(|e| probe.is_on(e.coord) && kept.insert(e.coord));
+        // `kept` now holds exactly the bits with an entry.
+        self.delta_members = kept;
+        self.delta_members_ok = true;
         self.delta_full_len = self.delta_index.len();
         self.delta_csr_built = false;
         self.delta_compactions += 1;
@@ -1642,7 +1658,9 @@ impl Renderer {
         self.owner_key = owner_key(coord);
         if self.recording {
             if projected.iter().all(Option::is_some) {
-                if let Some(entry) = self.grown_box(coord, min_x, max_x, min_y, max_y) {
+                if let Some(entry) = self.grown_box(coord, min_x, max_x, min_y, max_y)
+                    && (!self.delta_members_ok || self.delta_members.insert(coord))
+                {
                     self.delta_index.push(entry);
                 }
             } else {
@@ -2528,6 +2546,39 @@ fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
     }
     farthest_squared.is_finite()
         && focal * focal >= ENCLOSED_MIN_SPAN * ENCLOSED_MIN_SPAN * farthest_squared
+}
+
+/// A set of bits, as one bit per cell in per-chunk words (the bits of the delta index).
+#[derive(Default)]
+struct IndexedBits {
+    slot: crate::world::CoordMap<crate::world::ChunkCoord, usize>,
+    words: Vec<[u64; crate::world::CHUNK_WORDS]>,
+    /// The last chunk met and its slot: consecutive inserts mostly share a chunk.
+    last: Option<(crate::world::ChunkCoord, usize)>,
+}
+
+impl IndexedBits {
+    /// Adds `coord`; `true` when it was not in the set.
+    fn insert(&mut self, coord: Coord) -> bool {
+        let (chunk, index) = World::chunk_of(coord);
+        let slot = match self.last {
+            Some((c, slot)) if c == chunk => slot,
+            _ => {
+                let words = &mut self.words;
+                let slot = *self.slot.entry(chunk).or_insert_with(|| {
+                    words.push([0; crate::world::CHUNK_WORDS]);
+                    words.len() - 1
+                });
+                self.last = Some((chunk, slot));
+                slot
+            }
+        };
+        let word = &mut self.words[slot][index / 64];
+        let bit = 1_u64 << (index % 64);
+        let fresh = *word & bit == 0;
+        *word |= bit;
+        fresh
+    }
 }
 
 /// A bit and its grown, clamped raster box `[x0, x1) x [y0, y1)` (see `Renderer::grown_box`).
@@ -4449,14 +4500,15 @@ mod tests {
     /// depths and `world_pixels` -- with the crosshair drawn between frames, from far, near and
     /// close cameras, and with every bit the hidden-bit test skips checked to write nothing.
     /// §6k: run again with no index slack and longer chains, so compactions (and the full path
-    /// after one) happen between frames.
+    /// after one) happen between frames. §6p: bits already indexed are not recorded again, so
+    /// the index grows more slowly and fewer compactions happen (at least 3 still do).
     #[test]
     fn delta_render_matches_full_render() {
         let mut compacted = 0;
         for slack in [4096_usize, 0] {
             compacted += delta_render_matches_full_render_with(slack);
         }
-        assert!(compacted >= 5, "only {compacted} compactions");
+        assert!(compacted >= 3, "only {compacted} compactions");
     }
 
     fn delta_render_matches_full_render_with(slack: usize) -> u64 {
