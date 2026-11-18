@@ -1742,9 +1742,28 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
 
     // Candidate offsets ordered by a blurred radius (fixed-point radius plus a
     // seeded jitter), hash then offset breaking ties.
-    type Offset = (i64, i64, i64);
-    let mut cand: Vec<(u64, u64, i64, Offset)> = Vec::new();
-    let mut air: Vec<(i64, (i64, i64, i64))> = Vec::new();
+    //
+    // §6u: every ball cell (shell and hollow) gets its index in `(dx, dy, dz)` loop order,
+    // which is ascending `Coord` order. A candidate sorts as `(key, hash, d2 << 32 | index)`:
+    // the index is monotone in the offset, so this is the `(key, hash, d2, offset)` order
+    // (`d2 <= 3 * 103^2` and the index `< 207^3` both fit in 32 bits). The layers are then
+    // written into per-index arrays and the cells emitted in loop order, which is the
+    // coordinate sort of the same cells.
+    let column = |dx: i64, dy: i64| -> i64 {
+        let rest = r2 - dx * dx - dy * dy;
+        if rest < 0 {
+            return 0;
+        }
+        2 * rest.isqrt() + 1
+    };
+    let mut ball = 0usize;
+    for dx in -ri..=ri {
+        for dy in -ri..=ri {
+            ball += column(dx, dy) as usize;
+        }
+    }
+    let mut cand: Vec<(u64, u64, u64)> = Vec::with_capacity(ball);
+    let mut idx = 0u64;
     for dx in -ri..=ri {
         for dy in -ri..=ri {
             for dz in -ri..=ri {
@@ -1752,16 +1771,18 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
                 if d2 > r2 {
                     continue;
                 }
+                let at = idx;
+                idx += 1;
                 if h2.is_some_and(|h| d2 <= h) {
-                    air.push((d2, (dx, dy, dz)));
                     continue;
                 }
                 let h = cell_hash(cfg.seed, (dx, dy, dz));
                 let key = isqrt((d2 as u64) << 16) + h % BLUR_FX;
-                cand.push((key, h, d2, (dx, dy, dz)));
+                cand.push((key, h, (d2 as u64) << 32 | at));
             }
         }
     }
+    debug_assert_eq!(idx as usize, ball);
     cand.sort_unstable();
     let n = cand.len();
     // Shell thicknesses come from the budget: layer i owns the next counts[i]
@@ -1772,31 +1793,47 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
         .iter()
         .zip(counts)
         .flat_map(|(&m, k)| std::iter::repeat_n(m, k));
-    let mut cells: Vec<(Coord, MatId, i32)> = Vec::with_capacity(n + air.len());
-    for &(_, _, d2, (dx, dy, dz)) in &cand {
-        let coord = Coord::new(c.x + dx, c.y + dy, c.z + dz);
+    let mut mats = vec![MatId::AIR; ball];
+    let mut heat = vec![0i32; ball];
+    for &(_, _, packed) in &cand {
+        let (d2, at) = ((packed >> 32) as i64, (packed & 0xffff_ffff) as usize);
         let m = fill.next().unwrap_or(MatId::AIR);
         if m != MatId::AIR {
             let mc = comp(m).expect("table rows");
             spend(&mut rem, &mc, 1);
         }
-        cells.push((coord, m, genesis_heat(m, d2, r, params)));
+        mats[at] = m;
+        heat[at] = genesis_heat(m, d2, r, params);
     }
     debug_assert!(fill.next().is_none());
     debug_assert_eq!(rem, bag);
-    for &(_, (dx, dy, dz)) in &air {
-        cells.push((Coord::new(c.x + dx, c.y + dy, c.z + dz), MatId::AIR, 0));
-    }
-    cells.sort_unstable_by_key(|e| e.0);
+    drop(cand);
     out.world.defer_octree();
-    for (coord, m, q) in cells {
-        out.cells.push(coord);
-        out.mat.push(m);
-        out.q.push(q);
-        if m != MatId::AIR {
-            out.world.set_on(coord);
+    out.cells.reserve(ball);
+    out.mat.reserve(ball);
+    out.q.reserve(ball);
+    let mut at = 0usize;
+    for dx in -ri..=ri {
+        for dy in -ri..=ri {
+            let len = column(dx, dy);
+            if len == 0 {
+                continue;
+            }
+            let half = len / 2;
+            for dz in -half..=half {
+                let coord = Coord::new(c.x + dx, c.y + dy, c.z + dz);
+                let m = mats[at];
+                out.cells.push(coord);
+                out.mat.push(m);
+                out.q.push(heat[at]);
+                if m != MatId::AIR {
+                    out.world.set_on(coord);
+                }
+                at += 1;
+            }
         }
     }
+    debug_assert_eq!(at, ball);
     out.world.flush_octree();
 
     // Whatever the shape could not hold settles into the bag.
@@ -1861,6 +1898,83 @@ mod tests {
     }
 
     const BUDGET: Lanes = [4000, 3000, 400, 120, 300, 350, 200, 60, 180, 150, 40, 30];
+
+    /// §6u: the indexed genesis lays out exactly the cells of the former construction (all
+    /// candidates sorted by `(key, hash, d2, offset)`, layers filled in that order, then every
+    /// cell sorted by coordinate), with the same materials, heat, occupancy and books, for a
+    /// solid ball, a hollow one, an off-origin centre and a budget the ball cannot hold.
+    #[test]
+    fn indexed_genesis_matches_the_sorted_construction() {
+        let reference = |cfg: &GenesisConfig, params: &P6Params| {
+            let r = cfg.shape.radius;
+            let ri = i64::from(r);
+            let c = cfg.shape.center;
+            let r2 = ri * ri;
+            let h2 = cfg.shape.hollow.map(|h| i64::from(h) * i64::from(h));
+            let mut rem = cfg.budget.lanes;
+            let mut cand = Vec::new();
+            let mut air = Vec::new();
+            for dx in -ri..=ri {
+                for dy in -ri..=ri {
+                    for dz in -ri..=ri {
+                        let d2 = dx * dx + dy * dy + dz * dz;
+                        if d2 > r2 {
+                            continue;
+                        }
+                        if h2.is_some_and(|h| d2 <= h) {
+                            air.push((dx, dy, dz));
+                            continue;
+                        }
+                        let h = cell_hash(cfg.seed, (dx, dy, dz));
+                        let key = isqrt((d2 as u64) << 16) + h % BLUR_FX;
+                        cand.push((key, h, d2, (dx, dy, dz)));
+                    }
+                }
+            }
+            cand.sort_unstable();
+            let (counts, _) = plan_layers(&rem, cand.len());
+            let mut fill = LAYERS
+                .iter()
+                .zip(counts)
+                .flat_map(|(&m, k)| std::iter::repeat_n(m, k));
+            let mut cells = Vec::new();
+            for &(_, _, d2, (dx, dy, dz)) in &cand {
+                let m = fill.next().unwrap_or(MatId::AIR);
+                if m != MatId::AIR {
+                    spend(&mut rem, &comp(m).unwrap(), 1);
+                }
+                let coord = Coord::new(c.x + dx, c.y + dy, c.z + dz);
+                cells.push((coord, m, genesis_heat(m, d2, r, params)));
+            }
+            for &(dx, dy, dz) in &air {
+                cells.push((Coord::new(c.x + dx, c.y + dy, c.z + dz), MatId::AIR, 0));
+            }
+            cells.sort_unstable_by_key(|e| e.0);
+            (cells, rem)
+        };
+        let params = P6Params::default();
+        let big: Lanes = BUDGET.map(|x| x * 40);
+        for (budget, seed, r, hollow, centre) in [
+            (BUDGET, 7, 9, None, Coord::new(0, 0, 0)),
+            (BUDGET, 3, 12, Some(4), Coord::new(5, -3, 11)),
+            (big, 11, 6, None, Coord::new(-2, 8, 1)),
+            (BUDGET, 1, 0, None, Coord::new(0, 0, 0)),
+            (BUDGET, 9, 15, Some(15), Coord::new(0, 0, 0)),
+        ] {
+            let mut cfg = cfg(budget, seed, r);
+            cfg.shape.hollow = hollow;
+            cfg.shape.center = centre;
+            let w = genesis_p6(&cfg, &params).unwrap();
+            let (cells, rem) = reference(&cfg, &params);
+            assert_eq!(w.cells.len(), cells.len());
+            for (j, &(coord, m, q)) in cells.iter().enumerate() {
+                assert_eq!((w.cells[j], w.mat[j], w.q[j]), (coord, m, q));
+                assert_eq!(w.world.is_on(coord), m != MatId::AIR || is_bedrock(coord));
+            }
+            assert_eq!(w.inv, rem);
+            assert_eq!(w.check_books(), Ok(()));
+        }
+    }
 
     /// §6t: inserting one domain cell keeps the cached topology, updated in place, and the
     /// result is exactly the topology a rebuild makes (every table, the core and the radial
