@@ -3419,6 +3419,74 @@ This wave is one shippable pass: a small page fix, then fresh gas at r84. Exactn
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6o. Ocean chem: sparse +y gas rise, N-family skip, bitset flow queue, single-quotient heat shares; cap raised to 86 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass: ocean chem at r84, then fresh gas and ocean at r86. Exactness is checked against 4f49d83. No hash or frame changed, and the mirror's FNV repaint test and frame spreading were left alone. Each commit passed the full local pre-push check first and was pushed on its own, so each has its own CI run, all green.
+
+**1. Diagnosis (native, ocean r84, temporary per-stage timers; per chem step over ticks 25–95).** Chem ~31 ms in total. The three costliest stages:
+- `combine2` 9.1 ms: hand reactions 4.3, of which most was the N-family cube scans (≈25 k N cells, but a single H cell in the world); the reaction network 1.2; the +y rise 3.7, a walk over the whole `topo.rise` list.
+- `flow` 7.2 ms, with its candidate `Vec` and `BinaryHeap`.
+- `heat` 5.3 ms.
+
+Water 2.8 and phase 2.3 make up most of the rest.
+
+**2. Change: a0d62b8 (exact).**
+- **N-family skip.** Every N-family reaction needs at least three H cells in one cube. If the world holds fewer than three H cells, no cube can react, so the scan is skipped. (`full_scans()` keeps the old scan for tests.)
+- **Sparse +y rise** (`gas_rise_up`, Classic water cycle only; core gravity still uses `gas_rise_outward`). The pass returns at once if there is no AIR or WATER. Otherwise one pass over the domain marks, by position in the rise list (new `Topology::rise_pos`, the inverse of `rise`), each pair whose lower cell is rising at the start of the tick. The marked pairs are then visited in ascending list order. Each pair re-checks the live materials, the shell block and the roll exactly as before. This visits the same pairs in the same order:
+  - A swap writes only its own two cells, and each cell is the lower cell of at most one +y pair.
+  - The list runs from the top row down, so the pair whose lower cell is a given pair's upper cell was visited earlier. No later swap can therefore move gas into a lower cell that has not been visited yet.
+  - So a pair whose lower cell is not rising at the start is still not rising when its turn comes. It is skipped, as the old loop's first test skips it.
+- **Bitset flow queue.** The sparse flow path's candidate list and heap are now a bitset over `ysort` positions. It is seeded with the WATER neighbours of AIR cells. The sweep takes the lowest set bit, and a move pushes only positions above the current one. So the visit order is the same ascending, each-once order the heap gave.
+- **Heat shares, one quotient.** `(q / d).max(0) / 6 == q.max(0) / (6·d)` for positive `d`, so each share is one division, and the remainder is `q − 6·share`.
+- **CO2 count.** Summed by 255-cell chunks (the same integer).
+- **Test.** `sparse_rise_and_n_skip_match_the_full_scans` runs `combine2_pass` with fast and full scans on scrambled Classic worlds (AIR, WATER, STEAM, O2, CO2, N, NH3, ROCK; 0–4 H cells; ticks 5–131). It requires identical materials, heat and reports, with rises in every case. The §6i sparse-flow test covers the flow queue.
+
+**3. Native (cap lifted; instrumented `spike_prof`, step(4) per chem frame; mean over chem steps 25–95).**
+
+| case | 4f49d83 step | §6o step | chem | mirror | render |
+|---|---|---|---|---|---|
+| ocean r84 | 44.3 ms | 35.8 ms | 30.9 → 22.8 | 4.0 → 3.9 | 8.7 → 8.4 |
+| ocean r86 | 43.2 ms | 38.1 ms | 28.7 → 24.1 | 4.2 → 4.1 | 9.5 → 9.2 |
+| gas r86 | 49.6 ms | 48.1 ms | 24.7 → 23.3 | 8.5 → 8.2 | 16.0 → 16.1 |
+
+Ocean r84 per stage after the change: flow 5.9, combine2 4.6, heat 4.0, water 2.8, phase 2.3 (22.5 ms in all).
+
+**4. Chrome (headless, Low 960×540, chem every 4 ticks; `presented_fps` averaged over 3 snapshots, busy; every run is "fresh", measured from 2 s after the radius change). Study build with the cap lifted.**
+
+| case | §6n 4f49d83 | §6o set 1 (4 runs) | §6o set 2 (4 runs) |
+|---|---|---|---|
+| gas r86 fresh | 12.33, 13.30, 14.23, 13.40 (first snapshot 7.6–11.1); 85–86% | 15.10, 15.13, 15.27, 15.17; 80–84% | 15.13, 15.20, 15.13, 15.13; 82–83% |
+| ocean r86 fresh | — | 15.00, 14.97, 15.03, 15.20; 63–69% | 15.03, 15.03, 15.00, 15.07; 63–68% |
+| gas r88 fresh | — | 12.10, 11.27 (first snapshot 7.0–7.8); 86–87% | — |
+| ocean r88 fresh | — | 14.47, 15.67; 72–74% | — |
+
+- The lowest r86 single snapshot is 14.9 (ocean). Every run ends `books=ok energy_drift=0`.
+- In a wasm CPU profile of gas r86, `step_laws` (convection, inlined) takes ~33% of samples, `draw_bit_with` ~13%, `heat_pass` ~9%, idle ~10%.
+
+**5. Cap: 84 → 86** (8b39ea2: `CHEM_RADIUS_MAX`, the page's `max` and title, the JS clamp). r86 holds ~15 fps on both presets over two sets of four fresh runs. At r88, a fresh gas load's first window dips in every run (7.0–7.8 fps), so r88 fails the rule.
+
+**6. Exactness evidence (vs 4f49d83).**
+- Parity byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 (with and without dynamics) match the §6i reference file. Core tests pass (release, 329). The full pre-push check passes.
+- `delta_eq` output is byte-identical:
+  - to §6l's on gas r80 and r82, ocean r80 and r82, ocean r60, gas r36, and preset 1 r80 and r82;
+  - to §6n's on gas and ocean r84;
+  - to 4f49d83 built natively on gas and ocean r86 (150 steps).
+- The shipped wasm, the 4f49d83 wasm (`479d29fb…`) and native print the same world and frame tags (with `books=ok`) on ocean and gas r84, gas r36 (warm 5) and preset 1 r60. On ocean and gas r86, native equals the shipped wasm; the 4f49d83 wasm clamps those radii to 84.
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page prints the same lines as before.
+
+**7. Next wall.**
+- (a) r88: a fresh gas load's first window dips to 7–8 fps. At r86 the gas hump step is ~48 ms native: chem ~23 (convection, mostly the bandwidth-bound density test ~5.4; heat ~4), render ~16 (classification ~4.5, recolour draw ~11.5 for ~80 k bits at ~150 ns each, 8 exact vertex projections per bit), mirror ~8.
+- (b) Ocean r86 is ~38 ms native (chem ~24: flow ~6, combine2 ~5, heat ~4). It has toggle-frame render spikes (p90 ~24 ms, max ~60).
+- (c) Replacing the mirror's FNV repaint test with an exact material comparison, or spreading the hump's redraw over frames, remain options for Owen only.
+
+**Build.** wasm (8b39ea2, ABI 17) md5 `268110ad3a792888b5040f94a1b820b5` (1,487,153 B), play.html `3163918a371b65228c69ef174a6dc6e3`, bitblock-lab.html `79876256a14b22f4a59a7d4245192401`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean r86 (15.0 presented fps) and gas r86 (15.1) both read `books=ok energy_drift=0 error=none`. Requesting r90 clamps to 86, and the box shows 86 (1 → 2, 40.7 → 40). Only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6o/play/{default,chem2_r86,chem4_r86,chem4_r90,radius_box_r90}.png`.
+- Sweeps and A/B: `/workspace/render_scale/s6o/` (`chrome/`, `prof/`, `ab0/`, `ab1/`, `eq/`).
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
