@@ -487,9 +487,10 @@ impl ChemWorld {
                 let i = w * 64 + bits.trailing_zeros() as usize;
                 bits &= bits - 1;
                 let up = cell_up[i] as usize;
-                let (m_b, m_a) = (self.mat[i], self.mat[up]);
-                self.set_mat(i, m_a);
-                self.set_mat(up, m_b);
+                // Both parcels are rising gas (non-zero mass), never AIR, so the two
+                // `set_mat` calls would only write the materials (no occupancy bit changes).
+                debug_assert!(self.mat[i] != MatId::AIR && self.mat[up] != MatId::AIR);
+                self.mat.swap(i, up);
                 self.q.swap(i, up);
             }
         }
