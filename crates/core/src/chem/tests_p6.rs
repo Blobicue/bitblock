@@ -4925,7 +4925,7 @@ fn gathered_heat_matches_general_scatter() {
             }
         }
     }
-    for dq in [i32::MIN, -1, 0, 1, 1_000, 6_000, i32::MAX] {
+    for dq in [i32::MIN, -1, 0, 1, 300, 1_000, 2_000, 6_000, i32::MAX] {
         let mut row = ChemWorld::from_cells(
             cells.clone(),
             [0; NE],
@@ -5061,5 +5061,66 @@ fn hit_mask_packs_the_cell_test() {
     ] {
         let want = (a..b).fold(0u64, |acc, k| acc | ((hit(mat[k], q[k]) as u64) << (k - a)));
         assert_eq!(hit_mask(&mat[a..b], &q[a..b], hit), want, "{a}..{b}");
+    }
+}
+
+/// §6j: a gas planet with no AIR or WATER skips the outward rise (and lets convection gather
+/// its own parcels): every step matches the full scans, with and without AIR present.
+#[test]
+fn gas_rise_gate_matches_the_full_scan() {
+    use super::p6_rest::FULL_SCANS;
+    let n = 900i64; // ~r6 sphere
+    let (fe, h2s, nh3) = (n / 20, n / 25, n / 5);
+    let ch4 = n - fe - h2s - nh3;
+    let mut lanes = [0i64; NE];
+    lanes[6] = fe;
+    lanes[0] = h2s * 2 + nh3 * 3 + ch4 * 4;
+    lanes[4] = h2s;
+    lanes[3] = nh3;
+    lanes[2] = ch4;
+    let cfg = GenesisConfig {
+        budget: GenesisBudget::new(lanes),
+        seed: 3,
+        shape: GenesisShape {
+            center: Coord::new(0, 7, 0),
+            radius: 6,
+            hollow: None,
+        },
+        atom_cap: DEFAULT_ATOM_CAP,
+    };
+    for air in [false, true] {
+        let mut base = genesis(&cfg).unwrap();
+        base.attach_net(trimmed());
+        let mut p = *base.params();
+        p.energy_in = EnergyInput {
+            sun: 8,
+            day: 600,
+            core: 40,
+            core_r: 0,
+        };
+        p.sun_sweep = SunSweep::FULL;
+        p.cycle = WaterCycle::Driven;
+        p.convect = true;
+        base.set_params(p);
+        if air {
+            base.set_mat(base.mat.len() / 2, MatId::AIR);
+        }
+        let run = |full: bool| {
+            FULL_SCANS.with(|f| f.set(full));
+            let mut w = base.clone();
+            let mut out = Vec::new();
+            for _ in 0..30 {
+                let r = w.step().unwrap();
+                out.push((format!("{r:?}"), w.mat.clone(), w.q.clone()));
+            }
+            FULL_SCANS.with(|f| f.set(false));
+            out
+        };
+        let (fast, full) = (run(false), run(true));
+        assert!(
+            fast.iter().any(|s| !s.0.contains("convected: 0")),
+            "convection ran"
+        );
+        assert_eq!(fast, full, "air {air}");
     }
 }

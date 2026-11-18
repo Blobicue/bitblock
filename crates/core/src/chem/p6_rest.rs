@@ -413,6 +413,15 @@ impl ChemWorld {
     /// when this tick's convection follows, the gathered parcels are handed on to it.
     pub(crate) fn gas_rise_outward(&mut self, topo: &Topology, rep: &mut StepReport) {
         let mut sc = std::mem::take(&mut self.convect_scratch);
+        // A rising cell trades only with AIR or WATER and a trade keeps both counts, so with
+        // neither in the domain the scan trades nothing: skip it and its gather (this tick's
+        // convection then gathers the same values itself).
+        if !full_scans() && find_mat2(&self.mat, 0, MatId::AIR, MatId::WATER).is_none() {
+            sc.swaps.clear();
+            sc.gathered = None;
+            self.convect_scratch = sc;
+            return;
+        }
         let hand_on = self.params.cycle == WaterCycle::Driven && self.params.convect;
         self.gather_parcels(topo, &mut sc, hand_on);
         sc.swaps.clear();
@@ -1824,7 +1833,16 @@ impl ChemWorld {
         // Only WATER with Q > 200 can evaporate and a visit writes only its own cell, so a
         // block's candidates are known before its first visit (the surface test and the roll
         // are pure reads of other cells' materials and of the cell's key).
-        let mut base = 0;
+        if let Some(zr) = &topo.zruns
+            && !full_scans()
+        {
+            self.evaporate_rows(topo, zr, tkey, rep);
+        }
+        let mut base = if topo.zruns.is_some() && !full_scans() {
+            n
+        } else {
+            0
+        };
         while base < n {
             let end = (base + 64).min(n);
             if find_mat(&self.mat[base..end], 0, MatId::WATER).is_none() {
@@ -1883,6 +1901,54 @@ impl ChemWorld {
             drops -= 1;
             self.q[i] = self.q[i].wrapping_add(LATENT_PAIR);
             rep.rained += 1;
+        }
+    }
+
+    /// The evaporation scan of [`Self::water_cycle_pass`] over z-runs, the same visits in index
+    /// order. A row's surface WATER (WATER whose cell above, in the next row up, is not
+    /// WATER) is found from the two row slices before the row's first visit: a visit writes
+    /// only its own cell, which is neither another cell of the row nor a cell above one, so
+    /// no visit changes another's surface test. Only surface WATER reads its heat and rolls.
+    fn evaporate_rows(
+        &mut self,
+        topo: &Topology,
+        zr: &super::p6::ZRuns,
+        tkey: u64,
+        rep: &mut StepReport,
+    ) {
+        let mut surf: Vec<bool> = Vec::new();
+        for run in &zr.runs {
+            let (s, len) = (run.start, (run.z1 - run.z0 + 1) as usize);
+            let row = &self.mat[s..s + len];
+            if !row.iter().fold(false, |h, &m| h | (m == MatId::WATER)) {
+                continue;
+            }
+            surf.clear();
+            surf.extend(row.iter().map(|&m| m == MatId::WATER));
+            if let Some(a) = zr.row(Some(run.x), run.y.checked_add(1)) {
+                let (lo, hi) = (run.z0.max(a.z0), run.z1.min(a.z1));
+                if lo <= hi {
+                    let m = (hi - lo + 1) as usize;
+                    let off = (lo - run.z0) as usize;
+                    let at = a.start + (lo - a.z0) as usize;
+                    for (f, &u) in surf[off..off + m].iter_mut().zip(&self.mat[at..at + m]) {
+                        *f &= u != MatId::WATER; // buried: not surface
+                    }
+                }
+            }
+            for (k, &f) in surf.iter().enumerate() {
+                let i = s + k;
+                if !f || self.q[i] <= 200 {
+                    continue;
+                }
+                if self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
+                    self.set_mat(i, MatId::AIR);
+                    self.vapor += 1;
+                    self.evaporated += 1;
+                    self.q[i] = (self.q[i] - LATENT_PAIR).max(0);
+                    rep.evaporated += 1;
+                }
+            }
         }
     }
 

@@ -891,27 +891,15 @@ fn add_shares(dst: &mut [i32], src: &[i32]) {
     }
 }
 
-/// The heat law's first sweep over whole-domain slices: each cell's emission `o = emit(q)`
-/// (truncated), its per-neighbour share `per = o / live` when it emits, and the heat it keeps,
-/// `nq = q - per * live`.
+/// The heat law's first sweep assuming six neighbours. Rim cells are patched with their
+/// actual live count before any share is read. `emit(q)` is the same truncating quotient as
+/// the law (this path is used only when dq divides 6000).
 #[inline(always)]
-fn heat_shares(q: &[i32], live: &[u8], per: &mut [i32], nq: &mut [i32], emit: impl Fn(i32) -> i32) {
-    for (((&qi, &l), p), k) in q.iter().zip(live).zip(per.iter_mut()).zip(nq.iter_mut()) {
-        let o = emit(qi);
-        let share = if o > 0 && l > 0 {
-            match l {
-                1 => o,
-                2 => o / 2,
-                3 => o / 3,
-                4 => o / 4,
-                5 => o / 5,
-                _ => o / 6,
-            }
-        } else {
-            0
-        };
+fn heat_shares_six(q: &[i32], per: &mut [i32], nq: &mut [i32], emit: impl Fn(i32) -> i32) {
+    for ((&qi, p), k) in q.iter().zip(per.iter_mut()).zip(nq.iter_mut()) {
+        let share = emit(qi).max(0) / 6;
         *p = share;
-        *k = qi - share * i32::from(l);
+        *k = qi - share * 6;
     }
 }
 
@@ -2060,10 +2048,28 @@ impl ChemWorld {
             // dq)` truncated (the same rational), and every quantity fits `i32`: `0 <= p * live
             // <= o <= q` for an emitting cell.
             match self.params.dq {
-                300 => heat_shares(&self.q, &rows.live, &mut per, &mut nq, |q| q / 20),
                 d if d > 0 && 6000 % d == 0 => {
-                    let k = 6000 / d;
-                    heat_shares(&self.q, &rows.live, &mut per, &mut nq, |q| q / k);
+                    let divisor = 6000 / d;
+                    // All but the rim cells have six neighbours. Do that branch-free whole-
+                    // slice case first, then patch just the rim (live < 6) with the original
+                    // per-live quotient, before any cell reads a share.
+                    if divisor == 20 {
+                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q / 20);
+                    } else {
+                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q / divisor);
+                    }
+                    for &(i, _) in &topo.space_faces {
+                        let i = i as usize;
+                        let o = self.q[i] / divisor;
+                        let live = usize::from(rows.live[i]);
+                        let p = if o > 0 && live > 0 {
+                            div_by_live(i64::from(o), live) as i32
+                        } else {
+                            0
+                        };
+                        per[i] = p;
+                        nq[i] = self.q[i] - p * live as i32;
+                    }
                 }
                 _ => {
                     for i in 0..n {
