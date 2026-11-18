@@ -5050,7 +5050,15 @@ fn hit_mask_packs_the_cell_test() {
     let mat: Vec<MatId> = (0..200).map(|_| MatId((rnd() % 6) as u8)).collect();
     let q: Vec<i32> = (0..200).map(|_| (rnd() % 60) as i32 - 10).collect();
     let hit = |m: MatId, x: i32| (m == MatId(2)) & (x > 20) | (m == MatId(4)) & (x < 0);
-    for (a, b) in [(0, 64), (64, 128), (100, 164), (136, 200), (150, 200), (5, 6), (7, 7)] {
+    for (a, b) in [
+        (0, 64),
+        (64, 128),
+        (100, 164),
+        (136, 200),
+        (150, 200),
+        (5, 6),
+        (7, 7),
+    ] {
         let want = (a..b).fold(0u64, |acc, k| acc | ((hit(mat[k], q[k]) as u64) << (k - a)));
         assert_eq!(hit_mask(&mat[a..b], &q[a..b], hit), want, "{a}..{b}");
     }
