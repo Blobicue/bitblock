@@ -809,8 +809,13 @@ impl PlaySession {
 
         let _consumed = std::mem::take(&mut self.inputs.actions);
         let pending_edits = std::mem::take(&mut self.inputs.edits);
-        if !pending_edits.is_empty() {
-            // Dig / place change chem materials outside a mirror: the next render is full.
+        // §6s: dig / place join the delta chain when it holds (the world is the one the last
+        // render drew plus the changes recorded since). Each applied edit flips its own bit and
+        // changes only that cell's chem material (`ChemWorld::dig` / `place`), so recording the
+        // bit as an occupancy change lets the next frame redraw it as a delta instead of a full
+        // re-render. Otherwise the next render is full, as before.
+        let edits_chain = !pending_edits.is_empty() && self.delta_chain == Some(pre_world);
+        if !pending_edits.is_empty() && !edits_chain {
             self.delta_chain = None;
         }
         let mut transaction = self.history.begin_tick(self.tick);
@@ -839,8 +844,11 @@ impl PlaySession {
                         self.needs_sidebar_render = true;
                         continue;
                     }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
+                    let applied = transaction.apply_edit(&self.history, &mut self.world, edit);
+                    if applied && edits_chain {
+                        self.delta_changed.push((edit.coord, true));
+                    }
+                    self.needs_render |= applied;
                     self.cut_view = None;
                 }
                 PendingEdit::Aim(AimEdit::Place) => {
@@ -873,8 +881,11 @@ impl PlaySession {
                             continue;
                         }
                     }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
+                    let applied = transaction.apply_edit(&self.history, &mut self.world, edit);
+                    if applied && edits_chain {
+                        self.delta_changed.push((edit.coord, true));
+                    }
+                    self.needs_render |= applied;
                     self.cut_view = None;
                 }
                 PendingEdit::Exact(edit) => {
@@ -898,11 +909,19 @@ impl PlaySession {
                             continue;
                         }
                     }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
+                    let applied = transaction.apply_edit(&self.history, &mut self.world, edit);
+                    if applied && edits_chain {
+                        self.delta_changed.push((edit.coord, true));
+                    }
+                    self.needs_render |= applied;
                     self.cut_view = None;
                 }
             }
+        }
+
+        if edits_chain {
+            self.delta_chain =
+                (self.delta_changed.len() <= DELTA_CHANGED_MAX).then(|| world_tag(&self.world));
         }
 
         // Chem tick: due steps run here, then the chem occupancy diff (over the chem domain)
@@ -1042,6 +1061,9 @@ impl PlaySession {
                         } else {
                             self.renderer
                                 .render_tinted(&self.world, &self.camera, Some(&tint));
+                        }
+                        if self.delta_render && chem.colors.never_black() {
+                            self.renderer.prepare_delta_lists();
                         }
                     }
                 }
@@ -2079,6 +2101,88 @@ mod chem_play_tests {
             }
             let used = runs[0].renderer.delta_frames();
             assert!(used >= 12, "preset {preset}: only {used} delta frames");
+            assert_eq!(runs[1].renderer.delta_frames(), 0);
+        }
+    }
+
+    /// §6s: dig / place frames go through the delta path (no full re-render) and equal the
+    /// full-render frames, on ticks with and without a chem step; a still-camera full render
+    /// builds the delta tile lists before the first delta frame, a moving one leaves them to it.
+    #[test]
+    fn edit_frames_are_deltas_equal_to_full_frames() {
+        for (preset, radius) in [(2_u32, 14_u32), (0, 12), (4, 14)] {
+            let mut runs: Vec<PlaySession> = [true, false]
+                .into_iter()
+                .map(|delta| {
+                    let mut s = PlaySession::with_chem(preset, 7, radius).expect("chem genesis");
+                    s.set_layout(320, 180, true);
+                    s.set_delta_render(delta);
+                    s.set_capture(true);
+                    s
+                })
+                .collect();
+            for s in &mut runs {
+                assert!(s.step(1));
+            }
+            assert!(
+                runs[0].renderer.delta_lists_built(),
+                "the first (still) full frame builds the tile lists"
+            );
+            let (mut edit_frames, mut edit_deltas) = (0, 0);
+            // A place outside the domain grows it; the next mirror is then a full scan and its
+            // frame a full render, as before. Those frames are not counted.
+            let mut grown = false;
+            for k in 1..=40_u32 {
+                let steps = runs[0].chem.as_ref().unwrap().steps_run;
+                let edit = k % 3 != 0;
+                let deltas = runs[0].renderer.delta_frames();
+                let renders = runs[0].renders();
+                let tag = runs[0].last_world_tag;
+                let domain = runs[0].chem.as_ref().unwrap().world.domain_len();
+                for s in &mut runs {
+                    if edit {
+                        let button = if k % 5 == 1 { 2 } else { 0 };
+                        s.pointer_button(button, true);
+                        s.pointer_button(button, false);
+                    }
+                    if k == 26 {
+                        s.look(31.0, -5.0);
+                    }
+                    s.step(if k % 4 == 0 { 4 } else { 1 });
+                }
+                let at = format!("preset {preset} r{radius} step {k}");
+                assert!(runs[0].rgba() == runs[1].rgba(), "{at} output");
+                assert_eq!(runs[0].status_with(true), runs[1].status_with(true), "{at}");
+                if k == 26 {
+                    assert!(
+                        !runs[0].renderer.delta_lists_built(),
+                        "{at}: a moved camera leaves the tile lists to the first delta frame"
+                    );
+                }
+                let chem = runs[0].chem.as_ref().unwrap();
+                let grew = chem.world.domain_len() != domain;
+                let skip = grown || grew;
+                if chem.steps_run != steps && !grew {
+                    grown = false;
+                }
+                grown |= grew;
+                if k != 26 && !skip && edit && runs[0].last_world_tag != tag && k != 27 {
+                    edit_frames += 1;
+                    assert!(runs[0].renders() > renders, "{at}: an edit repaints");
+                    if runs[0].renderer.delta_frames() > deltas {
+                        edit_deltas += 1;
+                    }
+                }
+                assert_mirrors_chem(&runs[0]);
+            }
+            assert!(
+                edit_frames >= 6,
+                "preset {preset}: only {edit_frames} edit frames"
+            );
+            assert_eq!(
+                edit_deltas, edit_frames,
+                "preset {preset}: every edit frame is a delta"
+            );
             assert_eq!(runs[1].renderer.delta_frames(), 0);
         }
     }

@@ -572,6 +572,12 @@
     ]
    },
    {
+    "item": "prepare_delta_lists",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "profile_tag",
     "modules": [
      "physical_sensor"
@@ -596,7 +602,7 @@
     ]
    }
   ],
-  "pub_items": 860,
+  "pub_items": 861,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -620,7 +626,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 35665,
+   "code_lines": 35677,
    "duplicated_lines": 407,
    "regions": [
     {

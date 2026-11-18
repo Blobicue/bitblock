@@ -368,6 +368,9 @@ pub struct Renderer {
     delta_tile_start: Vec<u32>,
     delta_tile_items: Vec<u32>,
     delta_csr_built: bool,
+    /// Set by a full traversal from the projection of the frame before it (see
+    /// `prepare_delta_lists`).
+    delta_lists_eager: bool,
     /// Delta scratch: per-entry and per-tile visit stamps, the reset-pixel mask and list.
     delta_seen: Vec<u32>,
     delta_tile_seen: Vec<u32>,
@@ -537,6 +540,7 @@ impl Renderer {
             delta_tile_start: Vec::new(),
             delta_tile_items: Vec::new(),
             delta_csr_built: false,
+            delta_lists_eager: false,
             delta_seen: Vec::new(),
             delta_tile_seen: Vec::new(),
             delta_stamp: 0,
@@ -731,7 +735,8 @@ impl Renderer {
     /// With `None` the frame is exactly what [`Self::render`] produces.
     pub fn render_tinted(&mut self, world: &World, camera: &Camera, tint: Option<BitTint<'_>>) {
         self.recolour_hidden.clear();
-        self.delta_base = None;
+        let previous = self.delta_base.take();
+        self.delta_lists_eager = false;
         self.crosshair_on = false;
         self.clear_frame();
         self.frame_serial += 1;
@@ -815,7 +820,26 @@ impl Renderer {
         self.delta_csr_built = false;
         if self.delta_index_ok {
             self.delta_base = Some(projection);
+            self.delta_lists_eager = previous.is_none_or(|p| p.bit_identical(&projection));
         }
+    }
+
+    /// §6s: builds the delta tile lists right after a full traversal whose projection is the
+    /// one of the frame before it (or that had no ordinary frame before it), so the first
+    /// delta frame after a still-camera full render does not pay for them on top of its own
+    /// redraw. A moving camera (a new projection per full frame) keeps building them lazily,
+    /// on the first delta frame. The lists are the same either way (built from the same index
+    /// entries), so no frame changes; only which frame pays for them.
+    pub fn prepare_delta_lists(&mut self) {
+        if std::mem::take(&mut self.delta_lists_eager) && self.delta_base.is_some() {
+            self.build_delta_csr();
+        }
+    }
+
+    /// Whether the delta tile lists are built for the frame now in the buffers (tests and
+    /// diagnostics).
+    pub const fn delta_lists_built(&self) -> bool {
+        self.delta_csr_built
     }
 
     /// The ordered traversal of `render_tinted`: every bit the chunk frustum and enclosed-bit
