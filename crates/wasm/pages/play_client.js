@@ -220,9 +220,12 @@
       let ticks = Math.floor(playAccum / TICK_MS);
       if (ticks > MAX_TICKS_PER_FRAME) { ticks = MAX_TICKS_PER_FRAME; playAccum = 0; }
       else playAccum -= ticks * TICK_MS;
-      if (ticks > 0) playStepAndPaint(ticks);
+      const painted = ticks > 0 && playStepAndPaint(ticks);
       const now = performance.now();
-      if (now - playStatusUiAt >= STATUS_UI_MS) {
+      // The status refresh sums the books over every chem cell (~5 ms at r78), so a frame that
+      // just stepped and painted leaves it to a later frame, at most one period late.
+      const sinceStatus = now - playStatusUiAt;
+      if (sinceStatus >= STATUS_UI_MS && (!painted || sinceStatus >= 2 * STATUS_UI_MS)) {
         // Hash only once the view has been still: hashing is a full-frame SHA-256 in wasm.
         playPulseStatus("live", now - playLastPaintAt >= IDLE_HASH_MS);
         playRefreshChem();
@@ -259,7 +262,7 @@
     }
     function playChemEveryTicks() { return playNum(playChemEvery, 4, 0, 600); }
     function playChemSeedVal() { return playNum(playChemSeed, 7, 0, 4294967295) >>> 0; }
-    function playChemRadiusVal() { return playNum(playChemRadius, 12, 2, 76); }
+    function playChemRadiusVal() { return playNum(playChemRadius, 12, 2, 80); }
     // The wasm-side 12 x i64 budget buffer (view re-made each use: memory may have grown).
     function playChemBudgetView() {
       return new BigInt64Array(instance.exports.memory.buffer, instance.exports.bitblock_play_chem_budget_ptr(), CHEM_LANES.length);
