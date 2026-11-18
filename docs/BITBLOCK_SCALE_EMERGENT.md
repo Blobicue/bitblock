@@ -3913,6 +3913,76 @@ Domain-growing place / dig at r90 on :8765 (`placefps6t.mjs`): ocean worst first
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6v. Recolour proofs as chunk bits, kept delta scratch: gas r92 wasm step −3.4 ms, no render rehash stalls; cap stays 90 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+Focus: gas r92's rare first-window dip, through render (~17 ms per wasm step, the largest after convection) and heat. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| e9e5907 | render: the recolour hidden-bit proofs (`recolour_hidden`) are per-chunk bit words (`IndexedBits`, with its direct-mapped recent-chunk cache), not a coordinate hash set | [44326039997](https://github.com/Blobicue/bitblock/actions/runs/44326039997) |
+| 20c5bce | render: a delta frame's classification storage (each chunk's exposed words, their slots, the loud bits) is kept by the renderer between frames and cleared, not allocated each frame | [44326312966](https://github.com/Blobicue/bitblock/actions/runs/44326312966) |
+| 2e36ac2 | www refresh | [44328205433](https://github.com/Blobicue/bitblock/actions/runs/44328205433) |
+
+**2. Cause and fix.**
+- On gas, every frame is tint-only. Convection changes the material of 150k–270k mirrored cells per frame, and about half of them are exposed (the loud bits, 75k–140k). Every loud bit was looked up in a `HashMap<Coord, ()>` of hidden proofs, and the proofs found in that frame were inserted.
+  - As the set grew past each power of two it rehashed inside one frame, giving native 16.7 ms and 26.2 ms render frames against ~9 ms steady.
+  - The per-frame `loud` and open-word vectors were allocated afresh and grown each frame (5–10 MB at r92).
+  - In this window, none of those recolours marks a pixel: the changed exposed cells are all proved hidden.
+- Proof membership is now a bit in a chunk word, and the classification storage persists. The sets and order of bits drawn are unchanged, so every frame is the same.
+- Tried and dropped, with no measurable gain:
+  - fusing heat's six interior share additions into one pass (heat is already slice-vectorised and memory-bound);
+  - skipping proved-hidden bits at classification;
+  - not reporting same-colour material swaps (gas swaps never share a colour).
+
+**3. Timings.**
+
+| measurement | before §6v (edce0f9) | after (20c5bce) |
+|---|---|---|
+| wasm gas r92 step (node `wasmstep` 30+60, 3 interleaved runs, median) | 54.2–55.0 ms | 50.9–51.5 ms |
+| wasm ocean r92 step | 51.2 ms | 51.9 ms (noise; ocean frames are not recolour-bound) |
+| native gas r92 render per frame, steady (instrumented worktree) | 8.6–8.9 ms | 7.0–7.3 ms |
+| native gas r92 render spike frames | 16.7, 26.2 ms (set rehash) | 8.0, 11.7 ms (one-time growth of the session's changed list) |
+| wasm profile self samples: render `draw_bit_with` / heat | 581 / 510 | 382 / 509 |
+
+**4. Chrome cadence (study build of 20c5bce with the cap lifted; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, first window in brackets).**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r92 | 15.00 (15), 14.80 (14.4), 15.00 (15), 15.00 (15); busy 76–81% | 15.00 (15), 15.17 (15.5), 15.23 (15.4), 15.00 (15); 76–81% |
+| ocean r92 | 15.67 (17), 15.07 (15.2), 15.50 (16.6), 15.43 (16.3); 83–85% | 15.53 (16.7), 15.53 (15.4), 15.50 (16.5), 15.50 (16.7); 82–86% |
+
+Gas busy fell from 81–86% (§6u) to 76–81%, and its worst first window rose from 12.7 to 14.4. **Cap: stays 90.** Set 1's gas mean is 14.95 because of one run (14.80, first 14.4), so the rule (both sets ≥ 15, first windows included) misses narrowly. Ocean is now the busier preset (82–86%).
+
+Domain-growing place / dig at r90 on :8765 (`placefps6t.mjs`):
+- ocean: worst first 0.5 s window 13.0 fps (gap 183 ms);
+- gas: 11.2 / 12.1 (gaps 217 / 117 ms);
+- then 15.0 in both;
+- digs 14.5–17.0.
+
+**5. Exactness.**
+- After the render commits: all 16 `delta_eq` outputs and `fp_long 36 600` are byte-identical to §6r's, 17/17, frame tags included. Parity md5s are unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6u wasm vs §6v wasm: 7/7 SAME.
+- The render test suite, including the per-skip hidden-bit write check and the delta-equals-full frame tests, passes in pre-push.
+- **Frame hashes: no re-baseline; old = new.** Default world `pmbj7za5…` → `pmbj7za5…`, frame `nx4b62u5…` → `nx4b62u5…`. Gas r92 node world `vbv6ockz…` and frame `3yu6bcrb…` are the same in both builds.
+
+**6. Next wall.**
+- Gas convection is now ~37% of the wasm step: a per-cell gather through `cell_up`.
+- The mirror's per-changed-cell push of 150k–270k entries (`sim_tick` self).
+- The classification lookup of every changed bit (`exposed`), even though none of them repaints a pixel in the gas window.
+- Ocean r92 at 82–86% busy.
+- The growing-place frame: 117–217 ms.
+
+**Build.** wasm (2e36ac2, ABI 17) md5 `7cf0826e757c36a5d1cbe1ebd414aa57` (1,575,100 B), play.html `3c190826d7a1618e4421deacef4a8d0d`, bitblock-lab.html `ae2bb455ca39b1abe64ba9e96829c8c4`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 15.0 and gas r90 15.0 fps, `books=ok energy_drift=0 error=none`.
+  - r94 clamps to 90. Only favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6v/{place_2,place_4,playtest}/*.png`.
+- Data: `/workspace/render_scale/s6v/{STATUS.md,eq1,parity1.log,wasm_parity.log,set1.log,set2.log,place_*.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
