@@ -1569,8 +1569,12 @@ impl PlaySession {
 /// this was a full scan (the cache was empty or resized: `changed` is then not a full record).
 /// Every bit whose material changed is appended to `changed`, flagged when its occupancy did.
 /// §6u: the material ids of up to 8 cells as one little-endian word (missing bytes 0).
+/// §6w: a full group of 8 is converted as one array, so it compiles to a single word load.
 #[inline]
 fn pack8(m: &[bitblock_core::chem::MatId]) -> u64 {
+    if let Ok(m) = <&[bitblock_core::chem::MatId; 8]>::try_from(m) {
+        return u64::from_le_bytes(m.map(|x| x.0));
+    }
     let mut b = [0u8; 8];
     for (d, s) in b.iter_mut().zip(m) {
         *d = s.0;
