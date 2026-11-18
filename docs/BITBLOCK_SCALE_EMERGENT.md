@@ -3232,6 +3232,72 @@ This wave is one shippable pass on ocean's presented-fps dips that did not follo
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6l. Gas's first seconds were tint-only delta frames redrawing the envelope: an exact recolour pass; cap stays 80 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass on gas, the limiting preset after §6k. Exactness is checked against 27ec0bb. No hash changed, and no win needed a hash change. Every pushed commit was checked locally first (`cargo fmt --check`, clippy `-D warnings` with and without `protocol-research`, debug workspace tests with `protocol-research`, the goldens, index drift and the index selftest), and CI is green on both.
+
+**1. Diagnosis (native, gas r80, temporary phase timers in `render_tinted_delta`).**
+- During the early stirring (chem steps ~30–90) every changed bit is tint-only: no toggles, ~180–208 k changed bits per chem step, ~15–22 k of them exposed ("loud").
+- The old path reset every pixel a changed bit held (only ~200–1,300 pixels), then drew every loud bit plus every indexed bit whose box reached a reset pixel: 30–83 k draws. The gas envelope is open throughout, so ~55 indexed bits stack behind each reset pixel.
+- A reset pixel is set to the background at infinite depth, which also sets its tile and coarse depth bounds to infinity. The hidden-bit test then cannot cull the bits stacked behind, so each one is rasterised.
+- At the peak: classify ~8 ms, collect ~5 ms, draw ~22 ms.
+
+**2. Change: 0f9f794 — the recolour pass (exact).** When no changed bit toggled, `render_tinted_delta` hands the frame to `recolour_delta`:
+- Geometry is unchanged, so each bit draws exactly the fragments (pixel, depth) it drew before, only with new colours, and no pixel's stored depth can change. Only fragments at exactly a pixel's stored depth compete with it.
+- **Step 1.** Every loud bit is drawn over the old frame in marking mode. Where a fragment meets the stored depth of a pixel its own bit holds (owner buffer), it replaces the stored colour in place. Everywhere else it is an ordinary `plot` (keep the lesser by depth, then RGB word).
+- **Tie record.** A new per-pixel flag `tie` says whether a second fragment may sit at exactly the stored depth. Every equal-depth meeting in `plot` and in the span writer sets it, and a strictly nearer write clears it. Only `false` is a promise. It holds because every fragment at a pixel's final depth reaches the writers (the culls and the hidden-bit test skip only bits strictly behind), and every delta frame draws every bit that gains a fragment.
+- **Marks.** An in-place recolour to a higher RGB word on a pixel whose `tie` admits another fragment marks that pixel: another bit could now win the tie.
+- **Step 2.** At marked pixels, every indexed or loud bit whose box reaches one is drawn again with ordinary `plot`. A bit bounded strictly behind every marked pixel of its box is skipped, because the rest of the frame already holds its minima. Depths never change and no pixel turns background, so tile and coarse bounds stay valid and `world_pixels` stays exact.
+- Classification now reads one cached word set per chunk (open words where the enclosed-bit cull applies, else the on bits) instead of a hashed `is_on` per bit plus a `HashMap` of open words, and skips the toggled-neighbour set when nothing toggled.
+- The full argument is in the doc comments of `recolour_delta` and the `tie` field. Toggle frames keep the §6k path unchanged.
+- Tests:
+  - New `delta_recolour_matches_full_render` covers a solid ball, a sparse random block (gas-like, most bits exposed) and a slab, at 24–161 px (down to the single-pixel path). It runs 16-frame recolour chains with near-equal palette words, so ties flip both ways, plus an occasional toggle frame. Every frame is compared with a fresh full render (pixels, depth bits, `world_pixels`), and it asserts the pass ran ≥100 times and marked pixels.
+  - Both delta tests also check that the delta frame's tie record never denies a tie the full frame sees.
+
+**3. Native (cap lifted; step(4) per chem frame, 120 frames; mean over chem steps 25–95 = the stirring hump).**
+
+| gas | 27ec0bb render | 0f9f794 render | 27ec0bb step | 0f9f794 step |
+|---|---|---|---|---|
+| r80 | 29.7 ms (p90 36.6) | 9.5 ms (p90 9.4 over the run) | 70.0 ms | 45.6 ms |
+| r82 | 39.4 ms (p90 48.2) | 12.9 ms (p90 13.7) | 81.3 ms | 52.5 ms |
+
+- At the hump peak the recolour pass costs classify ~5.5 ms plus step 1 ~3.8 ms. Gas marked 0 pixels in every sampled frame of the hump, so step 2 did not run there. The tests do exercise it.
+- Ocean is unchanged (render 3.4–5.1 ms mean). Its frames toggle bits, so they take the §6k path. A full render costs the same as before (105–144 ms at r80–r82): the tie flag adds one byte store per write.
+- `delta_eq` (delta session vs full-render session, output buffer every step, status every 25 steps) is equal on gas r80 and r82 (150 steps), ocean r80 (150 steps, 6 compactions), ocean r82 (150 steps, 5 compactions), ocean r60, gas r36 (200 steps) and preset 1 r80 and r82.
+
+**4. Chrome (headless, Low 960×540, chem every 4 ticks; `presented_fps` averaged over 3 snapshots, busy; "fresh" = measured from 2 s after the radius change instead of 7 s, so the window covers the stirring hump).**
+
+| case | §6k 27ec0bb | §6l set 1 (4 runs) | §6l set 2 (4 runs) |
+|---|---|---|---|
+| ocean r80 | (§6k: 14.97–15.03) | 15.00, 14.90, 15.00, 15.43; 59–61%; step max 61–86 ms | 15.00, 15.00, 15.03, 15.00; 58–59%; step max 62–66 ms |
+| gas r80 | (§6k: 14.67–15.03) | 14.97, 15.00, 15.03, 15.03; 57–63%; step max 50–67 ms | 15.03, 15.03, 15.00, 15.00; 58–60%; step max 48–52 ms |
+| gas r80 fresh | 11.57, 10.07 (first snapshot 5.9–6.2); step max 178–183 ms | 15.00, 15.03, 15.00, 15.07; 75–81%; step max 65–86 ms | 15.07, 14.87, 15.00, 15.03; 75–78%; step max 62–77 ms |
+| gas r82 fresh | 8.43, 8.80 (first two snapshots 4.3–5.9) | 15.07, 12.77, 13.47, 13.37, 12.93, 12.93 (first snapshot 7.6–9.6 in five of six) | — |
+
+- The 15.43 ocean reading is a snapshot window closing just after a burst; its traced rate is 14.97.
+- Every run ends `books=ok energy_drift=0`.
+
+**5. Cap: stays 80.** r80 now holds on both presets over two sets of four runs, including a fresh gas load's first seconds, which dipped to ~10 fps at 27ec0bb. Fresh gas at r82 still dips in its first snapshot, so r82 fails the rule. Natively the r82 hump step is ~52 ms: chem ~29 ms, mirror ~10 ms, render ~13 ms. In wasm that is over the 66 ms chem budget.
+
+**6. Exactness evidence (vs 27ec0bb).**
+- Parity byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 match the §6i reference file. p6 goldens 3/3 (release). Debug workspace tests (with `protocol-research`) pass.
+- The shipped wasm, the 27ec0bb wasm and native print the same world and frame tags (and `books=ok energy_drift=0`) on gas r80 (40 warm-up steps), gas r72 (120), ocean r40 (20), preset 1 r80 (30) and preset 0 r36 (60).
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page prints the same lines as 27ec0bb.
+
+**7. Next wall.**
+- (a) Gas chem itself: ~27–31 ms native at r80–r82 (convection gather 4.2 ms plus density test 5.5 ms at r78 are the largest items). The mirror adds ~9–10 ms during the hump: the FNV material hash over every domain cell, plus ~200 k changed-bit pushes. Classification is now ~5.5 ms of the ~9.5 ms render.
+- (b) Spreading the hump's redraw over several frames would change frames. With the recolour pass it is no longer needed at r80. It remains an option for Owen only.
+- (c) Ocean at r82+: unchanged from §6k (flow occupancy writes and the +y rise trades).
+
+**Build.** wasm (2fba429, ABI 17) md5 `3f06883cfd270b69a62d6e9c79e7a142` (1,481,745 B), play.html `d7f39b5a51a785b921fd99b7f9437786`, bitblock-lab.html `c0b70a0289a3b58a967501faa3c4b5b8`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- The radius input's title now says a fresh gas load holds at r80. There is no other page change.
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r80 `books=ok energy_drift=0 error=none` at 15.0 presented fps, r84 clamps to 80, and only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6l/playtest/{default,chem2_r80,chem4_r80,chem4_r84}.png`.
+- Sweeps, A/B and traces: `/workspace/render_scale/s6l/` (`sweep_r80.txt`, `sw_fresh82.txt`, `ab_t/`, `chrome/`, `ab.sh`, `ana_ab.py`).
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
