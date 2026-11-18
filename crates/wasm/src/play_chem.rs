@@ -55,10 +55,14 @@ pub const CHEM_RADIUS_DEFAULT: u32 = 12;
 /// §6r (the mirror reads chem occupancy from the material; 4 x 4 x 16 recent-chunk caches)
 /// measured fresh loads at r90 over two sets of four runs each: gas presents 14.93-15.37 fps
 /// (busy 79-83%) and ocean 15.00-15.20 (busy 72-76%); the §6q build still dipped to 7.5 in
-/// one of four gas runs under the same conditions. So r90 is the largest tested radius that
-/// holds the 15 Hz chem cadence on both presets (§6i/§6j: r76, §6k/§6l: r80, §6m: r82,
-/// §6n: r84, §6o: r86, §6p: r88).
-pub const CHEM_RADIUS_MAX: u32 = 90;
+/// one of four gas runs under the same conditions. §6s-§6w held r90 but missed r92 by one run
+/// each time. §6x (a toggling delta frame keeps the recolour proofs its resets cannot break and
+/// drops changed bits proved hidden; the delta member set is built eagerly) measured fresh
+/// loads at r92 over two sets of four runs each, first windows included: gas presents
+/// 15.00-15.10 fps (busy 68-71%) and ocean 15.00-15.47 (busy 71-72%). So r92 is the largest
+/// tested radius that holds the 15 Hz chem cadence on both presets (§6i/§6j: r76, §6k/§6l:
+/// r80, §6m: r82, §6n: r84, §6o: r86, §6p: r88, §6r: r90).
+pub const CHEM_RADIUS_MAX: u32 = 92;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
