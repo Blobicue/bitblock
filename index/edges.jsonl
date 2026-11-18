@@ -1476,6 +1476,7 @@
 {"from": "doc:docs/PROTOCOL.md#typed-coordinate-history-journal-checkpoint", "kind": "documents", "to": "module:history_store"}
 {"from": "proof:proof/BitblockProof/ChunkRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/World.lean", "kind": "proves", "to": "module:world"}
+{"from": "module:chem", "kind": "tests_with", "to": "module:history"}
 {"from": "module:coordinate_episode", "kind": "tests_with", "to": "module:program"}
 {"from": "module:display_artifact", "kind": "tests_with", "to": "module:frame_v2"}
 {"from": "module:display_store", "kind": "tests_with", "to": "module:output_color"}

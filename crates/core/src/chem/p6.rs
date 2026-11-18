@@ -1222,6 +1222,208 @@ impl Topology {
         t
     }
 
+    /// §6t: this topology with one cell inserted at domain index `at` (`cells` is the new
+    /// domain, `cells[at]` the new cell), exactly as [`Self::build`] plus
+    /// [`Self::radial_frame`] would make it for `cells` with the core cell `core` (the pinned
+    /// core's new index, or `None` to take the bounding-box rule). Every list is the old one
+    /// with indices at or after `at` shifted by one and the new cell's entries (and its
+    /// neighbours' changed ones) put in their sorted places: linear passes, no sort. Returns
+    /// `None` where that does not hold cheaply, so the caller rebuilds: a hashed lookup, a cell
+    /// outside the lookup box (the box and the core rule would change), or a core that moves.
+    /// Lazily built tables start empty, as after `build`.
+    pub(crate) fn inserted(&self, cells: &[Coord], at: usize, core: Option<u32>) -> Option<Self> {
+        let n_old = self.keys.len();
+        if cells.len() != n_old + 1 || at >= cells.len() || n_old + 1 >= NO_SLOT as usize {
+            return None;
+        }
+        let c = cells[at];
+        let at32 = at as u32;
+        let shift = |v: u32| if v != NO_SLOT && v >= at32 { v + 1 } else { v };
+        // Lookup: the same box (the new cell must lie in it, so the bounding box, and with it
+        // `boxed`'s choice and the core rule's centre, stay as they were).
+        let Lookup::Boxed { min, dim, slot } = &self.lookup else {
+            return None;
+        };
+        let (rx, ry, rz) = (c.x - min[0], c.y - min[1], c.z - min[2]);
+        if rx < 0 || ry < 0 || rz < 0 || rx >= dim[0] || ry >= dim[1] || rz >= dim[2] {
+            return None;
+        }
+        let mut slot: Vec<u32> = slot.iter().map(|&v| shift(v)).collect();
+        slot[((rx * dim[1] + ry) * dim[2] + rz) as usize] = at32;
+        let lookup = Lookup::Boxed {
+            min: *min,
+            dim: *dim,
+            slot,
+        };
+        // Core: pinned (given), or the bounding-box rule over the same box, where the new cell
+        // can only take over as the strictly nearer cell or the lower index on a tie.
+        let old_core = self.core.map(shift);
+        let core = match core {
+            Some(pin) => Some(pin),
+            None => {
+                let m2: [i128; 3] =
+                    std::array::from_fn(|k| 2 * i128::from(min[k]) + i128::from(dim[k]) - 1);
+                let d2 = |q: Coord| -> i128 {
+                    [q.x, q.y, q.z]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(k, v)| {
+                            let e = 2 * i128::from(v) - m2[k];
+                            e * e
+                        })
+                        .sum()
+                };
+                let o = old_core?;
+                let (dn, dold) = (d2(c), d2(cells[o as usize]));
+                if dn < dold || (dn == dold && at32 < o) {
+                    return None; // the core moves: every radial table changes
+                }
+                Some(o)
+            }
+        };
+        if core != old_core {
+            return None;
+        }
+        let mut t = Self {
+            lookup,
+            keys: Vec::with_capacity(cells.len()),
+            rise: Vec::new(),
+            ysort: Vec::new(),
+            r2: Vec::new(),
+            rsort: Vec::new(),
+            shell_up: Vec::new(),
+            cell_roll: std::sync::OnceLock::new(),
+            rpos: std::sync::OnceLock::new(),
+            cell_up: std::sync::OnceLock::new(),
+            rise_pos: std::sync::OnceLock::new(),
+            ypos: std::sync::OnceLock::new(),
+            zruns: ZRuns::build(cells),
+            space_faces: Vec::new(),
+            core,
+        };
+        t.keys.extend_from_slice(&self.keys[..at]);
+        t.keys.push(cell_key(c));
+        t.keys.extend_from_slice(&self.keys[at..]);
+        // ysort: (y, x, z) ascending.
+        let yk = |i: u32| {
+            let q = cells[i as usize];
+            (q.y, q.x, q.z)
+        };
+        let mut ysort: Vec<u32> = self.ysort.iter().map(|&v| shift(v)).collect();
+        let k = ysort.partition_point(|&v| yk(v) < yk(at32));
+        ysort.insert(k, at32);
+        t.ysort = ysort;
+        // rise: (cell, cell above) by the lower cell's (y descending, x, z); the new cell gains
+        // the pair to the cell above it, and the cell below it gains the pair to it.
+        let rk = |i: u32| {
+            let q = cells[i as usize];
+            (std::cmp::Reverse(q.y), q.x, q.z)
+        };
+        let mut rise: Vec<(u32, u32)> = self
+            .rise
+            .iter()
+            .map(|&(a, b)| (shift(a), shift(b)))
+            .collect();
+        if let Some(up) = t.offset(cells, at, (0, 1, 0)) {
+            let k = rise.partition_point(|&(a, _)| rk(a) < rk(at32));
+            rise.insert(k, (at32, up as u32));
+        }
+        if let Some(below) = t.offset(cells, at, (0, -1, 0)) {
+            let b = below as u32;
+            let k = rise.partition_point(|&(a, _)| rk(a) < rk(b));
+            rise.insert(k, (b, at32));
+        }
+        t.rise = rise;
+        // space_faces, in index order: the new cell's mask, and each face neighbour loses the
+        // face toward it (dropped when it no longer touches space).
+        let mut faces: Vec<(u32, u8)> = self
+            .space_faces
+            .iter()
+            .map(|&(i, m)| (shift(i), m))
+            .collect();
+        let mut mask = 0u8;
+        for (k, d) in NB6.iter().enumerate() {
+            match t.offset(cells, at, *d) {
+                None => mask |= 1 << k,
+                Some(j) => {
+                    // NB6 pairs opposite directions as (0, 1), (2, 3), (4, 5).
+                    let back = k ^ 1;
+                    let pos = faces.partition_point(|&(i, _)| (i as usize) < j);
+                    if let Some(e) = faces.get_mut(pos)
+                        && e.0 as usize == j
+                    {
+                        e.1 &= !(1 << back);
+                        if e.1 == 0 {
+                            faces.remove(pos);
+                        }
+                    }
+                }
+            }
+        }
+        if mask != 0 {
+            let pos = faces.partition_point(|&(i, _)| i < at32);
+            faces.insert(pos, (at32, mask));
+        }
+        t.space_faces = faces;
+        // Radial frame around the same core cell.
+        if let Some(co) = core {
+            let o = cells[co as usize];
+            let r2c = {
+                let (dx, dy, dz) = (c.x - o.x, c.y - o.y, c.z - o.z);
+                dx * dx + dy * dy + dz * dz
+            };
+            let mut r2 = Vec::with_capacity(cells.len());
+            r2.extend_from_slice(&self.r2[..at]);
+            r2.push(r2c);
+            r2.extend_from_slice(&self.r2[at..]);
+            let sk = |i: u32| {
+                let q = cells[i as usize];
+                (r2[i as usize], q.y, q.x, q.z)
+            };
+            let mut rsort: Vec<u32> = self.rsort.iter().map(|&v| shift(v)).collect();
+            let k0 = rsort.partition_point(|&v| sk(v) < sk(at32));
+            rsort.insert(k0, at32);
+            let k032 = k0 as u32;
+            let kshift = |v: u32| if v != NO_SLOT && v >= k032 { v + 1 } else { v };
+            let mut up: Vec<u32> = Vec::with_capacity(cells.len());
+            up.extend(self.shell_up[..k0].iter().map(|&v| kshift(v)));
+            up.push(NO_SLOT);
+            up.extend(self.shell_up[k0..].iter().map(|&v| kshift(v)));
+            let pos_of = |i: usize| rsort.partition_point(|&v| sk(v) < sk(i as u32));
+            let step_of =
+                |q: Coord| super::p6_rest::outward_step((q.x - o.x, q.y - o.y, q.z - o.z));
+            // The new cell's own outward neighbour ...
+            let st = step_of(c);
+            if st != (0, 0, 0)
+                && let Some(j) = t.offset(cells, at, st)
+            {
+                up[k0] = pos_of(j) as u32;
+            }
+            // ... and the cells whose outward step lands on it (they had none before).
+            for dx in -1_i64..=1 {
+                for dy in -1_i64..=1 {
+                    for dz in -1_i64..=1 {
+                        if (dx, dy, dz) == (0, 0, 0) {
+                            continue;
+                        }
+                        let Some(j) = t.offset(cells, at, (dx, dy, dz)) else {
+                            continue;
+                        };
+                        let q = cells[j];
+                        let s = step_of(q);
+                        if s != (0, 0, 0) && (q.x + s.0, q.y + s.1, q.z + s.2) == (c.x, c.y, c.z) {
+                            up[pos_of(j)] = k032;
+                        }
+                    }
+                }
+            }
+            t.r2 = r2;
+            t.rsort = rsort;
+            t.shell_up = up;
+        }
+        Some(t)
+    }
+
     fn boxed(cells: &[Coord]) -> Option<Lookup> {
         let first = cells.first()?;
         let mut lo = [first.x, first.y, first.z];
@@ -1533,6 +1735,20 @@ impl Topology {
 }
 
 impl ChemWorld {
+    /// §6t: keeps the cached topology through one inserted domain cell (index `at`), when
+    /// [`Topology::inserted`] can; otherwise drops it, to be rebuilt on next use.
+    pub(crate) fn topology_after_insert(&mut self, at: usize) {
+        let Some(old) = self.topo.take() else { return };
+        let pin = self
+            .core_pin
+            .and_then(|p| self.cells.binary_search(&p).ok())
+            .map(|i| i as u32);
+        if self.core_pin.is_some() && pin.is_none() {
+            return;
+        }
+        self.topo = old.inserted(&self.cells, at, pin).map(Arc::new);
+    }
+
     pub(crate) fn topology(&mut self) -> Arc<Topology> {
         if let Some(t) = &self.topo {
             return t.clone();

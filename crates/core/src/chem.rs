@@ -1183,7 +1183,8 @@ impl ChemWorld {
         self.cells.insert(i, coord);
         self.mat.insert(i, MatId::AIR);
         self.q.insert(i, 0);
-        self.topo = None;
+        // §6t: the topology is kept, with the cell inserted (no full rebuild on the next step).
+        self.topology_after_insert(i);
         i
     }
 
@@ -1860,6 +1861,121 @@ mod tests {
     }
 
     const BUDGET: Lanes = [4000, 3000, 400, 120, 300, 350, 200, 60, 180, 150, 40, 30];
+
+    /// §6t: inserting one domain cell keeps the cached topology, updated in place, and the
+    /// result is exactly the topology a rebuild makes (every table, the core and the radial
+    /// frame), for unpinned and pinned cores, at cells inside and outside the old z-rows;
+    /// where the update cannot hold (outside the lookup box, a moving core) it is dropped.
+    #[test]
+    fn inserted_cell_keeps_the_rebuilt_topology() {
+        let base = genesis(&cfg(BUDGET, 7, 9)).unwrap();
+        let sky = genesis_sky(&cfg(BUDGET, 7, 9), &P6Params::default(), 2).unwrap();
+        let radial = genesis_sky_radial(&cfg(BUDGET, 7, 9), &P6Params::default(), 2).unwrap();
+        let (mut kept, mut dropped) = (0, 0);
+        for w0 in [base, sky, radial] {
+            let mut w0 = w0;
+            let _ = w0.topology();
+            let mut tried = 0;
+            for x in -12_i64..=12 {
+                for y in -12_i64..=12 {
+                    for z in -12_i64..=12 {
+                        let c = Coord::new(x, y, z);
+                        if (x + 2 * y + 3 * z).rem_euclid(5) != 0
+                            || w0.index_of(c).is_some()
+                            || w0.world.is_on(c)
+                        {
+                            continue;
+                        }
+                        let mut w = w0.clone();
+                        let _ = w.topology().cell_up(); // a lazily built table, dropped on insert
+                        let i = w.insert_cell(c);
+                        tried += 1;
+                        let Some(t) = w.topo.clone() else {
+                            dropped += 1;
+                            continue;
+                        };
+                        kept += 1;
+                        let mut v = w.clone();
+                        v.topo = None;
+                        let full = v.topology();
+                        assert_eq!(format!("{t:?}"), format!("{full:?}"), "insert {c:?} at {i}");
+                    }
+                }
+            }
+            assert!(tried > 200);
+        }
+        assert!(kept > 400, "kept {kept}");
+        assert!(dropped > 0, "dropped {dropped}");
+    }
+
+    /// §6t: a place that joins the domain leaves the world on exactly the path a rebuilt
+    /// topology takes: materials, heat, books and the occupancy world agree step for step.
+    #[test]
+    fn place_outside_the_domain_steps_as_with_a_rebuilt_topology() {
+        let mut energy = EnergyInput::OFF;
+        energy.sun = 8;
+        energy.day = 600;
+        energy.core = 40;
+        let params = P6Params {
+            seed: 7,
+            cycle: WaterCycle::Driven,
+            energy_in: energy,
+            ..P6Params::default()
+        };
+        for w0 in [
+            genesis(&cfg(BUDGET, 7, 10)).unwrap(),
+            genesis_p6(&cfg(BUDGET, 7, 10), &params).unwrap(),
+            genesis_sky_radial(&cfg(BUDGET, 7, 10), &params, 2).unwrap(),
+        ] {
+            let mut a = w0;
+            for _ in 0..3 {
+                a.step().unwrap();
+            }
+            // Dig a few surface cells for material, then place them just outside the domain.
+            let mut placed = 0;
+            let cells: Vec<Coord> = a.cells.clone();
+            let dug: Vec<Coord> = cells
+                .iter()
+                .filter_map(|&c| a.clone().dig(c).map(|_| c))
+                .take(6)
+                .collect();
+            let mut dug = dug.into_iter();
+            let spots: Vec<Coord> = cells
+                .iter()
+                .map(|&c| Coord::new(c.x, c.y + 1, c.z))
+                .filter(|&u| a.index_of(u).is_none() && !a.world.is_on(u))
+                .step_by(7)
+                .take(6)
+                .collect();
+            for up in spots {
+                let Some(c) = dug.next() else { break };
+                let m = a.dig(c).expect("diggable");
+                let before = a.domain_len();
+                if a.place(up, m) && a.domain_len() == before + 1 {
+                    placed += 1;
+                }
+            }
+            assert!(placed >= 3, "placed {placed}");
+            assert!(a.topo.is_some(), "the places keep the topology");
+            let mut b = a.clone();
+            b.topo = None;
+            for step in 0..12 {
+                a.step().unwrap();
+                b.step().unwrap();
+                assert!(
+                    a.mat == b.mat && a.q == b.q && a.cells == b.cells,
+                    "step {step}"
+                );
+                assert_eq!(a.book_totals(), b.book_totals(), "step {step}");
+                assert_eq!(
+                    crate::history::world_tag(&a.world),
+                    crate::history::world_tag(&b.world),
+                    "step {step}"
+                );
+            }
+            assert_eq!(a.check_books(), Ok(()));
+        }
+    }
 
     /// The books' occupancy walk over z-runs and chunk words reports exactly what the walk
     /// over the cell list reports, through chunk borders at negative coordinates too.
