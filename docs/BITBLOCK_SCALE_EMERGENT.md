@@ -4284,6 +4284,87 @@ Dig / place at r92 on :8765 (`placefps6t.mjs`, 4340749 www):
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; play-loop catch-up and cap rule untouched; 8790/8791 left alone.
 
+## 6aa. The silent network round skips its q scan, driven erode skips when nothing is marked, and combine2 keeps its presence bits: gas r94 −3.5 ms (node) and busy ~72% → 66–70%. r94 still misses the cap rule (set 2 gas 14.975), so the cap stays 92 (2026-11-18, branch `chem/render-scale-2026-11`). Every hash and book is unchanged
+
+Targets, in order: (1) the chemistry-network round that runs every tick but never fires, in both presets; (2) gas's mean step at r94, using ideas other than the four convection tests tried before; (3) the ocean gas-rise candidates, if cheap. The play-loop catch-up and the cap rule were left alone. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 98c4100 | net: `hot_reactive` block-tests each 64-cell block's materials against the reactive ids and reads `q` only in blocks that hold one; with no reactive id it is false at once | [44384154260](https://github.com/Blobicue/bitblock/actions/runs/44384154260) |
+| 924f735 | driven erode: a `marked` flag (set by `mark`) lets `reset_marks` skip the clear when nothing was marked, and `driven_erode_pass` returns early when no cell is marked (test-only full scans still run it) | [44385621945](https://github.com/Blobicue/bitblock/actions/runs/44385621945) |
+| 4720503 | combine2: after a network round that fired nothing, the C/STEAM presence bits from before it are kept (full scans still re-check) | [44386977515](https://github.com/Blobicue/bitblock/actions/runs/44386977515) |
+| 8293d28 | www refresh (cap unchanged at 92) | [44389697502](https://github.com/Blobicue/bitblock/actions/runs/44389697502) |
+
+**2. Why the network round cannot fire (target 1).**
+- A network round fires only at a hot reactive cell: a cell whose material is one of the network's reactive ids and whose `q` passes the threshold. When no such cell exists, the round already took its existing exact early exit, with no firing, no material write and no heat write.
+- In both presets no reactive material is in the domain at all: ids 7, 14, 15, 106, 116 and 120 each count 0 in gas and in ocean. The round therefore never fired, but each tick it still scanned `q` and `mat` over the whole domain to prove that.
+- The fix keeps the same test but runs a material block test first, so `q` is read only in blocks that hold a reactive id. When a reactive material is placed, those blocks take the old path unchanged. Native NET 1.5 → 0.38 ms in both presets.
+- Since a silent round writes no material, the presence bits from before it still hold, so combine2 no longer recomputes them (4720503).
+
+**3. Gas mean step (target 2).**
+- Gas native r94 costs per tick: convect 14.8–17.6 ms (1.17M of 3.48M pairs pass the test, 0.58M rolled, 0.53M swaps), heat 6–10, combine2 3.1 → ~1.6, energy input 1.0–1.4, weather 0.9, driven erode 1.0 → 0, gas rise (outward) 1.1.
+- Driven erode in gas marks nothing, so its per-tick mark clear and pass were pure overhead (924f735).
+- Tried and dropped (no node gain):
+  - a lazy `sky_open` build in weather (weather's cost is not the sky build);
+  - a fused heat sweep that adds the six neighbour shares in one pass over each row run when all four side rows cover it. Hashes stayed the same, but interleaved node medians were within ±0.4 ms.
+- The gas-rise candidate scan in gas is only 1.1 ms native (outward path), so it was not worth working on.
+
+**4. Ocean gas-rise candidates (target 3): skipped, not cheap.** `gas_rise_up` costs 4.7 ms native: 116k candidates, 19k trades. Its cost is the per-candidate random read of the cell above, plus the shell guard and roll. A start-of-tick prefilter on the cell above is not exact, because earlier trades in list order change which cells are open. The §6z block tests on the rising ids gave nothing.
+
+**5. Timings (node `wasmstep`, 30 warm + 60 steps, cap lifted, interleaved).**
+
+| case | before (§6z, c152968) | after (4720503) |
+|---|---|---|
+| gas r94 median | 52.2–52.8 ms | 47.6–49.1 ms |
+| ocean r94 median | 48.8–50.0 ms | 46.7–47.5 ms |
+| r92 gas / ocean median (www) | — | 44.6 / 43.3 ms |
+
+**6. Chrome cadence at r94 (study build = 4720503 with the cap lifted, wasm `15eae4e8…`; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, windows in brackets).**
+
+| run | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| 1 | 14.80 [14.9,15.2,**14.3**] | 15.60 [16.8,15,15] | 15.00 [15,15,15] | 15.10 [15.2,15,15.1] |
+| 2 | 15.00 [15,15,15] | 15.00 [15,15,15] | 15.00 [15,15,15] | 15.00 [15,15,15] |
+| 3 | 15.00 [15,15,15] | 14.80 [15,**14.4**,15] | 15.07 [15,15,15.2] | 15.00 [15,15,15] |
+| 4 | 15.33 [16,15,15] | 15.00 [15,15,15] | 14.83 [**14.5**,15,15] | 15.00 [15,15,15] |
+| mean | 15.03 | 15.10 | **14.975** | 15.03 |
+| busy | 67–71% | 68–73% | 66–70% | 68–70% |
+
+**Cap: stays 92.** Set 2 gas averages 14.975 < 15, so the rule fails at r94. The rule was not changed.
+- Busy fell by about 5 points in gas (§6z: 72–79%), and 14 of 16 runs per preset sit at 15.0 or above. The two gas misses are each a single window (14.3, 14.5) with a step_max of 81 or 131 ms: a one-off stall, not load.
+- At 15 presented fps the mean can reach 15 only if no window dips, so the rule now turns on stalls rather than step cost. Play-loop catch-up (waiting on Owen) is what would absorb them.
+
+Dig / place at r92 on :8765 (`placefps6t.mjs`, 8293d28 www):
+- gas: 15.0–16.0, every window ≥ 15; gaps ≤ 83 ms.
+- ocean: 14.9–17.0, gaps ≤ 50 ms.
+- `books=ok energy_drift=0 error=none` throughout; no page errors.
+
+**7. Exactness.**
+- After each of 98c4100, 924f735 and 4720503: all 16 `delta_eq` outputs and `fp_long` byte-identical, 17/17. Parity md5s unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6z wasm vs §6aa wasm: 7/7 SAME. Core 335 and wasm 83 tests pass.
+- **Frame hashes: no re-baseline; old = new.**
+  - default world `pmbj7za5…`, frame `nx4b62u5…`
+  - node r90 gas `vbv6ockz…` / `ymhicrsu…`
+  - node r90 ocean `wtevn2pz…` / `smmn3aox…`
+  - node r92 gas `2lniroz3…` / `6ucp2u65…`
+  - node r92 ocean `3skk4kg6…` / `xaiybmjb…`
+  - node r94 (cap lifted): ocean `d2ntakaz…` / `gnrwiwke…`, gas frame `7mz2leqp…`, before and after.
+
+**8. Next wall.**
+- Gas r94: convection (~15 ms native: the pair test, roll and scatter over 3.48M pairs) and heat (~6–10 ms, memory-bound) are what remain. The step has ~30% headroom at 15 fps, so the remaining misses are host stalls.
+- Ocean r94: flow sloshing and the +y gas rise.
+
+**Build.** wasm (8293d28, ABI 17) md5 `15096bfa2118e5930ba538b05532079e` (1,591,047 B), play.html `c6c0299d31bf40671c86236574ba058a`, bitblock-lab.html `9cf318419795ea42179d6c5b1a55cb60`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90 run at 15.0 fps; r94 clamps to 92 (gas 15.0).
+  - The only error is the favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6aa/pt/{play,g92,o92}/*.png` (contact sheet `s6aa/pt/sheet.png`).
+- Data: `/workspace/render_scale/s6aa/{STATUS.md,eq1–3,eq1–3.log,parity1–3.log,chrome/set1,set2.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; play-loop catch-up and cap rule untouched; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
