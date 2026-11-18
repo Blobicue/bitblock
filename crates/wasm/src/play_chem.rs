@@ -212,8 +212,9 @@ pub struct ChemPlay {
     pub steps_run: u64,
     /// Material id -> tint RGB for the play renderer, and the legal tinted palette.
     pub colors: ChemColors,
-    /// FNV-1a of the domain's material ids after the last chem step (repaint trigger).
-    pub material_hash: u64,
+    /// Domain cells whose material id the mirrors saw change, summed over every mirror (a full
+    /// scan counts every cell). §6s: replaces the FNV-1a material hash as the repaint trigger.
+    pub material_changes: u64,
     /// §5y mirror cache: the domain's material ids as of the last occupancy mirror (empty =
     /// full scan next time). Chem occupancy only changes through `set_mat`, so cells whose id
     /// is unchanged since the last mirror cannot need an edit; only changed cells are probed.
@@ -279,7 +280,7 @@ impl ChemPlay {
             last_step_changed: 0,
             steps_run: 0,
             colors: ChemColors::new(),
-            material_hash: 0,
+            material_changes: 0,
             mirror_mats: Vec::new(),
             mirror_edits: Vec::new(),
             cut: ChemCut::default(),

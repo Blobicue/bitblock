@@ -1515,8 +1515,8 @@ impl PlaySession {
     }
 }
 
-/// Applies the chem occupancy diff (over the chem domain) to the play world as history edits
-/// and refreshes the material hash. Returns whether the game view must repaint, and whether
+/// Applies the chem occupancy diff (over the chem domain) to the play world as history edits.
+/// Returns whether the game view must repaint, and whether
 /// this was a full scan (the cache was empty or resized: `changed` is then not a full record).
 /// Every bit whose material changed is appended to `changed`, flagged when its occupancy did.
 fn mirror_chem(
@@ -1527,9 +1527,11 @@ fn mirror_chem(
     changed_bits: &mut Vec<(Coord, bool)>,
 ) -> (bool, bool) {
     let mut changed = 0u32;
-    // FNV-1a over the domain's material ids: a material-only change (rock ->
-    // sediment, water -> ice) keeps occupancy but must still repaint the chem tint.
-    let mut mat_hash = 0xcbf2_9ce4_8422_2325_u64;
+    // §6s: cells whose material id differs from the mirror cache (all of them on a full scan).
+    // A material-only change (rock -> sediment, water -> ice) keeps occupancy but must still
+    // repaint the chem tint; comparing the ids exactly replaces the former FNV-1a hash of the
+    // whole domain (which repainted on the same changes, up to hash collisions).
+    let mut mats_changed = 0u64;
     // §5y: probe occupancy only where the material id changed since the last mirror (same
     // edits as the full scan; the full scan runs when the cache is empty / resized).
     let mut seen = std::mem::take(&mut chem.mirror_mats);
@@ -1542,8 +1544,8 @@ fn mirror_chem(
         seen.resize(chem.world.domain_len(), bitblock_core::chem::MatId::AIR);
     }
     // Coordinates and occupancy are read only for cells whose material changed, both worlds
-    // through chunk-caching probes. The scan runs in blocks of 64 cells: the material hash and
-    // a mask of the changed cells first (no branch per cell), then the changed cells in order.
+    // through chunk-caching probes. The scan runs in blocks of 64 cells: a mask of the changed
+    // cells first (no branch per cell), then the changed cells in order.
     // The edits are applied after the scan, in the same order: each domain cell is visited
     // once and an edit flips only its own bit, so every occupancy read before them sees what
     // it would see between them.
@@ -1556,9 +1558,9 @@ fn mirror_chem(
     for (block, (mats, seen)) in mats.chunks(64).zip(seen.chunks_mut(64)).enumerate() {
         let mut mask = 0u64;
         for (j, (&mat, &was)) in mats.iter().zip(seen.iter()).enumerate() {
-            mat_hash = (mat_hash ^ u64::from(mat.0)).wrapping_mul(0x0100_0000_01b3);
             mask |= u64::from(full || was != mat) << j;
         }
+        mats_changed += u64::from(mask.count_ones());
         seen.copy_from_slice(mats);
         while mask != 0 {
             let i = block * 64 + mask.trailing_zeros() as usize;
@@ -1588,8 +1590,8 @@ fn mirror_chem(
     world.flush_octree();
     chem.mirror_mats = seen;
     chem.last_step_changed = changed;
-    let recolored = mat_hash != chem.material_hash;
-    chem.material_hash = mat_hash;
+    chem.material_changes += mats_changed;
+    let recolored = full || mats_changed > 0;
     (changed > 0 || recolored, full)
 }
 
@@ -2522,11 +2524,11 @@ mod chem_play_tests {
         let mut repaint_without_occupancy = 0;
         for _ in 0..40 {
             let renders = s.renders();
-            let before = s.chem.as_ref().unwrap().material_hash;
+            let before = s.chem.as_ref().unwrap().material_changes;
             s.chem_queue(1);
             s.step(1);
             let chem = s.chem.as_ref().unwrap();
-            if chem.material_hash != before {
+            if chem.material_changes != before {
                 assert!(s.renders() > renders, "material change must repaint");
                 if chem.last_step_changed == 0 {
                     repaint_without_occupancy += 1;
