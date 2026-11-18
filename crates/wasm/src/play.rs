@@ -1606,15 +1606,29 @@ fn mirror_chem(
     edits.clear();
     for (block, (mats, seen)) in mats.chunks(64).zip(seen.chunks_mut(64)).enumerate() {
         let mut mask = 0u64;
+        // §6u: changed cells where neither the old nor the new material is AIR (a gas or rock
+        // swap). The play world holds each domain cell's bit as the chem occupancy of its
+        // mirrored material (a full scan sets every bit, each later mirror applies every
+        // toggle, and dig / place apply their edit with the cache update, and nothing else
+        // edits the play world), so such a cell is on in both worlds: no probe, no toggle.
+        let mut solid = 0u64;
+        let air = bitblock_core::chem::MatId::AIR;
         for (j, (&mat, &was)) in mats.iter().zip(seen.iter()).enumerate() {
             mask |= u64::from(full || was != mat) << j;
+            solid |= u64::from(!full && was != air && mat != air) << j;
         }
         mats_changed += u64::from(mask.count_ones());
         seen.copy_from_slice(mats);
         while mask != 0 {
-            let i = block * 64 + mask.trailing_zeros() as usize;
+            let j = mask.trailing_zeros() as usize;
+            let i = block * 64 + j;
             mask &= mask - 1;
             let coord = cells[i];
+            if solid >> j & 1 == 1 {
+                debug_assert!(want_probe.is_on(coord) && have_probe.is_on(coord));
+                changed_bits.push((coord, false));
+                continue;
+            }
             // The chem world's bit follows from the material except at the bedrock cell.
             let want = bitblock_core::chem::ChemWorld::occupancy_of(mats[i - block * 64], coord)
                 .unwrap_or_else(|| want_probe.is_on(coord));
@@ -2110,6 +2124,38 @@ mod chem_play_tests {
     /// full-render frames, on ticks with and without a chem step; a still-camera full render
     /// builds the delta tile lists before the first delta frame, a moving one leaves them to it.
     /// §6t: a place outside the chem domain (which grows it) is a delta frame too.
+    /// §6u: after every mirror the play world holds each chem domain cell's bit as the chem
+    /// occupancy of the cell's material (what lets the mirror skip the probes of a solid-to-solid
+    /// change), through convection, digs, places that grow the domain, and camera moves.
+    #[test]
+    fn play_world_mirrors_chem_occupancy_through_edits() {
+        for (preset, radius) in [(4_u32, 14_u32), (2, 14), (0, 12)] {
+            let mut s = PlaySession::with_chem(preset, 7, radius).expect("chem genesis");
+            s.set_layout(320, 180, true);
+            s.set_capture(true);
+            let mut swaps = 0u64;
+            for k in 1..=36_u32 {
+                if k % 3 != 0 {
+                    let button = if k % 4 == 1 { 2 } else { 0 };
+                    s.pointer_button(button, true);
+                    s.pointer_button(button, false);
+                }
+                if k == 20 {
+                    s.look(25.0, -4.0);
+                }
+                s.step(4);
+                let chem = s.chem.as_ref().unwrap();
+                swaps = chem.material_changes;
+                for (&c, &m) in chem.world.cells().iter().zip(chem.world.mats()) {
+                    let want = bitblock_core::chem::ChemWorld::occupancy_of(m, c)
+                        .unwrap_or_else(|| chem.world.world().is_on(c));
+                    assert_eq!(s.world.is_on(c), want, "preset {preset} step {k} at {c:?}");
+                }
+            }
+            assert!(swaps > 0, "preset {preset}: no material changed");
+        }
+    }
+
     #[test]
     fn edit_frames_are_deltas_equal_to_full_frames() {
         let mut growths = 0;
