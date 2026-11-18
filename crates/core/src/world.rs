@@ -303,12 +303,13 @@ impl World {
             .is_some_and(|chunk| chunk.is_on(local_index))
     }
 
-    /// A reader for [`Self::is_on`] that keeps the last chunk it looked up, for scans whose
-    /// consecutive coordinates mostly share a chunk.
+    /// A reader for [`Self::is_on`] that keeps the chunks it looked up recently, for scans
+    /// whose coordinates mostly share a chunk or return to a few nearby ones.
     pub fn probe(&self) -> BitProbe<'_> {
         BitProbe {
             world: self,
             last: None,
+            recent: [None; PROBE_WAYS],
         }
     }
 
@@ -940,10 +941,20 @@ fn word_and_mask(index: usize) -> (usize, u64) {
     )
 }
 
-/// [`World::is_on`] with the last chunk lookup kept (see [`World::probe`]).
+/// Ways of [`BitProbe`]'s recent-chunk cache: 4 x 4 chunks across and 16 along `z`, so a
+/// row of cells walked `z` fastest (the chem domain's order) meets each of its chunks in its
+/// own way, and the next row finds them again.
+const PROBE_WAYS: usize = 256;
+
+type ProbeSlot<'a> = Option<(ChunkCoord, Option<&'a [u64; CHUNK_WORDS]>)>;
+
+/// [`World::is_on`] with recent chunk lookups kept (see [`World::probe`]): the last chunk,
+/// then a cache direct-mapped by the chunk's low coordinate bits. Both only remember what
+/// the chunk map answered, and the world cannot change while the probe borrows it.
 pub struct BitProbe<'a> {
     world: &'a World,
-    last: Option<(ChunkCoord, Option<&'a [u64; CHUNK_WORDS]>)>,
+    last: ProbeSlot<'a>,
+    recent: [ProbeSlot<'a>; PROBE_WAYS],
 }
 
 impl BitProbe<'_> {
@@ -953,7 +964,16 @@ impl BitProbe<'_> {
         let bits = match self.last {
             Some((c, bits)) if c == chunk_coord => bits,
             _ => {
-                let bits = self.world.chunks.get(&chunk_coord).map(|chunk| &chunk.bits);
+                let way = (chunk_coord.x & 3 | (chunk_coord.y & 3) << 2 | (chunk_coord.z & 15) << 4)
+                    as usize;
+                let bits = match self.recent[way] {
+                    Some((c, bits)) if c == chunk_coord => bits,
+                    _ => {
+                        let bits = self.world.chunks.get(&chunk_coord).map(|chunk| &chunk.bits);
+                        self.recent[way] = Some((chunk_coord, bits));
+                        bits
+                    }
+                };
                 self.last = Some((chunk_coord, bits));
                 bits
             }

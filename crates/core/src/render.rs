@@ -1015,7 +1015,8 @@ impl Renderer {
         let mut open_words: Vec<Words> = Vec::new();
         let mut open_cache: crate::world::CoordMap<crate::world::ChunkCoord, usize> =
             crate::world::CoordMap::default();
-        let mut recent: [Option<(crate::world::ChunkCoord, usize)>; 64] = [None; 64];
+        let mut recent: [Option<(crate::world::ChunkCoord, usize)>; RECENT_WAYS] =
+            [None; RECENT_WAYS];
         let cull_enabled = self.enclosed_cull_enabled();
         let mut exposed = |coord: Coord, world: &World| -> bool {
             let (chunk, index) = World::chunk_of(coord);
@@ -2564,7 +2565,7 @@ struct IndexedBits {
     words: Vec<[u64; crate::world::CHUNK_WORDS]>,
     /// Recently met chunks and their slots, direct-mapped by the chunk's low coordinate bits
     /// (`recent_way`): nearby inserts and lookups then rarely hash.
-    recent: [Option<(crate::world::ChunkCoord, usize)>; 64],
+    recent: [Option<(crate::world::ChunkCoord, usize)>; RECENT_WAYS],
 }
 
 impl Default for IndexedBits {
@@ -2572,15 +2573,20 @@ impl Default for IndexedBits {
         Self {
             slot: Default::default(),
             words: Vec::new(),
-            recent: [None; 64],
+            recent: [None; RECENT_WAYS],
         }
     }
 }
 
 /// The `IndexedBits::recent` way of a chunk.
 fn recent_way(chunk: crate::world::ChunkCoord) -> usize {
-    (chunk.x & 3 | (chunk.y & 3) << 2 | (chunk.z & 3) << 4) as usize
+    (chunk.x & 3 | (chunk.y & 3) << 2 | (chunk.z & 15) << 4) as usize
 }
+
+/// Ways of the recent-chunk caches: 4 x 4 chunks across, 16 along `z`, so a domain row of
+/// cells (`z` fastest, as the chem domain and its changed bits are ordered) meets each of
+/// its chunks in its own way.
+const RECENT_WAYS: usize = 256;
 
 impl IndexedBits {
     /// Adds `coord`; `true` when it was not in the set.
@@ -2627,7 +2633,7 @@ impl IndexedBits {
     fn clear(&mut self) {
         self.slot.clear();
         self.words.clear();
-        self.recent = [None; 64];
+        self.recent = [None; RECENT_WAYS];
     }
 }
 
