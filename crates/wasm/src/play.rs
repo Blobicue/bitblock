@@ -176,7 +176,8 @@ pub struct PlaySession {
     /// Lit-face masks of the cut faces for `cut_view` (rebuilt with it; see `ChemPlay::cut_faces`).
     cut_faces: Vec<(Coord, u8)>,
     /// §6f delta render: `Some(tag)` while every play-world and chem-tint change since the last
-    /// game render is a chem mirror recorded in `delta_changed` and the world now has `tag`.
+    /// game render is a chem mirror or (§6s) a dig / place recorded in `delta_changed` and the
+    /// world now has `tag`.
     delta_chain: Option<ContentTag>,
     /// Bits whose chem material changed since the last game render, each flagged when its
     /// occupancy may have changed too (see `Renderer::render_tinted_delta`).
@@ -2257,8 +2258,12 @@ mod chem_play_tests {
         // Gas at its default cadence (one chem step every 4 ticks): paced steps of up to 9
         // ticks run one chem step each and drop the rest; the ticks that do run leave world,
         // history, books and game pixels exactly where as many `fixed_tick`s would.
+        // The audited session renders every frame in full, so each paced frame (a delta drawn
+        // after skipped frames and dropped ticks) is checked against a full render of the
+        // same world: the paced view converges to it on every frame it presents.
         let mut paced = PlaySession::with_chem(CHEM_PRESET_GAS, 7, CHEM_RADIUS_DEFAULT).unwrap();
         let mut audited = PlaySession::with_chem(CHEM_PRESET_GAS, 7, CHEM_RADIUS_DEFAULT).unwrap();
+        audited.set_delta_render(false);
         for s in [&mut paced, &mut audited] {
             s.set_layout(320, 180, true);
         }
@@ -2282,6 +2287,7 @@ mod chem_play_tests {
             assert_mirrors_chem(&paced);
         }
         assert!(dropped > 0, "the 9-tick steps must drop a second chem step");
+        assert!(paced.renderer.delta_frames() > 0, "paced frames are deltas");
         // Without chem a paced step is a plain step.
         let mut plain = PlaySession::new();
         let mut live = PlaySession::new();
