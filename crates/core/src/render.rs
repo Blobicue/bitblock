@@ -1067,6 +1067,12 @@ impl Renderer {
         let mut recent: [Option<(crate::world::ChunkCoord, usize)>; RECENT_WAYS] =
             [None; RECENT_WAYS];
         let cull_enabled = self.enclosed_cull_enabled();
+        // §6w: on a tint-only frame a bit already proved strictly hidden (`recolour_hidden`)
+        // marks and writes nothing, in the recolour and in any redraw that reaches it (the
+        // depths it lost to are unchanged), so it is dropped with the enclosed bits: each
+        // chunk's words are its exposed bits less its proved ones.
+        let hidden = std::mem::take(&mut self.recolour_hidden);
+        let drop_hidden = tint_only;
         let mut exposed = |coord: Coord, world: &World| -> bool {
             let (chunk, index) = World::chunk_of(coord);
             let way = recent_way(chunk);
@@ -1078,13 +1084,19 @@ impl Renderer {
                             && world
                                 .chunk_bounds(chunk)
                                 .is_some_and(|b| enclosed_cull_applies(projection, b));
-                        open_words.push(if applies {
+                        let mut words = if applies {
                             world.chunk_open_words(chunk)
                         } else {
                             world
                                 .chunk_words(chunk)
                                 .map_or([0; crate::world::CHUNK_WORDS], |(_, bits)| *bits)
-                        });
+                        };
+                        if drop_hidden && let Some(proved) = hidden.chunk_words(chunk) {
+                            for (w, p) in words.iter_mut().zip(proved) {
+                                *w &= !p;
+                            }
+                        }
+                        open_words.push(words);
                         open_words.len() - 1
                     });
                     recent[way] = Some((chunk, slot));
@@ -1093,11 +1105,23 @@ impl Renderer {
             };
             open_words[slot][index / 64] >> (index % 64) & 1 == 1
         };
+        #[cfg(test)]
+        let mut proved_skips: Vec<Coord> = Vec::new();
         for &(coord, toggled) in changed {
             let near = toggled || (!tint_only && toggled_near.contains(coord));
             let open_now = exposed(coord, world);
             if !near && !open_now {
-                continue; // off in both, or enclosed in both: owns no pixel in either frame
+                #[cfg(test)]
+                if drop_hidden {
+                    let (chunk, index) = World::chunk_of(coord);
+                    if hidden
+                        .chunk_words(chunk)
+                        .is_some_and(|w| w[index / 64] >> (index % 64) & 1 == 1)
+                    {
+                        proved_skips.push(coord);
+                    }
+                }
+                continue; // off in both, enclosed in both, or (tint-only) proved hidden
             }
             // A tint-only frame reads a loud bit's grown box only when its recolour marks a
             // pixel, so the box is built there, on demand, when every vertex is safely in front
@@ -1111,6 +1135,7 @@ impl Renderer {
                     Ok(entry) => entry,
                     Err(()) => {
                         self.delta_scratch = scratch;
+                        self.recolour_hidden = hidden;
                         self.render_tinted(world, camera, tint);
                         return false;
                     }
@@ -1119,6 +1144,7 @@ impl Renderer {
             loud.push((coord, toggled, open_now, entry));
             if loud.len() > self.delta_full_len / 2 + 4096 {
                 self.delta_scratch = scratch;
+                self.recolour_hidden = hidden;
                 self.render_tinted(world, camera, tint);
                 return false;
             }
@@ -1132,6 +1158,15 @@ impl Renderer {
         neighbours.dedup();
         neighbours.retain(|&c| exposed(c, world));
         self.toggled_near = toggled_near;
+        self.recolour_hidden = hidden;
+        // Each proved bit the classification dropped still writes nothing (the recolour's
+        // check of a proved bit, run here on the unchanged buffers).
+        #[cfg(test)]
+        for coord in proved_skips {
+            self.marking = true;
+            self.draw_bit_with(projection, coord, tint);
+            self.marking = false;
+        }
 
         if self.crosshair_on {
             self.invert_crosshair();
@@ -2758,6 +2793,14 @@ impl IndexedBits {
             },
         };
         self.words[slot][index / 64] >> (index % 64) & 1 == 1
+    }
+
+    /// The words of `chunk`, when any of its bits was ever added since the last clear.
+    fn chunk_words(
+        &self,
+        chunk: crate::world::ChunkCoord,
+    ) -> Option<&[u64; crate::world::CHUNK_WORDS]> {
+        self.slot.get(&chunk).map(|&slot| &self.words[slot])
     }
 
     /// Empties the set, keeping its storage.
