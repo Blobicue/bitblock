@@ -3776,6 +3776,83 @@ This wave covers the three items Owen approved after §6r: (1) the mirror's FNV 
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6t. Domain-growing place without a stall; dug gas planet at its undug chem cost; O(n) topology build; cap stays 90 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+Priority 1: a place that grows the chem domain still forced a full redraw, which caused a ~2 fps window in ocean. Priority 2: gas chem after a dig (26 → 49 ms/step), and gas r92's first window. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 05af081 | play: a place that grows the chem domain inserts its cell into the mirror cache, so the frame stays a delta; the edit test now asserts every edit frame, growth included, is a delta equal to a full frame | [44306302544](https://github.com/Blobicue/bitblock/actions/runs/44306302544) |
+| d7379ce | chem: `insert_cell` keeps the cached topology and updates it in place (`Topology::inserted`, linear passes, no sort); it falls back to a rebuild for a hashed lookup, a cell outside the box, or a core that moves | [44306572305](https://github.com/Blobicue/bitblock/actions/runs/44306572305) |
+| cb23566 | chem: collapse, uplift and plume visit only the cells by the few AIR/WATER cells of a dug gas planet | [44307860265](https://github.com/Blobicue/bitblock/actions/runs/44307860265) |
+| cce209b | chem: the outward gas rise visits only the pairs under the few AIR/WATER cells | [44309230179](https://github.com/Blobicue/bitblock/actions/runs/44309230179) |
+| 41135c9 | chem: ysort / rise / rsort are counting sorts; the radial frame fills `cell_up` / `rsort_pos` (an insert carries them over) | [44311023786](https://github.com/Blobicue/bitblock/actions/runs/44311023786) |
+| 7c071bf | www refresh | [44312279970](https://github.com/Blobicue/bitblock/actions/runs/44312279970) |
+
+**2. Cause and fix.**
+- *Place stall.* Growing the domain made the mirror cache one cell short, which forced a full scan and a full render (05af081). Growing it also dropped the chem topology, so the next step rebuilt it, about 900 ms native at r90 (d7379ce). Now the mirror gains the cell in place, and the topology is the old one with its indices shifted and the new cell's entries put in their sorted places. It is exactly what a rebuild gives, checked by Debug equality against a rebuild on plain, sky and radial worlds.
+- *Gas after a dig.* A gas planet has no AIR or WATER, so collapse, uplift, plume and the outward rise all took their no-fluid early-outs. One dug AIR cell defeated those early-outs, and all four laws then scanned the whole domain.
+  - Collapse now visits only the cells whose inward step lands on an AIR cell. These are the only cells that can fall, because a target written during the pass is marked moved.
+  - Uplift and plume visit the cells below a fluid cell, plus the cells below any cell a firing turned fluid.
+  - The outward rise starts from the rsort positions under a fluid cell and adds the cells just inside each trade's lower cell, outermost first, with each trade applied in place.
+  - In all four cases the visits, the order and the state each visit sees are the same as before. Above a fluid-count limit (n/128 for collapse, n/16 for uplift/plume, n/64 for the rise), the old dense loops run.
+- *First step.* The first step after genesis built the topology: three comparison sorts with random key reads, plus the radial frame. The domain is kept in ascending (x, y, z) order, so a stable counting sort by y gives ysort and rise, and a counting sort of ysort by r2 gives rsort. The keys are distinct, so these are the same lists. Sortedness is checked first; otherwise the code falls back to the old sorts. Outward neighbours are computed in domain order and kept as `cell_up`, and the ranks as `rsort_pos`.
+
+**3. Native (r90 960×540 unless noted).**
+
+| measurement | before §6t | after |
+|---|---|---|
+| step after a domain-growing place, ocean (`place_bench`) | 1304 ms | edit 107–138 ms, next 64–77 ms |
+| step after a domain-growing place, gas | 1423–1456 ms | edit 93–143 ms, next 115–157 ms |
+| gas chem per step, before → after one dig (`dig_laws`, per law) | 26.5 → 49.0 ms (collapse +9.6, uplift +4.2, plume +3.6, rise +4.4) | 26.5 → 25.7 ms |
+| gas r92 first chem step (`first_window`) | 1284 ms (topology ~900) | 379 ms (topology ~300) |
+| gas r92 steady chem | 28–29 ms, convection 18–19 | unchanged (convection is a dense law on a dense gas planet) |
+
+**4. Chrome: the domain-growing place (`placefps6t.mjs`, :8765 build vs the §6s build; pointer-locked dig/place ×3, 3 s after each edit).**
+
+| r90 | §6s (cab5c6b) | §6t (7c071bf) |
+|---|---|---|
+| ocean, growing place | longest frame gap 1433 ms, first 0.5 s window 4.3 fps | gap 217 ms, 12.0 fps, then 15.0 |
+| gas, growing places | gaps 1583 / 1567 ms, 3.4 / 3.0 fps | gaps 183 / 117 ms, 12.7 / 11.8 fps, then 15.0 |
+| gas after digs (steady) | 11.5–12.9 fps | 15.0 fps |
+
+**5. Chrome cadence (study build of 7c071bf with the cap lifted; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, first window in brackets).**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r92 | 14.67 (13.6), 15.13 (14.7), 14.73 (14.3), 14.73 (13.5); busy 88–91% | 15.17 (14.8), 15.10 (14.3), 14.93 (14.3), 15.17 (14.4); 87–90% |
+| ocean r92 | 15.23, 15.40, 15.10, 15.47; 83–84% | 15.27, 15.40, 15.57, 15.43; 82–83% |
+
+**Cap: stays 90.** Ocean r92 is clean. Gas r92 averages 14.9, but its first windows are 13.5–14.8 and set 1 averages below 15, so the rule does not pass. The first window is now set by steady convection (~18 ms native, ~65% of gas chem), not by the one-off topology build.
+
+**6. Exactness.**
+- After each chem commit: all 16 `delta_eq` outputs are byte-identical to §6r's, frame tags included, and `fp_long 36 600` equals `s6i/fp_ref.txt`. Parity md5s are unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity`, §6s wasm vs §6t wasm: world, frame and books are the same in 7/7 cases.
+- New tests:
+  - `inserted_cell_keeps_the_rebuilt_topology`
+  - `place_outside_the_domain_steps_as_with_a_rebuilt_topology`
+  - `sparse_collapse_uplift_plume_rise_match_the_full_scans`: scrambled worlds with 1–40 fluid cells, plus the sparse path forced onto fluid-rich slabs and a sky ball; every law fires.
+  - `gas_rise_gate_matches_the_full_scan`: now with 0, 1 and 60 fluid cells.
+  - `counting_sorted_topology_matches_the_comparison_sorts`
+  - `edit_frames_are_deltas_equal_to_full_frames`: every growth frame is a delta.
+- **Frame hashes: no re-baseline; old = new.** Default world `pmbj7za5…` → `pmbj7za5…`, frame `nx4b62u5…` → `nx4b62u5…`.
+
+**7. Next wall.**
+- Gas convection's density pass and roll, about 18 ms native per step at r92: dense work on a fully gaseous ball. This is what gas r92's first window now waits on.
+- About 120–250 ms of linear passes on a domain-growing place, one frame. It could be cut further by carrying the lookup slots and lazy roll tables in place.
+- Genesis itself takes ~850 ms native at r92.
+
+**Build.** wasm (7c071bf, ABI 17) md5 `d910845b8528c28e16a72979c8c81e54` (1,562,257 B), play.html `3b3cdc3b10a260a29f0528ed978c3c1a`, bitblock-lab.html `1e9e360c5e0dc80cde49d16fe9ba4b71`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 15.0 and gas r90 15.1 fps, `books=ok energy_drift=0 error=none`.
+  - r94 clamps to 90. Only favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6t/{place_new,playtest}/*.png`.
+- Data: `/workspace/render_scale/s6t/{STATUS.md,eq1..eq4,parity1..4.log,wasm_parity.log,place_*.log,set1.log,set2.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
