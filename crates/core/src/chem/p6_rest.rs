@@ -48,16 +48,18 @@ use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
 
 /// Reused buffers of the outward gas rise and [`ChemWorld::convect_pass`] (the rise's
-/// materials gathered into rsort order, the convection density bits and move marks, and the
-/// tick's swaps), kept across steps so a step does not allocate per domain cell. Each pass
+/// materials gathered into rsort order and its swaps, the convection density, candidate,
+/// move and swap bits), kept across steps so a step does not allocate per domain cell. Each pass
 /// clears or rewrites every buffer it reads before reading it.
 #[derive(Default)]
 pub(crate) struct ConvectScratch {
     smat: Vec<MatId>,
     swaps: Vec<(u32, u32)>,
-    /// Convection candidates: the rsort positions whose pair passes the density test (see
-    /// [`ChemWorld::convect_pass`]).
-    cand: Vec<u32>,
+    /// One bit per rsort position: its pair passes the density test (and, on the driven
+    /// path, the roll); see [`ChemWorld::convect_pass`].
+    cand: Vec<u64>,
+    /// One bit per domain cell: it and its outward neighbour swap this tick.
+    swapped: Vec<u64>,
     /// One bit per domain cell: its pair with its outward neighbour passes the density test.
     pass: Vec<u64>,
     /// One bit per rsort position: the parcel there moved this tick.
@@ -275,6 +277,8 @@ impl ChemWorld {
                 *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
             }
         }
+        let below_mass = mass.map(|m| m.wrapping_mul(1000 + CONVECT_MARGIN_PERMILLE));
+        let above_mass = mass.map(|m| m.wrapping_mul(1000));
         // Outermost first over rsort. A parcel moves at most once per tick, so every density
         // test reads the values the domain holds when the pass starts (the outward gas rise
         // has already written its trades back), and so does any test the scan reaches before
@@ -284,11 +288,13 @@ impl ChemWorld {
         // the original order, only the rsort positions whose bit is set, and skips a pair one
         // of whose parcels already moved (the test could have read nothing else that differs).
         // The roll is a pure function of the cell and tick, so rolling only those pairs is the
-        // same as rolling every pair that reaches it. The swaps are replayed in scan order,
-        // the same `set_mat` / heat-swap calls as swapping in place.
+        // same as rolling every pair that reaches it. The swaps are applied after the scan,
+        // the same `set_mat` / heat-swap calls as swapping in place (see below).
+        // The density test is `mb * ta * 1010 < ma * tb * 1000` in wrapping i64; wrapping
+        // multiplication is associative and commutative, so scaling each mass once per
+        // material first gives the same products.
         let n = topo.rsort.len();
         let mut sc = std::mem::take(&mut self.convect_scratch);
-        sc.swaps.clear();
         let cell_up = topo.cell_up();
         let words = n.div_ceil(64);
         sc.pass.clear();
@@ -299,82 +305,91 @@ impl ChemWorld {
                 let u = cell_up[i];
                 let has_up = u != NO_SLOT;
                 let u = if has_up { u as usize } else { i };
-                let mb = mass[self.mat[i].0 as usize];
-                let ma = mass[self.mat[u].0 as usize];
+                let mb = below_mass[self.mat[i].0 as usize];
+                let ma = above_mass[self.mat[u].0 as usize];
                 let tb = i64::from(self.q[i]) + CONVECT_T0;
                 let ta = i64::from(self.q[u]) + CONVECT_T0;
                 let pass = has_up
-                    & (mb != 0)
-                    & (ma != 0)
+                    & (mass[self.mat[i].0 as usize] != 0)
+                    & (mass[self.mat[u].0 as usize] != 0)
                     & (tb > 0)
                     & (ta > 0)
-                    & (mb
-                        .wrapping_mul(ta)
-                        .wrapping_mul(1000 + CONVECT_MARGIN_PERMILLE)
-                        < ma.wrapping_mul(tb).wrapping_mul(1000));
+                    & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
                 bits |= u64::from(pass) << (i - w * 64);
             }
             *word = bits;
         }
         let convect_key = self.roll_key(SALT_CONVECT);
         // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
-        // in rsort order (the same roll, read sequentially).
+        // in domain order, so the pairs that pass the density test are rolled right here and
+        // the survivors marked by rsort position (`Topology::rsort_pos`). A roll is a pure
+        // function of the cell and tick, so rolling every passing pair is the same as rolling
+        // each pair the scan reaches. On the lattice path the scan rolls instead.
         let roll_cells = match convect_key {
-            RollKey::Wide(key) => topo.rsort_roll_cells(key, &self.cells),
+            RollKey::Wide(key) => topo.cell_roll_cells(key, &self.cells),
             RollKey::Lattice(_) => None,
         };
-        // Every slot below `len` is written before it is read, so the buffer is only grown
-        // (not cleared and zero-filled each tick).
-        let (pass, cand, moved, swaps) = (&sc.pass, &mut sc.cand, &mut sc.moved, &mut sc.swaps);
-        if cand.len() < n + 1 {
-            cand.resize(n + 1, 0);
-        }
-        let mut len = 0usize;
-        for (k, &i) in topo.rsort.iter().enumerate() {
-            let i = i as usize;
-            cand[len] = k as u32;
-            len += (pass[i / 64] >> (i % 64) & 1) as usize;
-        }
-        // Driven rolls are read sequentially from the topology's table, so they are rolled
-        // here for every candidate at once and the pairs that fail are dropped (the scan
-        // below then rolls a candidate again only on the lattice path).
-        if let Some(cells) = roll_cells {
-            let tick = self.tick;
-            let mut kept = 0usize;
-            for c in 0..len {
-                let k = cand[c];
-                let pass = wide_roll_finish(cells[k as usize], tick) % 1000 < CONVECT_ODDS;
-                cand[kept] = k;
-                kept += usize::from(pass);
+        let rsort_pos = topo.rsort_pos();
+        let tick = self.tick;
+        let (pass, cand, moved, swapped) =
+            (&mut sc.pass, &mut sc.cand, &mut sc.moved, &mut sc.swapped);
+        cand.clear();
+        cand.resize(words, 0);
+        for (w, word) in pass.iter().enumerate() {
+            let mut bits = *word;
+            while bits != 0 {
+                let i = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let rolled = roll_cells
+                    .is_none_or(|cells| wide_roll_finish(cells[i], tick) % 1000 < CONVECT_ODDS);
+                let k = rsort_pos[i] as usize;
+                cand[k / 64] |= u64::from(rolled) << (k % 64);
             }
-            len = kept;
         }
+        // The scan, outermost first: candidates in descending rsort position. A swapped pair
+        // is marked by its lower parcel's cell.
         moved.clear();
         moved.resize(words, 0);
+        swapped.clear();
+        swapped.resize(words, 0);
         let is_moved = |moved: &[u64], k: usize| moved[k / 64] >> (k % 64) & 1 == 1;
-        for &k in cand[..len].iter().rev() {
-            let k = k as usize;
-            let ku = topo.shell_up[k] as usize;
-            if is_moved(moved, k) || is_moved(moved, ku) {
-                continue;
+        let mut swaps = 0u32;
+        for w in (0..words).rev() {
+            let mut bits = cand[w];
+            while bits != 0 {
+                let top = 63 - bits.leading_zeros() as usize;
+                bits &= !(1u64 << top);
+                let k = w * 64 + top;
+                let ku = topo.shell_up[k] as usize;
+                if is_moved(moved, k) || is_moved(moved, ku) {
+                    continue;
+                }
+                let i = topo.rsort[k] as usize;
+                if roll_cells.is_none() && self.roll_keyed(topo, convect_key, i) >= CONVECT_ODDS {
+                    continue;
+                }
+                moved[k / 64] |= 1 << (k % 64);
+                moved[ku / 64] |= 1 << (ku % 64);
+                swapped[i / 64] |= 1 << (i % 64);
+                swaps += 1;
             }
-            if roll_cells.is_none()
-                && self.roll_keyed(topo, convect_key, topo.rsort[k] as usize) >= CONVECT_ODDS
-            {
-                continue;
+        }
+        // The swaps are disjoint pairs (each parcel moves at most once), so applying them in
+        // domain order of the lower cell leaves the same materials, heat and occupancy bits
+        // as applying them in scan order: each `set_mat` reads only its own cell's old value.
+        for (w, &word) in sc.swapped.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let i = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let up = cell_up[i] as usize;
+                let (m_b, m_a) = (self.mat[i], self.mat[up]);
+                self.set_mat(i, m_a);
+                self.set_mat(up, m_b);
+                self.q.swap(i, up);
             }
-            moved[k / 64] |= 1 << (k % 64);
-            moved[ku / 64] |= 1 << (ku % 64);
-            swaps.push((topo.rsort[k], topo.rsort[ku]));
         }
-        for &(i, up) in &sc.swaps {
-            let (i, up) = (i as usize, up as usize);
-            let (m_b, m_a) = (self.mat[i], self.mat[up]);
-            self.set_mat(i, m_a);
-            self.set_mat(up, m_b);
-            self.q.swap(i, up);
-            rep.convected += 1;
-        }
+        rep.convected += swaps;
         self.convect_scratch = sc;
     }
 

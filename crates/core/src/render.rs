@@ -13,6 +13,11 @@ use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::{BEDROCK_COORD, Bounds, Coord, World};
 
 const BACKGROUND: u32 = 0x000000;
+/// A bit whose centre lies deeper than this in view space has every cube vertex in front of
+/// the camera: a vertex is at most sqrt(3)/2 from the centre, so its depth (the same dot
+/// product, rounding error ~1e-12 at play coordinates) stays above 1, and it projects to
+/// finite screen coordinates.
+const DEFERRED_BOX_MIN_DEPTH: f64 = 2.0;
 const AGGREGATE_BIT: u32 = 0x00ffffff;
 const BEDROCK_PIXEL: u32 = 0x00ff9f1c;
 const BEDROCK_TOP: u32 = 0x00ffc15a;
@@ -1012,26 +1017,22 @@ impl Renderer {
             if !near && !open_now {
                 continue; // off in both, or enclosed in both: owns no pixel in either frame
             }
-            // Grown box; one with a vertex behind the camera is not bounded.
-            let mut extent = (
-                f64::INFINITY,
-                f64::NEG_INFINITY,
-                f64::INFINITY,
-                f64::NEG_INFINITY,
-            );
-            for vertex in cube_vertices(coord_center(coord)) {
-                let Some(p) = projection.project(vertex) else {
-                    self.render_tinted(world, camera, tint);
-                    return false;
-                };
-                extent = (
-                    extent.0.min(p.x),
-                    extent.1.max(p.x),
-                    extent.2.min(p.y),
-                    extent.3.max(p.y),
-                );
-            }
-            let entry = self.grown_box(coord, extent.0, extent.1, extent.2, extent.3);
+            // A tint-only frame reads a loud bit's grown box only when its recolour marks a
+            // pixel, so the box is built there, on demand, when every vertex is safely in front
+            // of the camera (then each vertex projects: the result below cannot be `Err`).
+            let entry = if tint_only
+                && projection.view_depth(coord_center(coord)) > DEFERRED_BOX_MIN_DEPTH
+            {
+                None
+            } else {
+                match self.bit_grown_box(projection, coord) {
+                    Ok(entry) => entry,
+                    Err(()) => {
+                        self.render_tinted(world, camera, tint);
+                        return false;
+                    }
+                }
+            };
             loud.push((coord, toggled, open_now, entry));
             if loud.len() > self.delta_full_len / 2 + 4096 {
                 self.render_tinted(world, camera, tint);
@@ -1186,6 +1187,31 @@ impl Renderer {
     /// bit makes lands inside: each face's raster box is built from a subset of those vertices
     /// by the same `floor` / `ceil` / clamp, and the single-pixel path plots the floor of its
     /// centre's projection, which lies in their hull; the one-pixel growth absorbs rounding.
+    /// A bit's grown box from the projections of its cube's vertices; `Err` when a vertex
+    /// does not project (behind the camera), `Ok(None)` when the box covers no pixel.
+    fn bit_grown_box(
+        &self,
+        projection: CameraProjection,
+        coord: Coord,
+    ) -> Result<Option<DeltaEntry>, ()> {
+        let mut extent = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
+        for vertex in cube_vertices(coord_center(coord)) {
+            let p = projection.project(vertex).ok_or(())?;
+            extent = (
+                extent.0.min(p.x),
+                extent.1.max(p.x),
+                extent.2.min(p.y),
+                extent.3.max(p.y),
+            );
+        }
+        Ok(self.grown_box(coord, extent.0, extent.1, extent.2, extent.3))
+    }
+
     fn grown_box(
         &self,
         coord: Coord,
@@ -1275,6 +1301,12 @@ impl Renderer {
         if !marks.is_empty() {
             self.collect_delta_candidates(world, projection, &marks, stamp, &mut redraw);
             for &(coord, _, open_now, entry) in loud {
+                // A deferred box (see `render_tinted_delta`) is built now; its vertices all
+                // project, so this is the box the classification would have built.
+                let entry = match entry {
+                    Some(e) => Some(e),
+                    None => self.bit_grown_box(projection, coord).unwrap_or(None),
+                };
                 let Some(e) = entry else { continue };
                 let reaches = (usize::from(e.y0)..usize::from(e.y1)).any(|y| {
                     self.delta_mask[y * width + usize::from(e.x0)..y * width + usize::from(e.x1)]

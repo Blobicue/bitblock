@@ -1108,10 +1108,12 @@ pub(crate) struct Topology {
     /// recomputing the step and probing the lookup per cell, and a scan over parcels gathered
     /// into rsort order stays in that order.
     pub(crate) shell_up: Vec<u32>,
-    /// [`wide_roll_cell`] of `rsort[k]` at index `k` under one wide-roll key (the first key
-    /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
-    /// every tick, read one sequential word per cell instead of the cell's coordinate.
-    rsort_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
+    /// [`wide_roll_cell`] of every domain cell, in domain order, under one wide-roll key (the
+    /// first key asked for; built on first use). Lets convection, which rolls the cells that
+    /// pass its density test every tick, read one word per cell instead of its coordinate.
+    cell_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
+    /// Each cell's position in `rsort` (the inverse permutation, built on first use).
+    rpos: std::sync::OnceLock<Vec<u32>>,
     /// The outward neighbour of each domain cell as a cell index (`shell_up` in domain order:
     /// `cell_up[rsort[k]] == rsort[shell_up[k]]`, `NO_SLOT` where `shell_up` is), built on
     /// first use. Lets the convection density test run in domain order.
@@ -1151,7 +1153,8 @@ impl Topology {
             r2: Vec::new(),
             rsort: Vec::new(),
             shell_up: Vec::new(),
-            rsort_roll: std::sync::OnceLock::new(),
+            cell_roll: std::sync::OnceLock::new(),
+            rpos: std::sync::OnceLock::new(),
             cell_up: std::sync::OnceLock::new(),
             ypos: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
@@ -1316,18 +1319,25 @@ impl Topology {
         })
     }
 
-    /// [`wide_roll_cell`] of every rsort entry under `key`, in rsort order; `None` when the
+    /// [`wide_roll_cell`] of every domain cell under `key`, in domain order; `None` when the
     /// cached table was built for another key (the caller then rolls per cell).
-    pub(crate) fn rsort_roll_cells(&self, key: u64, cells: &[Coord]) -> Option<&[u64]> {
-        let (k, table) = self.rsort_roll.get_or_init(|| {
-            let table = self
-                .rsort
-                .iter()
-                .map(|&i| wide_roll_cell(key, cells[i as usize]))
-                .collect();
+    pub(crate) fn cell_roll_cells(&self, key: u64, cells: &[Coord]) -> Option<&[u64]> {
+        let (k, table) = self.cell_roll.get_or_init(|| {
+            let table = cells.iter().map(|&c| wide_roll_cell(key, c)).collect();
             (key, table)
         });
         (*k == key).then_some(table.as_slice())
+    }
+
+    /// Each cell's position in `rsort` (the inverse permutation, built on first use).
+    pub(crate) fn rsort_pos(&self) -> &[u32] {
+        self.rpos.get_or_init(|| {
+            let mut pos = vec![0u32; self.rsort.len()];
+            for (k, &i) in self.rsort.iter().enumerate() {
+                pos[i as usize] = k as u32;
+            }
+            pos
+        })
     }
 
     /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
