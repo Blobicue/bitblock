@@ -721,6 +721,7 @@ impl ChemWorld {
         let n = self.cells.len();
         let mut sized = false;
         let mut cube = Vec::with_capacity(26);
+        const REACTIVE_IDS: usize = 8;
         let reactive: [bool; 256] = std::array::from_fn(|m| net.is_reactive(MatId(m as u8)));
         let tick = self.tick;
         let mut fired_total = 0u32;
@@ -729,11 +730,36 @@ impl ChemWorld {
         // reacts in posts nothing and writes no scratch there. With no hot reactive cell the
         // round posts no intent and the pass ends after it, so the block search below gives
         // the same result without the per-cell walk.
-        let hot_reactive = self.q.chunks(64).zip(self.mat.chunks(64)).any(|(q, m)| {
+        let hot_in = |q: &[i32], m: &[MatId]| {
             q.iter().zip(m).fold(false, |hit, (&q, &m)| {
                 hit | ((q >= 250) & reactive[m.0 as usize])
             })
-        });
+        };
+        // §6aa: with at most `REACTIVE_IDS` reactive ids, a block's materials are first
+        // compared against them (padded with repeats of the first id) and only a block holding
+        // one reads its heat; a block with no reactive material holds no hot reactive cell, so
+        // the answer is the same. With no reactive id there is none at all.
+        let ids: Vec<MatId> = (0..=255u8)
+            .map(MatId)
+            .filter(|m| reactive[m.0 as usize])
+            .collect();
+        let hot_reactive = match ids.first() {
+            None => false,
+            Some(&first) if ids.len() <= REACTIVE_IDS => {
+                let mut k = [first; REACTIVE_IDS];
+                k[..ids.len()].copy_from_slice(&ids);
+                self.q.chunks(64).zip(self.mat.chunks(64)).any(|(q, m)| {
+                    m.iter().fold(false, |hit, &x| {
+                        hit | k.iter().fold(false, |h, &id| h | (x == id))
+                    }) && hot_in(q, m)
+                })
+            }
+            Some(_) => self
+                .q
+                .chunks(64)
+                .zip(self.mat.chunks(64))
+                .any(|(q, m)| hot_in(q, m)),
+        };
         if !hot_reactive {
             scratch.posted.clear();
             return Ok((0, 1));
