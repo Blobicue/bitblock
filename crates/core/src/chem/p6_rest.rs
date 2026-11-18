@@ -370,10 +370,10 @@ impl ChemWorld {
         sc.smat.clear();
         sc.sq.clear();
         if heat {
-            for &i in &topo.rsort {
-                sc.smat.push(self.mat[i as usize]);
-                sc.sq.push(self.q[i as usize]);
-            }
+            // Two straight gathers (no per-element capacity checks): the same values.
+            sc.smat
+                .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
+            sc.sq.extend(topo.rsort.iter().map(|&i| self.q[i as usize]));
         } else {
             sc.smat
                 .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
