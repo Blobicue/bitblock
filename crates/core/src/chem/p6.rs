@@ -863,6 +863,21 @@ pub(crate) fn find_mat(mat: &[MatId], from: usize, m: MatId) -> Option<usize> {
     None
 }
 
+/// §6y: which of `ids` occur in `mat`, in one pass over 64-cell blocks (the same block
+/// test as [`find_mat`]); stops once every id has been seen.
+pub(crate) fn mats_present<const K: usize>(mat: &[MatId], ids: [MatId; K]) -> [bool; K] {
+    let mut seen = [false; K];
+    for block in mat.chunks(64) {
+        for (s, &id) in seen.iter_mut().zip(&ids) {
+            *s |= block.iter().fold(false, |hit, &x| hit | (x == id));
+        }
+        if seen.iter().all(|&s| s) {
+            break;
+        }
+    }
+    seen
+}
+
 /// Bit `k` set iff `hit(mat[k], q[k])`, for one block of at most 64 cells. A scan whose visits
 /// write only the visited cell (and test only that cell's own material and heat to decide
 /// whether it acts) may take a block's hits at once: no visit changes another cell's test.
@@ -2860,9 +2875,36 @@ impl ChemWorld {
             return Ok(());
         }
         let mut cube = Vec::new();
+        // §6y: no rule below makes C, Ca, N, O, H or STEAM (the burn rewrites a C cell as C),
+        // so a scan for an id the domain lacks when the pass starts (or, after the network,
+        // which can make any material, when it ends) finds nothing: one fused presence pass
+        // stands in for those scans. The test-only full scans skip nothing.
+        let present = |mat: &[MatId], ids| {
+            if super::p6_rest::full_scans() {
+                [true; 6]
+            } else {
+                mats_present(mat, ids)
+            }
+        };
+        const IDS: [MatId; 6] = [
+            MatId::C,
+            MatId::CA,
+            MatId::N,
+            MatId::O,
+            MatId::H,
+            MatId::STEAM,
+        ];
+        let needs_scan = self.params.combine || self.params.condense || self.net.is_some();
+        let [mut has_c, has_ca, has_n, has_o, has_h, mut has_steam] = if needs_scan {
+            present(&self.mat, IDS)
+        } else {
+            [true; 6]
+        };
+        let end = self.mat.len();
+        let from = |has: bool| if has { 0 } else { end };
         if self.params.combine {
             // C + 2 O -> CO2
-            let mut next = 0;
+            let mut next = from(has_c);
             while let Some(i) = find_mat(&self.mat, next, MatId::C) {
                 next = i + 1;
                 if self.q[i] < 300 {
@@ -2886,7 +2928,7 @@ impl ChemWorld {
                 }
             }
             // Ca + S + 4 O -> ROCK (O from the +-2 cube)
-            let mut next = 0;
+            let mut next = from(has_ca);
             while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
                 next = i + 1;
                 if self.q[i] < 300 {
@@ -2920,14 +2962,14 @@ impl ChemWorld {
             // fire (the test-only full scans skip only with none).
             let need = if super::p6_rest::full_scans() { 1 } else { 3 };
             let mut h_cells = 0;
-            let mut at = 0;
+            let mut at = from(has_h);
             while h_cells < need
                 && let Some(h) = find_mat(&self.mat, at, MatId::H)
             {
                 h_cells += 1;
                 at = h + 1;
             }
-            let mut next = if h_cells >= need { 0 } else { self.mat.len() };
+            let mut next = if h_cells >= need { from(has_n) } else { end };
             while let Some(i) = find_mat(&self.mat, next, MatId::N) {
                 next = i + 1;
                 if self.q[i] < 250 {
@@ -2953,7 +2995,7 @@ impl ChemWorld {
                 }
             }
             // Ca + C + 3 O -> CARB (C and O from the +-2 cube)
-            let mut next = 0;
+            let mut next = from(has_ca);
             while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
                 next = i + 1;
                 if self.q[i] < 300 {
@@ -2983,7 +3025,7 @@ impl ChemWorld {
                 }
             }
             // O + O -> O2
-            let mut next = 0;
+            let mut next = from(has_o);
             while let Some(i) = find_mat(&self.mat, next, MatId::O) {
                 next = i + 1;
                 if self.q[i] < 250 {
@@ -3002,7 +3044,7 @@ impl ChemWorld {
                 }
             }
             // Ca + O -> CAO
-            let mut next = 0;
+            let mut next = from(has_ca);
             while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
                 next = i + 1;
                 if self.q[i] < 300 {
@@ -3025,9 +3067,11 @@ impl ChemWorld {
                 let (fired, rounds) = self.network_pass(topo, &net)?;
                 rep.net_fired = fired;
                 rep.net_rounds = rounds;
+                let [c, .., steam] = present(&self.mat, IDS);
+                (has_c, has_steam) = (c, steam);
             }
             if self.params.net_burn && net.net_row().is_some() {
-                let mut next = 0;
+                let mut next = from(has_c);
                 while let Some(i) = find_mat(&self.mat, next, MatId::C) {
                     next = i + 1;
                     if self.q[i] < 250 {
@@ -3066,7 +3110,7 @@ impl ChemWorld {
         }
 
         if self.params.condense {
-            let mut next = 0;
+            let mut next = from(has_steam);
             while let Some(i) = find_mat(&self.mat, next, MatId::STEAM) {
                 next = i + 1;
                 if self.q[i] >= 150 {
