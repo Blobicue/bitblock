@@ -335,7 +335,8 @@ pub struct Renderer {
     /// stored colour and records the pixel in `recolour_marks` instead of losing.
     marking: bool,
     /// Strictly hidden bits proved during recolour. Tint-only frames keep the same depths;
-    /// full renders and occupancy changes discard these proofs before any reuse. §6v: per-chunk
+    /// full renders discard these proofs before any reuse, and a delta frame that toggles bits
+    /// drops those whose box may meet a pixel it resets (§6x, `drop_proofs_over`). §6v: per-chunk
     /// bit words rather than a hash set of coordinates, so a busy gas tick neither hashes each
     /// loud bit nor stalls a frame rehashing the set as it grows.
     recolour_hidden: IndexedBits,
@@ -370,6 +371,9 @@ pub struct Renderer {
     /// Test-only count of recolour draws answered by an earlier hidden proof.
     #[cfg(test)]
     recolour_reused: u64,
+    /// Proved bits a toggling delta frame kept (tests only, §6x).
+    #[cfg(test)]
+    recolour_kept: u64,
     delta_index_ok: bool,
     /// The bits holding an entry in `delta_index`, when `delta_members_ok` (built on the first
     /// delta frame that records, kept by compaction, dropped by a full traversal).
@@ -552,6 +556,8 @@ impl Renderer {
             recolour_marked: 0,
             #[cfg(test)]
             recolour_reused: 0,
+            #[cfg(test)]
+            recolour_kept: 0,
             delta_index_ok: false,
             delta_members: IndexedBits::default(),
             toggled_near: IndexedBits::default(),
@@ -1033,9 +1039,8 @@ impl Renderer {
         // either frame: off in both, or deeply enclosed (with the cull's geometry) in both,
         // which holds when it is enclosed now and no bit of its 3 x 3 x 3 block toggled.
         let tint_only = changed.iter().all(|&(_, toggled)| !toggled);
-        if !tint_only {
-            self.recolour_hidden.clear();
-        }
+        // §6x: a frame that toggles keeps the recolour proofs it cannot disturb (see
+        // `drop_proofs_over`, after the reset below) instead of discarding them all.
         // The bits within one step of a toggled bit, as per-chunk bit words (no hashing per
         // neighbour; the toggled bits and the changed bits both arrive in chunk runs).
         let mut toggled_near = std::mem::take(&mut self.toggled_near);
@@ -1236,6 +1241,8 @@ impl Renderer {
             range.1 = range.1.max(x as u32 + 1);
         }
 
+        self.drop_proofs_over(projection, &reset);
+
         // 2. Bits to draw: indexed bits reaching a reset pixel ...
         let mut redraw: Vec<(f64, Coord)> = Vec::new();
         self.collect_delta_candidates(world, projection, &reset, stamp, &mut redraw);
@@ -1291,6 +1298,69 @@ impl Renderer {
         self.delta_frames += 1;
         self.delta_scratch = scratch;
         true
+    }
+
+    /// §6x: drops the recolour proofs a toggling delta frame may break, keeping the rest. A
+    /// proof says every pixel of the bit's box holds a depth strictly nearer than any the bit
+    /// can draw (same projection: delta frames keep it). Such a frame raises depths only at
+    /// the pixels it resets (step 1); everywhere else it only draws, and a draw keeps the
+    /// lesser depth. So a proof stays true unless its box meets a reset pixel. Proofs are kept
+    /// per chunk: a chunk whose whole box (every bit's cube) lies in front of the camera and
+    /// projects, with two pixels of margin for rounding, clear of the reset pixels' bounding
+    /// rectangle keeps its proofs (each bit's box lies in the hull of the chunk's corners);
+    /// every other chunk's proofs are dropped, which only sends those bits back to be drawn.
+    fn drop_proofs_over(&mut self, projection: CameraProjection, reset: &[usize]) {
+        if reset.is_empty() || self.recolour_hidden.words.is_empty() {
+            return;
+        }
+        let width = self.width as usize;
+        let (mut x0, mut x1, mut y0, mut y1) = (usize::MAX, 0, usize::MAX, 0);
+        for &index in reset {
+            let (x, y) = (index % width, index / width);
+            (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
+        }
+        let (x0, x1, y0, y1) = (x0 as f64, x1 as f64 + 1.0, y0 as f64, y1 as f64 + 1.0);
+        let side = crate::world::CHUNK_SIDE as f64;
+        self.recolour_hidden.retain_chunks(|chunk| {
+            let lo = Vec3::new(
+                chunk.x as f64 * side - 0.5,
+                chunk.y as f64 * side - 0.5,
+                chunk.z as f64 * side - 0.5,
+            );
+            let hi = lo + Vec3::splat(side);
+            let (mut l, mut r, mut t, mut b) = (
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+            );
+            for corner in crate::camera::bounds_corners(lo, hi) {
+                let Some(p) = projection.project(corner) else {
+                    return false;
+                };
+                (l, r, t, b) = (l.min(p.x), r.max(p.x), t.min(p.y), b.max(p.y));
+            }
+            let (l, r, t, b) = (
+                l.floor() - 2.0,
+                r.ceil() + 2.0,
+                t.floor() - 2.0,
+                b.ceil() + 2.0,
+            );
+            if !(l.is_finite() && r.is_finite() && t.is_finite() && b.is_finite()) {
+                return false;
+            }
+            r <= x0 || l >= x1 || b <= y0 || t >= y1
+        });
+        #[cfg(test)]
+        {
+            self.recolour_kept += self
+                .recolour_hidden
+                .words
+                .iter()
+                .flatten()
+                .map(|w| u64::from(w.count_ones()))
+                .sum::<u64>();
+        }
     }
 
     /// The projection a delta frame may reuse the buffers under, or `None` when it must not
@@ -1730,7 +1800,8 @@ impl Renderer {
     ) {
         // A prior tint-only frame already proved that this bit loses every depth test
         // strictly. Recolour changes no fragment depth or geometry, so it still writes and
-        // marks nothing. Any occupancy or projection change clears the proofs first.
+        // marks nothing. A projection change or full render clears the proofs first, and a
+        // toggling delta frame drops every proof its resets may break (§6x).
         if self.marking && self.recolour_hidden.contains(coord) {
             #[cfg(test)]
             {
@@ -2801,6 +2872,15 @@ impl IndexedBits {
         chunk: crate::world::ChunkCoord,
     ) -> Option<&[u64; crate::world::CHUNK_WORDS]> {
         self.slot.get(&chunk).map(|&slot| &self.words[slot])
+    }
+
+    /// §6x: empties every chunk's words for which `keep` is false (the chunk stays indexed).
+    fn retain_chunks(&mut self, mut keep: impl FnMut(crate::world::ChunkCoord) -> bool) {
+        for (&chunk, &slot) in self.slot.iter() {
+            if !keep(chunk) {
+                self.words[slot] = [0; crate::world::CHUNK_WORDS];
+            }
+        }
     }
 
     /// Empties the set, keeping its storage.
@@ -4879,6 +4959,7 @@ mod tests {
         let mut recolours = 0;
         let mut marked = 0;
         let mut reused = 0;
+        let mut kept = 0;
         for (shape, case, size) in [
             (0, 0_usize, 161_u32),
             (0, 3, 97),
@@ -4963,7 +5044,9 @@ mod tests {
             recolours += delta.delta_recolours;
             marked += delta.recolour_marked;
             reused += delta.recolour_reused;
+            kept += delta.recolour_kept;
         }
+        assert!(kept > 0, "no toggling frame kept a hidden proof");
         assert!(
             recolours >= 100,
             "recolour pass taken only {recolours} times"

@@ -626,7 +626,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 35799,
+   "code_lines": 35861,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -807,7 +807,7 @@
    ]
   },
   "test": {
-   "code_lines": 23815,
+   "code_lines": 23818,
    "duplicated_lines": 341,
    "regions": [
     {
