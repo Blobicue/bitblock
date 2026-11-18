@@ -334,6 +334,9 @@ pub struct Renderer {
     /// ties the stored depth of a pixel its own bit holds, with a higher RGB word, replaces the
     /// stored colour and records the pixel in `recolour_marks` instead of losing.
     marking: bool,
+    /// Strictly hidden bits proved during recolour. Tint-only frames keep the same depths;
+    /// full renders and occupancy changes discard these proofs before any reuse.
+    recolour_hidden: crate::world::CoordMap<Coord, ()>,
     recolour_marks: Vec<usize>,
     /// Per pixel, whether a second fragment may sit at exactly its stored depth: set by every
     /// equal-depth meeting in `plot` and the span writer, cleared by a strictly nearer write.
@@ -350,6 +353,9 @@ pub struct Renderer {
     /// Pixels the recolour passes marked (tests only).
     #[cfg(test)]
     recolour_marked: u64,
+    /// Test-only count of recolour draws answered by an earlier hidden proof.
+    #[cfg(test)]
+    recolour_reused: u64,
     delta_index_ok: bool,
     /// Per `COVER_TILE` tile, the full-traversal entries whose box touches it (CSR; built on
     /// the first delta frame after a full one, `delta_csr_built`).
@@ -509,12 +515,15 @@ impl Renderer {
             delta_compactions: 0,
             recording: false,
             marking: false,
+            recolour_hidden: crate::world::CoordMap::default(),
             recolour_marks: Vec::new(),
             tie: Vec::new(),
             marks_only: false,
             delta_recolours: 0,
             #[cfg(test)]
             recolour_marked: 0,
+            #[cfg(test)]
+            recolour_reused: 0,
             delta_index_ok: false,
             delta_tile_start: Vec::new(),
             delta_tile_items: Vec::new(),
@@ -563,6 +572,7 @@ impl Renderer {
         self.delta_mask.resize(len, false);
         self.all_dirty = true;
         self.delta_base = None;
+        self.recolour_hidden.clear();
     }
 
     /// Restores every pixel to `BACKGROUND` and every depth to infinity: the whole buffers
@@ -711,6 +721,7 @@ impl Renderer {
     /// [`Self::render`] with an optional per-bit base colour override ([`BitTint`]).
     /// With `None` the frame is exactly what [`Self::render`] produces.
     pub fn render_tinted(&mut self, world: &World, camera: &Camera, tint: Option<BitTint<'_>>) {
+        self.recolour_hidden.clear();
         self.delta_base = None;
         self.crosshair_on = false;
         self.clear_frame();
@@ -968,6 +979,9 @@ impl Renderer {
         // either frame: off in both, or deeply enclosed (with the cull's geometry) in both,
         // which holds when it is enclosed now and no bit of its 3 x 3 x 3 block toggled.
         let tint_only = changed.iter().all(|&(_, toggled)| !toggled);
+        if !tint_only {
+            self.recolour_hidden.clear();
+        }
         let toggled_near: crate::world::CoordMap<Coord, ()> = changed
             .iter()
             .filter(|&&(_, toggled)| toggled)
@@ -1590,6 +1604,20 @@ impl Renderer {
         coord: Coord,
         tint: Option<BitTint<'_>>,
     ) {
+        // A prior tint-only frame already proved that this bit loses every depth test
+        // strictly. Recolour changes no fragment depth or geometry, so it still writes and
+        // marks nothing. Any occupancy or projection change clears the proofs first.
+        if self.marking && self.recolour_hidden.contains_key(&coord) {
+            #[cfg(test)]
+            {
+                let center = coord_center(coord);
+                let projected = cube_vertices(center).map(|v| projection.project(v));
+                self.owner_key = owner_key(coord);
+                self.recolour_reused += 1;
+                self.assert_hidden_bit_writes_nothing(projection, coord, center, &projected, tint);
+            }
+            return;
+        }
         let center = coord_center(coord);
         let vertices = cube_vertices(center);
         let projected = vertices.map(|vertex| projection.project(vertex));
@@ -1677,6 +1705,9 @@ impl Renderer {
             if let Some(covering) = covering
                 && covering < nearest_possible
             {
+                if self.marking {
+                    self.recolour_hidden.insert(coord, ());
+                }
                 #[cfg(test)]
                 {
                     self.hidden_bits += 1;
@@ -4565,6 +4596,7 @@ mod tests {
         ];
         let mut recolours = 0;
         let mut marked = 0;
+        let mut reused = 0;
         for (shape, case, size) in [
             (0, 0_usize, 161_u32),
             (0, 3, 97),
@@ -4648,12 +4680,14 @@ mod tests {
             }
             recolours += delta.delta_recolours;
             marked += delta.recolour_marked;
+            reused += delta.recolour_reused;
         }
         assert!(
             recolours >= 100,
             "recolour pass taken only {recolours} times"
         );
         assert!(marked > 0, "no recolour frame marked a pixel");
+        assert!(reused > 0, "no recolour frame reused a hidden proof");
     }
 
     /// The delta index must keep bits a delta frame uncovered: drill to the deeply enclosed
