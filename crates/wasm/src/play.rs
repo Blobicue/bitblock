@@ -412,6 +412,14 @@ impl PlaySession {
         self.delta_chain = None;
     }
 
+    /// Game frames drawn as deltas and delta index compactions so far (diagnostics only).
+    pub fn delta_counts(&self) -> (u64, u64) {
+        (
+            self.renderer.delta_frames(),
+            self.renderer.delta_compactions(),
+        )
+    }
+
     /// Output buffer width/height (game + sidebar, or game only).
     pub fn output_width(&self) -> u32 {
         if self.game_only {

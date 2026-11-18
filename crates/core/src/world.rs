@@ -11,7 +11,7 @@ use crate::protocol::ContentTag;
 /// nothing observable depends on map iteration order: ordered iteration sorts, bounds are
 /// min/max folds, and with SipHash's per-process random keys the order already varied per run.
 #[derive(Clone, Copy, Default)]
-struct CoordHasher(u64);
+pub(crate) struct CoordHasher(u64);
 
 impl CoordHasher {
     #[inline]
@@ -48,7 +48,7 @@ impl Hasher for CoordHasher {
     }
 }
 
-type CoordMap<K, V> = HashMap<K, V, BuildHasherDefault<CoordHasher>>;
+pub(crate) type CoordMap<K, V> = HashMap<K, V, BuildHasherDefault<CoordHasher>>;
 
 /// Number of coordinates along each axis of one sparse chunk.
 pub const CHUNK_SIDE: i64 = 16;

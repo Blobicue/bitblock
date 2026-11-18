@@ -309,10 +309,19 @@ pub struct Renderer {
     owner: Vec<u32>,
     /// `owner_key` of the bit being drawn.
     owner_key: u32,
-    /// Grown raster boxes of every bit the last full traversal reached (the first
-    /// `delta_full_len` entries) and of bits delta frames added since; see `render_tinted_delta`.
+    /// Grown raster boxes of every bit the last full traversal reached and of bits delta frames
+    /// added since; the first `delta_full_len` entries are in the tile lists (the traversal's,
+    /// or every entry kept by the last `compact_delta_index`). See `render_tinted_delta`.
     delta_index: Vec<DeltaEntry>,
     delta_full_len: usize,
+    /// Entries the last full traversal recorded (`delta_full_len` can differ after
+    /// `compact_delta_index` folds later entries into the tile lists).
+    delta_traversal_len: usize,
+    /// Index growth allowed past 1.5x before a compaction (and past 1.5x a traversal's after
+    /// one before the full path); tests shrink it to exercise both.
+    delta_slack: usize,
+    /// Compactions so far (diagnostics only).
+    delta_compactions: u64,
     /// Whether `draw_bit_with` appends to `delta_index`, and whether every appended bit had all
     /// eight vertices in front of the camera (else its box may not bound its writes).
     recording: bool,
@@ -470,6 +479,9 @@ impl Renderer {
             owner_key: 0,
             delta_index: Vec::new(),
             delta_full_len: 0,
+            delta_traversal_len: 0,
+            delta_slack: 4096,
+            delta_compactions: 0,
             recording: false,
             delta_index_ok: false,
             delta_tile_start: Vec::new(),
@@ -633,6 +645,11 @@ impl Renderer {
         (observation, palette)
     }
 
+    /// Delta index compactions by [`Self::render_tinted_delta`] so far (diagnostics only).
+    pub const fn delta_compactions(&self) -> u64 {
+        self.delta_compactions
+    }
+
     /// Frames drawn as deltas by [`Self::render_tinted_delta`] so far (diagnostics only).
     pub const fn delta_frames(&self) -> u64 {
         self.delta_frames
@@ -740,6 +757,7 @@ impl Renderer {
         self.traverse(world, projection, tint);
         self.recording = false;
         self.delta_full_len = self.delta_index.len();
+        self.delta_traversal_len = self.delta_full_len;
         self.delta_csr_built = false;
         if self.delta_index_ok {
             self.delta_base = Some(projection);
@@ -902,9 +920,15 @@ impl Renderer {
             self.render_tinted(world, camera, tint);
             return false;
         };
-        if self.delta_index.len() > self.delta_full_len * 3 / 2 + 4096 {
-            self.render_tinted(world, camera, tint);
-            return false;
+        if self.delta_index.len() > self.delta_full_len * 3 / 2 + self.delta_slack {
+            // Fold the entries added since into the tile lists instead of redrawing the whole
+            // frame; only when that leaves the index well above a full traversal's does the
+            // full path rebuild it.
+            self.compact_delta_index(world);
+            if self.delta_index.len() > self.delta_traversal_len * 3 / 2 + self.delta_slack {
+                self.render_tinted(world, camera, tint);
+                return false;
+            }
         }
         // Classify the changed bits by the new world's occupancy and deep enclosure (the
         // enclosed-bit cull's own test, per chunk). A bit is `Quiet` when it owns no pixel in
@@ -1177,7 +1201,36 @@ impl Renderer {
         })
     }
 
-    /// Builds the per-tile lists of the full traversal's index entries, once per full frame.
+    /// Drops the index entries of bits that are off in `world` and every repeat of a bit
+    /// already indexed (keeping its first entry), then marks the tile lists for a rebuild over
+    /// all that remain. The delta frames read the index only for on bits, an entry depends only
+    /// on its bit and the projection (`grown_box` of the bit's projected vertices), and a bit
+    /// that turns on again is recorded by the frame that sees it toggle, so the index still
+    /// holds a box for every on bit the old index did and the frames drawn from it are the same.
+    fn compact_delta_index(&mut self, world: &World) {
+        let mut probe = world.probe();
+        let mut kept: crate::world::CoordMap<
+            crate::world::ChunkCoord,
+            [u64; crate::world::CHUNK_WORDS],
+        > = crate::world::CoordMap::default();
+        self.delta_index.retain(|e| {
+            if !probe.is_on(e.coord) {
+                return false;
+            }
+            let (chunk, index) = World::chunk_of(e.coord);
+            let words = kept.entry(chunk).or_insert([0; crate::world::CHUNK_WORDS]);
+            let bit = 1_u64 << (index % 64);
+            let fresh = words[index / 64] & bit == 0;
+            words[index / 64] |= bit;
+            fresh
+        });
+        self.delta_full_len = self.delta_index.len();
+        self.delta_csr_built = false;
+        self.delta_compactions += 1;
+    }
+
+    /// Builds the per-tile lists of the index entries (the full traversal's, or all of them
+    /// after `compact_delta_index`), once per full frame or compaction.
     fn build_delta_csr(&mut self) {
         if self.delta_csr_built {
             return;
@@ -4104,8 +4157,18 @@ mod tests {
     /// delta render over the previous frame equals a fresh full render bit for bit -- pixels,
     /// depths and `world_pixels` -- with the crosshair drawn between frames, from far, near and
     /// close cameras, and with every bit the hidden-bit test skips checked to write nothing.
+    /// §6k: run again with no index slack and longer chains, so compactions (and the full path
+    /// after one) happen between frames.
     #[test]
     fn delta_render_matches_full_render() {
+        let mut compacted = 0;
+        for slack in [4096_usize, 0] {
+            compacted += delta_render_matches_full_render_with(slack);
+        }
+        assert!(compacted >= 5, "only {compacted} compactions");
+    }
+
+    fn delta_render_matches_full_render_with(slack: usize) -> u64 {
         let mut seed = 0x2545_f491_4f6c_dd1d_u64;
         let mut next = move |n: u64| {
             seed ^= seed << 13;
@@ -4122,6 +4185,7 @@ mod tests {
         ];
         let mut used = 0;
         let mut culled = 0;
+        let mut compactions = 0;
         for (case, size) in [(0_usize, 161_u32), (1, 97), (2, 161), (3, 120), (4, 161)] {
             let mut world = World::new();
             let mut colours: std::collections::HashMap<Coord, u32> =
@@ -4140,13 +4204,14 @@ mod tests {
             let camera = views(&world)[case].clone();
             let mut delta = Renderer::new(size, size);
             delta.verify_hidden_bits = size < 150;
+            delta.delta_slack = slack;
             {
                 let tint = |c: Coord| colours.get(&c).copied();
                 delta.render_tinted(&world, &camera, Some(&tint));
             }
             culled += delta.enclosed_bits;
             delta.draw_crosshair(crosshair_overlay_input());
-            for frame in 0..10 {
+            for frame in 0..if slack == 0 { 30 } else { 10 } {
                 let mut changed = Vec::new();
                 let toggles = if frame % 4 == 3 { 0 } else { 1 + next(12) };
                 for _ in 0..toggles {
@@ -4201,9 +4266,11 @@ mod tests {
                 assert_eq!(bits(&delta.depth), bits(&full.depth), "{at} depth");
                 assert_eq!(delta.world_pixels, full.world_pixels, "{at} world pixels");
             }
+            compactions += delta.delta_compactions;
         }
         assert!(used >= 30, "delta path taken only {used} times");
         assert!(culled > 0, "no case exercised the enclosed-bit cull");
+        compactions
     }
 
     /// The delta index must keep bits a delta frame uncovered: drill to the deeply enclosed
