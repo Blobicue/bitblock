@@ -3983,6 +3983,75 @@ Domain-growing place / dig at r90 on :8765 (`placefps6t.mjs`):
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6w. Mirror word packing, hidden-bit drop by chunk word, in-place growing place: wasm step −5 ms gas / −3 ms ocean, place frames no longer hitch; cap stays 90 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+Focus: headroom under the gas r92 cap rule (§6v missed it by one run), through convection's gather, the mirror's per-frame pushes, the classification of changed cells that repaint nothing, and the 117–217 ms domain-growing place frame. Ocean (82–86% busy) kept in view. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 13ffe86 | play: the mirror packs each full group of 8 material ids with one word load (`pack8`) | [44330967460](https://github.com/Blobicue/bitblock/actions/runs/44330967460) |
+| 2ca6ec6 | render: a tint-only delta drops proved-hidden bits together with the enclosed ones, one chunk word at a time, before classifying them | [44331928925](https://github.com/Blobicue/bitblock/actions/runs/44331928925) |
+| 0da6a2b | chem: a growing place updates the topology in place (the vapor geometry holds a `Weak`, so the `Arc` is unique), takes the new cell into the z-runs incrementally, keeps 1/64 growth room in rebuilt per-cell tables, and under Driven carries the vapor regions through the insert | [44339366912](https://github.com/Blobicue/bitblock/actions/runs/44339366912) |
+| 69f1c7d | www refresh | [44343141140](https://github.com/Blobicue/bitblock/actions/runs/44343141140) |
+
+**2. Cause and fix.**
+- Mirror: `pack8` assembled each word from 8 byte reads; a full group is now one 8-byte load (native mirror 5.4 → 4.35 ms per frame).
+- Classification: every changed exposed bit of a gas frame was classified and then found proved hidden. The proofs are chunk words (§6v), so they are now masked out of each chunk's exposed word before classification. A test-only check re-draws every skipped bit and asserts it marks nothing.
+- Growing place: `Topology::inserted` built a second copy of every whole-domain table, after `Arc::unwrap_or_clone` had already cloned the topology (the vapor geometry held a second strong `Arc`, a 67–85 ms clone). It also rebuilt the z-runs (~26 ms), copied every per-cell array on the first insert after a build (capacity = length), and the next tick rebuilt the vapor geometry (19–28 ms).
+  - Now: in-place shifts and inserts, a `Weak` in `VaporGeo` (it keeps the allocation, so no other topology can reuse the address), an incremental `ZRuns::inserted`, growth room reserved at build, and `VaporGeo::inserted` from the old regions (Driven only, where the next tick's `vapor_sync` would build exactly the same geometry before anything reads it).
+  - Tests compare the inserted topology with a full rebuild (wide-roll words included) and the carried vapor geometry with `VaporGeo::build`, and step both worlds 12 ticks.
+- Tried and dropped, no gain: a contiguous-slice fast path for convection words whose cells share one outward offset (only 1.9% of words qualify at gas r92); deriving convection's rising test from the mass tables (native 40.2–40.8 vs 39.5–40.2 ms per frame). Convection stays latency-bound on the `cell_up` gather.
+
+**3. Timings.**
+
+| measurement | before §6w (§6v www) | after (§6w www) |
+|---|---|---|
+| wasm gas r90 step (node `wasmstep` 30+60, 3 interleaved runs, median) | 49.98–51.42 ms | 45.13–46.07 ms |
+| wasm ocean r90 step | 51.85–54.73 ms | 48.35–49.11 ms |
+| native mirror per gas frame | 5.4 ms | 4.35 ms |
+| native gas r90 place edit (`place_bench`) | 188–236 ms | 40–57 ms |
+| native ocean r90 place edit | 161 ms | 37 ms |
+| native step after a gas place | ~77 ms | ~50–56 ms (steady ~40) |
+| z-runs on insert | ~26 ms | 0.1–0.3 ms |
+
+**4. Chrome cadence (study build of 0da6a2b with the cap lifted, wasm `e23d2bfa…`; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, first window in brackets).**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r92 | 15.10 (15), 15.00 (15), 15.00 (15), 15.03 (15); busy 67–69% | 14.53 (13.6), 15.00 (15), 15.00 (15), 15.00 (15); 66–68% |
+| ocean r92 | 15.60 (16.7), 15.30 (15.8), 15.33 (16.1), 15.20 (15.6); 75–80% | 15.43 (16.2), 15.40 (16.2), 15.33 (16.0), 15.53 (16.6); 75–77% |
+
+Gas busy fell from 76–81% (§6v) to 66–69%, and ocean from 82–86% to 75–80%. **Cap: stays 90.** Set 2's gas mean is 14.88 because one run's first window had one 83 ms frame gap (13.6, mean 14.53), so the rule (both sets ≥ 15, first windows included) misses again. In Chrome the gas step is ~50 ms in the first window; a 15 fps frame needs it to fit in four vsyncs with the paint, so the first window still has little headroom.
+
+Domain-growing place / dig at r90 on :8765 (`placefps6t.mjs`):
+- ocean: worst first 0.5 s window 15.5 fps, later windows ≥ 14.8, gaps ≤ 67 ms (§6v: 13.0, gap 183 ms);
+- gas: worst window 14.8, gaps ≤ 50 ms (§6v: 11.2 / 12.1, gaps 217 / 117 ms);
+- digs 15.0–17.0.
+
+No spread/deferred render was needed: the place frame now costs about one ordinary frame.
+
+**5. Exactness.**
+- After A+B and again after C: all 16 `delta_eq` outputs and `fp_long 36 600` are byte-identical to §6r's, 17/17. Parity md5s are unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6v wasm vs §6w wasm: 7/7 SAME.
+- **Frame hashes: no re-baseline; old = new.** Default world `pmbj7za5…`, frame `nx4b62u5…`. Node r90 gas world `vbv6ockz…`, frame `ymhicrsu…`; ocean world `wtevn2pz…`, frame `smmn3aox…`; the same in both builds. bb_u r92 node (B vs C): world `2lniroz3…`, frame `o7ihkayn…`, the same.
+
+**6. Next wall.**
+- Gas r92's first window in Chrome: the step is ~50 ms, at the edge of a four-vsync frame. Convection's gather through `cell_up` (~37% of the wasm step) is the largest part.
+- Heat (~500 profile samples) and render `draw_bit_with` (~420) next.
+- The step after a growing place is still ~+10–15 ms native (lazy inverse tables rebuilt on next use, vapor rim/edges rebuilt from the regions).
+- The first edit after load pays a one-time ~60 ms native (its render ~29 ms of it), not yet traced; later digs cost ~2 ms.
+
+**Build.** wasm (69f1c7d, ABI 17) md5 `fb36f3dce65e35839a72fbe0f9d4c7c4` (1,584,878 B), play.html `94d2498c2e1c945984b536b1390317c1`, bitblock-lab.html `92bf53728e86139eb0b57790158ab3a2`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 15.0 and gas r90 15.0 fps, `books=ok energy_drift=0 error=none`.
+  - r94 clamps to 90. Only favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6w/{place_2,place_4,playtest}/*.png` (contact sheet `s6w/contact.png`).
+- Data: `/workspace/render_scale/s6w/{STATUS.md,eq1,eq2,parity1.log,parity2.log,node_ab.log,chrome/set1.log,chrome/set2.log,place_*.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
