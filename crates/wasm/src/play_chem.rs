@@ -40,13 +40,14 @@ pub const CHEM_RADIUS_MIN: u32 = 2;
 pub const CHEM_RADIUS_DEFAULT: u32 = 12;
 /// Browser cap. §6k measured Chrome Low 960x540 (chem every 4 ticks) after the delta index
 /// compaction (no periodic full re-render) and the status refresh moved off painted frames;
-/// §6l made tint-only delta frames a recolour pass, so a fresh gas load's first seconds hold at
-/// r80. §6m (domain-order convection density test, mirror edits, classify chunk cache) measured
-/// fresh loads at r82 over two sets of four runs each: gas presents 14.83-15.10 fps (busy
-/// 72-78%) and ocean 14.73-15.03 (busy 67-70%). At r84 a fresh gas load's first window still
-/// dips (9.4 and 13.1 fps in two of eight runs). So r82 is the largest tested radius that holds
-/// the 15 Hz chem cadence on both presets (§6i/§6j: r76, §6k/§6l: r80).
-pub const CHEM_RADIUS_MAX: u32 = 82;
+/// §6l made tint-only delta frames a recolour pass and §6m made gas convection, the mirror and
+/// classification cheaper (r82). §6n (convection rolls and swaps in domain order, tint-only
+/// grown boxes built on demand) measured fresh loads at r84 over two sets of four runs each:
+/// gas presents 15.00-15.33 fps (busy 75-80%) and ocean 14.87-15.27 (busy 73-78%). At r86 a
+/// fresh gas load's first window still dips (7.6-11.1 fps in all four runs). So r84 is the
+/// largest tested radius that holds the 15 Hz chem cadence on both presets (§6i/§6j: r76,
+/// §6k/§6l: r80, §6m: r82).
+pub const CHEM_RADIUS_MAX: u32 = 84;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
