@@ -1683,6 +1683,17 @@ pub extern "C" fn bitblock_play_step(ticks: u32) -> u32 {
     with_play(|session| u32::from(session.step(ticks)))
 }
 
+/// §6s live loop: like `bitblock_play_step`, but stops before a second chem step in one call
+/// (see `PlaySession::step_paced`). Returns `painted | ticks_run << 1`; the client drops the
+/// ticks that did not run instead of catching up.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_step_paced(ticks: u32) -> u32 {
+    with_play(|session| {
+        let (painted, ran) = session.step_paced(ticks);
+        u32::from(painted) | ran << 1
+    })
+}
+
 /// Resolution / layout control: game view `sim_width × sim_height`, plus the native 400-px
 /// sidebar when `sidebar != 0` (otherwise the game view is the whole output).
 #[unsafe(no_mangle)]
@@ -1942,6 +1953,8 @@ pub extern "C" fn bitblock_play_chem_dynamics_get() -> u32 {
 }
 
 #[unsafe(no_mangle)]
+/// 17 (additive, same number, §6s): `bitblock_play_step_paced(ticks)` (live step with at most
+/// one chem step per call; returns `painted | ticks_run << 1`).
 /// 17 (additive, same number, §5y): gas preset `bitblock_play_load_chem(4, ..)` (loads with
 /// energy sun8 + driven cycle + gas convection) and energy mode 2 (sun8) for
 /// `bitblock_play_chem_dynamics`; `_chem_dynamics_get` gains bit 3 for energy 2 only.

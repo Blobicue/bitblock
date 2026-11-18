@@ -724,6 +724,32 @@ impl PlaySession {
         self.render_pending(self.tick - 1, RenderPolicy::Live)
     }
 
+    /// §6s browser live step that never catches up with a second chem step: runs up to `ticks`
+    /// fixed simulation ticks but stops before a tick on which a chem step is due once one has
+    /// run in this call, then finalises at most ONE frame (live policy) like [`Self::step`].
+    /// Returns whether a frame was finalised and how many ticks ran; the caller drops the rest
+    /// (the simulation falls behind wall time instead of running two chem steps in one frame,
+    /// which after one late frame kept every later frame late). The ticks that run are exactly
+    /// the next ones `fixed_tick` would run, so world / history / books evolve as with that
+    /// many `fixed_tick` calls; only which ticks get presented differs.
+    pub fn step_paced(&mut self, ticks: u32) -> (bool, u32) {
+        let mut ran = 0;
+        let mut chem_ran = false;
+        while ran < ticks {
+            let due = self.chem.as_ref().is_some_and(|c| c.due_on(self.tick));
+            if due && chem_ran {
+                break;
+            }
+            chem_ran |= due;
+            self.sim_tick();
+            ran += 1;
+        }
+        if self.tick == 0 {
+            return (false, ran);
+        }
+        (self.render_pending(self.tick - 1, RenderPolicy::Live), ran)
+    }
+
     fn sim_tick(&mut self) {
         let pre_world = self.history.current_world();
         debug_assert_eq!(world_tag(&self.world), pre_world);
@@ -2101,6 +2127,43 @@ mod chem_play_tests {
             assert_mirrors_chem(&s);
         }
         assert!(PlaySession::with_chem(3, 7, 12).is_none());
+    }
+
+    #[test]
+    fn step_paced_runs_at_most_one_chem_step_and_the_same_ticks() {
+        // Gas at its default cadence (one chem step every 4 ticks): paced steps of up to 9
+        // ticks run one chem step each and drop the rest; the ticks that do run leave world,
+        // history, books and game pixels exactly where as many `fixed_tick`s would.
+        let mut paced = PlaySession::with_chem(CHEM_PRESET_GAS, 7, CHEM_RADIUS_DEFAULT).unwrap();
+        let mut audited = PlaySession::with_chem(CHEM_PRESET_GAS, 7, CHEM_RADIUS_DEFAULT).unwrap();
+        for s in [&mut paced, &mut audited] {
+            s.set_layout(320, 180, true);
+        }
+        let mut dropped = 0;
+        for (k, ticks) in [1_u32, 9, 4, 5, 8, 2, 9, 6, 9, 3].into_iter().enumerate() {
+            let before = paced.chem.as_ref().unwrap().steps_run;
+            let (painted, ran) = paced.step_paced(ticks);
+            assert!(ran >= 1 && ran <= ticks, "k={k}");
+            dropped += ticks - ran;
+            let steps = paced.chem.as_ref().unwrap().steps_run - before;
+            assert!(steps <= 1, "k={k}: {steps} chem steps in one paced step");
+            for _ in 0..ran {
+                audited.fixed_tick();
+            }
+            assert_eq!(paced.tick, audited.tick, "k={k}");
+            assert_eq!(paced.last_world_tag, audited.last_world_tag, "k={k}");
+            assert_eq!(paced.chem_status(), audited.chem_status(), "k={k}");
+            if painted {
+                assert_eq!(paced.renderer.pixels(), audited.renderer.pixels(), "k={k}");
+            }
+            assert_mirrors_chem(&paced);
+        }
+        assert!(dropped > 0, "the 9-tick steps must drop a second chem step");
+        // Without chem a paced step is a plain step.
+        let mut plain = PlaySession::new();
+        let mut live = PlaySession::new();
+        assert_eq!(plain.step_paced(7), (live.step(7), 7));
+        assert_eq!(plain.status(), live.status());
     }
 
     #[test]

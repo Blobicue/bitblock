@@ -55,7 +55,7 @@
     let playLastPaintAt = 0;
     let playHeld = Object.create(null);
     // FPS / frame-ms readout (performance.now / rAF timestamps).
-    const playStats = { since: performance.now(), raf: 0, painted: 0, ticks: 0, stepMs: 0, stepMax: 0, paintMs: 0, paintMax: 0, rafGapMax: 0, renders0: 0 };
+    const playStats = { since: performance.now(), raf: 0, painted: 0, ticks: 0, dropped: 0, stepMs: 0, stepMax: 0, paintMs: 0, paintMax: 0, rafGapMax: 0, renders0: 0 };
 
     function f64bits(n) {
       const buf = new ArrayBuffer(8);
@@ -175,13 +175,24 @@
       // Canvas backing store is resized at the next paint (no blank flash in between).
     }
     // Live step: n sim ticks, then at most one frame; paint only if a frame was finalised.
+    // §6s: the paced step runs at most one chem step per frame and drops the ticks past it, so
+    // one late frame no longer makes the next run two chem steps (and stay late).
     function playStepAndPaint(ticks) {
+      const playStepPaced = instance.exports.bitblock_play_step_paced;
       const t0 = performance.now();
-      const painted = instance.exports.bitblock_play_step(ticks) !== 0;
+      let painted, ran = ticks;
+      if (playStepPaced) {
+        const r = playStepPaced(ticks) >>> 0;
+        painted = (r & 1) !== 0;
+        ran = r >>> 1;
+      } else {
+        painted = instance.exports.bitblock_play_step(ticks) !== 0;
+      }
       const dt = performance.now() - t0;
       playStats.stepMs += dt;
       if (dt > playStats.stepMax) playStats.stepMax = dt;
-      playStats.ticks += ticks;
+      playStats.ticks += ran;
+      playStats.dropped += ticks - ran;
       if (painted) playPaint();
       return painted;
     }
@@ -196,14 +207,14 @@
       const stepAvg = playStats.raf ? playStats.stepMs / playStats.raf : 0;
       const paintAvg = playStats.painted ? playStats.paintMs / playStats.painted : 0;
       const busy = (playStats.stepMs + playStats.paintMs) / span * 100;
-      playFpsEl.textContent = "raf_fps="+rafFps.toFixed(1)+" presented_fps="+frameFps.toFixed(1)+" tick_rate="+(playStats.ticks*1000/span).toFixed(1)+"/s"
+      playFpsEl.textContent = "raf_fps="+rafFps.toFixed(1)+" presented_fps="+frameFps.toFixed(1)+" tick_rate="+(playStats.ticks*1000/span).toFixed(1)+"/s dropped="+playStats.dropped
         + "\nstep_ms avg="+stepAvg.toFixed(2)+" max="+playStats.stepMax.toFixed(2)
         + "  paint_ms avg="+paintAvg.toFixed(2)+" max="+playStats.paintMax.toFixed(2)
         + "  ms_per_presented_frame(step+paint)="+(playStats.painted ? (playStats.stepMs + playStats.paintMs) / playStats.painted : 0).toFixed(2)
         + "  raf_gap_max="+playStats.rafGapMax.toFixed(1)+"ms  main_thread_busy="+busy.toFixed(0)+"%"
         + "\noutput="+playCanvas.width+"x"+playCanvas.height+" (presented_fps counts only changed frames; idle view = 0 by design)";
       playFpsEl.className = rafFps >= 30 ? "ok" : "err";
-      playStats.since = now; playStats.raf = 0; playStats.painted = 0; playStats.ticks = 0;
+      playStats.since = now; playStats.raf = 0; playStats.painted = 0; playStats.ticks = 0; playStats.dropped = 0;
       playStats.stepMs = 0; playStats.stepMax = 0; playStats.paintMs = 0; playStats.paintMax = 0; playStats.rafGapMax = 0;
       playStats.renders0 = renders;
     }

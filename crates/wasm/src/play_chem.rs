@@ -469,6 +469,13 @@ impl ChemPlay {
         faces
     }
 
+    /// Whether [`Self::take_due`] would return a nonzero count on sim tick `tick` (no state
+    /// change).
+    pub fn due_on(&self, tick: u64) -> bool {
+        self.error.is_none()
+            && (self.queued > 0 || (self.every > 0 && tick.is_multiple_of(u64::from(self.every))))
+    }
+
     /// Chem steps due on sim tick `tick` (auto cadence plus queued manual steps).
     pub fn take_due(&mut self, tick: u64) -> u32 {
         if self.error.is_some() {
