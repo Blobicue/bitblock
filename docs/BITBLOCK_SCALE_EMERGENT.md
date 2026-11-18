@@ -3170,6 +3170,68 @@ Every run ends `books=ok energy_drift=0 error=none`.
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6k. Ocean's presented dips were periodic full re-renders: exact delta index compaction; play cap 76 → 80 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass on ocean's presented-fps dips that did not follow load. Exactness is checked against dfbc726. No hash changed, and no win needed a hash change. Every pushed commit was checked locally first (`cargo fmt --check`, clippy `-D warnings` with and without `protocol-research`, debug workspace tests with `protocol-research`, the goldens, index drift and the index selftest), and CI is green on both.
+
+**1. Diagnosis (headless Chrome frame cadence, then native).**
+- A per-frame trace of the play loop (rAF time and gap, ticks, step / paint / status ms, presented count), long tasks, JS heap, V8 GC trace events and a named-wasm CPU profile, ocean r78 on dfbc726:
+  - Chem frames take ~40 ms. Every 11–16 chem steps one takes 110–140 ms. The next rAF then carries 7–8 ticks, which spans two chem steps, so one presented frame is lost and the frame interval reaches ~150 ms.
+  - GC is negligible (a few µs; heap 7–19 MB, flat). Long tasks are exactly the step spikes. The status refresh is 5.2–5.6 ms at ~7.5 Hz. Paint is 0.3 ms.
+  - The play page's `presented_fps` is the last ~500 ms window at the moment it is read (7 or 8 frames), and the sweeps average three such snapshots. A snapshot containing one spike reads 12–13 fps, which is where single runs like §6j's 13.40 came from.
+- Native `spike_prof` (step(4) per chem frame) with temporary stage timers: chem has no spikes (`spike_chem`: median 20.9, p99 28.7 ms at r78). The spikes are `render_game`: a delta frame normally costs ~10 ms, but every 11–16 steps it costs ~72 ms. The delta index (`delta_index`, the grown raster boxes of every bit the last full traversal drew plus the bits each delta frame added) passed 1.5× the full traversal's entries + 4096. Then `render_tinted_delta` fell back to a full redraw to rebuild it. About 11 k entries were appended per ocean frame, mostly repeats of bits already indexed (340 k entries held 232 k distinct bits).
+
+**2. Changes.**
+- 7bfd552 — **Delta index compaction (exact).** When the index outgrows the tile lists, `compact_delta_index` drops the entries of bits now off and every repeat of an indexed bit (first entry kept; a per-chunk bitset finds repeats). It then rebuilds the tile lists over what remains, instead of redrawing the frame. The full path stays for an index still above 1.5× the last traversal's after compaction.
+  - Why the frames are the same: a delta frame reads the index only for on bits, an entry is a function of its bit and the projection only (`grown_box` of the projected vertices), and a bit that turns on again is recorded by the frame that sees it toggle. So the compacted index holds a box for every on bit the old one did. The chaining argument of `render_tinted_delta` is per frame and does not depend on how long the chain is.
+  - `delta_render_matches_full_render` now also runs with no slack and 30-frame chains (12 compactions, and the full path after some), comparing pixels, depths and `world_pixels` against a fresh full render every frame. Truncating the compacted index to the old tile lists fails it.
+  - `PlaySession::delta_counts` reports delta frames and compactions (diagnostics only).
+- 02176b4 — **Cap 76 → 80; status refresh off painted frames; www refresh.** The 10 Hz status refresh (it sums the books over every chem cell) now skips a frame that just stepped and painted, and runs on a later frame, at most one period late. This is JS scheduling only: the same wasm calls and text.
+
+**3. Native (cap lifted; ocean r78, step(4) per chem frame, 400 frames).**
+
+| | dfbc726 | 7bfd552 |
+|---|---|---|
+| median / p90 / p99 step | 29.2 / 41.8 / 106.7 ms | 29.4 / 39.8 / 52.4 ms |
+| frames > 1.6× median (after warm-up) | 21 (~100 ms, full re-render) | 7 (45–52 ms, compaction ~8 ms + tile lists) |
+| delta render, mean | ~10 ms + 72 ms spikes | 4.8 ms |
+
+- `delta_eq` (delta-render session vs full-render session, the same inputs, output buffer compared every step and status every 25 steps): equal on ocean r78 for 200 steps (199 delta frames, 9 compactions), gas r78 for 200 steps (0 compactions; gas never reached the old fallback), and ocean r76 for 120 steps (10 compactions).
+
+**4. Chrome (headless, Low 960×540, chem every 4 ticks; `presented_fps` averaged over 3 snapshots, busy, and the largest step in the traced 7.5 s window). dfbc726 and 02176b4-code study builds interleaved in one session.**
+
+| case | dfbc726 (4 runs) | §6k (4 runs) | §6k second set |
+|---|---|---|---|
+| ocean r78 | 15.00, 15.07, 14.93, 15.00; 53–55%; step max 111–114 ms | 15.00, 14.93, 15.03, 14.97; 55%; step max 51–52 ms | — |
+| gas r78 | 14.90, 15.07, 14.97, 15.07; 53–58% | 15.03, 15.03, 15.03, 15.00; 54–55% | — |
+| ocean r80 | 14.30, 15.83, 15.93, 15.87; 64–72%; step max 136–142 ms | 15.00, 15.03, 15.03, 15.03; 58–61%; step max 60–67 ms | 14.97, 15.03, 15.03, 15.03; 59–61% |
+| gas r80 | 15.00, 15.03, 15.07, 15.03; 60–63% | 14.97, 15.03, 14.67, 15.03; 61–66% | 15.03, 15.00, 15.00, 15.00; 59–61% |
+| ocean r82 | — | 15.00, 15.00, 15.03, 14.73; 62–65% | — |
+| gas r82 | — | 13.10, 12.77, 12.63, 12.67 (first snapshot 7.9–9.2) | — |
+
+- Readings above 15 on dfbc726 r80 come from snapshot windows that close just after a burst of frames following a spike. The trace's presented rate there is 14.64–14.74.
+- Every run ends `books=ok energy_drift=0`.
+
+**5. Cap: 76 → 80.** Both presets hold ~15 presented fps at r80 over two sets of four runs: ocean's minimum is 14.97 and gas's is 14.67. Ocean now holds even at r82. Gas is the binding preset: for its first ~100 chem steps the convection stirring recolours most of the envelope, so its delta frames redraw a lot. Natively the delta render climbs to ~36 ms at r80 between steps 30 and 90, then falls to ~10 ms. At r80 the tail of that hump touches the start of the measured window (single 120–150 ms steps; one run's traced rate is 13.98 while its snapshots read 14.97). At r82 it fills the first snapshot.
+
+**6. Exactness evidence (vs dfbc726).**
+- Parity byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 match the §6i reference file. p6 goldens 3/3. Debug (with `protocol-research`) and release tests pass.
+- Ship wasm == native world and frame tags (and `books=ok energy_drift=0`) on ocean and gas r80, ocean r40 over 1,100 steps, gas r30 over 600 steps, and presets 0 and 1 at r30 over 200 steps.
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page prints the same lines as dfbc726.
+
+**7. Next wall.**
+- (a) Gas's early stirring: delta frames that redraw most of the envelope for ~100 steps. That cost is real content change. Options are a cheaper redraw path for tint-only changes (no occupancy change, so no reset/neighbour work), or capping how many bits a delta frame redraws before handing the rest to the next frame. The second would change frames, so it is a question for Owen.
+- (b) Gas convection: gather 4.2 ms (materials 1.4 ms, heat 2.2 ms) plus density test 5.5 ms native at r78. Persistent radius-ordered materials would save at most ~1.4 ms less upkeep on ~400 k `set_mat` per tick. Convection parks moved parcels in its copy, so it would still need a scratch copy. Heat is rewritten every tick, so it cannot persist. Deferred to the next pass.
+- (c) Ocean at r82+: chem ~21 ms plus render ~5 ms native per frame. Flow's occupancy writes and the +y rise trades remain the largest chem items.
+
+**Build.** wasm (02176b4, ABI 17) md5 `dde5277b3873930d00a7ec829b7ad744` (1,477,610 B), play.html `baa488a807c3052867f5375785734f0a`, bitblock-lab.html `4dfcd0240d67acb69cc8933bf201a238`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r80 `books=ok energy_drift=0 error=none`, r84 clamps to 80, and only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6k/playtest/{default,chem2_r80,chem4_r80,chem4_r84}.png`.
+- Traces, profiles and sweeps: `/workspace/render_scale/s6k/` (`chrome/`, `sweep{1,2,3_r82}.txt`, `ana.py`, `prof_spikes.py`, `mkstudy.sh`); bins `spike_prof`, `spike_chem`, `delta_eq` in `scale_measure`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
