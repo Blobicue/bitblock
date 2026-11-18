@@ -3487,6 +3487,76 @@ Ocean r84 per stage after the change: flow 5.9, combine2 4.6, heat 4.0, water 2.
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6p. Recolour reuses strict hidden-bit proofs; each bit recorded once in the delta index; cap raised to 88 (2026-11-18, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass: fresh gas r88's first window, then ocean's spikes on frames where bits switch on or off. Exactness is checked against 16f8dda. No hash or frame changed. The mirror's FNV repaint test and frame spreading were left alone. Each commit passed the full local pre-push check first and was pushed on its own, so each has its own CI run, all green.
+
+**1. Diagnosis (native, cap lifted, temporary counters and timers).**
+- **Gas r88:** about 20 ms of the 55 ms step is render, almost all of it the recolour pass of tint-only frames.
+  - Of ~99.2 k loud (exposed, retinted) bits per frame, 98.9 k fail the exact hidden-bit test: they lie behind the near surface.
+  - Each still paid 8 vertex projections and the test, ~15 ms in all. Drawing the ~300 visible ones costs 0.3 ms.
+- **Ocean r88:** every chem frame switches bits on or off. Besides the first-window load, two spikes stand out:
+  - **Compaction:** ~55–60 ms native at steps ~44 and ~90, about 20 ms to compact plus ~35 ms to rebuild the per-tile lists.
+  - **Duplicate entries:** 85% of the index tail that compaction dropped (~0.5 M of 0.6 M entries) were repeat entries of bits already indexed. They were re-recorded as "fresh" bits each frame (bits that turned on, and on neighbours of bits that turned off). That growth also forced wasm memory growth: Chrome reported 9–17 ms of GC in every ocean run.
+
+**2. Change 1: 643d368 (exact).** Tint-only frames reuse strict hidden-bit proofs.
+- When the marking pass's exact hidden-bit test proves that a bit loses every depth comparison strictly, the bit is remembered (`recolour_hidden`).
+- A tint-only frame changes no geometry and no depth, so a later tint-only frame skips that bit: it would write and mark nothing.
+- Every full render, resize and frame that switches a bit clears the proofs first, so they are only reused under the depths they were proven against.
+- `delta_recolour_matches_full_render` compares 16-frame chains against fresh full renders, with every skipped bit rasterised and checked to write nothing. It now also requires that proofs were reused.
+
+**3. Change 2: a8af425 (exact).** Each bit is recorded once in the delta index.
+- A delta frame no longer re-records a bit that already has an entry (`IndexedBits`, a per-chunk bitset). It is built on the first recording delta frame after a full traversal, and compaction rebuilds it from the bits it keeps.
+- An entry depends only on its bit and the (bit-identical) projection, so a repeat entry adds nothing. Compaction already kept only a bit's first entry. A delta frame reads entries only for bits that are on, and a bit drawn twice gives the same frame as drawn once.
+- The index grows far more slowly, so compactions become rare (ocean r88: 2 → 0 in 150 steps; ocean r60: 8 → 1) and the wasm heap stops growing (Chrome GC 0 ms).
+- `delta_render_matches_full_render` still requires compactions (at least 3; fewer now happen).
+
+**4. Native (cap lifted; instrumented `spike_prof`, step(4) per chem frame; mean over chem steps 25–95).**
+
+| case | 16f8dda step | §6p step | chem | mirror | render (mean / p90 / max) |
+|---|---|---|---|---|---|
+| gas r86 | 47.8 ms | 38.8 ms | 23.1 → 23.2 | 8.1 → 8.0 | 16.1 / 16.6 / 34 → 7.2 / 7.4 / 30 |
+| gas r88 | 55.3 ms | 41.9 ms | 25.3 → 24.8 | 9.5 → 8.6 | 20.0 / 20.9 / 48 → 8.0 / 9.5 / 38 |
+| ocean r86 | 38.8 ms | 36.7 ms | 24.3 → 24.2 | 4.2 → 4.2 | 9.5 / 24.4 / 58 → 7.6 / 21.0 / 63 |
+| ocean r88 | 44.1 ms | 39.3 ms | 27.5 → 25.8 | 4.6 → 4.5 | 11.2 / 29.8 / 75 → 8.2 / 25.3 / 75 |
+
+- Ocean r88 steps above 1.6× the median: 22 → 12. The 88–97 ms spikes at steps 29, 44, 89 and 90 are gone. What remains is the first window after load (steps 1–12, 60–106 ms).
+
+**5. Chrome (headless, Low 960×540, chem every 4 ticks; `presented_fps` averaged over 3 snapshots, busy; every run is "fresh", measured from 2 s after the radius change). Study build with the cap lifted, from the shipped code.**
+
+| case | §6o 16f8dda | §6p set 1 (4 runs) | §6p set 2 (4 runs) |
+|---|---|---|---|
+| gas r88 fresh | 12.10, 11.27 (first snapshot 7.0–7.8) | 15.10, 15.07, 15.03, 15.07; 78–79% | 15.13, 15.03, 15.07, 15.03; 78–80% |
+| ocean r88 fresh | 14.47, 15.67 | 15.03, 15.00, 15.00, 15.37; 68–70% | 15.03, 15.00, 15.00, 15.00; 68% |
+| gas r90 fresh | — | 12.73 (first snapshot 9.2), 15.20; 84–86% | — |
+| ocean r90 fresh | — | 15.00, 15.00; 73% | — |
+
+- Every run ends `books=ok energy_drift=0`. Chrome GC is 0 ms in every r88 run (9–17 ms per ocean run before change 2).
+- With change 1 alone, ocean r88 still dipped mid-window (14.40–14.60, snapshots 13.1–13.8, in 2 of 4 runs); change 2 removed those dips.
+
+**6. Cap: 86 → 88** (aac4bea: `CHEM_RADIUS_MAX`, the page's `max` and title, the JS clamp). r88 holds ~15 fps on both presets over two sets of four fresh runs. At r90, a fresh gas load's first window still dips, so r90 fails the rule.
+
+**7. Exactness evidence (vs 16f8dda).**
+- Parity byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 match the §6i reference file. Core tests pass (release, 329), and the full pre-push check passes.
+- `delta_eq` (full rgba and status compared on every step) is equal on every case: preset 1 r80/r82, ocean r60/r80/r82/r84/r86/r88, and gas r36/r80/r82/r84/r86/r88.
+  - It is byte-identical to the earlier references on every gas and preset 1 case, and to 16f8dda built natively on gas r88.
+  - On ocean, the outputs differ from the references only in the diagnostic compaction count. The final frame tags are the same.
+- The shipped wasm, the 16f8dda wasm (`268110ad…`) and native print the same world and frame tags (with `books=ok`) on ocean and gas r86, gas r36 (warm 5) and preset 1 r60. On ocean and gas r88, native equals the shipped wasm; the 16f8dda wasm clamps those radii to 86.
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page prints the same lines as before.
+
+**8. Next wall.**
+- (a) r90: a fresh gas load's first window dips (9.2 in one of two runs; busy 84–86%). At r88 the gas hump step is ~42 ms native: chem ~25 (convection, heat), mirror ~9 (the FNV hash plus changed-bit probes), render ~8.
+- (b) Ocean's first window after load (steps 1–12, 60–106 ms native) is the bulk of what is left of its spikes. It is driven by the large early redraw lists of frames that switch bits.
+- (c) Replacing the mirror's FNV repaint test with an exact material comparison, or spreading the hump's redraw over frames, remain options for Owen only.
+
+**Build.** wasm (aac4bea, ABI 17) md5 `211d5d8b9163fcd0846107a9e51f838b` (1,488,507 B), play.html `a1cefd1dbbe7d8e3160150b8a46f8795`, bitblock-lab.html `d5c2d076e344c944880515b7fa3c820d`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean r88 (15.0 presented fps) and gas r88 (15.1) both read `books=ok energy_drift=0 error=none`. Requesting r92 clamps to 88, and the box shows 88 (1 → 2, 40.7 → 40). Only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6p/play/{default,chem2_r88,chem4_r88,chem4_r92,radius_box_r92}.png`.
+- Sweeps and A/B: `/workspace/render_scale/s6p/` (`chrome/`, `prof/`, `ab0/`–`ab3/`, `abcache/`, `eq/`, `eq2/`).
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
