@@ -856,9 +856,29 @@ impl Renderer {
     /// redraw. A moving camera (a new projection per full frame) keeps building them lazily,
     /// on the first delta frame. The lists are the same either way (built from the same index
     /// entries), so no frame changes; only which frame pays for them.
+    ///
+    /// §6x: the set of indexed bits (`delta_members`) that the first toggling delta frame
+    /// needs is built here too, under the same rule. Only a full traversal and a toggling
+    /// delta frame add index entries, and compaction rebuilds the set, so it is the same set
+    /// whichever frame builds it.
     pub fn prepare_delta_lists(&mut self) {
         if std::mem::take(&mut self.delta_lists_eager) && self.delta_base.is_some() {
             self.build_delta_csr();
+            self.build_delta_members();
+        }
+    }
+
+    /// The bits holding an entry in `delta_index`, when not yet built since the last full
+    /// traversal.
+    fn build_delta_members(&mut self) {
+        if !self.delta_members_ok {
+            let mut members = std::mem::take(&mut self.delta_members);
+            members.clear();
+            for e in &self.delta_index {
+                members.insert(e.coord);
+            }
+            self.delta_members = members;
+            self.delta_members_ok = true;
         }
     }
 
@@ -1268,15 +1288,7 @@ impl Renderer {
         for &(_, coord) in &redraw {
             self.draw_bit_with(projection, coord, tint);
         }
-        if !self.delta_members_ok {
-            let mut members = std::mem::take(&mut self.delta_members);
-            members.clear();
-            for e in &self.delta_index {
-                members.insert(e.coord);
-            }
-            self.delta_members = members;
-            self.delta_members_ok = true;
-        }
+        self.build_delta_members();
         // A bit already indexed is not recorded again: its entry would repeat the one held
         // (an entry depends only on its bit and this projection), and compaction keeps only a
         // bit's first entry anyway. A delta frame reads entries only for on bits and draws a bit
