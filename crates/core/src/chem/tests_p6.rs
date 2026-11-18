@@ -4955,3 +4955,25 @@ fn gathered_heat_matches_general_scatter() {
         assert!(row.topo.as_ref().unwrap().zruns.is_some());
     }
 }
+
+/// `find_mat2` is the first index at or after `from` holding either id, as a slice scan.
+#[test]
+fn block_two_material_search_matches_current_slice() {
+    use super::p6::find_mat2;
+    let mut seed = 11u32;
+    let mats: Vec<MatId> = (0..1031)
+        .map(|_| {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            MatId((seed >> 27) as u8)
+        })
+        .collect();
+    for (a, b) in [(0, 1), (3, 3), (5, 31), (31, 200), (200, 201)] {
+        for from in 0..=mats.len() {
+            let want = mats[from..]
+                .iter()
+                .position(|x| x.0 == a || x.0 == b)
+                .map(|k| from + k);
+            assert_eq!(find_mat2(&mats, from, MatId(a), MatId(b)), want);
+        }
+    }
+}

@@ -21,7 +21,8 @@
 //! that is exactly its `for y, for x, for z` with the MASK test).
 
 use super::p6::{
-    NB6, NO_SLOT, RollKey, StepReport, Topology, WaterCycle, find_mat, wide_roll, wide_roll_finish,
+    NB6, NO_SLOT, RollKey, StepReport, Topology, WaterCycle, find_mat, find_mat2, wide_roll,
+    wide_roll_finish,
 };
 use super::vapor::{EvapTop, RainFall};
 use super::{ChemWorld, MatId, NE};
@@ -288,9 +289,12 @@ impl ChemWorld {
         // then visits only the pairs that pass it, skipping a moved parcel as before. The
         // roll is a pure function of the cell and tick, so rolling only those pairs is the
         // same as rolling every pair that reaches it.
+        // Every slot below `len` is written before it is read, so the buffer is only grown
+        // (not cleared and zero-filled each tick).
         let cand = &mut sc.cand;
-        cand.clear();
-        cand.resize(n + 1, 0);
+        if cand.len() < n + 1 {
+            cand.resize(n + 1, 0);
+        }
         let mut len = 0usize;
         for k in 0..n {
             let ku = topo.shell_up[k];
@@ -598,8 +602,10 @@ impl ChemWorld {
         // §5v diagnostic (outside every book): evaporation / rain split by
         // the core's world y (lower = y < core y)
         let core_y = topo.core.map(|c| self.cells[c as usize].y);
-        for i in 0..n {
-            if self.mat[i] != MatId::WATER || self.q[i] <= EVAP_Q {
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat[..n], next, MatId::WATER) {
+            next = i + 1;
+            if self.q[i] <= EVAP_Q {
                 continue;
             }
             if !self.evap_open(topo, frame, i) {
@@ -870,11 +876,9 @@ impl ChemWorld {
         if !self.params.erode {
             return;
         }
-        for i in 0..self.cells.len() {
-            let m = self.mat[i];
-            if m != MatId::ROCK && m != MatId::MIN {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat2(&self.mat, next, MatId::ROCK, MatId::MIN) {
+            next = i + 1;
             let nm = self.nb_marks(topo, i);
             if nm == 0 {
                 continue;
@@ -1005,6 +1009,11 @@ impl ChemWorld {
         let track_mask = self.params.sun_sweep.track_mask();
         let seed = self.params.seed;
         let tick = self.tick;
+        // Only ROCK / MIN cells weather; with none in the domain nothing below can fire
+        // (the sky test has no side effects).
+        let Some(first) = find_mat2(&self.mat, 0, MatId::ROCK, MatId::MIN) else {
+            return;
+        };
         // With a sky shell the sun-track proxy sees through open air: a face on
         // a sky-open AIR cell (an all-AIR column up to space) counts as lit,
         // like a face on space. No shell: planet6 space faces only.
@@ -1019,11 +1028,9 @@ impl ChemWorld {
         } else {
             Vec::new()
         };
-        for i in 0..self.cells.len() {
-            let m = self.mat[i];
-            if m != MatId::ROCK && m != MatId::MIN {
-                continue;
-            }
+        let mut next = first;
+        while let Some(i) = find_mat2(&self.mat, next, MatId::ROCK, MatId::MIN) {
+            next = i + 1;
             let mut open = false;
             let mut lit = 0u32;
             for (k, j) in topo.nb6(&self.cells, i).into_iter().enumerate() {
@@ -1629,11 +1636,13 @@ impl ChemWorld {
         let seed = self.params.seed;
         let tick = self.tick;
         let mut fired = 0u32;
-        for i in 0..self.cells.len() {
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::WATER) {
+            next = i + 1;
             if fired >= DEGAS_MAX_PER_TICK {
                 break;
             }
-            if self.mat[i] != MatId::WATER || self.q[i] <= DEGAS_Q {
+            if self.q[i] <= DEGAS_Q {
                 continue;
             }
             let odds = ((self.q[i] - DEGAS_Q) as u32)
@@ -1973,6 +1982,10 @@ impl ChemWorld {
     /// diagonal staircase is held by any solid tread); the displaced fluid
     /// moves out. A pure swap.
     fn settle_core(&mut self, topo: &Topology, rep: &mut StepReport, o: Coord) {
+        // Only SED cells sink and the pass makes no SED from other cells.
+        if find_mat(&self.mat, 0, MatId::SED).is_none() {
+            return;
+        }
         for &i in &topo.rsort {
             let i = i as usize;
             if self.mat[i] != MatId::SED {
@@ -2014,6 +2027,10 @@ impl ChemWorld {
     /// neighbour no more than one `r2` unit above it ([`Self::side_target`]).
     /// A pure swap; marks as `stepFlow` (fall / side).
     fn flow_core(&mut self, topo: &Topology, rep: &mut StepReport, o: Coord) {
+        // Only WATER cells move and the pass makes no new WATER from other cells.
+        if find_mat(&self.mat, 0, MatId::WATER).is_none() {
+            return;
+        }
         let n = self.cells.len();
         let seed = self.params.seed;
         let tick = self.tick;

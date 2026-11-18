@@ -824,6 +824,26 @@ pub(crate) enum RollKey {
     Wide(u64),
 }
 
+/// The first index at or after `from` whose material is `a` or `b` ([`find_mat`] for two ids,
+/// with the same visiting guarantee).
+#[inline]
+pub(crate) fn find_mat2(mat: &[MatId], from: usize, a: MatId, b: MatId) -> Option<usize> {
+    const BLOCK: usize = 64;
+    let mut i = from;
+    while i < mat.len() {
+        let end = (i + BLOCK).min(mat.len());
+        let block = &mat[i..end];
+        if block
+            .iter()
+            .fold(false, |hit, &x| hit | (x == a) | (x == b))
+        {
+            return block.iter().position(|&x| x == a || x == b).map(|k| i + k);
+        }
+        i = end;
+    }
+    None
+}
+
 /// The first index at or after `from` whose material is `m`. A scan that walks the cells of one
 /// material in index order calls it again after each visit, so a visit's writes are seen
 /// exactly as a cell-by-cell scan would see them (the cells it skips are not `m` and nothing
@@ -2154,7 +2174,10 @@ impl ChemWorld {
     }
 
     fn phase_pass(&mut self, rep: &mut StepReport) {
-        for i in 0..self.cells.len() {
+        // Only WATER and ICE cells change, and each visit writes only its own cell.
+        let mut next = 0;
+        while let Some(i) = find_mat2(&self.mat, next, MatId::WATER, MatId::ICE) {
+            next = i + 1;
             let m = self.mat[i];
             if m == MatId::WATER && self.q[i] < FREEZE_AT {
                 self.set_mat(i, MatId::ICE);

@@ -1087,13 +1087,15 @@ impl ChemWorld {
             return;
         }
         self.mat[i] = m;
-        let c = self.cells[i];
+        // The coordinate is read only when occupancy changes (a material-to-material write,
+        // like a convection swap, touches no bit).
         if m == MatId::AIR {
+            let c = self.cells[i];
             if !is_bedrock(c) {
                 self.world.set_off(c);
             }
         } else if old == MatId::AIR {
-            self.world.set_on(c);
+            self.world.set_on(self.cells[i]);
         }
     }
 
