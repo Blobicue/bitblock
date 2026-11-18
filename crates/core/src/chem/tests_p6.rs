@@ -5188,3 +5188,109 @@ fn sparse_rise_and_n_skip_match_the_full_scans() {
         }
     }
 }
+
+/// §6t: collapse, uplift and plume over the cells next to the few AIR/WATER cells (a dug gas
+/// planet) leave the same materials and report as the whole-domain loops, on scrambled worlds
+/// with 1–40 fluid cells and a steep heat field, across many ticks.
+#[test]
+fn sparse_collapse_uplift_plume_match_the_full_scans() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let solids = [MatId::ROCK, MatId::SED, MatId::MIN, MatId::GYP];
+    let (mut collapsed, mut uplifted, mut plumed) = (0u32, 0u32, 0u32);
+    for (fluids, salt) in [(1usize, 3u32), (3, 5), (12, 7), (40, 9)] {
+        let mut params = relief_params(WaterCycle::Driven);
+        params.settle = true;
+        params.energy_in = EnergyInput {
+            sun: 8,
+            day: 600,
+            core: 40,
+            core_r: 0,
+        };
+        let mut base = genesis_sky_radial(&cfg, &params, 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        let n = base.mat.len();
+        for i in 0..n {
+            let m = solids[rnd() as usize % solids.len()];
+            base.set_mat(i, m);
+            base.q[i] = (rnd() % 4000) as i32;
+        }
+        for _ in 0..fluids {
+            let m = if rnd() % 3 == 0 {
+                MatId::WATER
+            } else {
+                MatId::AIR
+            };
+            base.set_mat(rnd() as usize % n, m);
+        }
+        for tick in 0..120u64 {
+            let run = |full: bool| {
+                FULL_SCANS.with(|f| f.set(full));
+                let mut w = base.clone();
+                w.tick = tick * 7 + 1;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                w.collapse_pass(&topo, &mut rep);
+                w.uplift_pass(&topo, &mut rep);
+                w.plume_pass(&topo, &mut rep);
+                FULL_SCANS.with(|f| f.set(false));
+                (w.mat.clone(), rep)
+            };
+            let (fast, full) = (run(false), run(true));
+            assert_eq!(fast, full, "{fluids} fluids tick {tick}");
+            collapsed += full.1.collapsed;
+            uplifted += full.1.uplifted;
+            plumed += full.1.plumed;
+        }
+    }
+    // fluid-rich worlds where the laws fire often (sparse forced on): whole steps agree
+    use super::p6_rest::ANY_SPARSE;
+    for (name, base) in [
+        ("plume slab", plume_slab(WaterCycle::Driven, 40)),
+        ("deep plate", {
+            let mut w = relief_plate_deep(WaterCycle::Driven);
+            let mut p = *w.params();
+            p.energy_in.core = 40;
+            w.set_params(p);
+            w
+        }),
+    ] {
+        let run = |sparse: bool| {
+            FULL_SCANS.with(|f| f.set(!sparse));
+            ANY_SPARSE.with(|f| f.set(sparse));
+            let mut w = base.clone();
+            let mut out = Vec::new();
+            for _ in 0..600 {
+                let r = w.step().unwrap();
+                out.push((format!("{r:?}"), w.mat.clone()));
+            }
+            FULL_SCANS.with(|f| f.set(false));
+            ANY_SPARSE.with(|f| f.set(false));
+            out
+        };
+        let (fast, full) = (run(true), run(false));
+        let fired = |k: &str| {
+            full.iter()
+                .filter(|s| !s.0.contains(&format!("{k}: 0,")))
+                .count()
+        };
+        eprintln!(
+            "{name}: uplift ticks {} plume ticks {} collapse ticks {}",
+            fired("uplifted"),
+            fired("plumed"),
+            fired("collapsed")
+        );
+        assert_eq!(fast, full, "{name}");
+        uplifted += fired("uplifted") as u32;
+        plumed += fired("plumed") as u32;
+    }
+    eprintln!("collapsed {collapsed} uplifted {uplifted} plumed {plumed}");
+    assert!(
+        collapsed > 0 && uplifted > 0 && plumed > 0,
+        "a law never fired"
+    );
+}

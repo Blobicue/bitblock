@@ -31,6 +31,19 @@ thread_local! {
     /// Test switch: the sparse and row-wise scans fall back to their plain whole-domain
     /// loops, so a test can compare the two on one world.
     pub(crate) static FULL_SCANS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Test switch (§6t): the AIR/WATER-sparse scans run on any world, however many fluid
+    /// cells it holds, so a test can compare them with the full loops on fluid-rich worlds.
+    pub(crate) static ANY_SPARSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The most fluid cells a sparse scan takes (`limit`, or no bound under the test switch).
+#[inline]
+fn sparse_limit(limit: usize) -> usize {
+    #[cfg(test)]
+    if ANY_SPARSE.with(|f| f.get()) {
+        return usize::MAX;
+    }
+    limit
 }
 
 #[inline]
@@ -46,6 +59,89 @@ pub(crate) fn full_scans() -> bool {
 }
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
+
+/// §6t: the indices of the cells holding `a` or `b`, in index order, or `None` when there are
+/// more than `limit` of them (a scan over so many is no cheaper than the dense loop).
+fn sparse_cells(mat: &[MatId], a: MatId, b: MatId, limit: usize) -> Option<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut next = 0;
+    while let Some(i) = find_mat2(mat, next, a, b) {
+        if out.len() >= limit {
+            return None;
+        }
+        out.push(i);
+        next = i + 1;
+    }
+    Some(out)
+}
+
+/// §6t: the visit order of a column-top scan (uplift, plume) whose candidate `t` must have a
+/// fluid (AIR/WATER) cell straight above it at its visit. Dense visits every cell in index
+/// order; sparse visits, in the same order, the cells below a fluid cell at the start plus the
+/// cells below any cell a firing turned fluid, so every cell the dense loop would get past
+/// its fluid test is visited, in the same order and seeing the same state.
+enum TopScan {
+    Dense(usize, usize),
+    Sparse(
+        std::collections::BinaryHeap<std::cmp::Reverse<usize>>,
+        Option<usize>,
+    ),
+}
+
+impl TopScan {
+    fn new(w: &ChemWorld, topo: &Topology) -> Self {
+        let n = w.cells.len();
+        if full_scans() {
+            return TopScan::Dense(0, n);
+        }
+        match sparse_cells(&w.mat, MatId::AIR, MatId::WATER, sparse_limit(n / 16)) {
+            Some(fl) => TopScan::Sparse(
+                fl.into_iter()
+                    .filter_map(|a| topo.offset(&w.cells, a, (0, -1, 0)))
+                    .map(std::cmp::Reverse)
+                    .collect(),
+                None,
+            ),
+            None => TopScan::Dense(0, n),
+        }
+    }
+
+    fn next(&mut self) -> Option<usize> {
+        match self {
+            TopScan::Dense(i, n) => {
+                let t = *i;
+                (t < *n).then(|| {
+                    *i += 1;
+                    t
+                })
+            }
+            TopScan::Sparse(heap, last) => {
+                while let Some(std::cmp::Reverse(t)) = heap.pop() {
+                    if last.is_none_or(|l| t > l) {
+                        *last = Some(t);
+                        return Some(t);
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    /// After a firing at `t` rewrote `path`: the cells below a path cell that is fluid now
+    /// become candidates (those past `t`; the dense loop has already passed the rest).
+    fn fired(&mut self, w: &ChemWorld, topo: &Topology, path: &[usize], t: usize) {
+        if let TopScan::Sparse(heap, _) = self {
+            for &p in path {
+                if w.fluid(w.mat[p])
+                    && let Some(b) = topo.offset(&w.cells, p, (0, -1, 0))
+                    && b > t
+                {
+                    heap.push(std::cmp::Reverse(b));
+                }
+            }
+        }
+    }
+}
 
 /// Reused buffers of the outward gas rise and [`ChemWorld::convect_pass`] (the rise's
 /// materials gathered into rsort order and its swaps, the convection density, candidate,
@@ -1277,7 +1373,8 @@ impl ChemWorld {
         let tick = self.tick;
         let mut fired = 0u32;
         let mut path: Vec<usize> = Vec::new();
-        for t in 0..self.cells.len() {
+        let mut scan = TopScan::new(self, topo);
+        while let Some(t) = scan.next() {
             if fired >= UPLIFT_MAX_PER_TICK {
                 break;
             }
@@ -1389,6 +1486,7 @@ impl ChemWorld {
             }
             fired += 1;
             rep.uplifted += 1;
+            scan.fired(self, topo, &path, t);
         }
     }
 
@@ -1441,7 +1539,8 @@ impl ChemWorld {
         let span = (PLUME_REACH_MAX - PLUME_REACH_MIN + 1) as u32;
         let mut path: Vec<usize> = Vec::new();
         let mut chan: Vec<usize> = Vec::new();
-        for t in 0..self.cells.len() {
+        let mut scan = TopScan::new(self, topo);
+        while let Some(t) = scan.next() {
             if fired >= PLUME_MAX_PER_TICK {
                 break;
             }
@@ -1581,6 +1680,7 @@ impl ChemWorld {
             }
             fired += 1;
             rep.plumed += 1;
+            scan.fired(self, topo, &path, t);
         }
     }
 
@@ -1829,7 +1929,40 @@ impl ChemWorld {
         let tick = self.tick;
         let n = self.cells.len();
         let mut moved = vec![false; n];
-        for c in 0..n {
+        // §6t: a cell falls only into its inward target, and that target must be AIR and not
+        // yet moved at the visit, i.e. AIR at the start of the pass (every cell a fall writes
+        // is marked moved). So with few AIR cells only the cells whose inward step lands on one
+        // can fall: visit just those, in index order, with the same body.
+        let sparse = if full_scans() {
+            None
+        } else {
+            sparse_cells(&self.mat, MatId::AIR, MatId::AIR, sparse_limit(n / 128)).map(|air| {
+                let mut cand = Vec::new();
+                for u in air {
+                    for k in 0..26usize {
+                        let k = if k >= 13 { k + 1 } else { k };
+                        let d = (
+                            (k / 9) as i64 - 1,
+                            ((k / 3) % 3) as i64 - 1,
+                            (k % 3) as i64 - 1,
+                        );
+                        if let Some(c) = topo.offset(&self.cells, u, (-d.0, -d.1, -d.2))
+                            && Self::inward_support(o, self.cells[c]).0[0] == d
+                        {
+                            cand.push(c);
+                        }
+                    }
+                }
+                cand.sort_unstable();
+                cand.dedup();
+                cand
+            })
+        };
+        let order: Box<dyn Iterator<Item = usize>> = match sparse {
+            Some(cand) => Box::new(cand.into_iter()),
+            None => Box::new(0..n),
+        };
+        for c in order {
             if moved[c] || !self.rock_like(self.mat[c]) {
                 continue;
             }
