@@ -5133,3 +5133,58 @@ fn gas_rise_gate_matches_the_full_scan() {
         assert_eq!(fast, full, "air {air}");
     }
 }
+
+/// §6o: the +y gas rise over the marked rise candidates and the skip of the N-family scan
+/// (fewer than three H cells) leave the same materials, heat and report as the whole-domain
+/// loops, on scrambled worlds with 0–4 H cells.
+#[test]
+fn sparse_rise_and_n_skip_match_the_full_scans() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let pal = [
+        MatId::AIR,
+        MatId::WATER,
+        MatId::STEAM,
+        MatId::O2,
+        MatId::CO2,
+        MatId::N,
+        MatId::ROCK,
+        MatId::NH3,
+    ];
+    for (h_cells, salt) in [(0usize, 3u32), (1, 5), (2, 7), (3, 9), (4, 11)] {
+        let mut params = relief_params(WaterCycle::Classic);
+        params.gas_rise = true;
+        params.elements = true;
+        params.combine = true;
+        let mut base = genesis_sky_radial(&cfg, &params, 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        let n = base.mat.len();
+        for i in 0..n {
+            let m = pal[rnd() as usize % pal.len()];
+            base.set_mat(i, m);
+            base.q[i] = (rnd() % 400) as i32;
+        }
+        for k in 0..h_cells {
+            base.set_mat((k * 7919 + salt as usize) % n, MatId::H);
+        }
+        for tick in [5u64, 30, 100, 131] {
+            let run = |full: bool| {
+                FULL_SCANS.with(|f| f.set(full));
+                let mut w = base.clone();
+                w.tick = tick;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                let ok = w.combine2_pass(&topo, &mut rep).is_ok();
+                FULL_SCANS.with(|f| f.set(false));
+                (ok, w.mat.clone(), w.q.clone(), rep)
+            };
+            let (fast, full) = (run(false), run(true));
+            assert!(full.3.rose > 0, "nothing rose with {h_cells} H");
+            assert_eq!(fast, full, "{h_cells} H tick {tick}");
+        }
+    }
+}

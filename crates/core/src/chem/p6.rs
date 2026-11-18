@@ -897,7 +897,7 @@ fn add_shares(dst: &mut [i32], src: &[i32]) {
 #[inline(always)]
 fn heat_shares_six(q: &[i32], per: &mut [i32], nq: &mut [i32], emit: impl Fn(i32) -> i32) {
     for ((&qi, p), k) in q.iter().zip(per.iter_mut()).zip(nq.iter_mut()) {
-        let share = emit(qi).max(0) / 6;
+        let share = emit(qi);
         *p = share;
         *k = qi - share * 6;
     }
@@ -1118,6 +1118,9 @@ pub(crate) struct Topology {
     /// `cell_up[rsort[k]] == rsort[shell_up[k]]`, `NO_SLOT` where `shell_up` is), built on
     /// first use. Lets the convection density test run in domain order.
     cell_up: std::sync::OnceLock<Vec<u32>>,
+    /// Each cell's position in `rise` as its lower cell, `NO_SLOT` for a cell with no cell
+    /// above (built on first use). Lets the +y gas rise visit only its rising cells.
+    rise_pos: std::sync::OnceLock<Vec<u32>>,
     /// The inverse of `ysort` (built on first use): `ysort[ypos[i]] == i`. Lets a sparse scan
     /// visit a few cells in `ysort` order without walking all of it.
     ypos: std::sync::OnceLock<Vec<u32>>,
@@ -1156,6 +1159,7 @@ impl Topology {
             cell_roll: std::sync::OnceLock::new(),
             rpos: std::sync::OnceLock::new(),
             cell_up: std::sync::OnceLock::new(),
+            rise_pos: std::sync::OnceLock::new(),
             ypos: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
             space_faces: Vec::new(),
@@ -1305,6 +1309,17 @@ impl Topology {
                 }
             }
             up
+        })
+    }
+
+    /// [`Topology::rise_pos`]: each cell's position in `rise` (built on first use).
+    pub(crate) fn rise_pos(&self) -> &[u32] {
+        self.rise_pos.get_or_init(|| {
+            let mut pos = vec![NO_SLOT; self.ysort.len()];
+            for (k, &(i, _)) in self.rise.iter().enumerate() {
+                pos[i as usize] = k as u32;
+            }
+            pos
         })
     }
 
@@ -2052,7 +2067,12 @@ impl ChemWorld {
         let dq = i64::from(self.params.dq);
         let co2n: i64 = match self.params.greenhouse {
             Greenhouse::Off => 0,
-            _ => self.mat.iter().filter(|m| **m == MatId::CO2).count() as i64,
+            // Counted 255 cells at a time in `u8` lanes (the same count, vectorised).
+            _ => self
+                .mat
+                .chunks(255)
+                .map(|c| i64::from(c.iter().map(|m| u8::from(*m == MatId::CO2)).sum::<u8>()))
+                .sum(),
         };
         let mut nq = std::mem::take(&mut self.heat_scratch.nq);
         // Each emitting cell adds the same `per` to each face neighbour and keeps the rest;
@@ -2081,10 +2101,13 @@ impl ChemWorld {
                     // All but the rim cells have six neighbours. Do that branch-free whole-
                     // slice case first, then patch just the rim (live < 6) with the original
                     // per-live quotient, before any cell reads a share.
+                    // `(q / divisor).max(0) / 6` in one quotient: for `q >= 0` truncation
+                    // composes (`q / d / 6 == q / (6 d)`), and for `q < 0` both are 0.
                     if divisor == 20 {
-                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q / 20);
+                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q.max(0) / 120);
                     } else {
-                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q / divisor);
+                        let six = 6 * divisor;
+                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q.max(0) / six);
                     }
                     for &(i, _) in &topo.space_faces {
                         let i = i as usize;
@@ -2338,7 +2361,11 @@ impl ChemWorld {
     }
 
     /// planet6 `stepCombine2` (everything after its `elements` gate).
-    fn combine2_pass(&mut self, topo: &Topology, rep: &mut StepReport) -> Result<(), StepError> {
+    pub(crate) fn combine2_pass(
+        &mut self,
+        topo: &Topology,
+        rep: &mut StepReport,
+    ) -> Result<(), StepError> {
         if !self.params.elements {
             return Ok(());
         }
@@ -2399,12 +2426,18 @@ impl ChemWorld {
                 }
             }
             // N + 3 H -> NH3. Exact skip: every firing needs three H cells and this
-            // scan never makes H, so with no H in the domain no N cell can fire.
-            let mut next = if find_mat(&self.mat, 0, MatId::H).is_some() {
-                0
-            } else {
-                self.mat.len()
-            };
+            // scan never makes H, so with fewer than three H in the domain no N cell can
+            // fire (the test-only full scans skip only with none).
+            let need = if super::p6_rest::full_scans() { 1 } else { 3 };
+            let mut h_cells = 0;
+            let mut at = 0;
+            while h_cells < need
+                && let Some(h) = find_mat(&self.mat, at, MatId::H)
+            {
+                h_cells += 1;
+                at = h + 1;
+            }
+            let mut next = if h_cells >= need { 0 } else { self.mat.len() };
             while let Some(i) = find_mat(&self.mat, next, MatId::N) {
                 next = i + 1;
                 if self.q[i] < 250 {
@@ -2570,6 +2603,8 @@ impl ChemWorld {
             // (the outward neighbours are precomputed in `Topology::shell_up`)
             if self.grav_core(topo).is_some() {
                 self.gas_rise_outward(topo, rep);
+            } else if !super::p6_rest::full_scans() {
+                self.gas_rise_up(topo, rep);
             } else {
                 for &(i, up) in &topo.rise {
                     let (i, up) = (i as usize, up as usize);

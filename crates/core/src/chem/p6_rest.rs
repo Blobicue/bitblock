@@ -34,7 +34,7 @@ thread_local! {
 }
 
 #[inline]
-fn full_scans() -> bool {
+pub(crate) fn full_scans() -> bool {
     #[cfg(test)]
     {
         FULL_SCANS.with(|f| f.get())
@@ -62,6 +62,12 @@ pub(crate) struct ConvectScratch {
     swapped: Vec<u64>,
     /// One bit per domain cell: its pair with its outward neighbour passes the density test.
     pass: Vec<u64>,
+    /// One bit per `ysort` position still to visit in the sparse flow scan (see
+    /// [`ChemWorld::flow_pass`]).
+    flow_queue: Vec<u64>,
+    /// One bit per `Topology::rise` pair: its lower cell is rising (see
+    /// [`ChemWorld::gas_rise_up`]).
+    rise_cand: Vec<u64>,
     /// One bit per rsort position: the parcel there moved this tick.
     moved: Vec<u64>,
 }
@@ -452,6 +458,64 @@ impl ChemWorld {
             self.set_mat(up, below);
             self.set_mat(i, above);
             rep.rose += 1;
+        }
+        self.convect_scratch = sc;
+    }
+
+    /// planet6's +y gas rise (`Topology::rise` order: y descending, then x, z): a rising cell
+    /// trades places with the AIR or WATER cell above it.
+    ///
+    /// The whole-list scan visits every pair. Only a pair whose lower cell is rising can
+    /// trade, and that cell still holds its tick-start material when its pair is visited: a
+    /// trade writes only its own two cells, the cell above sits one row higher (its own pair
+    /// came earlier) and each cell is the lower cell of at most one pair. So the pairs whose
+    /// lower cell is rising at the start are found first, in domain order (`rise_pos`), and
+    /// visited in list order with the same tests on the live materials and the same
+    /// `set_mat` calls in the same order. With no AIR or WATER in the domain nothing can trade
+    /// (a trade keeps both counts), so the scan is skipped.
+    pub(crate) fn gas_rise_up(&mut self, topo: &Topology, rep: &mut StepReport) {
+        if find_mat2(&self.mat, 0, MatId::AIR, MatId::WATER).is_none() {
+            return;
+        }
+        let rising: [bool; 256] = std::array::from_fn(|m| self.is_rising(MatId(m as u8)));
+        let rise_pos = topo.rise_pos();
+        let mut sc = std::mem::take(&mut self.convect_scratch);
+        let cand = &mut sc.rise_cand;
+        cand.clear();
+        cand.resize(topo.rise.len().div_ceil(64), 0);
+        for (i, m) in self.mat.iter().enumerate() {
+            if rising[m.0 as usize] {
+                let k = rise_pos[i];
+                if k != NO_SLOT {
+                    cand[k as usize / 64] |= 1 << (k % 64);
+                }
+            }
+        }
+        for (w, &word) in sc.rise_cand.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let k = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let (i, up) = topo.rise[k];
+                let (i, up) = (i as usize, up as usize);
+                if !rising[self.mat[i].0 as usize] {
+                    continue;
+                }
+                let above = self.mat[up];
+                if above != MatId::AIR && above != MatId::WATER {
+                    continue;
+                }
+                // §5u: displaced WATER may not be pushed down into a radial-only shell cell
+                if above == MatId::WATER && self.shell_blocked(i) {
+                    continue;
+                }
+                if self.roll(topo, 0xb0b81e, i) < 500 {
+                    let below = self.mat[i];
+                    self.set_mat(up, below);
+                    self.set_mat(i, above);
+                    rep.rose += 1;
+                }
+            }
         }
         self.convect_scratch = sc;
     }
@@ -2161,48 +2225,42 @@ impl ChemWorld {
         // visits, in `ysort` order, just the WATER faces of the AIR cells plus the faces of
         // each AIR cell a move leaves behind (a move's target is one of those). Every other
         // cell of the full scan is a no-op visit: not WATER, or no AIR face when visited.
+        // The positions to visit are kept as one bit per `ysort` position and swept in
+        // ascending order: a move queues only positions after the current one, so the sweep
+        // meets each queued position once, in order (the same visits as a sorted queue).
         let ypos = topo.ysort_pos();
-        let mut cand: Vec<u32> = air
-            .iter()
-            .flat_map(|&a| topo.nb6(&self.cells, a as usize))
-            .flatten()
-            .filter(|&j| self.mat[j] == MatId::WATER)
-            .map(|j| ypos[j])
-            .collect();
-        cand.sort_unstable();
-        cand.dedup();
-        let mut later = std::collections::BinaryHeap::new();
-        let mut at = 0;
-        let mut last = None;
-        loop {
-            let next = match (cand.get(at), later.peek()) {
-                (Some(&c), Some(&std::cmp::Reverse(l))) if l < c => {
-                    later.pop();
-                    l
+        let mut queue = std::mem::take(&mut self.convect_scratch.flow_queue);
+        queue.clear();
+        queue.resize(topo.ysort.len().div_ceil(64), 0);
+        for &a in &air {
+            for j in topo.nb6(&self.cells, a as usize).into_iter().flatten() {
+                if self.mat[j] == MatId::WATER {
+                    let p = ypos[j] as usize;
+                    queue[p / 64] |= 1 << (p % 64);
                 }
-                (Some(&c), _) => {
-                    at += 1;
-                    c
-                }
-                (None, Some(&std::cmp::Reverse(l))) => {
-                    later.pop();
-                    l
-                }
-                (None, None) => break,
-            };
-            if last.is_some_and(|p| next <= p) {
-                continue; // queued twice
             }
-            last = Some(next);
-            let i = topo.ysort[next as usize] as usize;
+        }
+        let mut w = 0;
+        while w < queue.len() {
+            let bits = queue[w];
+            if bits == 0 {
+                w += 1;
+                continue;
+            }
+            let b = bits.trailing_zeros() as usize;
+            queue[w] = bits & (bits - 1);
+            let next = w * 64 + b;
+            let i = topo.ysort[next] as usize;
             if self.flow_cell(topo, i, rep) {
                 for j in topo.nb6(&self.cells, i).into_iter().flatten() {
-                    if ypos[j] > next {
-                        later.push(std::cmp::Reverse(ypos[j]));
+                    let p = ypos[j] as usize;
+                    if p > next {
+                        queue[p / 64] |= 1 << (p % 64);
                     }
                 }
             }
         }
+        self.convect_scratch.flow_queue = queue;
     }
 
     /// The AIR cells in index order when they are few enough (at most 1/8 of the domain)
