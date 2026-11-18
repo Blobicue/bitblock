@@ -863,6 +863,26 @@ pub(crate) fn find_mat(mat: &[MatId], from: usize, m: MatId) -> Option<usize> {
     None
 }
 
+/// Bit `k` set iff `hit(mat[k], q[k])`, for one block of at most 64 cells. A scan whose visits
+/// write only the visited cell (and test only that cell's own material and heat to decide
+/// whether it acts) may take a block's hits at once: no visit changes another cell's test.
+#[inline]
+pub(crate) fn hit_mask(mat: &[MatId], q: &[i32], hit: impl Fn(MatId, i32) -> bool) -> u64 {
+    debug_assert!(mat.len() <= 64 && mat.len() == q.len());
+    if let (Ok(m), Ok(q)) = (<&[MatId; 64]>::try_from(mat), <&[i32; 64]>::try_from(q)) {
+        // a whole block: a fixed trip count the compiler turns into vector compares
+        let mut b = 0u64;
+        for k in 0..64 {
+            b |= (hit(m[k], q[k]) as u64) << k;
+        }
+        return b;
+    }
+    mat.iter()
+        .zip(q)
+        .enumerate()
+        .fold(0u64, |b, (k, (&m, &x))| b | ((hit(m, x) as u64) << k))
+}
+
 /// `dst[k] += src[k]` wrapping, the heat law's share additions over one row slice.
 #[inline]
 fn add_shares(dst: &mut [i32], src: &[i32]) {
@@ -1104,6 +1124,9 @@ pub(crate) struct Topology {
     /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
     /// every tick, read one sequential word per cell instead of the cell's coordinate.
     rsort_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
+    /// The inverse of `ysort` (built on first use): `ysort[ypos[i]] == i`. Lets a sparse scan
+    /// visit a few cells in `ysort` order without walking all of it.
+    ypos: std::sync::OnceLock<Vec<u32>>,
     /// The domain's rows as z-runs, when each row is one contiguous run.
     pub(crate) zruns: Option<ZRuns>,
 }
@@ -1137,6 +1160,7 @@ impl Topology {
             rsort: Vec::new(),
             shell_up: Vec::new(),
             rsort_roll: std::sync::OnceLock::new(),
+            ypos: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
             space_faces: Vec::new(),
             core: None,
@@ -1273,6 +1297,17 @@ impl Topology {
             })
             .collect();
         self.rsort = rs;
+    }
+
+    /// Each cell's position in `ysort` (the inverse permutation, built on first use).
+    pub(crate) fn ysort_pos(&self) -> &[u32] {
+        self.ypos.get_or_init(|| {
+            let mut pos = vec![0u32; self.ysort.len()];
+            for (k, &i) in self.ysort.iter().enumerate() {
+                pos[i as usize] = k as u32;
+            }
+            pos
+        })
     }
 
     /// [`wide_roll_cell`] of every rsort entry under `key`, in rsort order; `None` when the
@@ -2174,22 +2209,37 @@ impl ChemWorld {
     }
 
     fn phase_pass(&mut self, rep: &mut StepReport) {
-        // Only WATER and ICE cells change, and each visit writes only its own cell.
-        let mut next = 0;
-        while let Some(i) = find_mat2(&self.mat, next, MatId::WATER, MatId::ICE) {
-            next = i + 1;
-            let m = self.mat[i];
-            if m == MatId::WATER && self.q[i] < FREEZE_AT {
-                self.set_mat(i, MatId::ICE);
-                self.q[i] = self.q[i].wrapping_add(2 * SL_FUSE);
-                rep.froze += 1;
-                self.mark(i, super::p6_rest::MARK_PHASE);
-            } else if m == MatId::ICE && self.q[i] > MELT_AT {
-                self.set_mat(i, MatId::WATER);
-                self.q[i] = self.q[i].wrapping_sub(2 * SL_FUSE);
-                rep.melted += 1;
-                self.mark(i, super::p6_rest::MARK_PHASE);
+        // Only WATER below FREEZE_AT and ICE above MELT_AT change, and each visit writes
+        // only its own cell, so a block's hits are known before its first visit.
+        let n = self.mat.len();
+        let mut base = 0;
+        while base < n {
+            let end = (base + 64).min(n);
+            let mut bits = hit_mask(&self.mat[base..end], &self.q[base..end], |m, q| {
+                (m == MatId::WATER) & (q < FREEZE_AT) | (m == MatId::ICE) & (q > MELT_AT)
+            });
+            while bits != 0 {
+                let i = base + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                self.phase_cell(i, rep);
             }
+            base = end;
+        }
+    }
+
+    #[inline]
+    fn phase_cell(&mut self, i: usize, rep: &mut StepReport) {
+        let m = self.mat[i];
+        if m == MatId::WATER && self.q[i] < FREEZE_AT {
+            self.set_mat(i, MatId::ICE);
+            self.q[i] = self.q[i].wrapping_add(2 * SL_FUSE);
+            rep.froze += 1;
+            self.mark(i, super::p6_rest::MARK_PHASE);
+        } else if m == MatId::ICE && self.q[i] > MELT_AT {
+            self.set_mat(i, MatId::WATER);
+            self.q[i] = self.q[i].wrapping_sub(2 * SL_FUSE);
+            rep.melted += 1;
+            self.mark(i, super::p6_rest::MARK_PHASE);
         }
     }
 

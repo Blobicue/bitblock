@@ -4977,3 +4977,81 @@ fn block_two_material_search_matches_current_slice() {
         }
     }
 }
+
+/// §6i: the AIR-driven sparse flow and dissolve scans and the row-wise erode visit the same
+/// cells in the same order as the whole-domain loops: on scrambled worlds (sparse AIR, and
+/// AIR past the sparse limit) every pass leaves identical materials, heat and report counts.
+#[test]
+fn sparse_air_and_row_scans_match_the_whole_domain_loops() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let pal = [
+        MatId::WATER,
+        MatId::ROCK,
+        MatId::MIN,
+        MatId::GYP,
+        MatId::SED,
+        MatId::ICE,
+    ];
+    for (air_pct, salt) in [(1u32, 3u32), (4, 5), (9, 7), (30, 9)] {
+        let mut base = genesis_sky_radial(&cfg, &sky_params(), 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        for i in 0..base.mat.len() {
+            let r = rnd();
+            let m = if r % 100 < air_pct {
+                MatId::AIR
+            } else {
+                pal[(r / 100) as usize % pal.len()]
+            };
+            base.set_mat(i, m);
+            base.q[i] = (rnd() % 400) as i32;
+        }
+        for tick in [5u64, 30, 100, 130, 245] {
+            let run = |full: bool| {
+                FULL_SCANS.with(|f| f.set(full));
+                let mut w = base.clone();
+                w.tick = tick;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                w.water_cycle_pass(&topo, &mut rep);
+                w.erode_pass(&topo, &mut rep);
+                w.dissolve_pass(&topo, &mut rep);
+                w.flow_pass(&topo, &mut rep);
+                FULL_SCANS.with(|f| f.set(false));
+                let counts = (
+                    rep.evaporated,
+                    rep.rained,
+                    rep.eroded,
+                    rep.dissolved,
+                    rep.flowed,
+                );
+                (w.mat.clone(), w.q.clone(), w.world.len(), counts)
+            };
+            let (fast, full) = (run(false), run(true));
+            assert!(full.3.4 > 0, "flow moved nothing at air {air_pct}%");
+            assert_eq!(fast, full, "air {air_pct}% tick {tick}");
+        }
+    }
+}
+
+/// `hit_mask` is the per-cell test packed into bits, for whole and short blocks.
+#[test]
+fn hit_mask_packs_the_cell_test() {
+    use super::p6::hit_mask;
+    let mut seed = 17u32;
+    let mut rnd = || {
+        seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+        seed >> 8
+    };
+    let mat: Vec<MatId> = (0..200).map(|_| MatId((rnd() % 6) as u8)).collect();
+    let q: Vec<i32> = (0..200).map(|_| (rnd() % 60) as i32 - 10).collect();
+    let hit = |m: MatId, x: i32| (m == MatId(2)) & (x > 20) | (m == MatId(4)) & (x < 0);
+    for (a, b) in [(0, 64), (64, 128), (100, 164), (128, 200), (5, 6), (7, 7)] {
+        let want = (a..b).fold(0u64, |acc, k| acc | ((hit(mat[k], q[k]) as u64) << (k - a)));
+        assert_eq!(hit_mask(&mat[a..b], &q[a..b], hit), want, "{a}..{b}");
+    }
+}
