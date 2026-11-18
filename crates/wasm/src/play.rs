@@ -1564,7 +1564,10 @@ fn mirror_chem(
             let i = block * 64 + mask.trailing_zeros() as usize;
             mask &= mask - 1;
             let coord = cells[i];
-            let want = want_probe.is_on(coord);
+            // The chem world's bit follows from the material except at the bedrock cell.
+            let want = bitblock_core::chem::ChemWorld::occupancy_of(mats[i - block * 64], coord)
+                .unwrap_or_else(|| want_probe.is_on(coord));
+            debug_assert_eq!(want, want_probe.is_on(coord));
             let have = have_probe.is_on(coord);
             let toggled = want != have;
             if !full {

@@ -686,6 +686,22 @@ impl ChemWorld {
         &self.world
     }
 
+    /// The occupancy bit of the domain cell at `coord` holding `m`, when the material alone
+    /// decides it: on for every non-air material, off for air anywhere but the bedrock cell
+    /// (only the bedrock bit can stay on under air). Every material write goes through
+    /// `set_mat`, which keeps exactly this in step (and the books check the non-air half);
+    /// `None` means read the bit from [`Self::world`].
+    #[inline]
+    pub fn occupancy_of(m: MatId, coord: Coord) -> Option<bool> {
+        if m != MatId::AIR {
+            Some(true)
+        } else if is_bedrock(coord) {
+            None
+        } else {
+            Some(false)
+        }
+    }
+
     pub(crate) fn index_of(&self, coord: Coord) -> Option<usize> {
         // The cached topology indexes exactly `cells` (every domain change drops it).
         match &self.topo {
