@@ -335,8 +335,10 @@ pub struct Renderer {
     /// stored colour and records the pixel in `recolour_marks` instead of losing.
     marking: bool,
     /// Strictly hidden bits proved during recolour. Tint-only frames keep the same depths;
-    /// full renders and occupancy changes discard these proofs before any reuse.
-    recolour_hidden: crate::world::CoordMap<Coord, ()>,
+    /// full renders and occupancy changes discard these proofs before any reuse. §6v: per-chunk
+    /// bit words rather than a hash set of coordinates, so a busy gas tick neither hashes each
+    /// loud bit nor stalls a frame rehashing the set as it grows.
+    recolour_hidden: IndexedBits,
     recolour_marks: Vec<usize>,
     /// Per pixel, whether a second fragment may sit at exactly its stored depth: set by every
     /// equal-depth meeting in `plot` and the span writer, cleared by a strictly nearer write.
@@ -536,7 +538,7 @@ impl Renderer {
             delta_compactions: 0,
             recording: false,
             marking: false,
-            recolour_hidden: crate::world::CoordMap::default(),
+            recolour_hidden: IndexedBits::default(),
             recolour_marks: Vec::new(),
             tie: Vec::new(),
             marks_only: false,
@@ -1683,7 +1685,7 @@ impl Renderer {
         // A prior tint-only frame already proved that this bit loses every depth test
         // strictly. Recolour changes no fragment depth or geometry, so it still writes and
         // marks nothing. Any occupancy or projection change clears the proofs first.
-        if self.marking && self.recolour_hidden.contains_key(&coord) {
+        if self.marking && self.recolour_hidden.contains(coord) {
             #[cfg(test)]
             {
                 let center = coord_center(coord);
@@ -1784,7 +1786,7 @@ impl Renderer {
                 && covering < nearest_possible
             {
                 if self.marking {
-                    self.recolour_hidden.insert(coord, ());
+                    self.recolour_hidden.insert(coord);
                 }
                 #[cfg(test)]
                 {
