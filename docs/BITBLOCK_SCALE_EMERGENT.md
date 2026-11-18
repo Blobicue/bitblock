@@ -3853,6 +3853,66 @@ Priority 1: a place that grows the chem domain still forced a full redraw, which
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6u. Exact mirror masks, indexed genesis, one-pass convection; gas r92 wasm step −3 ms, genesis −30%; cap stays 90 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+Focus: gas r92's first window (dense convection on an all-gas ball), then genesis. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 26bff9b | play: the chem mirror skips both occupancy probes for a material change where neither the old nor the new id is AIR (such a cell is on in both worlds); new test `play_world_mirrors_chem_occupancy_through_edits` | [44317422232](https://github.com/Blobicue/bitblock/actions/runs/44317422232) |
+| 8954761 | play: the mirror builds its change and solid masks 8 cells per u64 word (SWAR byte-nonzero), no per-cell branch; test `swar_mask_matches_bytewise_compare` | [44318395537](https://github.com/Blobicue/bitblock/actions/runs/44318395537) |
+| 8c9166d | chem: genesis sorts a packed `(key, hash, d2<<32 \| index)` candidate key and writes layers into loop-index arrays; cells are emitted in loop order, which is ascending `Coord`, so the coordinate sort is gone; exact capacity reserved; test `indexed_genesis_matches_the_sorted_construction` (reference = the former construction) | [44319663511](https://github.com/Blobicue/bitblock/actions/runs/44319663511) |
+| de8b425 | chem: convection's density test and roll run per 64-cell word in one pass (no per-cell pass bit array, slice iteration without per-cell bounds checks) | [44320694870](https://github.com/Blobicue/bitblock/actions/runs/44320694870) |
+| 9e37e52 | www refresh | [44322417464](https://github.com/Blobicue/bitblock/actions/runs/44322417464) |
+
+**2. Cause and fix.**
+- *Mirror.* Gas convection swaps hundreds of thousands of parcels per step, and each changed cell paid two chunk-probe lookups. A gas/rock-to-gas/rock change never changes occupancy, and nothing else edits the play world, so the probes are skipped (asserted in debug and checked against the chem occupancy after every step of dig/place runs). The compare loop now works on 8 ids per word: `x ^ y` gives the changed bytes, and since AIR = 0 the byte-nonzero masks of both words give "solid".
+- *Genesis.* Two comparison sorts of 40–48-byte tuples (candidates, then all cells by coordinate) plus Vec growth. The loop index is monotone in the offset, so a 24-byte key sorts in the same order. The final coordinate sort is the loop order itself.
+- *Convection.* The test pass, the bit array and the roll pass were three walks; now there is one walk per word, rolling only the passing bits. This order and these values are unchanged (a roll is a pure function of cell and tick).
+- simd128 was already on for the wasm build. The remaining density test is a table gather per cell, which simd128 has no gather for, so no explicit SIMD was added.
+
+**3. Timings.**
+
+| measurement | before §6u (de923b0) | after (9e37e52) |
+|---|---|---|
+| wasm gas r92 step (node, `wasmstep` 30+60, 3 interleaved runs, median) | 58.3–59.6 ms | 55.2–56.3 ms |
+| wasm gas r92 init (genesis + setup) | 1176–1198 ms | 802–808 ms |
+| wasm mirror_chem self (profile, 40 steps) | 879 samples | 551 samples |
+| native gas r92 `ChemPlay::new` (genesis) | 855–860 ms | 561–618 ms |
+| native gas r92 first step / steady / convection | 368–370 / 28–29 / 19 ms | 361–437 / 27–29 / 18–19 ms (convection is native-bound by the same memory traffic; the win is wasm-side) |
+
+**4. Chrome cadence (study build of de8b425 with the cap lifted; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, first window in brackets).**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r92 | 15.00 (15), 15.00 (15), 15.10 (15.1), 14.33 (12.7); busy 81–86% | 15.27 (15.7), 15.00 (15), 15.13 (15.1), 15.00 (15); 81–84% |
+| ocean r92 | 15.47 (16.4), 14.60 (13.8), 15.60 (16.8), 15.57 (16.8); 83–85% | 15.57, 15.57, 15.53, 15.50; 82–83% |
+
+Gas busy fell from 87–91% (§6t) to 81–86%. **Cap: stays 90.** Set 1 has one gas run with a 12.7 first window (14.33 mean) and one ocean run with a 13.8 first window (14.60), so the rule (both sets, first windows included) does not pass.
+
+Domain-growing place / dig at r90 on :8765 (`placefps6t.mjs`): ocean worst first 0.5 s window 13.4 fps (gap 167 ms), gas 12.7 (gaps 150 / 117 ms), then 15.0; digs 14.8–17.1.
+
+**5. Exactness.**
+- After each commit: all 16 `delta_eq` outputs and `fp_long 36 600` are byte-identical to §6r's, 17/17. Parity md5s are unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6t wasm vs §6u wasm: 7/7 SAME. Native `convected` counts per step are identical before and after.
+- **Frame hashes: no re-baseline; old = new.** Default world `pmbj7za5…` → `pmbj7za5…`, frame `nx4b62u5…` → `nx4b62u5…`. Gas r92 node: world `vbv6ockz…`, frame `3yu6bcrb…` both builds.
+
+**6. Next wall.**
+- Gas convection: still ~18 ms native, ~19 ms wasm. That is a per-cell gather of mass and heat through `cell_up`. A real cut needs a different data layout: parcels kept in rsort order, so the outward neighbour is a small stride.
+- The render of gas's many swapped cells (draw_bit_with ~10 ms/step wasm).
+- The domain-growing place frame: 117–167 ms gap, from the linear topology passes.
+
+**Build.** wasm (9e37e52, ABI 17) md5 `cfdc1473b4f46486ccf92c65fcd92448` (1,553,418 B), play.html `a00a0ae7cb1939071bbf05fff8f3423d`, bitblock-lab.html `542db2c57e2010dbc21362403503dd8b`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 15.0 and gas r90 14.7 fps, `books=ok energy_drift=0 error=none`.
+  - r94 clamps to 90. Only favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6u/{place_2,place_4,playtest}/*.png`.
+- Data: `/workspace/render_scale/s6u/{STATUS.md,eq1..eq4,parity1..4.log,wasm_parity_wt.log,node_ab.log,native_fw.log,set1.log,set2.log,place_*.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
