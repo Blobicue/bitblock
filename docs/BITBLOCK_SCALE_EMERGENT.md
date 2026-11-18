@@ -4120,6 +4120,86 @@ Dig / place at r92 on :8765 (`placefps6t.mjs`, 936eed0 www):
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6y. Combine2 presence pass, direct convection swaps: r94 misses the cap rule by one window; cap stays 92 (2026-11-18, branch `chem/render-scale-2026-11`), with every hash and book unchanged
+
+Focus: headroom for r94 (gas r92 set 3 sat at 15.00, and a first window after a place read 14.0). The targets were the convection test loop, scan and apply, heat, and combine2. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| e24bebd | chem: combine2 finds which of C, Ca, N, O, H and STEAM the domain holds in one fused pass (`mats_present`, 64-cell blocks, stops once all are seen). Scans for absent ids are skipped. C and STEAM are re-checked after the network, which can make any material. Test-only full scans skip nothing | [44369821240](https://github.com/Blobicue/bitblock/actions/runs/44369821240) |
+| 95b0567 | chem: the convection apply loop swaps `mat` and `q` directly. Both parcels are rising gas with non-zero mass, never AIR, so the two `set_mat` calls only wrote materials (debug-asserted) | [44370785883](https://github.com/Blobicue/bitblock/actions/runs/44370785883) |
+| 2d4ab1a | www refresh (cap unchanged at 92) | [44374125783](https://github.com/Blobicue/bitblock/actions/runs/44374125783) |
+
+**2. Cause and fix.**
+- The wasm r94 gas step is ~54.5 ms (names build, node). `step_laws` takes 42.4 ms of it:
+  - convection test + roll + scatter: 17–18 ms
+  - heat: 8.6–9 ms
+  - combine2: 4.3 ms
+  - convection scan: 3.4 ms
+  - convection apply: 3.5 ms
+  - other passes: ~7 ms
+
+  Outside `step_laws`: render 6.2–6.5 ms, mirror and tick ~5 ms.
+- In ocean r94 (~70.6 ms) the render is 15.4 ms (`draw_bit_with` 6.2, sorting and dedup ~4.3). Then come flow 9, combine2 8.9, heat 8.8, phase 4.3 and settle 3.3 ms.
+- J: combine2 ran up to eight `find_mat` sweeps for ids the domain often lacks. One fused presence pass replaces them. Native gas combine2 went 3.47 → 3.3 ms; the presence pass costs 0.44 ms, the network ~1.5–1.8 and gas rise ~1.
+- K: the apply loop called `set_mat` twice per swap. Node r94 gas over base: median 52.1–54.2 → 50.5–52.2 ms, min 49.9–51.2 → 48.1–49.9 ms. This box is noisy (±1.5 ms).
+- Tried and dropped (no gain, or worse):
+  - an f64 density test, which is also not exact in general;
+  - a contiguous-offset segment test loop (segments average 14.8 cells; native 6.7–6.9 vs ~7 ms; worse in wasm);
+  - a per-cell mass prepass with 8-lane blocks (wasm +2–3 ms);
+  - `mass != 0` in place of the rising table;
+  - heat's `q / 120` as a 32×32→64 multiply-shift. It is exact for all `0 ≤ q ≤ i32::MAX` (checked exhaustively) and 0.6 ms faster in a wasm microbench, but in node r94 gas it was 51.7 / 51.2 vs 52.0 / 51.2 ms.
+- The test loop is compute-bound, not memory-bound.
+
+**3. Chrome cadence at r94 (study build = J+K with the cap lifted; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, windows in brackets).**
+
+| run | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| 1 | 15.00 [15,15,15] | 15.53 [16.6,15,15] | 15.00 [15,15,15] | 15.00 [**14.9**,15,15.1] |
+| 2 | 15.00 [15,15,15] | 15.10 [15.3,15,15] | 15.00 [15,15,15] | 15.50 [16.5,15,15] |
+| 3 | 15.10 [15,15.3,15] | 15.57 [16.7,15,15] | 15.00 [15,15,15] | 15.27 [16.5,14.3,15] |
+| 4 | 15.07 [15,15,15.2] | 15.63 [16.9,15,15] | 14.87 [15,**14.6**,15] | 15.20 [15.4,15.2,15] |
+| mean | 15.04 | 15.46 | **14.97** | 15.24 |
+| busy | 72–74% | 82–83% | 72–73% | 82–84% |
+
+A single-set probe before these passed: gas 15.03 / 15.03 / 15.00 / 15.00, ocean 15.60 / 15.47 / 15.53 / 15.23.
+
+**Cap: stays 92.** Set 2 gas averages 14.97 < 15, so the rule fails at r94.
+- The miss is one second window (14.6, step_max 64 ms) in one run. Gas is only 72–73% busy, so this is the same host-level one-off stall as §6x, not steady app work. More mean headroom does not remove it. The cap rule was not changed.
+- Ocean is now the tighter preset by load (82–84% busy). Ocean set 2 run 1 had a first window of 14.9.
+
+Dig / place at r92 on :8765 (`placefps6t.mjs`, 2d4ab1a www):
+- gas: every window ≥ 15.0, except one at 13.8 (1.5 s after the second place) and 14.8 once after a dig; gaps ≤ 100 ms.
+- ocean: 14.7–17.1, gaps ≤ 83 ms.
+- `books=ok energy_drift=0 error=none` throughout; no page errors.
+
+**4. Exactness.**
+- After J and after K: all 16 `delta_eq` outputs and `fp_long` are byte-identical, 17/17 each time. Parity md5s are unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6x wasm vs §6y wasm: 7/7 SAME.
+- **Frame hashes: no re-baseline; old = new.**
+  - Default world `pmbj7za5…`, frame `nx4b62u5…`.
+  - Node r90 gas `vbv6ockz…` / `ymhicrsu…`.
+  - Node r90 ocean `wtevn2pz…` / `smmn3aox…`.
+  - Node r92 gas `2lniroz3…` / `6ucp2u65…`.
+  - Node r92 ocean `3skk4kg6…` / `xaiybmjb…`.
+  - r94 gas (cap lifted) frame `7mz2leqp…` for the base build and every §6y variant.
+
+**5. Next wall.**
+- Gas at r94 has ~27% idle, yet one host stall per set can still pull a mean under 15. Passing the rule at r94 as written needs the loop to absorb a 60–80 ms hole within its window, which means catch-up headroom rather than a lower mean.
+- Ocean r94 is 82–84% busy. Its toggling-frame render (15 ms: `draw_bit_with`, candidate sort and dedup) and flow (9 ms) are the next real costs, then heat (~8.5 ms in both presets).
+- Convection's test + roll + scatter (~17 ms gas wasm) is still the largest single stage. It is compute-bound.
+
+**Build.** wasm (2d4ab1a, ABI 17) md5 `7ca3752f7c0467e144d7b9d0df06e5cf` (1,588,894 B), play.html `2f7401e558dd1d70b3ed9e92b31d0c87`, bitblock-lab.html `c0642a06479c422e632b1a1e782d1c5b`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90 run at 15.0 fps; r94 clamps to 92 (gas 15.0).
+  - The only error is a favicon 404.
+- I checked screenshots of every dig/place by eye; no holes or tearing: `/workspace/render_scale/s6y/pt/{play,g92,o92}/*.png` (contact sheet `s6y/pt/sheet.png`).
+- Data: `/workspace/render_scale/s6y/{STATUS.md,eq1,eq2,parity1,parity2.log,chrome/{p1,set1,set2}.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
