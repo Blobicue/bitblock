@@ -391,6 +391,9 @@ pub struct Renderer {
     delta_stamp: u32,
     delta_mask: Vec<bool>,
     delta_pixels: Vec<usize>,
+    /// §6v: storage kept across delta frames for their classification (see
+    /// `render_tinted_delta`), so a busy tick does not allocate and grow them every frame.
+    delta_scratch: DeltaScratch,
     /// Frames `render_tinted_delta` drew as deltas (diagnostics only).
     delta_frames: u64,
     /// Frames rendered so far; identifies which frame `changed_rows` is relative to.
@@ -562,6 +565,7 @@ impl Renderer {
             delta_stamp: 0,
             delta_mask: Vec::new(),
             delta_pixels: Vec::new(),
+            delta_scratch: DeltaScratch::default(),
             delta_frames: 0,
             frame_serial: 0,
             reference_traversal: false,
@@ -1051,10 +1055,15 @@ impl Renderer {
         // met chunks sit in a small direct-mapped cache keyed by the chunk's low coordinate
         // bits, so most lookups hash nothing (the changed bits of a busy tick jump between
         // nearby chunks rather than arriving in one run per chunk).
-        type Words = [u64; crate::world::CHUNK_WORDS];
-        let mut open_words: Vec<Words> = Vec::new();
-        let mut open_cache: crate::world::CoordMap<crate::world::ChunkCoord, usize> =
-            crate::world::CoordMap::default();
+        let mut scratch = std::mem::take(&mut self.delta_scratch);
+        let DeltaScratch {
+            open_words,
+            open_cache,
+            loud,
+        } = &mut scratch;
+        open_words.clear();
+        open_cache.clear();
+        loud.clear();
         let mut recent: [Option<(crate::world::ChunkCoord, usize)>; RECENT_WAYS] =
             [None; RECENT_WAYS];
         let cull_enabled = self.enclosed_cull_enabled();
@@ -1084,8 +1093,6 @@ impl Renderer {
             };
             open_words[slot][index / 64] >> (index % 64) & 1 == 1
         };
-        // (bit, whether it is exposed in the new world, its grown box)
-        let mut loud: Vec<(Coord, bool, bool, Option<DeltaEntry>)> = Vec::new();
         for &(coord, toggled) in changed {
             let near = toggled || (!tint_only && toggled_near.contains(coord));
             let open_now = exposed(coord, world);
@@ -1103,6 +1110,7 @@ impl Renderer {
                 match self.bit_grown_box(projection, coord) {
                     Ok(entry) => entry,
                     Err(()) => {
+                        self.delta_scratch = scratch;
                         self.render_tinted(world, camera, tint);
                         return false;
                     }
@@ -1110,6 +1118,7 @@ impl Renderer {
             };
             loud.push((coord, toggled, open_now, entry));
             if loud.len() > self.delta_full_len / 2 + 4096 {
+                self.delta_scratch = scratch;
                 self.render_tinted(world, camera, tint);
                 return false;
             }
@@ -1146,7 +1155,8 @@ impl Renderer {
         let stamp = self.delta_stamp;
 
         if tint_only {
-            self.recolour_delta(world, projection, tint, &loud, stamp);
+            self.recolour_delta(world, projection, tint, loud, stamp);
+            self.delta_scratch = scratch;
             self.delta_base = self.delta_index_ok.then_some(projection);
             self.delta_frames += 1;
             self.delta_recolours += 1;
@@ -1161,7 +1171,7 @@ impl Renderer {
         self.prev_dirty_valid = true;
         let mut reset = std::mem::take(&mut self.delta_pixels);
         reset.clear();
-        for &(coord, _, _, entry) in &loud {
+        for &(coord, _, _, entry) in loud.iter() {
             let Some(entry) = entry else { continue };
             let key = owner_key(coord);
             for y in usize::from(entry.y0)..usize::from(entry.y1) {
@@ -1198,7 +1208,7 @@ impl Renderer {
         // the new world deeply encloses where the enclosed-bit cull applies. Bits that turned
         // on and those neighbours may be missing from the index, so they are recorded into it.
         let mut fresh: Vec<Coord> = neighbours;
-        for &(coord, toggled, open_now, _) in &loud {
+        for &(coord, toggled, open_now, _) in loud.iter() {
             if !open_now {
                 continue;
             }
@@ -1244,6 +1254,7 @@ impl Renderer {
         self.delta_pixels = reset;
         self.delta_base = self.delta_index_ok.then_some(projection);
         self.delta_frames += 1;
+        self.delta_scratch = scratch;
         true
     }
 
@@ -2667,6 +2678,16 @@ fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
     }
     farthest_squared.is_finite()
         && focal * focal >= ENCLOSED_MIN_SPAN * ENCLOSED_MIN_SPAN * farthest_squared
+}
+
+/// Storage of a delta frame's classification, kept by the renderer between frames: the
+/// exposed words of each chunk met and their slots, and the loud bits (bit, whether it
+/// toggled, whether it is exposed in the new world, its grown box). Each frame clears it.
+#[derive(Default)]
+struct DeltaScratch {
+    open_words: Vec<[u64; crate::world::CHUNK_WORDS]>,
+    open_cache: crate::world::CoordMap<crate::world::ChunkCoord, usize>,
+    loud: Vec<(Coord, bool, bool, Option<DeltaEntry>)>,
 }
 
 /// A set of bits, as one bit per cell in per-chunk words (the bits of the delta index).
