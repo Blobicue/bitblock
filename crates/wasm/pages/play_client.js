@@ -262,7 +262,12 @@
     }
     function playChemEveryTicks() { return playNum(playChemEvery, 4, 0, 600); }
     function playChemSeedVal() { return playNum(playChemSeed, 7, 0, 4294967295) >>> 0; }
-    function playChemRadiusVal() { return playNum(playChemRadius, 12, 2, 82); }
+    function playChemRadiusVal() {
+      const radius = playNum(playChemRadius, 12, 2, 82);
+      // Show the radius actually requested from wasm, not an out-of-range input.
+      if (playChemRadius) playChemRadius.value = String(radius);
+      return radius;
+    }
     // The wasm-side 12 x i64 budget buffer (view re-made each use: memory may have grown).
     function playChemBudgetView() {
       return new BigInt64Array(instance.exports.memory.buffer, instance.exports.bitblock_play_chem_budget_ptr(), CHEM_LANES.length);
@@ -439,6 +444,7 @@
     playGameOnly.addEventListener("change", onPlayLayoutChange);
     // Chem world options: seed / radius rebuild the chem world; cadence and manual step are live.
     function onPlayChemRebuild() {
+      playChemRadiusVal(); // also normalize when no chem world is selected
       if (playSelectedChem() < 0) return;
       playResetLive("chem");
       if (playCanvas.focus) playCanvas.focus({ preventScroll: true });
