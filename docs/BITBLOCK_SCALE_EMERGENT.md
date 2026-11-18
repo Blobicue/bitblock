@@ -3701,6 +3701,81 @@ This wave is one shippable exact pass, checked against b93b429. The gain came fr
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6s. Exact material comparison, spread heavy redraws, no double tick; cap stays 90 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+This wave covers the three items Owen approved after §6r: (1) the mirror's FNV check becomes an exact material comparison, (2) heavy redraws are spread across frames, (3) the double tick after one late frame stops. Two latent bugs found by the new tests were fixed in their own commits. Each commit passed the full local pre-push gate (now also gated on the bbgraph selftest) and was pushed separately with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| ea7c151 | (1) mirror: exact per-block material comparison replaces the FNV `mat_hash`; `ChemPlay::material_changes` counts changed cells | [44287247549](https://github.com/Blobicue/bitblock/actions/runs/44287247549) |
+| d423e9a | (3) `PlaySession::step_paced` / `bitblock_play_step_paced` (ABI 17, additive): at most one chem step per frame, the rest of a late frame's ticks dropped; JS uses it and shows `dropped=` | [44288191010](https://github.com/Blobicue/bitblock/actions/runs/44288191010) |
+| 3f75849 | fix: dig / place keep the mirror cache in step (a cell refilled with its old material before the next mirror was skipped; pre-existing) | [44290238686](https://github.com/Blobicue/bitblock/actions/runs/44290238686) |
+| 9951fae | (2) dig / place join the delta chain (edit frames are delta frames); a still-camera full render builds the delta tile lists right after itself | [44291034047](https://github.com/Blobicue/bitblock/actions/runs/44291034047) |
+| edfd8d0 | fix: delta redraws keep the tie record of the full render | [44300528861](https://github.com/Blobicue/bitblock/actions/runs/44300528861) |
+| d9b3967 | paced frames checked against full renders; www refresh | [44301372843](https://github.com/Blobicue/bitblock/actions/runs/44301372843) |
+
+**2. Cause and fix.**
+- *Double tick.* A late frame accumulated ≥ 5 ticks, so the next frame ran two chem steps (~2 × 45 ms in gas r90 wasm) and was late again: the §6q/§6r 7–13 fps troughs. `step_paced` stops before a second chem-due tick in one call and drops the remaining ticks. The ticks that run are exactly those `fixed_tick` would run, so world, history and books are unchanged; only live presentation timing differs.
+- *Heavy redraws.* A dig or place forced a full re-render (~345–385 ms native gas/ocean r90 960×540). Each applied edit now records its bit as an occupancy change while the delta chain holds, so the edit frame is a delta frame (~53–93 ms native, `dig_bench`). A place outside the chem domain grows it; that frame stays a full render.
+- *Tie record (edfd8d0).* After 9951fae, a dig next to the camera left gas r90 native steps at ~88–92 ms, against ~68–70 ms after the full render the dig used to force. A delta frame redraws every indexed bit whose box reaches a reset pixel; at the pixels it kept it met its own stored fragment and set `tie` for good (also when a bit arrived twice). Every later recolour then marked those pixels and redrew their tiles. Now each bit is drawn once per pass, redraws add the pixels they write to the mask, and a bit meeting its own fragment outside the mask leaves `tie` alone. Pixels and depths are unchanged.
+
+**3. Native (960×540, ms per `step(4)`, `dig_after` / `dig_prof`).**
+
+| gas r90 | before dig | dig step | steady after |
+|---|---|---|---|
+| 8e498f9 (base) | 42–44 | 382–426 | 67–71 |
+| 9951fae | 42–44 | 122–126 | 86–92 |
+| edfd8d0 | 42–44 | 126–131 | 69–72 |
+
+- Ocean r90 is unaffected by edfd8d0 (~46–51 → ~39–47 after a dig).
+- What remains after a dig is chem, not render: gas r90 chem 26.4 → ~49 ms per step after one dig, render back to ~9.6 ms (7.7 before).
+
+**4. Chrome cadence (normal study build of edfd8d0 with the cap lifted; Low 960×540, chem every 4 ticks, each run fresh; mean `presented_fps` of 3 snapshots).**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r92 | 15.27, 15.07, 14.63, 14.93; busy 87–89% | 14.83 (first 13.7), 15.20, 14.87, 14.73; 86–88% |
+| ocean r92 | 15.47, 15.60, 15.50, 15.47; 81% | 15.57, 15.57, 15.57, 15.50; 79–82% |
+| gas r94 (probe) | 13.90 (first 12.7), 14.17 | — |
+| ocean r94 (probe) | 15.10, 14.97 | — |
+| gas r96 (probe) | 13.10, 13.60 | — |
+| ocean r96 (probe) | 14.27, 14.33 | — |
+
+- All runs end `books=ok energy_drift=0`. The 9951fae study build gave the same picture (gas r92 15.03–15.23 with one 14.37, first window down to 13.1).
+- The base 8e498f9 at r92: gas 12.13 (first 7.2), 8.57 (first 3.9), 13.43, 12.67. The double tick no longer reproduces in any §6s run.
+
+**5. Cap: stays 90.** Ocean holds at r92–r94. Gas r92 averages ~14.9 but dips to 13.1–13.7 in its first window in several runs, so it is not a clean ~15. r94/r96 fall below in gas (and ocean r96).
+
+**6. Exactness vs 8e498f9.**
+- Parity md5s unchanged: chem `8ef8f6828310e98ad1ed5c3e997d5a27`, play `dd849e0b7f30eeeec7f0eda8c64be363`, big `9248e8d75489a64a1468400da6a1c51a`, split `bc8ac3afa8d7d53571373bba315ca32d`.
+- `fp_long 36 600` matches `s6i/fp_ref.txt` byte for byte.
+- All 16 `delta_eq` outputs are byte-identical to §6r's, frame tags included.
+- `wasm_parity` 8e498f9 wasm vs shipped wasm: world/frame/books are the same in 7/7 cases. Native == shipped == base wasm at warm 30 / 20 steps for ocean and gas r90, preset 1 r60 and ocean r88.
+- New tests:
+  - `step_paced_runs_at_most_one_chem_step_and_the_same_ticks`: each paced frame equals a full render of the same world.
+  - `edit_frames_are_deltas_equal_to_full_frames`: delta and full sessions with digs and places give equal frames every step. This is the convergence test.
+  - `digs_refilled_before_the_next_mirror_stay_mirrored`.
+  - `material_only_change_repaints_chem_frame` (now on `material_changes`).
+  - `delta_redraws_keep_the_full_tie_record`: fails without edfd8d0.
+- **Frame hashes: no re-baseline needed; old = new.** `step` and `fixed_tick` are unchanged and every frame stays bit-identical to a full render. Default world `pmbj7za5…` → `pmbj7za5…`, frame `nx4b62u5…` → `nx4b62u5…`. Gas r90 frame `kbm7k6qv…` and ocean r90 `lj3wf7ny…` are unchanged.
+
+**7. Next wall.**
+- Chem cost after a dig: a gas r90 dig roughly doubles chem per step (convection around the hole), so gas r90 with digs presents ~12.2–12.9 fps (base 5.8–6.4).
+- Gas r92's first window.
+- Convection (~55% of gas chem).
+
+**Build.** wasm (d9b3967, ABI 17) md5 `3734f5bcb42a094a9a27486e25446b45` (1,540,180 B), play.html `153dbfd5878ad4a13041848ae7180ea7`, bitblock-lab.html `7e3a5f7028813976182bca62b3956638`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 15.0 and gas r90 14.8 fps, both `books=ok energy_drift=0 error=none`.
+  - r94 clamps to 90. Only favicon 404.
+  - Pointer-locked dig ×3 / place ×2: ocean 15–17 fps, with one 2.0 window on the domain-growing place (full render), settled 15.0. Gas 12.2–12.9 fps, `books=ok` throughout.
+- Screenshots visually checked, no holes or tearing: `/workspace/render_scale/s6s/play3/*.png`.
+- Data: `/workspace/render_scale/s6s/{STATUS.md,eq3,parity3.log,wasmparity3.txt,sweep_s3_*.txt,chrome_s3}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
