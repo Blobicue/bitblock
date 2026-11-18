@@ -725,6 +725,19 @@ impl ChemWorld {
         let tick = self.tick;
         let mut fired_total = 0u32;
         let mut rounds = 0u32;
+        // Round 0 visits every cell, and a cell that is cold or of a material no mounted row
+        // reacts in posts nothing and writes no scratch there. With no hot reactive cell the
+        // round posts no intent and the pass ends after it, so the block search below gives
+        // the same result without the per-cell walk.
+        let hot_reactive = self.q.chunks(64).zip(self.mat.chunks(64)).any(|(q, m)| {
+            q.iter().zip(m).fold(false, |hit, (&q, &m)| {
+                hit | ((q >= 250) & reactive[m.0 as usize])
+            })
+        });
+        if !hot_reactive {
+            scratch.posted.clear();
+            return Ok((0, 1));
+        }
 
         for rnd in 0..FIRE_MAX_ROUNDS {
             rounds = rnd + 1;
