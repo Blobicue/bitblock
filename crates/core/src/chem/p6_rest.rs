@@ -783,8 +783,13 @@ impl ChemWorld {
     pub(crate) fn reset_marks(&mut self) {
         if self.params.cycle == WaterCycle::Driven {
             let n = self.cells.len();
-            self.marks.clear();
-            self.marks.resize(n, 0);
+            // §6aa: with no mark written since the last clear the buffer already holds `n`
+            // zeros when its length is `n`.
+            if self.marked || self.marks.len() != n {
+                self.marks.clear();
+                self.marks.resize(n, 0);
+            }
+            self.marked = false;
         }
     }
 
@@ -792,6 +797,7 @@ impl ChemWorld {
     pub(crate) fn mark(&mut self, i: usize, m: u8) {
         if let Some(x) = self.marks.get_mut(i) {
             *x |= m;
+            self.marked |= m != 0;
         }
     }
 
@@ -1142,6 +1148,11 @@ impl ChemWorld {
     /// that moved or rained this tick, or beside a freeze/thaw.
     pub(crate) fn driven_erode_pass(&mut self, topo: &Topology, rep: &mut StepReport) {
         if !self.params.erode {
+            return;
+        }
+        // §6aa: a cell erodes only beside a mark; with none this tick (every mark 0) the
+        // scan fires nothing.
+        if !self.marked && !full_scans() {
             return;
         }
         let mut next = 0;

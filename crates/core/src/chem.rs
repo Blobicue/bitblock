@@ -567,6 +567,9 @@ pub struct ChemWorld {
     /// Per-tick surface-activity marks ([`WaterCycle::Driven`] only; not in
     /// any book or the fingerprint; cleared at the start of every tick).
     pub(crate) marks: Vec<u8>,
+    /// §6aa: false only while every entry of `marks` is known to be 0 (no [`ChemWorld::mark`]
+    /// with a non-zero mark since the last clear). Not in any book or the fingerprint.
+    pub(crate) marked: bool,
     /// Sky-shell headroom in cells added by [`ChemWorld::add_sky_shell`] (0 =
     /// none, the planet6 full-ball domain). Not in any book or the fingerprint.
     pub(crate) sky_height: u32,
@@ -639,6 +642,7 @@ impl ChemWorld {
             heat_scratch: p6::HeatScratch::default(),
             convect_scratch: p6_rest::ConvectScratch::default(),
             marks: Vec::new(),
+            marked: false,
             sky_height: 0,
             core_pin: None,
             radial_shell: None,
