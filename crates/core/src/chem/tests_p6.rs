@@ -5097,7 +5097,8 @@ fn gas_rise_gate_matches_the_full_scan() {
         },
         atom_cap: DEFAULT_ATOM_CAP,
     };
-    for air in [false, true] {
+    // §6t: 0 / 1 AIR cells, then 1 and 60 AIR/WATER cells with the sparse scans forced on
+    for (air, fluids) in [(false, 0usize), (true, 1), (true, 60)] {
         let mut base = genesis(&cfg).unwrap();
         base.attach_net(trimmed());
         let mut p = *base.params();
@@ -5111,11 +5112,14 @@ fn gas_rise_gate_matches_the_full_scan() {
         p.cycle = WaterCycle::Driven;
         p.convect = true;
         base.set_params(p);
-        if air {
-            base.set_mat(base.mat.len() / 2, MatId::AIR);
+        let n = base.mat.len();
+        for k in 0..fluids {
+            let m = if k % 3 == 2 { MatId::WATER } else { MatId::AIR };
+            base.set_mat((n / 2 + k * 7919) % n, m);
         }
         let run = |full: bool| {
             FULL_SCANS.with(|f| f.set(full));
+            super::p6_rest::ANY_SPARSE.with(|f| f.set(!full && fluids > 1));
             let mut w = base.clone();
             let mut out = Vec::new();
             for _ in 0..30 {
@@ -5123,9 +5127,16 @@ fn gas_rise_gate_matches_the_full_scan() {
                 out.push((format!("{r:?}"), w.mat.clone(), w.q.clone()));
             }
             FULL_SCANS.with(|f| f.set(false));
+            super::p6_rest::ANY_SPARSE.with(|f| f.set(false));
             out
         };
         let (fast, full) = (run(false), run(true));
+        if fluids > 1 {
+            assert!(
+                full.iter().any(|s| !s.0.contains("rose: 0,")),
+                "nothing rose"
+            );
+        }
         assert!(
             fast.iter().any(|s| !s.0.contains("convected: 0")),
             "convection ran"
@@ -5189,11 +5200,11 @@ fn sparse_rise_and_n_skip_match_the_full_scans() {
     }
 }
 
-/// §6t: collapse, uplift and plume over the cells next to the few AIR/WATER cells (a dug gas
+/// §6t: collapse, uplift, plume and the outward gas rise over the cells next to the few AIR/WATER cells (a dug gas
 /// planet) leave the same materials and report as the whole-domain loops, on scrambled worlds
 /// with 1–40 fluid cells and a steep heat field, across many ticks.
 #[test]
-fn sparse_collapse_uplift_plume_match_the_full_scans() {
+fn sparse_collapse_uplift_plume_rise_match_the_full_scans() {
     use super::p6_rest::FULL_SCANS;
     let cfg = small_budget();
     let solids = [MatId::ROCK, MatId::SED, MatId::MIN, MatId::GYP];
@@ -5288,9 +5299,56 @@ fn sparse_collapse_uplift_plume_match_the_full_scans() {
         uplifted += fired("uplifted") as u32;
         plumed += fired("plumed") as u32;
     }
-    eprintln!("collapsed {collapsed} uplifted {uplifted} plumed {plumed}");
+    // the outward (coreward) gas rise on a scrambled sky-shell ball, sparse forced on
+    let mut rose = 0u32;
+    let gases = [
+        MatId::STEAM,
+        MatId::CO2,
+        MatId::NH3,
+        MatId::ROCK,
+        MatId::SED,
+    ];
+    for (fluid_pct, salt) in [(1u32, 13u32), (10, 17), (40, 19)] {
+        let mut params = sky_params();
+        params.gravity = Gravity::Core;
+        params.gas_rise = true;
+        params.elements = true;
+        let mut base = genesis_sky_radial(&cfg, &params, 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        for i in 0..base.mat.len() {
+            let r = rnd();
+            let m = if r % 100 < fluid_pct {
+                if r % 2 == 0 { MatId::AIR } else { MatId::WATER }
+            } else {
+                gases[(r / 100) as usize % gases.len()]
+            };
+            base.set_mat(i, m);
+        }
+        for tick in [5u64, 30, 100, 131] {
+            let run = |sparse: bool| {
+                FULL_SCANS.with(|f| f.set(!sparse));
+                ANY_SPARSE.with(|f| f.set(sparse));
+                let mut w = base.clone();
+                w.tick = tick;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                let ok = w.combine2_pass(&topo, &mut rep).is_ok();
+                FULL_SCANS.with(|f| f.set(false));
+                ANY_SPARSE.with(|f| f.set(false));
+                (ok, w.mat.clone(), w.q.clone(), rep)
+            };
+            let (fast, full) = (run(true), run(false));
+            rose += full.3.rose;
+            assert_eq!(fast, full, "{fluid_pct}% fluid tick {tick}");
+        }
+    }
+    eprintln!("collapsed {collapsed} uplifted {uplifted} plumed {plumed} rose {rose}");
     assert!(
-        collapsed > 0 && uplifted > 0 && plumed > 0,
+        collapsed > 0 && uplifted > 0 && plumed > 0 && rose > 0,
         "a law never fired"
     );
 }

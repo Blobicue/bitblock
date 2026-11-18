@@ -519,10 +519,22 @@ impl ChemWorld {
             self.convect_scratch = sc;
             return;
         }
-        self.gather_parcels(topo, &mut sc);
         sc.swaps.clear();
         let rising: [bool; 256] = std::array::from_fn(|m| self.is_rising(MatId(m as u8)));
         let key = self.roll_key(0xb0b81e);
+        if !full_scans()
+            && let Some(fluid) = sparse_cells(
+                &self.mat,
+                MatId::AIR,
+                MatId::WATER,
+                sparse_limit(topo.rsort.len() / 64),
+            )
+        {
+            self.convect_scratch = sc;
+            self.gas_rise_outward_sparse(topo, &fluid, &rising, key, rep);
+            return;
+        }
+        self.gather_parcels(topo, &mut sc);
         for k in (0..topo.rsort.len()).rev() {
             let below = sc.smat[k];
             if !rising[below.0 as usize] {
@@ -556,6 +568,78 @@ impl ChemWorld {
             rep.rose += 1;
         }
         self.convect_scratch = sc;
+    }
+
+    /// §6t: [`Self::gas_rise_outward`] on a domain with few AIR/WATER cells (a dug gas planet).
+    /// A pair trades only when its outward cell holds AIR or WATER at the visit, and the only
+    /// write that makes a cell AIR/WATER is a trade's lower cell. So the scan visits, outermost
+    /// first, just the rsort positions whose outward cell is AIR/WATER at the start, plus the
+    /// cells just inside a trade's lower cell (those still ahead of the scan), with the same
+    /// tests on the live materials. Each trade is applied as it is made, which is the same
+    /// sequence of `set_mat` calls the gathered scan replays.
+    fn gas_rise_outward_sparse(
+        &mut self,
+        topo: &Topology,
+        fluid: &[usize],
+        rising: &[bool; 256],
+        key: RollKey,
+        rep: &mut StepReport,
+    ) {
+        let cell_up = topo.cell_up();
+        let rsort_pos = topo.rsort_pos();
+        let mut heap = std::collections::BinaryHeap::new();
+        let inside = |heap: &mut std::collections::BinaryHeap<u32>,
+                      cells: &[Coord],
+                      u: usize,
+                      below: u32| {
+            for k in 0..26usize {
+                let k = if k >= 13 { k + 1 } else { k };
+                let d = (
+                    (k / 9) as i64 - 1,
+                    ((k / 3) % 3) as i64 - 1,
+                    (k % 3) as i64 - 1,
+                );
+                if let Some(c) = topo.offset(cells, u, d)
+                    && cell_up[c] as usize == u
+                    && rsort_pos[c] < below
+                {
+                    heap.push(rsort_pos[c]);
+                }
+            }
+        };
+        for &u in fluid {
+            inside(&mut heap, &self.cells, u, u32::MAX);
+        }
+        let mut last = u32::MAX;
+        while let Some(k) = heap.pop() {
+            if k >= last {
+                continue;
+            }
+            last = k;
+            let i = topo.rsort[k as usize] as usize;
+            let below = self.mat[i];
+            if !rising[below.0 as usize] {
+                continue;
+            }
+            let ku = topo.shell_up[k as usize];
+            if ku == NO_SLOT {
+                continue;
+            }
+            let up = topo.rsort[ku as usize] as usize;
+            let above = self.mat[up];
+            if above != MatId::AIR && above != MatId::WATER {
+                continue;
+            }
+            if above == MatId::WATER && self.shell_blocked(i) {
+                continue;
+            }
+            if self.roll_keyed(topo, key, i) < 500 {
+                self.set_mat(up, below);
+                self.set_mat(i, above);
+                rep.rose += 1;
+                inside(&mut heap, &self.cells, i, k);
+            }
+        }
     }
 
     /// planet6's +y gas rise (`Topology::rise` order: y descending, then x, z): a rising cell
