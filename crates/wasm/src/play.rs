@@ -1568,6 +1568,24 @@ impl PlaySession {
 /// Returns whether the game view must repaint, and whether
 /// this was a full scan (the cache was empty or resized: `changed` is then not a full record).
 /// Every bit whose material changed is appended to `changed`, flagged when its occupancy did.
+/// §6u: the material ids of up to 8 cells as one little-endian word (missing bytes 0).
+#[inline]
+fn pack8(m: &[bitblock_core::chem::MatId]) -> u64 {
+    let mut b = [0u8; 8];
+    for (d, s) in b.iter_mut().zip(m) {
+        *d = s.0;
+    }
+    u64::from_le_bytes(b)
+}
+
+/// §6u: bit `k` set iff byte `k` of `x` is non-zero.
+#[inline]
+fn nonzero_bytes(x: u64) -> u64 {
+    const LO7: u64 = 0x7f7f_7f7f_7f7f_7f7f;
+    let hi = (((x & LO7) + LO7) | x) & !LO7; // 0x80 in each non-zero byte
+    ((hi >> 7).wrapping_mul(0x0102_0408_1020_4080)) >> 56
+}
+
 fn mirror_chem(
     chem: &mut crate::play_chem::ChemPlay,
     history: &History,
@@ -1612,10 +1630,18 @@ fn mirror_chem(
         // toggle, and dig / place apply their edit with the cache update, and nothing else
         // edits the play world), so such a cell is on in both worlds: no probe, no toggle.
         let mut solid = 0u64;
-        let air = bitblock_core::chem::MatId::AIR;
-        for (j, (&mat, &was)) in mats.iter().zip(seen.iter()).enumerate() {
-            mask |= u64::from(full || was != mat) << j;
-            solid |= u64::from(!full && was != air && mat != air) << j;
+        if full {
+            mask = if mats.len() == 64 {
+                !0
+            } else {
+                (1u64 << mats.len()) - 1
+            };
+        } else {
+            for (k, (m8, s8)) in mats.chunks(8).zip(seen.chunks(8)).enumerate() {
+                let (a, b) = (pack8(m8), pack8(s8));
+                mask |= nonzero_bytes(a ^ b) << (8 * k);
+                solid |= (nonzero_bytes(a) & nonzero_bytes(b)) << (8 * k);
+            }
         }
         mats_changed += u64::from(mask.count_ones());
         seen.copy_from_slice(mats);
@@ -2127,6 +2153,45 @@ mod chem_play_tests {
     /// §6u: after every mirror the play world holds each chem domain cell's bit as the chem
     /// occupancy of the cell's material (what lets the mirror skip the probes of a solid-to-solid
     /// change), through convection, digs, places that grow the domain, and camera moves.
+    #[test]
+    fn swar_mask_matches_bytewise_compare() {
+        use bitblock_core::chem::MatId;
+        let mut r = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            r
+        };
+        for len in [1usize, 5, 8, 13, 63, 64] {
+            for _ in 0..2000 {
+                let pick = |x: u64| {
+                    MatId(match x % 4 {
+                        0 => 0,
+                        1 => 0x80,
+                        2 => 1,
+                        _ => (x >> 8) as u8,
+                    })
+                };
+                let a: Vec<MatId> = (0..len).map(|_| pick(next())).collect();
+                let b: Vec<MatId> = (0..len)
+                    .map(|_| if next() % 3 == 0 { a[0] } else { pick(next()) })
+                    .collect();
+                let (mut m0, mut s0, mut m1, mut s1) = (0u64, 0u64, 0u64, 0u64);
+                for j in 0..len {
+                    m0 |= u64::from(a[j] != b[j]) << j;
+                    s0 |= u64::from(a[j] != MatId::AIR && b[j] != MatId::AIR) << j;
+                }
+                for (k, (x, y)) in a.chunks(8).zip(b.chunks(8)).enumerate() {
+                    let (p, q) = (super::pack8(x), super::pack8(y));
+                    m1 |= super::nonzero_bytes(p ^ q) << (8 * k);
+                    s1 |= (super::nonzero_bytes(p) & super::nonzero_bytes(q)) << (8 * k);
+                }
+                assert_eq!((m0, s0), (m1, s1));
+            }
+        }
+    }
+
     #[test]
     fn play_world_mirrors_chem_occupancy_through_edits() {
         for (preset, radius) in [(4_u32, 14_u32), (2, 14), (0, 12)] {
