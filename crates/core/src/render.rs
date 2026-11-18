@@ -360,6 +360,8 @@ pub struct Renderer {
     /// The bits holding an entry in `delta_index`, when `delta_members_ok` (built on the first
     /// delta frame that records, kept by compaction, dropped by a full traversal).
     delta_members: IndexedBits,
+    /// A delta frame's bits within one step of a toggled bit (kept for its storage).
+    toggled_near: IndexedBits,
     delta_members_ok: bool,
     /// Per `COVER_TILE` tile, the full-traversal entries whose box touches it (CSR; built on
     /// the first delta frame after a full one, `delta_csr_built`).
@@ -530,6 +532,7 @@ impl Renderer {
             recolour_reused: 0,
             delta_index_ok: false,
             delta_members: IndexedBits::default(),
+            toggled_near: IndexedBits::default(),
             delta_members_ok: false,
             delta_tile_start: Vec::new(),
             delta_tile_items: Vec::new(),
@@ -989,25 +992,35 @@ impl Renderer {
         if !tint_only {
             self.recolour_hidden.clear();
         }
-        let toggled_near: crate::world::CoordMap<Coord, ()> = changed
-            .iter()
-            .filter(|&&(_, toggled)| toggled)
-            .flat_map(|&(c, _)| neighbourhood27(c))
-            .map(|c| (c, ()))
-            .collect();
+        // The bits within one step of a toggled bit, as per-chunk bit words (no hashing per
+        // neighbour; the toggled bits and the changed bits both arrive in chunk runs).
+        let mut toggled_near = std::mem::take(&mut self.toggled_near);
+        toggled_near.clear();
+        if !tint_only {
+            for &(c, toggled) in changed {
+                if toggled {
+                    for n in neighbourhood27(c) {
+                        toggled_near.insert(n);
+                    }
+                }
+            }
+        }
         // Per chunk, the bits that count as exposed: its open words where the enclosed-bit
         // cull applies to it, else its on bits (open words are a subset of the on bits). The
-        // words of every chunk met are built once and kept by index, and the changed bits arrive
-        // in runs within a chunk, so the last chunk's slot is kept at hand (no copy on a switch).
+        // words of every chunk met are built once and kept by index, and the slots of recently
+        // met chunks sit in a small direct-mapped cache keyed by the chunk's low coordinate
+        // bits, so most lookups hash nothing (the changed bits of a busy tick jump between
+        // nearby chunks rather than arriving in one run per chunk).
         type Words = [u64; crate::world::CHUNK_WORDS];
         let mut open_words: Vec<Words> = Vec::new();
         let mut open_cache: crate::world::CoordMap<crate::world::ChunkCoord, usize> =
             crate::world::CoordMap::default();
-        let mut last: Option<(crate::world::ChunkCoord, usize)> = None;
+        let mut recent: [Option<(crate::world::ChunkCoord, usize)>; 64] = [None; 64];
         let cull_enabled = self.enclosed_cull_enabled();
         let mut exposed = |coord: Coord, world: &World| -> bool {
             let (chunk, index) = World::chunk_of(coord);
-            let slot = match last {
+            let way = recent_way(chunk);
+            let slot = match recent[way] {
                 Some((c, slot)) if c == chunk => slot,
                 _ => {
                     let slot = *open_cache.entry(chunk).or_insert_with(|| {
@@ -1024,7 +1037,7 @@ impl Renderer {
                         });
                         open_words.len() - 1
                     });
-                    last = Some((chunk, slot));
+                    recent[way] = Some((chunk, slot));
                     slot
                 }
             };
@@ -1033,7 +1046,7 @@ impl Renderer {
         // (bit, whether it is exposed in the new world, its grown box)
         let mut loud: Vec<(Coord, bool, bool, Option<DeltaEntry>)> = Vec::new();
         for &(coord, toggled) in changed {
-            let near = toggled || (!tint_only && toggled_near.contains_key(&coord));
+            let near = toggled || (!tint_only && toggled_near.contains(coord));
             let open_now = exposed(coord, world);
             if !near && !open_now {
                 continue; // off in both, or enclosed in both: owns no pixel in either frame
@@ -1068,6 +1081,7 @@ impl Renderer {
         neighbours.sort_unstable();
         neighbours.dedup();
         neighbours.retain(|&c| exposed(c, world));
+        self.toggled_near = toggled_near;
 
         if self.crosshair_on {
             self.invert_crosshair();
@@ -1165,9 +1179,7 @@ impl Renderer {
         }
         if !self.delta_members_ok {
             let mut members = std::mem::take(&mut self.delta_members);
-            members.slot.clear();
-            members.words.clear();
-            members.last = None;
+            members.clear();
             for e in &self.delta_index {
                 members.insert(e.coord);
             }
@@ -1437,9 +1449,7 @@ impl Renderer {
     fn compact_delta_index(&mut self, world: &World) {
         let mut probe = world.probe();
         let mut kept = std::mem::take(&mut self.delta_members);
-        kept.slot.clear();
-        kept.words.clear();
-        kept.last = None;
+        kept.clear();
         self.delta_index
             .retain(|e| probe.is_on(e.coord) && kept.insert(e.coord));
         // `kept` now holds exactly the bits with an entry.
@@ -2549,19 +2559,35 @@ fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
 }
 
 /// A set of bits, as one bit per cell in per-chunk words (the bits of the delta index).
-#[derive(Default)]
 struct IndexedBits {
     slot: crate::world::CoordMap<crate::world::ChunkCoord, usize>,
     words: Vec<[u64; crate::world::CHUNK_WORDS]>,
-    /// The last chunk met and its slot: consecutive inserts mostly share a chunk.
-    last: Option<(crate::world::ChunkCoord, usize)>,
+    /// Recently met chunks and their slots, direct-mapped by the chunk's low coordinate bits
+    /// (`recent_way`): nearby inserts and lookups then rarely hash.
+    recent: [Option<(crate::world::ChunkCoord, usize)>; 64],
+}
+
+impl Default for IndexedBits {
+    fn default() -> Self {
+        Self {
+            slot: Default::default(),
+            words: Vec::new(),
+            recent: [None; 64],
+        }
+    }
+}
+
+/// The `IndexedBits::recent` way of a chunk.
+fn recent_way(chunk: crate::world::ChunkCoord) -> usize {
+    (chunk.x & 3 | (chunk.y & 3) << 2 | (chunk.z & 3) << 4) as usize
 }
 
 impl IndexedBits {
     /// Adds `coord`; `true` when it was not in the set.
     fn insert(&mut self, coord: Coord) -> bool {
         let (chunk, index) = World::chunk_of(coord);
-        let slot = match self.last {
+        let way = recent_way(chunk);
+        let slot = match self.recent[way] {
             Some((c, slot)) if c == chunk => slot,
             _ => {
                 let words = &mut self.words;
@@ -2569,7 +2595,7 @@ impl IndexedBits {
                     words.push([0; crate::world::CHUNK_WORDS]);
                     words.len() - 1
                 });
-                self.last = Some((chunk, slot));
+                self.recent[way] = Some((chunk, slot));
                 slot
             }
         };
@@ -2578,6 +2604,30 @@ impl IndexedBits {
         let fresh = *word & bit == 0;
         *word |= bit;
         fresh
+    }
+
+    /// Whether `coord` is in the set.
+    fn contains(&mut self, coord: Coord) -> bool {
+        let (chunk, index) = World::chunk_of(coord);
+        let way = recent_way(chunk);
+        let slot = match self.recent[way] {
+            Some((c, slot)) if c == chunk => slot,
+            _ => match self.slot.get(&chunk) {
+                Some(&slot) => {
+                    self.recent[way] = Some((chunk, slot));
+                    slot
+                }
+                None => return false,
+            },
+        };
+        self.words[slot][index / 64] >> (index % 64) & 1 == 1
+    }
+
+    /// Empties the set, keeping its storage.
+    fn clear(&mut self) {
+        self.slot.clear();
+        self.words.clear();
+        self.recent = [None; 64];
     }
 }
 

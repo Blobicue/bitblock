@@ -620,7 +620,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 35613,
+   "code_lines": 35650,
    "duplicated_lines": 407,
    "regions": [
     {
