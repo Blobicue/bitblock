@@ -38,11 +38,12 @@ pub const CHEM_ATOM_CAP: i64 = 1 << 32;
 
 pub const CHEM_RADIUS_MIN: u32 = 2;
 pub const CHEM_RADIUS_DEFAULT: u32 = 12;
-/// Browser cap. §6e measured Chrome Low 960x540 after the incremental v2 `world_tag`: r54
-/// ocean presents 15.03-15.07 fps and gas 14.93-15.17 over three runs each (54-57 ms per
-/// presented frame); r56 falls to 12.0 (ocean) and 14.3 (gas). So r54 is the largest tested
-/// radius that holds the 15 Hz chem cadence on both presets.
-pub const CHEM_RADIUS_MAX: u32 = 54;
+/// Browser cap. §6f measured Chrome Low 960x540 (chem every 4 ticks) after the exact delta
+/// render, mirror, heat and convection work: r70 ocean presents 14.93-15.23 fps and gas
+/// 14.97-15.03 over four runs each (r68: 14.57-15.77 / 14.97-15.03); r72 falls to 13.3
+/// (ocean) and 12.7-13.0 (gas). So r70 is the largest tested radius that holds the 15 Hz chem
+/// cadence on both presets.
+pub const CHEM_RADIUS_MAX: u32 = 70;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
