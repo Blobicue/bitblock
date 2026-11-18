@@ -44,10 +44,13 @@ pub const CHEM_RADIUS_DEFAULT: u32 = 12;
 /// classification cheaper (r82). §6n (convection rolls and swaps in domain order, tint-only
 /// grown boxes built on demand) measured fresh loads at r84 over two sets of four runs each:
 /// gas presents 15.00-15.33 fps (busy 75-80%) and ocean 14.87-15.27 (busy 73-78%). At r86 a
-/// fresh gas load's first window still dips (7.6-11.1 fps in all four runs). So r84 is the
-/// largest tested radius that holds the 15 Hz chem cadence on both presets (§6i/§6j: r76,
-/// §6k/§6l: r80, §6m: r82).
-pub const CHEM_RADIUS_MAX: u32 = 84;
+/// fresh gas load's first window still dipped (7.6-11.1 fps). §6o (sparse +y gas rise, N-family
+/// skip under three H, bitset flow queue, single-quotient heat shares) measured fresh loads at
+/// r86 over two sets of four runs each: gas presents 15.10-15.27 fps (busy 80-84%) and ocean
+/// 14.97-15.20 (busy 63-69%). At r88 a fresh gas load's first window still dips (7.0-7.8 fps).
+/// So r86 is the largest tested radius that holds the 15 Hz chem cadence on both presets
+/// (§6i/§6j: r76, §6k/§6l: r80, §6m: r82, §6n: r84).
+pub const CHEM_RADIUS_MAX: u32 = 86;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
