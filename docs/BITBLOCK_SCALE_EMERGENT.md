@@ -3030,6 +3030,69 @@ Every run ends `books=ok energy_drift=0 error=none`.
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6i. Exact AIR-driven activity for the ocean passes; play cap 74 → 76 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass on ocean, the limiter after §6h (Owen accepted r74; ocean's dips do not track load, noise floor ~14.5). The exactness bar is the same as §6h, against 1bcd506: same cells, same order, same roll draws. No hash changed, and no win needed a hash change.
+
+**Why AIR.** An ocean planet at r72 is 1.56 M cells: WATER 431 k, ROCK / MINERAL / GYPSUM 193 k each, and only ~1 k AIR at genesis, growing by ~100 a tick through evaporation (15 k by tick 150, ~1 %). Classic flow moves WATER only into an AIR face neighbour, and dissolve needs an AIR face, so on this planet nearly every visit of those two full scans is a no-op. The per-chunk activity the brief asked for is, for these passes, exactly "cells beside AIR": tracking it per cell is cheaper and finer than per chunk.
+
+**1. Changes (all exact).**
+- bf08840 — **AIR-driven sparse scans, row-wise erode, block masks.**
+  - `sparse_air()` lists the AIR cells by the 64-cell block search, or `None` past 1/8 of the domain (the full loops then run unchanged).
+  - Classic flow (`ysort` order): the visits are the WATER faces of the AIR cells, taken in `ysort` order through a new lazily built inverse `Topology::ysort_pos`, plus, after each move, the faces of the AIR cell the move leaves (the move's target is one of them) pushed on a min-heap when they lie later in the scan. Every skipped visit of the full scan is a no-op (not WATER, or no AIR face when visited); a cell is visited at most once at its own scan position, as before. The visit body is the old one, factored as `flow_cell`.
+  - Dissolve: intents read the snapshot, so the visits are just the GYPSUM faces of the AIR cells, sorted ascending and deduplicated; claims and commits are unchanged.
+  - Classic erode over z-runs: a row's exposure (a face off the domain, or on AIR/WATER) comes from contiguous slices of the row and its four neighbouring rows. The pass only turns ROCK/MINERAL into SED, neither of them AIR/WATER, so no visit changes another cell's exposure; rolls are drawn per exposed cell in index order as before.
+  - Phase and Classic evaporation: a visit writes only its own cell and decides on its own material and heat, so a 64-cell `hit_mask` of (material, Q) gives a block's visits up front.
+  - Tests `sparse_air_and_row_scans_match_the_whole_domain_loops` (scrambled worlds at 1, 4, 9 and 30 % AIR, storm/calm/rain ticks, compared with a test switch that forces the plain loops; three mutations of the new code each fail it) and `hit_mask_packs_the_cell_test`.
+- 236a439 — a block with no WATER/ICE skips the heat read (gas has no water: phase back to 0.09 ms).
+- c091402 — cap 74 → 76 and www refresh. bc1315a, b974a47 — test fix (debug shift) and rustfmt.
+
+**2. Native (`season_prof`, r74, 150 ticks averaged per season window; ms).**
+
+| stage | 1bcd506 storm / calm | b974a47 storm / calm |
+|---|---|---|
+| ocean phase | 2.31 / 2.20 | 1.64 / 1.64 |
+| ocean water cycle | 4.26 / 3.96 | 3.43 / 3.47 |
+| ocean erode (storm only) | 5.22 | 3.02 |
+| ocean dissolve (storm only) | 4.75 | 0.31 |
+| ocean flow | 7.60 / 7.71 | 4.04 / 5.17 |
+| **ocean chem step** | **44.1 / 23.4** | **31.9 / 19.6** |
+| gas chem step | 36.6 / 21.4 | 34.7 / 21.3 (unchanged) |
+
+`play_loop_prof` r74 (four ticks with chem, mirror and render, early ticks = storm): ocean 58.5 → 44.3 ms, gas 36.3 → 34.7 ms. Flow is now bound by its ~15 k moves a tick (two occupancy writes each), not its scan.
+
+**3. Chrome (headless, Low 960×540, chem every 4 ticks; presented fps, step ms, busy; study build of 236a439).**
+
+| case | §6h (1bcddba) | §6i, 4 runs |
+|---|---|---|
+| **ocean r76** | 14.43–15.57, 15–30 ms, 65–81% | **14.93, 15.10, 15.60, 15.53; 15.9–24.2 ms, 66–76%** |
+| **gas r76** | 14.87–15.03 | **14.90, 15.27, 15.07, 14.97; 15.9–17.7 ms, 65–69%** |
+| ocean r78 | 13.10–15.03 | 15.03, 13.20, 14.33, 13.87; 26–41 ms, 77–85% |
+| gas r78 | 14.93–15.03 | 15.43, 15.17, 12.93, 15.17; 21–47 ms, 73–78% |
+
+Every run ends `books=ok energy_drift=0 error=none`.
+
+**4. Cap: `CHEM_RADIUS_MAX` 74 → 76 (c091402).** At r76 both presets hold ~15 on four runs and ocean's lowest (14.93) is above the r72/r74 noise floor (~14.5). r78 fails on both (ocean 13.20, gas 12.93). The slider (`max="76"`, title), `playNum(…, 2, 76)` and the Rust clamp match; an r80 request on :8765 clamps to 76.
+
+**5. Exactness evidence.**
+- Parity vs 1bcd506 is byte-identical after each code commit: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- A 600-tick run of every preset at r36 (both dynamics settings; fingerprint, energy and AIR count every 60 ticks, two and a half seasons, AIR rising to 25.7 k, near the 1/8 sparse limit; the unit test covers the fallback at 30 % AIR) is identical to 1bcd506.
+- p6 goldens 3/3; core and wasm tests pass; local CI green.
+- Ship wasm == native world and frame on ocean / gas r76 and r40, presets 0 and 1 at r30, and long runs (ocean r40 1,100 steps to tick 4,416; gas r30 600 steps).
+- Chrome on :8765 reads the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17; the lab page reports `match_expected=true` twice.
+
+**6. Next wall.**
+- (a) Ocean past r76: heat (4.6 ms), the combine2 stage (3.7 ms: N scan, network, gas rise gather), flow's moves (~15 k a tick, each two occupancy writes through the chunk map), evaporation's heat mask (memory-bound over Q) and the mirror walk.
+- (b) Gas past r76: convection (density test and gather) and heat; persistent radius-ordered materials remain the lever.
+- (c) The incremental mirror material hash is still skipped, as Owen asked.
+
+**Build.** wasm (c091402, ABI 17) md5 `c1c9a6e8b286f04c3866840988bce2ab` (1,471,693 B), play.html `912b608fbbe4195a4e15b8bac5b5936c`, bitblock-lab.html `dd9a9ccde675931a5817ec90d825b556`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r76 `books=ok energy_drift=0 error=none`, r80 clamps to 76, and only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6i/playtest/{default,chem2_r76,chem4_r76,chem4_r80}.png`.
+- Sweep shots: `/workspace/render_scale/s6i/chrome/`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
