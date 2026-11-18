@@ -3354,6 +3354,71 @@ Ocean does not convect, so its chem is unchanged. Its limiters are unchanged fro
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6n. Radius box shows the clamped radius; convection rolls and swaps in domain order, tint-only boxes on demand; cap raised to 84 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass: a small page fix, then fresh gas at r84. Exactness is checked against a8e1a81. No hash changed, and no win needed a hash change. Each commit passed the full local pre-push check first and was pushed on its own, so each has its own CI run, all green.
+
+**1. UI fix: e9ac8c9 (JS only).** Before this, a radius above the cap (or below 2, or fractional) left the box showing the requested value while the world was built at the clamped one. `playChemRadiusVal` now writes the radius it hands to wasm back into the box, and a radius change normalises the box even when no chem world is selected. Checked in Chrome on :8765:
+
+| request | box | status |
+|---|---|---|
+| 88 (cap 84) | 84 | radius=84 |
+| 1 | 2 | radius=2 |
+| 40.7 | 40 | radius=40 |
+| 90 (empty world selected) | 84 | — |
+
+**2. Diagnosis (native, gas r84, temporary per-pass timers; per chem step over ticks 25–95).**
+- Chem ~26 ms in total: convection ~14 ms (density test 5.9, candidates and rolls 3.8, scan 1.3, swaps 3.0), heat 5.4, network 1.2, rise 0.8.
+- Render ~17 ms: classification ~8.4 ms for ~215 k tint-only changed bits, and the recolour draw ~8.8 ms for ~55 k exposed ones. Classification projected all 8 cube vertices of every exposed bit to build its grown box, but a tint-only frame reads that box only when its recolour marks a pixel, and gas marked none in the hump.
+- Mirror ~7–8 ms: the FNV material hash (a serial chain over every domain cell) plus ~215 k changed-bit probes. It is left as is: the hash decides repainting, and replacing it would change behaviour where it collides.
+
+**3. Change: 8156cbd (exact).**
+- **Convection rolls.** The topology's wide-roll table is now in domain order (`cell_roll_cells`). The cells that pass the density test are rolled right after it, and the survivors are marked by rsort position (new `Topology::rsort_pos`, the inverse of `rsort`). The marking has no branch (the roll fails half the time). The scan reads that bitset from the highest position down, which is the old candidate order.
+- **Swaps.** The scan marks each swap by its lower cell, and the swaps are then applied in domain order. They are disjoint pairs (each parcel moves at most once), and each `set_mat` reads only its own cell's old value, so the materials, heat and occupancy bits come out the same as in scan order.
+- **Density test.** Each mass is scaled once per material (×1010 below, ×1000 above). Wrapping multiplication is associative and commutative, so `mb*1010*ta < ma*1000*tb` gives the same products as `mb*ta*1010 < ma*tb*1000`. The zero-mass test still reads the unscaled mass.
+- **Tint-only grown boxes on demand** (`render_tinted_delta`, `recolour_delta`). In a tint-only frame, the box of an exposed bit whose centre lies deeper than 2 in view space is not built during classification. Every vertex of such a bit is in front of the camera: it is at most √3/2 from the centre, and the depth is the same dot product. `recolour_delta` builds the box with the same projection code only when marks exist. Any other bit, and every toggle frame, builds the box as before, including the fallback to a full render when a vertex is behind the camera.
+- **Tests.** The roll-table test now checks the domain-order table, `rsort_pos` and `cell_up` against `rsort` and `shell_up`. `delta_recolour_matches_full_render` (which marks pixels) and the convection tests pass.
+
+**4. Native (cap lifted; instrumented `spike_prof`, step(4) per chem frame; mean over chem steps 25–95).**
+
+| case | a8e1a81 step | §6n step | chem | mirror | render |
+|---|---|---|---|---|---|
+| gas r82 | 44.2 ms | 38.8 ms | 23.9 → 21.4 | 7.6 → 7.3 | 12.2 → 9.6 |
+| gas r84 | 51.5 ms | 44.3 ms | 25.9 → 23.2 | 8.4 → 8.0 | 16.8 → 12.7 |
+| ocean r84 | 45.4 ms | 44.3 ms | 31.6 → 30.9 | 4.0 → 4.0 | 9.0 → 8.5 |
+
+**5. Chrome (headless, Low 960×540, chem every 4 ticks; `presented_fps` averaged over 3 snapshots, busy; every run is "fresh", measured from 2 s after the radius change). Study build with the cap lifted.**
+
+| case | §6m a8e1a81 | §6n set 1 (4 runs) | §6n set 2 (4 runs) |
+|---|---|---|---|
+| gas r84 fresh | 13.37 (first snapshot 9.4), 15.03, 15.10, 15.10 / 15.20, 15.13, 14.70 (first snapshot 13.1), 15.13 | 15.00, 15.17, 15.00, 15.07; 75–78% | 15.07, 15.33, 15.00, 15.03; 75–80% |
+| ocean r84 fresh | 14.87, 14.83, 14.80, 14.90 | 14.97, 15.03, 15.27, 15.03; 73–78% | 15.03, 14.87, 15.00, 14.90; 75–76% |
+| gas r86 fresh | — | 12.33, 13.30, 14.23, 13.40 (first snapshot 7.6–11.1); 85–86% | — |
+
+- The lowest r84 single snapshot is 14.6 (ocean).
+- Every run ends `books=ok energy_drift=0`.
+
+**6. Cap: 82 → 84** (853c7b1: `CHEM_RADIUS_MAX`, the page's `max` and title, the JS clamp). r84 holds ~15 fps on both presets over two sets of four fresh runs. At r86, a fresh gas load's first window dips in every run, so r86 fails the rule. Gas still limits, so ocean chem was not taken up this pass.
+
+**7. Exactness evidence (vs a8e1a81).**
+- Parity byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 (with and without dynamics) match the §6i reference file. p6 goldens pass (release). Debug workspace tests (with `protocol-research`) pass.
+- `delta_eq` output is byte-identical to §6l/§6m's on gas r80 and r82, ocean r80 and r82, ocean r60, gas r36 and preset 1 r80 and r82. On gas and ocean r84 (150 steps), it is byte-identical to a8e1a81 built natively (the same final frame tags, 4 compactions on ocean).
+- The shipped wasm, the a8e1a81 wasm and native print the same world and frame tags (and `books=ok energy_drift=0`) on preset 0 r36, preset 1 r40, ocean and gas r80 and r82, and gas r36. On ocean and gas r84, native equals the shipped wasm; the a8e1a81 wasm clamps those radii to 82.
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page prints the same lines as before.
+
+**8. Next wall.**
+- (a) r86: a fresh gas load's first window dips to 7.6–11 fps. At r84 the gas hump step is ~44 ms native: chem ~23 (convection ~10, heat ~5.4), render ~13 (the recolour draw ~9), mirror ~8 (the FNV hash plus the changed-bit probes).
+- (b) Ocean is now as costly as gas at r84 (~44 ms native; chem ~31). Its limiters are flow occupancy writes and the +y rise trades.
+- (c) Replacing the mirror's FNV repaint test with an exact material comparison would differ only where the hash collides. It remains an option for Owen only, like spreading the hump's redraw over frames.
+
+**Build.** wasm (853c7b1, ABI 17) md5 `479d29fb0c4f4df93b84ef00da8ecb7a` (1,484,991 B), play.html `54794458754a3087c276f46b4c96286c`, bitblock-lab.html `b949e3e7abf6cfe23fdcc3c5e50fa7e6`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r84 `books=ok energy_drift=0 error=none` at 15.0 presented fps. Two live fresh runs each read gas 15.30 and 15.07 and ocean 14.80 and 14.83. Requesting r88 clamps to 84, and the box shows 84. Only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6n/playtest/{default,chem2_r84,chem4_r84,chem4_r88,radius_box_r88}.png`.
+- Sweeps and A/B: `/workspace/render_scale/s6n/` (`chrome/`, `chrome_8765/`, `ab0/`, `ab1/`, `ab2/`, `eq/`).
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
