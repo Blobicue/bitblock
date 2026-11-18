@@ -2788,6 +2788,108 @@ Every run ends `books=ok energy_drift=0 error=none`. Ocean r44 step falls from 8
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. No Desktop copy; main untouched.
 
+## 6f. Exact delta render, cheaper mirror/books, heat and convection; play cap 54 → 70 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "yes lets keep scalling" pt251u) — every hash and book unchanged
+
+The brief targeted convection gather, heat, combine2 and render with packed integer arrays, batching and culling. Everything had to stay exact vs ac4a049 (§6e): world v2 and frame hashes, p6 goldens, chem/play/big parity, native == wasm, `books=ok energy_drift=0`. The cap could only rise where ocean and gas both hold about 15 presented fps on four Chrome runs (Low 960×540, chem every 4 ticks). No hash changed, and no option needing a hash change came up.
+
+**1. Changes (all exact).**
+- 3366809 — **delta render for a static camera.** A frame is the per-pixel minimum by (depth, then RGB word) over the fragments of every on bit. So when only some bits change, the frame can be rebuilt by resetting just the pixels those bits owned and redrawing the bits whose screen boxes touch them.
+  - The renderer keeps an owner key per pixel and a box index (`DeltaEntry`, grown 1 px, CSR per 4 px tile) recorded during the full traversal.
+  - A delta frame does the following:
+    - resets the pixels of the "loud" changed bits;
+    - redraws the indexed bits that overlap a reset pixel;
+    - draws the open changed bits everywhere (exact ties);
+    - draws and records the fresh bits (turned on, plus the open on-neighbours of bits turned off).
+  - Quiet bits are skipped: off and not near a toggle, or enclosed where the cull applies.
+  - It falls back to a full render when:
+    - the projection is not bit-identical;
+    - the base is invalid (resize, all-dirty, camera inside a bit, reference traversal);
+    - any vertex is behind the camera;
+    - more than half the bits are loud;
+    - the index grows past 1.5× the base.
+  - `world_pixels` stays exact because no chem colour is BACKGROUND (`ChemColors::never_black`).
+  - Play side:
+    - Play uses it only while every change since the last render is a chem mirror (`delta_chain`, a tag check before and after).
+    - Edits, full mirror scans, bench stages and the cut view fall back to the full render.
+  - Tests:
+    - drill-hole and floating-plate cases against a full render;
+    - `delta_render_frames_equal_full_render_frames` (≥ 12 delta frames, frame-equal to full renders).
+- 9641cd6 — **mirror and books.**
+  - Mirror: the chem→play mirror keeps its FNV walk over `mats()` but reads coordinates and occupancy only for cells whose material changed. Lookups go through a cached-chunk `BitProbe` (chem world) and a copy of the last chunk's words (play world).
+  - Books: `lane_totals`, `energy_total` and `material_count` sum the same i64 terms grouped by a 4-way material histogram. `check_books` uses the probe.
+- 42451bc — **heat, combine2, convection.**
+  - Heat:
+    - `ZRuns.live` precomputes each cell's face-neighbour count.
+    - The first sweep runs over whole-domain slices in i32 with `q / (6000/dq)` when `dq` divides 6000 (the same truncated rational; `0 ≤ per·live ≤ o ≤ q`). The i64 path is kept otherwise.
+  - combine2: the N + 3 H scan is skipped when the domain holds no H. Every firing needs three H and the scan makes none.
+  - Convection now runs in three phases, with the same swaps:
+    1. A branchless density test over every gathered pair. No parcel has moved yet, and a parcel keeps its gathered values until it moves.
+    2. The Driven rolls over the candidates, read in sequence from the rsort roll table. The roll is a pure function of cell and tick.
+    3. The original-order scan over the survivors, skipping moved parcels as before.
+- 7ccc99b — cap 54 → 70 and www refresh. 20238e3 / 46202ac — index regen (pub counts 1326 / 1329).
+
+**2. Native per pass (r60, chem every 4 ticks, ms; ac4a049 → 42451bc).**
+
+| item | before | after |
+|---|---|---|
+| ocean play step(4) frame | 59 | 37–39 (delta render + mirror) |
+| gas play step(4) frame | 60 | 31–33 |
+| heat pass | 6.4 | 2.6 |
+| gas convect (scan + replay) | 10.4–11.2 | 5.2 |
+| ocean combine2 | ~5 | ~3.5 (N + 3 H scan 1.5 → 0) |
+| ocean chem step | 24.6 | 20.2 |
+| gas chem step | 21.5 | 16.4 |
+
+**3. Chrome (headless, Low 960×540; presented fps, step ms, main-thread busy).** Presented fps tops out at 15, the chem cadence (one chem step per 4 ticks at 60 Hz). Busy % is the headroom left.
+
+| case | ac4a049 | 42451bc |
+|---|---|---|
+| ocean r60 | 11.3, 76 ms, 87% | 15.0, 6.9 ms, 38% |
+| gas r60 | 9.6, 90 ms, 86% | 15.0, 9.5 ms, 47% |
+| ocean r64 | 6.8, 125 ms | 14.5–14.7, 8.5 ms, 44–48% |
+| gas r64 | 7.0, 121 ms | 14.8–15.3, 14.8 ms, 52–58% |
+| ocean r68 | — | 14.6–15.8 (4 runs), 50–60% |
+| gas r68 | — | 15.0 (4 runs), 62–68% |
+| **ocean r70** | 5.7, 145 ms | **14.93–15.23 (4 runs), 14–17 ms, 54–61%** |
+| **gas r70** | 5.0, 173 ms | **14.97–15.03 (4 runs), 18.5–19.4 ms, 69–71%** |
+| ocean r72 | — | 13.3–14.4, 19–33 ms, 64–73% |
+| gas r72 | — | 12.7–13.0, 54 ms, 81–82% |
+| ocean r76 | — | 14.8, 37 ms |
+| gas r76 | — | 5.6, 158 ms |
+| ocean r80 | — | 7.9, 107 ms |
+| gas r80 | — | 4.7, 194 ms |
+
+Every run ends `books=ok energy_drift=0 error=none`.
+
+**4. Cap: `CHEM_RADIUS_MAX` 54 → 70 (7ccc99b).** r70 holds about 15 presented fps on four of four runs for both presets. r72 drops gas to 12.7–13.0. The slider (`max="70"`, title updated), `playNum(…, 2, 70)` and the Rust clamp all match, and an r80 request on :8765 clamps to 70.
+
+**5. Exactness evidence.**
+- Parity vs ac4a049 is byte-identical after every code commit:
+  - chem `8ef8f682…`
+  - play `dd849e0b…`
+  - big `9248e8d7…`
+  - split `bc8ac3af…`
+- p6 goldens (`--ignored`) pass (3/3).
+- wasm (simd128 ship build) == native on ocean r60, gas r60 and gas r48 (`wasmstep` vs `wasmeq`).
+- Default play hashes unchanged (world `pmbj7za5…`, frame `nx4b62u5…`, the play test constants).
+- The lab's research and program checks report `match_expected=true`.
+- No wasm SIMD intrinsics were needed: the batched loops are plain integer code that the compiler vectorises.
+
+**6. Next wall.**
+- (a) Gas past r70. The rsort gather of materials and heat (`gather_parcels`, a random read per cell) and `step_laws`' rise/convect scan lead the profile. After them come combine2's network/gas-rise parts and heat. Gas r72 also jumps to 54 ms a step, likely memory or cache size.
+- (b) Ocean past r76: `step_laws` (flow, erode, dissolve, water ~2.5 ms each at r60), the mirror's `is_on`, and the books totals (`energy_total`, `lane_totals`).
+- (c) Delta render only helps with a still camera. A moving camera pays the full render, the §6e cost.
+- Exact ideas still open:
+  - keeping the materials and heat in rsort order, which removes the gather but is a large layout change;
+  - an activity bitset per chunk for flow/erode;
+  - keeping the books totals incrementally in `set_mat`.
+
+**Build.** wasm (7ccc99b, ABI 17) md5 `0c247aa20e66733c488974cefe40f5da` (1,458,319 B), play.html `a27df0e80c908f6c0ae359684e1e2451`, bitblock-lab.html `1700fb34341ef2d5ce69a2709ccc7516`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged). Served at 127.0.0.1:8765 and self-playtested: ocean and gas r70 `books=ok energy_drift=0 error=none` at 15.0 / 15.1 presented fps, and r80 clamps to 70. Only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6f/playtest/{default,chem2_r70,chem4_r70,chem4_r80}.png`.
+- Sweep shots: `/workspace/render_scale/s6f/chrome/{ref,e1,e1rep*,e1r70_*}_*.png`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
