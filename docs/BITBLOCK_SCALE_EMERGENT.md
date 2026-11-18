@@ -2890,6 +2890,72 @@ Every run ends `books=ok energy_drift=0 error=none`.
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6g. Status books in one pass, straight convection gathers; play cap 70 → 72 (2026-11-17, branch `chem/render-scale-2026-11`; Owen "keep going, but make sure to update my desktop after every pass" pt252u) — every hash and book unchanged
+
+This wave is one shippable pass, so Owen's Desktop can be updated after it. The exactness bar is the same as §6f, against b55c24e: parity byte-identical, p6 goldens, native == wasm, the default play world `pmbj7za5…` / frame `nx4b62u5…`, and `books=ok energy_drift=0`. No hash changed, and no win needed a hash change.
+
+**1. Changes (all exact).**
+- 76de12c — **status books.** The browser loop asks for both status lines at 10 Hz (`STATUS_UI_MS = 100`), so this cost ran ten times a second.
+  - Before, the chem readout recomputed the material histogram about seven times, summed the heat three times, and probed every cell's 24-byte coordinate through the chunk map.
+  - `ChemWorld::book_totals` now computes material count, lane totals and drift, and energy total and drift from one histogram and one heat sum. These are the same i64 terms as the separate calls. `check_books_with` reuses them.
+  - The occupancy check walks the topology's z-runs, with one chunk lookup per 16-cell z block. In that block z + 1 steps one 16×16 layer, so the bit index steps by 256. The cells are the same, in the same order, so the first failure is the same.
+  - Without a topology (before the first step, or after cells change) it keeps the cell walk. When a material lacks a table row, it keeps the original walk, so a `BadMaterial` error stays exact.
+  - Test `books_occupancy_walk_by_runs_matches_cell_walk`: 37 bits turned off from the last solid cell backwards, crossing chunk borders at negative coordinates. Each run walk must equal the cell walk and name that cell. Changing the layer step to 16 fails it.
+- 8252a42 — **convection gathers.** `gather_parcels` (handed from the gas rise to convection) fills the materials and the heat as two straight `extend`s over `rsort`, instead of a push pair per cell. The values are the same.
+- 0a5bae2 — cap 70 → 72 and www refresh.
+
+**2. Native (before → after).**
+
+| item | before | after |
+|---|---|---|
+| chem status (debug readout), ocean / gas r72 | 11.1 / 11.8 ms | 2.5 / 2.6 ms |
+| play status line, ocean / gas r72 | 1.8 / 2.1 ms | 0.8 / 0.9 ms |
+| both at 10 Hz, gas r72 | ~139 ms per second | ~35 ms per second |
+| gas r60 gather (rise → convect) | 2.33 ms | 1.47 ms |
+| gas r72 gather | — | 2.94 ms (scan 7.4, replay 3.2, 243k swaps) |
+
+The status cost runs outside the page's `step_ms`/`busy` counters, so it shows up only as raf and presented-fps headroom.
+
+**3. Chrome (headless, Low 960×540, chem every 4 ticks; presented fps, step ms, busy).**
+
+| case | b55c24e (§6f ship) | 0a5bae2 |
+|---|---|---|
+| ocean r70 | 15.30, 12.2, 52% | 14.87, 12.1, 54% |
+| gas r70 | 15.00, 18.9, 69% | 15.07, 21.1, 74% |
+| ocean r72 | 15.87 (§6f: 13.3–14.4) | **14.67–15.13 (4 runs), 13.3–19.9** |
+| gas r72 | 15.20 (§6f: 12.7–13.0) | **14.40–15.40 (4 runs), 21.4–33.8, 73–85%** |
+| ocean r74 | 15.43, 20.5 | 15.13, 15.8 |
+| gas r74 | 8.6, 107 | 13.2, 59.6, 90% |
+
+Every run ends `books=ok energy_drift=0 error=none`. The §6f build at r72 swings between about 13 and 15 from run to run; with this pass all four runs on both presets hold 14.4 or more.
+
+**4. Cap: `CHEM_RADIUS_MAX` 70 → 72 (0a5bae2).** r72 holds about 15 presented fps on four of four runs for both presets (lowest gas run 14.40). Gas r74 falls to 13.2. The slider (`max="72"`, title updated), `playNum(…, 2, 72)` and the Rust clamp all match, and an r80 request on :8765 clamps to 72.
+
+**5. Exactness evidence.**
+- Parity vs b55c24e is byte-identical after each code commit: chem `8ef8f682…`, play `dd849e0b…` (its lines carry `books`, `energy_drift` and `lanes`), big `9248e8d7…`, split `bc8ac3af…`.
+- p6 goldens 3/3; core 323 and wasm 78 tests pass.
+- Ship wasm == native world and frame on ocean r60, gas r60, gas r48, ocean r72 and gas r72.
+- On :8765 Chrome reads the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page reports `match_expected=true`.
+
+**6. Next wall.**
+- (a) Gas past r72:
+  - convection's ordered scan (7.4 ms at r72) and its swap replay (3.2 ms, 243k random set_mat / heat swaps);
+  - the rsort gather (2.9 ms);
+  - combine2's network (1.4 ms at r60) and heat.
+  - Busy is already 73–85% at r72. r74 jumps to 60–107 ms steps once the frame no longer fits in a 15 Hz slot.
+- (b) Ocean past r74: flow, erode, dissolve and water (~2.5 ms each at r60), and the mirror's FNV walk and `is_on`.
+- (c) Exact ideas still open:
+  - keep the materials (and heat) persistently in rsort order through `set_mat`;
+  - a per-chunk activity bitset for the ocean relief passes;
+  - incremental material hash in the mirror, which needs a careful collision argument, so it is left out.
+
+**Build.** wasm (0a5bae2, ABI 17) md5 `374ad1abb7b8a60cdf17cf2293b9697c` (1,459,637 B), play.html `4fb9ae85faea099f9403cee1d34baec9`, bitblock-lab.html `684beaf1b31de06044ac2615d545a691`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean and gas r72 `books=ok energy_drift=0 error=none`, r80 clamps to 72, and only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6g/playtest/{default,chem2_r72,chem4_r72,chem2_r80}.png`.
+- Sweep shots: `/workspace/render_scale/s6g/chrome/{base,g1,g1rep*,g2rep*}_*.png`.
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy (Owen's Desktop is handled outside this branch), and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
