@@ -971,7 +971,8 @@ impl Renderer {
             .collect();
         // Per chunk, the bits that count as exposed: its open words where the enclosed-bit
         // cull applies to it, else its on bits (open words are a subset of the on bits). The
-        // changed bits arrive in runs within a chunk, so the last chunk's words are kept at hand.
+        // words of every chunk met are built once and kept by index, and the changed bits arrive
+        // in runs within a chunk, so the last chunk's slot is kept at hand (no copy on a switch).
         type Words = [u64; crate::world::CHUNK_WORDS];
         let mut open_words: Vec<Words> = Vec::new();
         let mut open_cache: crate::world::CoordMap<crate::world::ChunkCoord, usize> =
