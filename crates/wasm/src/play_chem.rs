@@ -39,13 +39,14 @@ pub const CHEM_ATOM_CAP: i64 = 1 << 32;
 pub const CHEM_RADIUS_MIN: u32 = 2;
 pub const CHEM_RADIUS_DEFAULT: u32 = 12;
 /// Browser cap. §6k measured Chrome Low 960x540 (chem every 4 ticks) after the delta index
-/// compaction (no periodic full re-render) and the status refresh moved off painted frames:
-/// r80 ocean presents 14.97-15.03 fps (busy 58-61%) and gas 14.67-15.03 (busy 59-66%) over two
-/// sets of four runs each; r78 holds 14.93-15.03 on both. r82 ocean still holds (14.73-15.03)
-/// but gas's early stirring (its delta frames redraw most of the envelope for the first ~100
-/// steps) drops its first window to 7.9-9.2 fps. So r80 is the largest tested radius that holds
-/// the 15 Hz chem cadence on both presets (§6i/§6j: r76).
-pub const CHEM_RADIUS_MAX: u32 = 80;
+/// compaction (no periodic full re-render) and the status refresh moved off painted frames;
+/// §6l made tint-only delta frames a recolour pass, so a fresh gas load's first seconds hold at
+/// r80. §6m (domain-order convection density test, mirror edits, classify chunk cache) measured
+/// fresh loads at r82 over two sets of four runs each: gas presents 14.83-15.10 fps (busy
+/// 72-78%) and ocean 14.73-15.03 (busy 67-70%). At r84 a fresh gas load's first window still
+/// dips (9.4 and 13.1 fps in two of eight runs). So r82 is the largest tested radius that holds
+/// the 15 Hz chem cadence on both presets (§6i/§6j: r76, §6k/§6l: r80).
+pub const CHEM_RADIUS_MAX: u32 = 82;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
