@@ -1827,6 +1827,10 @@ impl ChemWorld {
         let mut base = 0;
         while base < n {
             let end = (base + 64).min(n);
+            if find_mat(&self.mat[base..end], 0, MatId::WATER).is_none() {
+                base = end;
+                continue;
+            }
             let mut bits = hit_mask(&self.mat[base..end], &self.q[base..end], |m, q| {
                 (m == MatId::WATER) & (q > 200)
             });
