@@ -3557,6 +3557,83 @@ This wave is one shippable pass: fresh gas r88's first window, then ocean's spik
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6q. Delta classify without per-neighbour hashing; cap stays 88 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+This wave is one shippable pass on two first windows: gas r90's, and ocean's right after load. Exactness is checked against 56be670. No hash or frame changed. The mirror's FNV repaint test and frame spreading were left alone. Each commit passed the full local pre-push check first and was pushed on its own, so each has its own CI run, all green.
+
+**1. Diagnosis (Chrome CPU profiles of fresh r90 loads, split per `bitblock_play_step`; cap lifted in a study build).**
+- **Gas r90's first window is a threshold effect.** For the first ~2.5 s one sim tick costs ~64–66 ms in wasm (chem ~39, mirror ~12, render ~13), right at the 66.7 ms budget of 15 Hz.
+  - When one frame runs late, the next frame catches up with two ticks (~130 ms, about 7.5 fps), and the loop stays in that double-tick state until the tick cost falls (to ~50 ms by 5 s).
+  - So a fresh run either holds 15 fps or dips to 7–13 fps in its first snapshot. The 56be670 build behaves the same way.
+- **Natively, the step-2 spike is the per-tile list build** (`build_delta_csr`, ~50 ms at gas r90) on the first delta frame. The step-32 spike in one earlier run did not recur.
+- **Within render, part of the classify cost was hashing.**
+  - The set of bits within one step of a toggled bit was a `CoordMap` of 27 neighbours per toggled bit.
+  - The per-chunk "exposed words" lookup used a last-chunk cache over a `CoordMap`. A busy tick's changed bits jump between nearby chunks, so most lookups hashed.
+  - In ocean's first window this hashing was ~1.2 ms per tick in wasm.
+
+**2. Change: 45e01fa (exact).** The classify step no longer hashes per neighbour.
+- The toggled-neighbour set is now an `IndexedBits` (per-chunk bit words, with new `contains` and `clear`). It is kept on the renderer for its storage.
+- `IndexedBits` and the classify step's exposed-words lookup both keep a 64-way cache of recent chunks, direct-mapped by the chunk's low coordinate bits, in front of their maps.
+- Both are pure caches of the same lookups, so the sets, the index, the frames and the hashes are unchanged. `delta_index` membership and compaction use the same `IndexedBits` (and its `clear`).
+
+**Tried and dropped (all exact, none shipped):**
+- **Hidden proofs kept across frames that switch bits.** Validity was tracked per tile through a reset-frame serial. Ocean's early redraw got slightly cheaper, but gas's draw cost rose from ~5.5 to ~7 ms per tick in wasm (proof inserts and lookups on frames whose resets invalidate them).
+- **The same 64-way chunk cache in `World::probe`** (the mirror's occupancy probes). No measurable change: the mirror's cost there is memory, not hashing.
+
+**3. Native (cap lifted; instrumented `spike_prof`, step(4) per chem frame; mean over chem steps 25–95; gVisor sandbox, noisy).**
+
+| case | 56be670 step | §6q step | chem | mirror | render (mean / p90 / max) |
+|---|---|---|---|---|---|
+| ocean r88 | 39.7 ms | 38.1 ms | 26.2 → 25.2 | 4.5 → 4.3 | 8.2 / 25.3 / 91 → 7.8 / 23.9 / 74 |
+| ocean r90 | 44.5 ms | 40.8 ms | 28.5 → 26.6 | 4.9 → 4.7 | 10.3 / 31.0 / 93 → 8.7 / 29.9 / 88 |
+| gas r88 | 41.5 ms | 40.6 ms | 24.7 → 24.7 | 8.6 → 8.0 | 7.7 / 8.7 / 36 → 7.5 / 8.4 / 35 |
+| gas r90 | 44.5 ms | 45.6 ms | 26.3 → 27.1 | 8.5 → 9.0 | 9.4 / 10.3 / 57 → 9.1 / 10.1 / 43 |
+
+- First window, native (total / render per step, steps 1–12): ocean r90 step 1 went from 164 / 93 to 123 / 88 ms; steps 2–12 are within noise. Gas r90 step 2 went from 93 / 57 to 77 / 43 ms.
+
+**4. Chrome per-tick cost (wasm, fresh r90; mean over single-tick steps of the first 2.5 s; two profiled runs per build).**
+
+| case | 56be670 | §6q (shipped) |
+|---|---|---|
+| ocean r90: all / render / classify hashing | 57.4, 55.7 / 10.6, 9.9 / 1.2 ms | 55.6, 55.2 / 9.6, 9.6 / 0.0 ms |
+| gas r90: all / render / classify hashing | 63.6, 65.2 / 12.0, 13.2 / 1.4–1.9 ms | 66.2, 67.0 / 13.6, 13.4 / 1.1–1.3 ms (within run-to-run noise) |
+
+- The gain is real on ocean: ~1 ms per tick of render in the first window, and the hashing is gone. Gas's first window did not move measurably: its hashing is a small share, and chem plus the mirror make up ~51 of its ~65 ms.
+
+**5. Chrome cadence (headless, Low 960×540, chem every 4 ticks; `presented_fps` averaged over 3 snapshots; each run fresh, measured from 2 s after the radius change). Study build of 45e01fa with the cap lifted.**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r90 fresh | 15.13, 12.53 (first snapshot 7.4), 15.27, 13.93 (11.5); busy 81–85% | 15.13, 15.37, 15.10, 14.67 (13.8); 81–87% |
+| ocean r90 fresh | 14.87, 14.97, 14.83, 15.03; 71–76% | 15.00, 15.03, 15.03, 15.00; 71–78% |
+| gas r88 fresh (shipped www) | 15.03, 15.07, 15.03, 14.93; 75–76% | — |
+| ocean r88 fresh (shipped www) | 15.00, 15.03, 15.00, 15.03; 66–67% | — |
+
+- Every run ends `books=ok energy_drift=0`.
+
+**6. Cap: stays at 88.** Ocean r90 holds ~15 fps over both sets. Gas r90 still drops into the double-tick state in 2 of 8 fresh runs (first snapshots 7.4 and 11.5), so r90 fails the rule. 2095d8e refreshes the www for the new code; the cap is unchanged.
+
+**7. Exactness evidence (vs 56be670).**
+- Parity byte-identical: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- 600-tick runs of every preset at r36 match the §6i reference file. Render tests pass, and the full pre-push check passes (fmt, clippy both feature sets, workspace tests, release goldens, index drift, bbgraph selftest).
+- `delta_eq` (full rgba and status compared on every step) is equal on all 16 cases: preset 1 r80/r82, ocean r60/r80–r90, and gas r36/r80–r90.
+  - The outputs match the §6p references byte for byte (compaction counts included) on every case up to r88.
+  - At r90 they match 56be670 built natively.
+- The shipped wasm, the 56be670 wasm (`211d5d8b…`) and native print the same world and frame tags (with `books=ok`) on ocean r88, gas r88 and preset 1 r60 (warm 30, 20 steps).
+- :8765 serves the default world `pmbj7za5…` and frame `nx4b62u5…`, ABI 17. The lab page prints the same lines as §6l.
+
+**8. Next wall.**
+- (a) Gas r90's first window: ~65 ms per tick in wasm against a 66.7 ms budget. Chem is ~39 ms (`step_laws`, heat pass, combine pass) and the mirror ~12 ms (the FNV hash over ~3 M domain cells plus the changed-bit occupancy probes). The render share (~13) is no longer the main lever. Lifting r90 needs a few ms out of chem, or the mirror's share.
+- (b) The first delta frame's per-tile list build (~50 ms native at r90) is still a one-off spike just after load.
+- (c) Replacing the mirror's FNV repaint test with an exact material comparison, spreading work over frames, or a catch-up policy that does not double-tick after one late frame remain options for Owen only. The last would change which frames are rendered, so the frame tags would change.
+
+**Build.** wasm (2095d8e, ABI 17) md5 `56bffeeba01cb896e617bb88f5c6b76e` (1,504,423 B), play.html `1c9bf5fd62ceaac5ecc0fbe427265077`, bitblock-lab.html `222d3671a311493310e1a60b43f64cea`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- Served at 127.0.0.1:8765 and self-playtested: ocean r88 (15.0 presented fps) and gas r88 (15.1) both read `books=ok energy_drift=0 error=none`. Requesting r92 clamps to 88, and the box shows 88 (1 → 2, 40.7 → 40). Only the favicon returns 404.
+- Screenshots: `/workspace/render_scale/s6q/play/{default,chem2_r88,chem4_r88,chem4_r92,radius_box_r92}.png`.
+- Sweeps, profiles and A/B: `/workspace/render_scale/s6q/` (`chrome/`, `chrome_final/`, `ab0/`–`ab5/`, `eq/`).
+
+Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
