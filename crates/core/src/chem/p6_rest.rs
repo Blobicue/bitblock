@@ -47,20 +47,21 @@ fn full_scans() -> bool {
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
 
-/// Reused buffers of [`ChemWorld::convect_pass`] (the parcels gathered into rsort order and the
-/// tick's swaps), kept across steps so a step does not allocate per domain cell. The pass
-/// clears and refills every buffer before reading it.
+/// Reused buffers of the outward gas rise and [`ChemWorld::convect_pass`] (the rise's
+/// materials gathered into rsort order, the convection density bits and move marks, and the
+/// tick's swaps), kept across steps so a step does not allocate per domain cell. Each pass
+/// clears or rewrites every buffer it reads before reading it.
 #[derive(Default)]
 pub(crate) struct ConvectScratch {
     smat: Vec<MatId>,
-    sq: Vec<i32>,
     swaps: Vec<(u32, u32)>,
-    /// Convection candidates: the rsort positions whose gathered pair passes the
-    /// density test (see [`ChemWorld::convect_pass`]).
+    /// Convection candidates: the rsort positions whose pair passes the density test (see
+    /// [`ChemWorld::convect_pass`]).
     cand: Vec<u32>,
-    /// The tick whose outward gas rise left `smat` and `sq` gathered for that tick's
-    /// convection (the two passes run back to back, and the rise moves no heat).
-    gathered: Option<u64>,
+    /// One bit per domain cell: its pair with its outward neighbour passes the density test.
+    pass: Vec<u64>,
+    /// One bit per rsort position: the parcel there moved this tick.
+    moved: Vec<u64>,
 }
 
 /// A clone starts with empty scratch: the buffers hold no state between steps.
@@ -274,27 +275,47 @@ impl ChemWorld {
                 *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
             }
         }
-        // Outermost first over rsort, with the parcels gathered into rsort order so the scan
-        // and its outward neighbour (`Topology::shell_up`) read memory in sequence. A parcel
-        // moves at most once per tick, so every swap sees the gathered values, and replaying
-        // the swaps in scan order makes the same `set_mat` / heat-swap calls as swapping in
-        // place.
+        // Outermost first over rsort. A parcel moves at most once per tick, so every density
+        // test reads the values the domain holds when the pass starts (the outward gas rise
+        // has already written its trades back), and so does any test the scan reaches before
+        // either parcel moved. The tests therefore run first, once per domain cell in domain
+        // order against its outward neighbour (`Topology::cell_up`, a few rows or planes away,
+        // so the reads stay near each other), into one bit per cell. The scan then visits, in
+        // the original order, only the rsort positions whose bit is set, and skips a pair one
+        // of whose parcels already moved (the test could have read nothing else that differs).
+        // The roll is a pure function of the cell and tick, so rolling only those pairs is the
+        // same as rolling every pair that reaches it. The swaps are replayed in scan order,
+        // the same `set_mat` / heat-swap calls as swapping in place.
         let n = topo.rsort.len();
         let mut sc = std::mem::take(&mut self.convect_scratch);
         sc.swaps.clear();
-        if sc.gathered.take() != Some(self.tick) {
-            self.gather_parcels(topo, &mut sc, true);
+        let cell_up = topo.cell_up();
+        let words = n.div_ceil(64);
+        sc.pass.clear();
+        sc.pass.resize(words, 0);
+        for (w, word) in sc.pass.iter_mut().enumerate() {
+            let mut bits = 0u64;
+            for i in w * 64..(w * 64 + 64).min(n) {
+                let u = cell_up[i];
+                let has_up = u != NO_SLOT;
+                let u = if has_up { u as usize } else { i };
+                let mb = mass[self.mat[i].0 as usize];
+                let ma = mass[self.mat[u].0 as usize];
+                let tb = i64::from(self.q[i]) + CONVECT_T0;
+                let ta = i64::from(self.q[u]) + CONVECT_T0;
+                let pass = has_up
+                    & (mb != 0)
+                    & (ma != 0)
+                    & (tb > 0)
+                    & (ta > 0)
+                    & (mb
+                        .wrapping_mul(ta)
+                        .wrapping_mul(1000 + CONVECT_MARGIN_PERMILLE)
+                        < ma.wrapping_mul(tb).wrapping_mul(1000));
+                bits |= u64::from(pass) << (i - w * 64);
+            }
+            *word = bits;
         }
-        // A parcel that moved is read no more this tick: overwriting its gathered material
-        // with a massless one skips it exactly like a moved flag (a massless parcel is
-        // skipped either way). With no massless id at all, a flag array instead.
-        let parked = mass.iter().position(|&m| m == 0).map(|m| MatId(m as u8));
-        let mut moved = if parked.is_none() {
-            vec![false; n]
-        } else {
-            Vec::new()
-        };
-        let (smat, sq, swaps) = (&mut sc.smat, &sc.sq, &mut sc.swaps);
         let convect_key = self.roll_key(SALT_CONVECT);
         // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
         // in rsort order (the same roll, read sequentially).
@@ -302,38 +323,17 @@ impl ChemWorld {
             RollKey::Wide(key) => topo.rsort_roll_cells(key, &self.cells),
             RollKey::Lattice(_) => None,
         };
-        // Two phases, the same swaps: a parcel's test reads only gathered values, which a
-        // parcel keeps until it moves, so the density test is run first over every pair at
-        // once (no branches; no parcel has moved yet), and the scan in the original order
-        // then visits only the pairs that pass it, skipping a moved parcel as before. The
-        // roll is a pure function of the cell and tick, so rolling only those pairs is the
-        // same as rolling every pair that reaches it.
         // Every slot below `len` is written before it is read, so the buffer is only grown
         // (not cleared and zero-filled each tick).
-        let cand = &mut sc.cand;
+        let (pass, cand, moved, swaps) = (&sc.pass, &mut sc.cand, &mut sc.moved, &mut sc.swaps);
         if cand.len() < n + 1 {
             cand.resize(n + 1, 0);
         }
         let mut len = 0usize;
-        for k in 0..n {
-            let ku = topo.shell_up[k];
-            let has_up = ku != NO_SLOT;
-            let ku = if has_up { ku as usize } else { k };
-            let mb = mass[smat[k].0 as usize];
-            let ma = mass[smat[ku].0 as usize];
-            let tb = i64::from(sq[k]) + CONVECT_T0;
-            let ta = i64::from(sq[ku]) + CONVECT_T0;
-            let pass = has_up
-                & (mb != 0)
-                & (ma != 0)
-                & (tb > 0)
-                & (ta > 0)
-                & (mb
-                    .wrapping_mul(ta)
-                    .wrapping_mul(1000 + CONVECT_MARGIN_PERMILLE)
-                    < ma.wrapping_mul(tb).wrapping_mul(1000));
+        for (k, &i) in topo.rsort.iter().enumerate() {
+            let i = i as usize;
             cand[len] = k as u32;
-            len += usize::from(pass);
+            len += (pass[i / 64] >> (i % 64) & 1) as usize;
         }
         // Driven rolls are read sequentially from the topology's table, so they are rolled
         // here for every candidate at once and the pairs that fail are dropped (the scan
@@ -349,15 +349,13 @@ impl ChemWorld {
             }
             len = kept;
         }
+        moved.clear();
+        moved.resize(words, 0);
+        let is_moved = |moved: &[u64], k: usize| moved[k / 64] >> (k % 64) & 1 == 1;
         for &k in cand[..len].iter().rev() {
             let k = k as usize;
-            let mb = mass[smat[k].0 as usize];
-            if mb == 0 || (!moved.is_empty() && moved[k]) {
-                continue;
-            }
             let ku = topo.shell_up[k] as usize;
-            let ma = mass[smat[ku].0 as usize];
-            if ma == 0 || (!moved.is_empty() && moved[ku]) {
+            if is_moved(moved, k) || is_moved(moved, ku) {
                 continue;
             }
             if roll_cells.is_none()
@@ -365,16 +363,8 @@ impl ChemWorld {
             {
                 continue;
             }
-            match parked {
-                Some(p) => {
-                    smat[k] = p;
-                    smat[ku] = p;
-                }
-                None => {
-                    moved[k] = true;
-                    moved[ku] = true;
-                }
-            }
+            moved[k / 64] |= 1 << (k % 64);
+            moved[ku / 64] |= 1 << (ku % 64);
             swaps.push((topo.rsort[k], topo.rsort[ku]));
         }
         for &(i, up) in &sc.swaps {
@@ -388,19 +378,11 @@ impl ChemWorld {
         self.convect_scratch = sc;
     }
 
-    /// Gathers the domain's materials (and, with `heat`, its heat) into rsort order.
-    fn gather_parcels(&self, topo: &Topology, sc: &mut ConvectScratch, heat: bool) {
+    /// Gathers the domain's materials into rsort order.
+    fn gather_parcels(&self, topo: &Topology, sc: &mut ConvectScratch) {
         sc.smat.clear();
-        sc.sq.clear();
-        if heat {
-            // Two straight gathers (no per-element capacity checks): the same values.
-            sc.smat
-                .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
-            sc.sq.extend(topo.rsort.iter().map(|&i| self.q[i as usize]));
-        } else {
-            sc.smat
-                .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
-        }
+        sc.smat
+            .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
     }
 
     /// planet6's gas rise under Gravity::Core: outermost first over rsort, a rising cell
@@ -409,8 +391,7 @@ impl ChemWorld {
     /// The scan reads the materials gathered into rsort order (its outward neighbour is an
     /// rsort position, [`Topology::shell_up`]) and makes each trade there as well, so every
     /// test sees the materials an in-place scan would see; the trades are then replayed in
-    /// scan order, the same `set_mat` calls with the same values. The rise moves no heat, so
-    /// when this tick's convection follows, the gathered parcels are handed on to it.
+    /// scan order, the same `set_mat` calls with the same values.
     pub(crate) fn gas_rise_outward(&mut self, topo: &Topology, rep: &mut StepReport) {
         let mut sc = std::mem::take(&mut self.convect_scratch);
         // A rising cell trades only with AIR or WATER and a trade keeps both counts, so with
@@ -418,12 +399,10 @@ impl ChemWorld {
         // convection then gathers the same values itself).
         if !full_scans() && find_mat2(&self.mat, 0, MatId::AIR, MatId::WATER).is_none() {
             sc.swaps.clear();
-            sc.gathered = None;
             self.convect_scratch = sc;
             return;
         }
-        let hand_on = self.params.cycle == WaterCycle::Driven && self.params.convect;
-        self.gather_parcels(topo, &mut sc, hand_on);
+        self.gather_parcels(topo, &mut sc);
         sc.swaps.clear();
         let rising: [bool; 256] = std::array::from_fn(|m| self.is_rising(MatId(m as u8)));
         let key = self.roll_key(0xb0b81e);
@@ -459,7 +438,6 @@ impl ChemWorld {
             self.set_mat(i, above);
             rep.rose += 1;
         }
-        sc.gathered = hand_on.then_some(self.tick);
         self.convect_scratch = sc;
     }
 

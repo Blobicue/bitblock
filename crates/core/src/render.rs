@@ -973,30 +973,35 @@ impl Renderer {
         // cull applies to it, else its on bits (open words are a subset of the on bits). The
         // changed bits arrive in runs within a chunk, so the last chunk's words are kept at hand.
         type Words = [u64; crate::world::CHUNK_WORDS];
-        let mut open_cache: crate::world::CoordMap<crate::world::ChunkCoord, Words> =
+        let mut open_words: Vec<Words> = Vec::new();
+        let mut open_cache: crate::world::CoordMap<crate::world::ChunkCoord, usize> =
             crate::world::CoordMap::default();
-        let mut last: Option<(crate::world::ChunkCoord, Words)> = None;
+        let mut last: Option<(crate::world::ChunkCoord, usize)> = None;
         let cull_enabled = self.enclosed_cull_enabled();
         let mut exposed = |coord: Coord, world: &World| -> bool {
             let (chunk, index) = World::chunk_of(coord);
-            if last.as_ref().is_none_or(|(c, _)| *c != chunk) {
-                let words = *open_cache.entry(chunk).or_insert_with(|| {
-                    let applies = cull_enabled
-                        && world
-                            .chunk_bounds(chunk)
-                            .is_some_and(|b| enclosed_cull_applies(projection, b));
-                    if applies {
-                        world.chunk_open_words(chunk)
-                    } else {
-                        world
-                            .chunk_words(chunk)
-                            .map_or([0; crate::world::CHUNK_WORDS], |(_, bits)| *bits)
-                    }
-                });
-                last = Some((chunk, words));
-            }
-            let (_, words) = last.as_ref().expect("filled above");
-            words[index / 64] >> (index % 64) & 1 == 1
+            let slot = match last {
+                Some((c, slot)) if c == chunk => slot,
+                _ => {
+                    let slot = *open_cache.entry(chunk).or_insert_with(|| {
+                        let applies = cull_enabled
+                            && world
+                                .chunk_bounds(chunk)
+                                .is_some_and(|b| enclosed_cull_applies(projection, b));
+                        open_words.push(if applies {
+                            world.chunk_open_words(chunk)
+                        } else {
+                            world
+                                .chunk_words(chunk)
+                                .map_or([0; crate::world::CHUNK_WORDS], |(_, bits)| *bits)
+                        });
+                        open_words.len() - 1
+                    });
+                    last = Some((chunk, slot));
+                    slot
+                }
+            };
+            open_words[slot][index / 64] >> (index % 64) & 1 == 1
         };
         // (bit, whether it is exposed in the new world, its grown box)
         let mut loud: Vec<(Coord, bool, bool, Option<DeltaEntry>)> = Vec::new();

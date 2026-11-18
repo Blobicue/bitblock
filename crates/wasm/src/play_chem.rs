@@ -205,6 +205,8 @@ pub struct ChemPlay {
     /// full scan next time). Chem occupancy only changes through `set_mat`, so cells whose id
     /// is unchanged since the last mirror cannot need an edit; only changed cells are probed.
     pub mirror_mats: Vec<MatId>,
+    /// Scratch of `mirror_chem`: the occupancy edits of one mirror, applied after its scan.
+    pub mirror_edits: Vec<(Coord, bool)>,
     /// Render-only cross-section (off by default).
     pub cut: ChemCut,
     /// `CHEM_ENERGY_*` (off by default: planet6 behaviour).
@@ -266,6 +268,7 @@ impl ChemPlay {
             colors: ChemColors::new(),
             material_hash: 0,
             mirror_mats: Vec::new(),
+            mirror_edits: Vec::new(),
             cut: ChemCut::default(),
             energy: CHEM_ENERGY_OFF,
             cycle: CHEM_CYCLE_CLASSIC,

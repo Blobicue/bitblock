@@ -1112,6 +1112,10 @@ pub(crate) struct Topology {
     /// asked for; built on first use). Lets the convection scan, which rolls in rsort order
     /// every tick, read one sequential word per cell instead of the cell's coordinate.
     rsort_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
+    /// The outward neighbour of each domain cell as a cell index (`shell_up` in domain order:
+    /// `cell_up[rsort[k]] == rsort[shell_up[k]]`, `NO_SLOT` where `shell_up` is), built on
+    /// first use. Lets the convection density test run in domain order.
+    cell_up: std::sync::OnceLock<Vec<u32>>,
     /// The inverse of `ysort` (built on first use): `ysort[ypos[i]] == i`. Lets a sparse scan
     /// visit a few cells in `ysort` order without walking all of it.
     ypos: std::sync::OnceLock<Vec<u32>>,
@@ -1148,6 +1152,7 @@ impl Topology {
             rsort: Vec::new(),
             shell_up: Vec::new(),
             rsort_roll: std::sync::OnceLock::new(),
+            cell_up: std::sync::OnceLock::new(),
             ypos: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
             space_faces: Vec::new(),
@@ -1285,6 +1290,19 @@ impl Topology {
             })
             .collect();
         self.rsort = rs;
+    }
+
+    /// [`Topology::cell_up`]: each domain cell's outward neighbour (built on first use).
+    pub(crate) fn cell_up(&self) -> &[u32] {
+        self.cell_up.get_or_init(|| {
+            let mut up = vec![NO_SLOT; self.rsort.len()];
+            for (&i, &ku) in self.rsort.iter().zip(&self.shell_up) {
+                if ku != NO_SLOT {
+                    up[i as usize] = self.rsort[ku as usize];
+                }
+            }
+            up
+        })
     }
 
     /// Each cell's position in `ysort` (the inverse permutation, built on first use).

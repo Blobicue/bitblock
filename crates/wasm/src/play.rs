@@ -1541,46 +1541,47 @@ fn mirror_chem(
         seen.clear();
         seen.resize(chem.world.domain_len(), bitblock_core::chem::MatId::AIR);
     }
-    // Coordinates and occupancy are read only for cells whose material changed: the chem
-    // world through a chunk-caching probe, the play world through a copy of the last chunk's
-    // bits (each domain cell is visited once, so an edit can only stale the bit just edited).
+    // Coordinates and occupancy are read only for cells whose material changed, both worlds
+    // through chunk-caching probes. The scan runs in blocks of 64 cells: the material hash and
+    // a mask of the changed cells first (no branch per cell), then the changed cells in order.
+    // The edits are applied after the scan, in the same order: each domain cell is visited
+    // once and an edit flips only its own bit, so every occupancy read before them sees what
+    // it would see between them.
     let mats = chem.world.mats();
     let cells = chem.world.cells();
     let mut want_probe = chem.world.world().probe();
-    let mut have_chunk: Option<(
-        bitblock_core::world::ChunkCoord,
-        [u64; bitblock_core::world::CHUNK_WORDS],
-    )> = None;
-    for (i, &mat) in mats.iter().enumerate() {
-        mat_hash = (mat_hash ^ u64::from(mat.0)).wrapping_mul(0x0100_0000_01b3);
-        if !full && seen[i] == mat {
-            continue;
+    let mut have_probe = world.probe();
+    let mut edits = std::mem::take(&mut chem.mirror_edits);
+    edits.clear();
+    for (block, (mats, seen)) in mats.chunks(64).zip(seen.chunks_mut(64)).enumerate() {
+        let mut mask = 0u64;
+        for (j, (&mat, &was)) in mats.iter().zip(seen.iter()).enumerate() {
+            mat_hash = (mat_hash ^ u64::from(mat.0)).wrapping_mul(0x0100_0000_01b3);
+            mask |= u64::from(full || was != mat) << j;
         }
-        seen[i] = mat;
-        let coord = cells[i];
-        let want = want_probe.is_on(coord);
-        let (chunk, index) = World::chunk_of(coord);
-        if have_chunk.as_ref().is_none_or(|(c, _)| *c != chunk) {
-            let words = world
-                .chunk_words(chunk)
-                .map_or([0; bitblock_core::world::CHUNK_WORDS], |(_, w)| *w);
-            have_chunk = Some((chunk, words));
-        }
-        let have = have_chunk
-            .as_ref()
-            .is_some_and(|(_, w)| w[index / 64] >> (index % 64) & 1 == 1);
-        debug_assert_eq!(have, world.is_on(coord));
-        let toggled = want != have;
-        if !full {
-            changed_bits.push((coord, toggled));
-        }
-        if toggled {
-            let op = if want { Operation::On } else { Operation::Off };
-            if transaction.apply_edit(history, world, Edit::new(op, coord)) {
-                changed += 1;
+        seen.copy_from_slice(mats);
+        while mask != 0 {
+            let i = block * 64 + mask.trailing_zeros() as usize;
+            mask &= mask - 1;
+            let coord = cells[i];
+            let want = want_probe.is_on(coord);
+            let have = have_probe.is_on(coord);
+            let toggled = want != have;
+            if !full {
+                changed_bits.push((coord, toggled));
+            }
+            if toggled {
+                edits.push((coord, want));
             }
         }
     }
+    for &(coord, want) in &edits {
+        let op = if want { Operation::On } else { Operation::Off };
+        if transaction.apply_edit(history, world, Edit::new(op, coord)) {
+            changed += 1;
+        }
+    }
+    chem.mirror_edits = edits;
     world.flush_octree();
     chem.mirror_mats = seen;
     chem.last_step_changed = changed;
