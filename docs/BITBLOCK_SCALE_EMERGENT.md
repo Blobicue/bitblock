@@ -4052,6 +4052,74 @@ No spread/deferred render was needed: the place frame now costs about one ordina
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6x. Recolour proofs kept across toggling frames, eager delta members, z-runs with gapped rows: toggling frames −10–23 ms, no 7.5 fps lock after a gapped place; cap 90 → 92 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+Focus: gas r92's one-off first-window gap (§6w missed the rule by one such run), the step after a dig or place (+10–15 ms native), and convection / heat / `draw_bit_with`. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 6ab19bd | render: a delta frame that toggles bits keeps the recolour proofs its resets cannot break (`drop_proofs_over`: per proof chunk, its projected box grown 2 px against the reset pixels' rect) | [44353682248](https://github.com/Blobicue/bitblock/actions/runs/44353682248) |
+| d09c8b8 | render: the delta member set is built with the eager delta lists after a still-camera full render, not on the first toggling frame | [44356431315](https://github.com/Blobicue/bitblock/actions/runs/44356431315) |
+| 26bab9b | render: a toggling delta frame drops changed bits proved hidden that no toggle is near, and its redraws record hidden proofs too | [44357427494](https://github.com/Blobicue/bitblock/actions/runs/44357427494) |
+| 2dd6859 | play: chem cap 90 → 92, www refresh | [44359502784](https://github.com/Blobicue/bitblock/actions/runs/44359502784) |
+| 936eed0 | chem: z-runs keep rows of several runs, so a domain-growing place that leaves a gap keeps row-slice heat | [44362651770](https://github.com/Blobicue/bitblock/actions/runs/44362651770) |
+| 7c08d27 | www refresh | [44364468762](https://github.com/Blobicue/bitblock/actions/runs/44364468762) |
+
+**2. Cause and fix.**
+- The one-off first-window gap is not app work. Chrome traces show it as a single frame at a random time (step 76–85 ms, or a 74 ms status refresh), not tied to load. A node loop run caught one as a 61 ms hole with no profiler samples: the process was not running. Page faults were 1–16 per step, with no `memory.grow` after load and no allocation stalls. Native frames over 150 steps show none. So it is a host-level stall; the only lever is headroom so the loop catches up inside the window.
+- Toggling frames: any frame that toggled a bit (dig, place, or a chem toggle) cleared every recolour proof. It then classified and redrew every changed exposed bit: 50–90k `draw_bit_with` calls for 2–3 toggles in gas. F keeps the proofs a frame's resets cannot reach. H skips changed bits that are still proved hidden and not near a toggle: such a bit holds no pixel, and if a reset pixel lets it win, the index brings it back as a redraw candidate. H also lets the toggling redraws, which run after the resets, record new proofs.
+- First toggling frame: it built the delta member set (every indexed bit) lazily. G builds it with the eager CSR lists after a still-camera full render; the set is the same whichever frame builds it.
+- Gapped place (found in the r92 playtest): a domain-growing place that left a z gap in its row made `ZRuns::build` return `None`. Heat then fell back to per-cell face lookups for the rest of the session: 5 → 53 ms native, and Chrome gas locked at 7.4 fps after the second place. §6w's study build at r92 showed the same, so it predates §6x. Rows may now hold several runs: `row_runs` and `beside` return slices, `split` counts the extra runs, and evaporation and erosion still need `contiguous()`. An insert into a gapped row rebuilds the z-runs.
+- Tried and dropped, no gain: a bounds-free `cell_up` gather (`u.min(n-1)`) and the heat share quotient via f64 (+3.5 ms).
+
+**3. Timings (native `place_bench`, gas r90 unless noted).**
+
+| measurement | before §6x | after |
+|---|---|---|
+| first dig edit (step 1) | 59 ms | 39–40 ms |
+| render of a toggling frame, 2–3 toggles | 20 / 33 ms | 9.4 / 10.6 ms |
+| chem-toggle frame after a re-dig | 63–64 ms | 40–41 ms |
+| frame after a place (F alone) | 54 / 49 ms | 45 / 37 ms |
+| ocean toggling frame render | 36–39 ms | 27–36 ms |
+| gas r92 step after a gapped place (heat) | 87–89 ms (heat 53) | 38–40 ms (heat 5) |
+| wasm gas r92 step (node `wasmstep`, interleaved) | 50.8–52.2 ms | 49.5–52.1 ms (noisy box) |
+
+**4. Chrome cadence (study builds with the cap lifted; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, first window in brackets).**
+
+| case | set 1 (26bab9b) | set 2 (26bab9b) | set 3 (936eed0) | set 4 (936eed0) |
+|---|---|---|---|---|
+| gas r92 | 15.10 (15), 15.07 (15), 15.03 (15), 15.00 (15.1); busy 69–71% | 15.00 (15) ×4; 68–69% | 14.97 (15), 15.00 (15), 15.00 (15), 15.03 (15); 70–72% | 14.87 (15), 15.03 (15), 15.07 (15), 15.40 (16.2); 71–73% |
+| ocean r92 | 15.03 (15.1), 15.03 (15), 15.07 (15.2), 15.00 (15); 72% | 15.47 (15), 15.00 (15), 15.03 (15.1), 15.03 (15.1); 72% | 15.33 (16), 15.03 (15.1), 15.00 (15), 15.13 (15.4); 73–78% | 15.30 (15.9), 15.03 (15.1), 15.03 (15.1), 15.07 (15.2); 73–76% |
+
+Per-preset means: set 1 gas 15.05, ocean 15.03; set 2 gas 15.00, ocean 15.13; set 3 gas 15.00, ocean 15.12; set 4 gas 15.09, ocean 15.11. Every first window is ≥ 15.0. **Cap: 90 → 92.** The rule (both sets ≥ 15, first windows included) passes on both builds. Gas sits exactly at 15.00 in two of the four sets. Host one-offs still show up, now in later windows (step_max up to 168 ms; 14.6 in one second window).
+
+Dig / place at r92 on :8765 (`placefps6t.mjs`, 936eed0 www):
+- gas: every window after each edit ≥ 15.0, except the first 0.5 s after a place at 14.0; gaps ≤ 83 ms. Before the z-runs fix: 7.4 fps from the second place on.
+- ocean: 14.7–17.5, gaps ≤ 83 ms.
+
+**5. Exactness.**
+- After F, G, H, the cap commit and I: all 16 `delta_eq` outputs and `fp_long` are byte-identical, 17/17 each time. Parity md5s are unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6w wasm vs §6x wasm: 7/7 SAME (both www builds).
+- New test checks: a toggling frame dropped a proved bit and its redraw proved one (`toggle_skipped`, `toggle_proved` > 0); every dropped bit is re-drawn in test builds and asserted to mark nothing. Gapped-row heat equals the per-cell scatter for all `dq`. The topology test checks rows of several runs against `nb6`.
+- Native 8-edit dig/place sequence at r92, old vs new z-runs: every status line (energy, space_q, lanes, books) identical, both presets.
+- **Frame hashes: no re-baseline; old = new.** Default world `pmbj7za5…`, frame `nx4b62u5…`. Node r90 gas world `vbv6ockz…`, frame `ymhicrsu…`; ocean world `wtevn2pz…`, frame `smmn3aox…`. Node r92 gas world `2lniroz3…`, frame `6ucp2u65…`, the same as the §6w build with the cap lifted.
+
+**6. Next wall.**
+- Headroom: gas r92 means are 15.00–15.09, so a host stall in any window can still pull a set under 15. Convection's `cell_up` gather (~37% of the wasm step) and heat remain the largest parts.
+- A gapped place costs a z-runs rebuild (place edit 41–52 → 63–69 ms native, one-off).
+- Ocean toggling frames still redraw 60–90k index candidates over a few hundred reset pixels.
+
+**Build.** wasm (7c08d27, ABI 17) md5 `71c1a959c8eb037f75a064b902140a07` (1,586,565 B), play.html `90ce22be603cb0cd4909fe0bc76d144c`, bitblock-lab.html `1e0ba378d48fb3a65ec3f311c005867c`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90 15.0 fps; r94 clamps to 92 (gas 15.0); `books=ok energy_drift=0 error=none`.
+  - Only favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6x/play2/{pt,pf4,pf2}/*.png` (contact sheet `s6x/contact.png`).
+- Data: `/workspace/render_scale/s6x/{STATUS.md,eq1..eq5,parity1..5.log,chrome/set1..4.log,node_final.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
