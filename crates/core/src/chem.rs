@@ -702,7 +702,9 @@ impl ChemWorld {
         }
     }
 
-    pub(crate) fn index_of(&self, coord: Coord) -> Option<usize> {
+    /// The domain index of `coord` (its position in [`Self::cells`] / [`Self::mats`]), or
+    /// `None` outside the domain.
+    pub fn index_of(&self, coord: Coord) -> Option<usize> {
         // The cached topology indexes exactly `cells` (every domain change drops it).
         match &self.topo {
             Some(t) => t.locate(coord),

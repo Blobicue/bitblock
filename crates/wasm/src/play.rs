@@ -2083,6 +2083,25 @@ mod chem_play_tests {
         }
     }
 
+    /// Digs on ticks without a chem step, then chem steps that refill the dug cells (ocean
+    /// water flows back): the play world keeps mirroring the chem occupancy after every step.
+    #[test]
+    fn digs_refilled_before_the_next_mirror_stay_mirrored() {
+        let mut s = PlaySession::with_chem(CHEM_PRESET_OCEAN, 7, 14).expect("chem genesis");
+        s.set_layout(320, 180, true);
+        s.set_capture(true);
+        assert!(s.step(1));
+        let mut digs = 0;
+        for k in 1..=24_u32 {
+            s.pointer_button(0, true);
+            s.pointer_button(0, false);
+            s.step(if k % 3 == 0 { 4 } else { 1 });
+            digs += u32::from(s.chem.as_ref().unwrap().last.starts_with("dig:"));
+            assert_mirrors_chem(&s);
+        }
+        assert!(digs >= 2, "only {digs} digs");
+    }
+
     fn chem_startup(preset: u32) -> PlaySession {
         let mut s = PlaySession::with_chem(preset, 7, CHEM_RADIUS_DEFAULT).expect("chem genesis");
         s.set_layout(1600, 900, true);

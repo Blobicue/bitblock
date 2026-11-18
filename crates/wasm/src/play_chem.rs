@@ -509,6 +509,7 @@ impl ChemPlay {
         let before = self.world.material(coord);
         match self.world.dig(coord) {
             Some(m) => {
+                self.edited_in_mirror_cache(coord);
                 self.place_mat = m;
                 self.last = format!("dig:{}", mat_name(m));
                 true
@@ -524,9 +525,26 @@ impl ChemPlay {
         }
     }
 
+    /// §6s: a dig / place changes one cell's material outside a mirror, and the play session
+    /// applies the same occupancy edit to the play world at once. The mirror cache records the
+    /// new material for that cell, so the cache keeps describing what the play world holds: a
+    /// later chem step that changes the cell again (water flowing back into a dug cell) is
+    /// then seen by the next mirror. Before, the cache still held the old material, and a cell
+    /// refilled with it before the next mirror was skipped, leaving the play world off there.
+    /// A place that grows the domain leaves the cache short, which makes the next mirror a
+    /// full scan.
+    fn edited_in_mirror_cache(&mut self, coord: Coord) {
+        if self.mirror_mats.len() == self.world.domain_len()
+            && let Some(i) = self.world.index_of(coord)
+        {
+            self.mirror_mats[i] = self.world.mats()[i];
+        }
+    }
+
     pub fn place(&mut self, coord: Coord) -> bool {
         for m in [self.place_mat, MatId::ROCK] {
             if self.world.place(coord, m) {
+                self.edited_in_mirror_cache(coord);
                 self.last = format!("place:{}", mat_name(m));
                 return true;
             }
