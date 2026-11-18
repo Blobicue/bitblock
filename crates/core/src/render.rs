@@ -348,6 +348,18 @@ pub struct Renderer {
     /// Whether the draws are the recolour pass's second step, which only has to reach the
     /// pixels `delta_mask` marks: a bit whose depth bound lies behind all of them is skipped.
     marks_only: bool,
+    /// Whether the draws are a toggle delta frame's redraw or the recolour pass's second step
+    /// (§6s), with `delta_mask` marking the pixels the frame reset or marked. Every pixel such a
+    /// draw writes is added to the mask (and to `delta_written`). At a pixel outside the mask the
+    /// stored fragment is one of the frame before, which still stands, and `tie` there already
+    /// records every equal-depth meeting of that frame's fragments; a bit meeting its own stored
+    /// fragment there again (it is redrawn because its box reaches a reset or marked pixel) is
+    /// not a second fragment, so it leaves `tie` as it is. Each bit is drawn once per pass, so
+    /// inside the mask a bit meets its own stored fragment only face against face (a crease),
+    /// which `tie` records as before. Without this, a redrawn bit set `tie` at every pixel it
+    /// kept, and each later recolour of it marked those pixels and redrew their tiles.
+    delta_redraw: bool,
+    delta_written: Vec<usize>,
     /// Tint-only delta frames so far (diagnostics only).
     delta_recolours: u64,
     /// Pixels the recolour passes marked (tests only).
@@ -528,6 +540,8 @@ impl Renderer {
             recolour_marks: Vec::new(),
             tie: Vec::new(),
             marks_only: false,
+            delta_redraw: false,
+            delta_written: Vec::new(),
             delta_recolours: 0,
             #[cfg(test)]
             recolour_marked: 0,
@@ -1192,13 +1206,11 @@ impl Renderer {
                 redraw.push((projection.view_depth(coord_center(coord)), coord));
             }
         }
-        reset
-            .iter()
-            .for_each(|&index| self.delta_mask[index] = false);
-        self.delta_pixels = reset;
+
+        dedup_draws(&mut redraw, &mut fresh);
 
         // 3. Draw, nearest first (any order gives the same frame).
-        redraw.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+        self.delta_redraw = true;
         for &(_, coord) in &redraw {
             self.draw_bit_with(projection, coord, tint);
         }
@@ -1220,6 +1232,14 @@ impl Renderer {
             self.draw_bit_with(projection, coord, tint);
         }
         self.recording = false;
+        self.delta_redraw = false;
+        for index in self.delta_written.drain(..) {
+            self.delta_mask[index] = false;
+        }
+        reset
+            .iter()
+            .for_each(|&index| self.delta_mask[index] = false);
+        self.delta_pixels = reset;
         self.delta_base = self.delta_index_ok.then_some(projection);
         self.delta_frames += 1;
         true
@@ -1396,12 +1416,17 @@ impl Renderer {
         // can still change (every other pixel already holds its minimum, which any fragment
         // these bits make there cannot beat), so a bit bounded behind all the marked pixels in
         // its box writes nothing and is skipped.
-        redraw.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+        dedup_draws(&mut redraw, &mut Vec::new());
         self.marks_only = true;
+        self.delta_redraw = true;
         for &(_, coord) in &redraw {
             self.draw_bit_with(projection, coord, tint);
         }
+        self.delta_redraw = false;
         self.marks_only = false;
+        for index in self.delta_written.drain(..) {
+            self.delta_mask[index] = false;
+        }
         marks
             .iter()
             .for_each(|&index| self.delta_mask[index] = false);
@@ -2224,7 +2249,43 @@ impl Renderer {
                 .zip(buffer.iter_mut())
                 .zip(owners.iter_mut())
                 .zip(ties.iter_mut());
-            if !self.marking {
+            if self.delta_redraw {
+                let mask = &mut self.delta_mask[base..base + n];
+                let written_at = &mut self.delta_written;
+                for (i, (((((&inverse_depth, &depth), pixel), stored), owner), (tie, here))) in
+                    inverse
+                        .iter()
+                        .zip(depths.iter())
+                        .zip(pixels.iter_mut())
+                        .zip(buffer.iter_mut())
+                        .zip(owners.iter_mut())
+                        .zip(ties.iter_mut().zip(mask.iter_mut()))
+                        .enumerate()
+                {
+                    if inverse_depth <= 0.0 || !inverse_depth.is_finite() {
+                        continue;
+                    }
+                    let depth_order = depth.total_cmp(stored);
+                    if depth_order.is_eq() && *owner == key && !*here {
+                        continue; // its own fragment of the frame before (see `delta_redraw`)
+                    }
+                    if depth_order.is_lt() || (depth_order.is_eq() && color < *pixel) {
+                        if *pixel == BACKGROUND && color != BACKGROUND {
+                            written += 1;
+                        }
+                        *stored = depth;
+                        *pixel = color;
+                        *owner = key;
+                        *tie = depth_order.is_eq();
+                        if !*here {
+                            *here = true;
+                            written_at.push(base + i);
+                        }
+                    } else if depth_order.is_eq() {
+                        *tie = true;
+                    }
+                }
+            } else if !self.marking {
                 for (((((&inverse_depth, &depth), pixel), stored), owner), tie) in fragments {
                     if inverse_depth <= 0.0 || !inverse_depth.is_finite() {
                         continue;
@@ -2293,6 +2354,13 @@ impl Renderer {
             }
             return;
         }
+        if self.delta_redraw
+            && depth_order.is_eq()
+            && self.owner[index] == self.owner_key
+            && !self.delta_mask[index]
+        {
+            return; // its own fragment of the frame before (see `delta_redraw`)
+        }
         // Equal-depth fragments choose the lower RGB word so unspecified world iteration order
         // cannot change the final frame.
         if depth_order.is_lt() || (depth_order.is_eq() && color < self.pixels[index]) {
@@ -2304,10 +2372,26 @@ impl Renderer {
             self.pixels[index] = color;
             self.owner[index] = self.owner_key;
             self.tie[index] = depth_order.is_eq();
+            if self.delta_redraw && !self.delta_mask[index] {
+                self.delta_mask[index] = true;
+                self.delta_written.push(index);
+            }
         } else if depth_order.is_eq() {
             self.tie[index] = true;
         }
     }
+}
+
+/// Sorts `redraw` nearest first and leaves each bit in `redraw` and `fresh` once.
+fn dedup_draws(redraw: &mut Vec<(f64, Coord)>, fresh: &mut Vec<Coord>) {
+    redraw.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    redraw.dedup_by_key(|e| e.1);
+    if fresh.is_empty() {
+        return;
+    }
+    let mut drawn = crate::world::CoordMap::default();
+    fresh.retain(|&c| drawn.insert(c, ()).is_none());
+    redraw.retain(|e| !drawn.contains_key(&e.1));
 }
 
 /// The largest depth in a short row, or `NaN` if the row holds one (`>`-select max, so the
@@ -4820,6 +4904,91 @@ mod tests {
         );
         assert!(marked > 0, "no recolour frame marked a pixel");
         assert!(reused > 0, "no recolour frame reused a hidden proof");
+    }
+
+    /// §6s: a bit a delta frame redraws (its box reaches a reset or marked pixel) does not take
+    /// its own fragments of the frame before, at the pixels it keeps, for second ones. While
+    /// bits are only added (no fragment of the frame before goes away) and others recoloured,
+    /// the delta frames' `tie` record stays exactly the full render's: no pixel claims a tie the
+    /// full frame does not have, so the recolour pass marks no more pixels than after a fresh
+    /// full render. (Before, each redrawn bit set `tie` at every pixel it kept.)
+    #[test]
+    fn delta_redraws_keep_the_full_tie_record() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move |n: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed % n
+        };
+        let palette = [
+            0x002f6fd6_u32,
+            0x002f6fd7,
+            0x00b04020,
+            0x0040c060,
+            0x00909090,
+        ];
+        for (case, size) in [(0_usize, 161_u32), (2, 120), (3, 97)] {
+            let mut world = World::new();
+            let mut colours: std::collections::HashMap<Coord, u32> =
+                std::collections::HashMap::new();
+            let mut shell = Vec::new();
+            for x in -7_i64..=7 {
+                for y in -7_i64..=7 {
+                    for z in -7_i64..=7 {
+                        let r = x * x + y * y + z * z;
+                        let c = Coord::new(x, y, z);
+                        if r <= 25 {
+                            world.set_on(c);
+                            colours.insert(c, palette[next(5) as usize]);
+                        } else if r <= 36 {
+                            shell.push(c);
+                        }
+                    }
+                }
+            }
+            let camera = views(&world)[case].clone();
+            let mut delta = Renderer::new(size, size);
+            {
+                let tint = |c: Coord| colours.get(&c).copied();
+                delta.render_tinted(&world, &camera, Some(&tint));
+            }
+            let mut toggle_frames = 0;
+            for frame in 0..24 {
+                let mut changed = Vec::new();
+                if frame % 2 == 0 {
+                    for _ in 0..1 + next(6) {
+                        let c = shell[next(shell.len() as u64) as usize];
+                        if !world.is_on(c) {
+                            world.set_on(c);
+                            colours.insert(c, palette[next(5) as usize]);
+                            changed.push((c, true));
+                        }
+                    }
+                }
+                for _ in 0..1 + next(200) {
+                    let c = Coord::new(
+                        next(13) as i64 - 6,
+                        next(13) as i64 - 6,
+                        next(13) as i64 - 6,
+                    );
+                    colours.insert(c, palette[next(5) as usize]);
+                    changed.push((c, false));
+                }
+                toggle_frames += usize::from(changed.iter().any(|&(_, t)| t));
+                let tint = |c: Coord| colours.get(&c).copied();
+                assert!(delta.render_tinted_delta(&world, &camera, Some(&tint), &changed));
+                let mut full = Renderer::new(size, size);
+                full.render_tinted(&world, &camera, Some(&tint));
+                let at = format!("case {case} size {size} frame {frame}");
+                assert!(delta.pixels == full.pixels, "{at} pixels");
+                assert!(delta.tie == full.tie, "{at} tie record");
+            }
+            assert!(
+                toggle_frames >= 8,
+                "case {case}: {toggle_frames} toggle frames"
+            );
+        }
     }
 
     /// The delta index must keep bits a delta frame uncovered: drill to the deeply enclosed
