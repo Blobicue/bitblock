@@ -4200,6 +4200,90 @@ Dig / place at r92 on :8765 (`placefps6t.mjs`, 2d4ab1a www):
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6z. Toggling frames draw only the unindexed neighbours of turned-off bits: ocean r94 −5.5 ms (node), busy 82–84% → 72–81%; r94 still misses the cap rule by one gas run, so the cap stays 92 (2026-11-18, branch `chem/render-scale-2026-11`). Every hash and book is unchanged
+
+Focus: the ocean preset at r94, the tighter one by load in §6y. Targets were its toggling-frame render, flow, and heat if cheap. The play-loop catch-up and the cap rule were left alone. Each commit passed the full local pre-push gate and was pushed separately, with its own green CI run.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 9c136ca | render: a toggling delta frame draws and records only those neighbours of turned-off bits that the index lacks. Indexed ones come back as redraw candidates at reset pixels. The filter runs before the sort, which leaves the same sorted list. | [44377552323](https://github.com/Blobicue/bitblock/actions/runs/44377552323) |
+| 4340749 | www refresh (cap unchanged at 92) | [44381868445](https://github.com/Blobicue/bitblock/actions/runs/44381868445) |
+
+**2. Cause and fix.**
+- Ocean steady state at r94 (native, per frame):
+  - ~34–45k changed bits, 2.6k of them toggles;
+  - ~12k loud bits;
+  - only 6–10 reset pixels (500 early on);
+  - ~3–4k index candidates (~100k early on);
+  - but ~17k "fresh" bits. Those are the on, exposed neighbours of every bit that turned off, drawn and recorded into the index each frame.
+- Almost all of those neighbours were already indexed. An indexed neighbour is unchanged and was on in the frame before. Outside the reset pixels the buffers already hold the minimum of its fragments, so redrawing it there changes nothing: `plot` is strict, with ties to the lower RGB, and a tie only re-sets a `tie` flag that is already set. At a reset pixel, its entry brings it back as a candidate; the entry depends only on the bit and the projection. Only unindexed neighbours (enclosed at the last full render) still need a draw.
+- Native ocean r94 per frame:
+  - fresh draws 3.2 → 0.36 ms (17k → ~1.8k bits);
+  - neighbour sort/dedup 2.3 → 0.45 ms (filtering before the sort).
+- wasm ocean r94 profile (names build, 70-step loop): render 15.4 → 10.3 ms per step.
+- Ocean costs that remain (wasm per step): flow 8.9, combine2 8.8, heat 8.5, phase 4.2, settle 3.4, render 10.3.
+  - Native flow makes ~25k water moves per tick (66k visits), mostly sloshing (net ~2.6k toggles per frame). Each move costs two world occupancy updates.
+  - combine2 in ocean is mostly the +y gas rise (4.1 ms native: 116k rising candidates over 23 rising ids, 19k trades) and a network round (1.5 ms) that fires nothing.
+- Tried and dropped (no node gain):
+  - reusing `nb6` from `flow_cell` for the flow queue;
+  - queueing only WATER neighbours;
+  - a block test for the rising ids (8 ids, then 6 id ranges) in `gas_rise_up`;
+  - a tile prefilter for the index entries added since the last full traversal.
+  - Heat had no cheap win left (the §6y `q / 120` multiply-shift gave nothing).
+
+**3. Timings (node `wasmstep`, 30 warm + 60 steps, cap lifted, interleaved).**
+
+| case | before (fa1508d) | after (9c136ca) |
+|---|---|---|
+| ocean r94 median / min | 55.3–55.9 / 49.9–51.5 ms | 49.3–50.3 / 46.7–47.4 ms |
+| gas r94 median / min | 51.2–53.1 / 48.9–50.8 ms | 51.1–54.4 / 48.9–50.8 ms (unchanged, noisy box) |
+
+**4. Chrome cadence at r94 (study build = 9c136ca with the cap lifted, wasm `8e1aced3…`; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots, windows in brackets).**
+
+| run | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| 1 | 15.00 [15,15,15] | 15.30 [15.9,15,15] | 15.03 [15.1,15,15] | 15.30 [15.9,15,15] |
+| 2 | 15.00 [15,15,15] | 15.17 [15.3,15.3,14.9] | 15.03 [15,15.1,15] | 15.33 [16,15,15] |
+| 3 | 14.67 [**13.8**,15.2,15] | 15.40 [16.1,15.1,15] | 15.00 [15,15,15] | 14.97 [**14.9**,15,15] |
+| 4 | 14.90 [15,15,14.7] | 15.30 [15.9,15,15] | 15.00 [15,15,15] | 15.10 [15.2,15.1,15] |
+| mean | **14.89** | 15.29 | 15.02 | 15.18 |
+| busy | 73–79% | 74–81% | 72–73% | 72–75% |
+
+**Cap: stays 92.** Set 1 gas averages 14.89 < 15, so the rule fails at r94. The rule was not changed.
+- Ocean now passes both sets (15.29, 15.18), and its busy fell from 82–84% (§6y) to 72–81%.
+- The gas misses are again single stalls: a 13.8 first window (step_max 100 ms) and a 14.7 last window, in a set where the busy figures also rose (up to 79%). Gas code is unchanged from §6y, where the same build read 72–74% busy, so this is host-level variance rather than app work.
+
+Dig / place at r92 on :8765 (`placefps6t.mjs`, 4340749 www):
+- gas: 13.9–17.7, every window ≥ 15 except the first 0.5 s after two places (14.7, 13.9) and one 14.2 late in a dig; gaps ≤ 83 ms.
+- ocean: 14.9–17.0, gaps ≤ 83 ms.
+- `books=ok energy_drift=0 error=none` throughout; no page errors.
+
+**5. Exactness.**
+- After 9c136ca: all 16 `delta_eq` outputs and `fp_long` byte-identical, 17/17. Parity md5s unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6y wasm vs §6z wasm: 7/7 SAME. Core 335 and wasm 83 tests pass.
+- **Frame hashes: no re-baseline; old = new.**
+  - default world `pmbj7za5…`, frame `nx4b62u5…`
+  - node r90 gas `vbv6ockz…` / `ymhicrsu…`
+  - node r90 ocean `wtevn2pz…` / `smmn3aox…`
+  - node r92 gas `2lniroz3…` / `6ucp2u65…`
+  - node r92 ocean `3skk4kg6…` / `xaiybmjb…`
+  - node r94 (cap lifted): ocean `d2ntakaz…` / `gnrwiwke…`, gas frame `7mz2leqp…`, before and after.
+
+**6. Next wall.**
+- Gas at r94 is limited by one-off host stalls at ~72% busy, not by load. Without play-loop catch-up (waiting on Owen) a set can still fall under 15.
+- Ocean r94: flow (~25k sloshing moves per tick, each with two world updates), the +y gas rise (116k candidates) and a network round that fires nothing are the next real costs, then heat (~8.5 ms in both presets).
+
+**Build.** wasm (4340749, ABI 17) md5 `ef9be6f2acd903a50b6af915b752f3b1` (1,589,306 B), play.html `7601a24868587eefbe681ffdf1ab5d1e`, bitblock-lab.html `e0e5be18f8c359734d8c0146eff506ff`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90 run at 15.0 fps; r94 clamps to 92 (gas 15.0).
+  - The only error is the favicon 404.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6z/pt/{play,g92,o92}/*.png` (contact sheet `s6z/pt/sheet.png`).
+- Data: `/workspace/render_scale/s6z/{STATUS.md,eq1,eq1.log,parity1.log,chrome/set1,set2.log}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; play-loop catch-up and cap rule untouched; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
