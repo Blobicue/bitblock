@@ -2002,6 +2002,12 @@ mod tests {
                         }
                         let mut w = w0.clone();
                         let _ = w.topology().cell_up(); // the radial frame's tables, carried over on insert
+                        // §6w: the wide-roll words too, when built (built here for every other
+                        // cell when the genesis topology has none yet).
+                        if x.rem_euclid(2) == 0 {
+                            let t0 = w.topology();
+                            let _ = t0.cell_roll_cells(0x5eed, &w.cells);
+                        }
                         let i = w.insert_cell(c);
                         tried += 1;
                         let Some(t) = w.topo.clone() else {
@@ -2012,6 +2018,9 @@ mod tests {
                         let mut v = w.clone();
                         v.topo = None;
                         let full = v.topology();
+                        if let Some(key) = t.cell_roll_key() {
+                            let _ = full.cell_roll_cells(key, &v.cells);
+                        }
                         assert_eq!(format!("{t:?}"), format!("{full:?}"), "insert {c:?} at {i}");
                     }
                 }
@@ -2036,6 +2045,7 @@ mod tests {
             energy_in: energy,
             ..P6Params::default()
         };
+        let mut carried = 0;
         for w0 in [
             genesis(&cfg(BUDGET, 7, 10)).unwrap(),
             genesis_p6(&cfg(BUDGET, 7, 10), &params).unwrap(),
@@ -2071,6 +2081,15 @@ mod tests {
             }
             assert!(placed >= 3, "placed {placed}");
             assert!(a.topo.is_some(), "the places keep the topology");
+            // §6w: under Driven the vapor regions are carried through each place, as built.
+            if let (Some(g), Some(t)) = (&a.vgeo, &a.topo)
+                && a.params.cycle == WaterCycle::Driven
+            {
+                assert!(g.for_topology(t), "the regions follow the places");
+                let full = vapor::VaporGeo::build(&a.cells, t, a.params.vapor_local);
+                assert_eq!(format!("{g:?}"), format!("{full:?}"));
+                carried += 1;
+            }
             let mut b = a.clone();
             b.topo = None;
             for step in 0..12 {
@@ -2089,6 +2108,7 @@ mod tests {
             }
             assert_eq!(a.check_books(), Ok(()));
         }
+        assert!(carried >= 2, "carried {carried}");
     }
 
     /// The books' occupancy walk over z-runs and chunk words reports exactly what the walk

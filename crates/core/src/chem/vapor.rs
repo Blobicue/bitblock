@@ -176,7 +176,10 @@ pub fn vapor_patch(d: (i64, i64, i64), n: u8) -> usize {
 /// Cached region geometry for one topology and locality model.
 #[derive(Debug)]
 pub(crate) struct VaporGeo {
-    topo: Arc<Topology>,
+    /// The topology this geometry was built for, compared by identity only. §6w: a weak
+    /// reference (it keeps the allocation, so no later topology can reuse the address), so the
+    /// geometry does not share ownership and a growing place can update the topology in place.
+    topo: std::sync::Weak<Topology>,
     pub(crate) mode: VaporLocality,
     /// Region of every domain cell.
     pub(crate) patch: Vec<u16>,
@@ -189,16 +192,48 @@ pub(crate) struct VaporGeo {
 }
 
 impl VaporGeo {
-    fn build(cells: &[Coord], topo: &Arc<Topology>, mode: VaporLocality) -> Self {
+    /// Whether this geometry was built for `topo` (the same topology, by identity).
+    pub(crate) fn for_topology(&self, topo: &Arc<Topology>) -> bool {
+        std::ptr::eq(self.topo.as_ptr(), Arc::as_ptr(topo))
+    }
+
+    pub(crate) fn build(cells: &[Coord], topo: &Arc<Topology>, mode: VaporLocality) -> Self {
+        let patch: Vec<u16> = cells
+            .iter()
+            .map(|&c| Self::patch_of(c, topo, cells, mode))
+            .collect();
+        Self::from_patch(cells, topo, mode, patch)
+    }
+
+    /// The region of the cell at `c` (`cells` and `topo` give the core).
+    fn patch_of(c: Coord, topo: &Topology, cells: &[Coord], mode: VaporLocality) -> u16 {
+        match (mode, topo.core.map(|i| cells[i as usize])) {
+            (VaporLocality::Patches { n, .. }, Some(o)) => {
+                vapor_patch((c.x - o.x, c.y - o.y, c.z - o.z), n) as u16
+            }
+            _ => 0,
+        }
+    }
+
+    /// §6w: the geometry after domain cell `at` was inserted, from the geometry before it
+    /// (built for the old topology, whose core cell is the same cell): every other cell keeps
+    /// its region, so the regions are the old ones with the new cell's inserted, and the rest
+    /// is built as [`Self::build`] builds it.
+    pub(crate) fn inserted(&self, cells: &[Coord], topo: &Arc<Topology>, at: usize) -> Self {
+        let mut patch = Vec::with_capacity(cells.len());
+        patch.extend_from_slice(&self.patch[..at]);
+        patch.push(Self::patch_of(cells[at], topo, cells, self.mode));
+        patch.extend_from_slice(&self.patch[at..]);
+        Self::from_patch(cells, topo, self.mode, patch)
+    }
+
+    fn from_patch(
+        cells: &[Coord],
+        topo: &Arc<Topology>,
+        mode: VaporLocality,
+        patch: Vec<u16>,
+    ) -> Self {
         let pc = mode.patch_count();
-        let core = topo.core.map(|c| cells[c as usize]);
-        let patch: Vec<u16> = match (mode, core) {
-            (VaporLocality::Patches { n, .. }, Some(o)) => cells
-                .iter()
-                .map(|c| vapor_patch((c.x - o.x, c.y - o.y, c.z - o.z), n) as u16)
-                .collect(),
-            _ => vec![0; cells.len()],
-        };
         let mut rim = vec![0i64; pc];
         let mut is_rim = vec![false; cells.len()];
         for &(i, _) in &topo.space_faces {
@@ -227,7 +262,7 @@ impl VaporGeo {
             v.sort_unstable();
         }
         Self {
-            topo: topo.clone(),
+            topo: Arc::downgrade(topo),
             mode,
             patch,
             rim,
@@ -271,7 +306,7 @@ impl ChemWorld {
     pub(crate) fn vapor_sync(&mut self, topo: &Arc<Topology>) {
         let mode = self.params.vapor_local;
         let ok = self.vgeo.as_ref().is_some_and(|g| {
-            Arc::ptr_eq(&g.topo, topo) && g.mode == mode && g.patch.len() == self.cells.len()
+            g.for_topology(topo) && g.mode == mode && g.patch.len() == self.cells.len()
         });
         if !ok {
             self.vgeo = Some(Arc::new(VaporGeo::build(&self.cells, topo, mode)));
