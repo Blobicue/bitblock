@@ -1043,8 +1043,9 @@ impl Renderer {
     /// bits come from the full traversal's box index plus the bits added since: a bit missing
     /// from both is deeply enclosed where the enclosed-bit cull applies (owns no pixel) or was
     /// never reachable, and the only bits that can stop being enclosed are the on neighbours
-    /// of a bit that turned off, which are drawn and indexed here. Changed bits and those
-    /// neighbours that are enclosed in the new world own no pixel of it and are skipped.
+    /// of a bit that turned off, which are drawn and indexed here when the index lacks them.
+    /// Changed bits and those neighbours that are enclosed in the new world own no pixel of it
+    /// and are skipped.
     pub fn render_tinted_delta(
         &mut self,
         world: &World,
@@ -1203,10 +1204,19 @@ impl Renderer {
                 return false;
             }
         }
+        // §6z: only the neighbours missing from the index are drawn and recorded. An indexed
+        // neighbour is unchanged and was on in the frame before, so outside the reset pixels
+        // the buffers already hold its fragments' minimum (a redraw there writes and marks
+        // nothing); at a reset pixel its entry, which depends only on the bit and this
+        // projection, brings it in as a redraw candidate. Filtering before the sort leaves the
+        // same sorted list as filtering after it.
+        self.build_delta_members();
+        let members = &mut self.delta_members;
         let mut neighbours: Vec<Coord> = changed
             .iter()
             .filter(|&&(c, toggled)| toggled && !world.is_on(c))
             .flat_map(|&(c, _)| neighbourhood27(c))
+            .filter(|&c| !members.contains(c))
             .collect();
         neighbours.sort_unstable();
         neighbours.dedup();
