@@ -1137,6 +1137,45 @@ pub(crate) const NB6: [(i64, i64, i64); 6] = [
     (0, 0, 1),
 ];
 
+/// §6t: `(y0, span)` of a domain in strictly ascending coordinate order whose y values span a
+/// modest range, for [`counting_sort`] by y; `None` sends the caller to its comparison sort
+/// (always under the test-only full scans).
+fn counting_span(cells: &[Coord]) -> Option<(i64, usize)> {
+    if super::p6_rest::full_scans() || cells.is_empty() || cells.len() >= NO_SLOT as usize {
+        return None;
+    }
+    if !cells.windows(2).all(|w| w[0] < w[1]) {
+        return None;
+    }
+    let (lo, hi) = cells.iter().fold((i64::MAX, i64::MIN), |(lo, hi), c| {
+        (lo.min(c.y), hi.max(c.y))
+    });
+    let span = hi.checked_sub(lo)?.checked_add(1)?;
+    (span as u64 <= 4 * cells.len() as u64 + 1024).then_some((lo, span as usize))
+}
+
+/// §6t: `items` stably sorted by `key` (each below `span`): the order a stable comparison
+/// sort by that key alone gives.
+fn counting_sort<T: Copy>(items: &[T], span: usize, key: impl Fn(T) -> usize) -> Vec<T> {
+    let mut start = vec![0usize; span + 1];
+    for &it in items {
+        start[key(it) + 1] += 1;
+    }
+    for k in 0..span {
+        start[k + 1] += start[k];
+    }
+    let Some(&first) = items.first() else {
+        return Vec::new();
+    };
+    let mut out = vec![first; items.len()];
+    for &it in items {
+        let k = key(it);
+        out[start[k]] = it;
+        start[k] += 1;
+    }
+    out
+}
+
 impl Topology {
     pub(crate) fn build(cells: &[Coord]) -> Self {
         let lookup = Self::boxed(cells).unwrap_or_else(|| {
@@ -1165,11 +1204,20 @@ impl Topology {
             space_faces: Vec::new(),
             core: None,
         };
+        // §6t: a domain in strictly ascending (x, y, z) order (as the chem world keeps it) is,
+        // within one y, in (x, z) order, so a stable counting sort by y alone gives the same
+        // lists as the comparison sorts by (y, x, z) and (-y, x, z) (the keys are distinct).
+        let y_span = counting_span(cells);
         let mut ysort: Vec<u32> = (0..cells.len() as u32).collect();
-        ysort.sort_by_key(|&i| {
-            let c = cells[i as usize];
-            (c.y, c.x, c.z)
-        });
+        match y_span {
+            Some((y0, span)) => {
+                ysort = counting_sort(&ysort, span, |i| (cells[i as usize].y - y0) as usize);
+            }
+            None => ysort.sort_by_key(|&i| {
+                let c = cells[i as usize];
+                (c.y, c.x, c.z)
+            }),
+        }
         t.ysort = ysort;
         let mut rise: Vec<(u32, u32)> = Vec::new();
         for i in 0..cells.len() {
@@ -1177,10 +1225,17 @@ impl Topology {
                 rise.push((i as u32, up as u32));
             }
         }
-        rise.sort_by_key(|&(i, _)| {
-            let c = cells[i as usize];
-            (std::cmp::Reverse(c.y), c.x, c.z)
-        });
+        match y_span {
+            Some((y0, span)) => {
+                rise = counting_sort(&rise, span, |(i, _)| {
+                    span - 1 - (cells[i as usize].y - y0) as usize
+                });
+            }
+            None => rise.sort_by_key(|&(i, _)| {
+                let c = cells[i as usize];
+                (std::cmp::Reverse(c.y), c.x, c.z)
+            }),
+        }
         t.rise = rise;
         for i in 0..cells.len() {
             let mut mask = 0u8;
@@ -1394,10 +1449,13 @@ impl Topology {
                 |q: Coord| super::p6_rest::outward_step((q.x - o.x, q.y - o.y, q.z - o.z));
             // The new cell's own outward neighbour ...
             let st = step_of(c);
+            let mut own_up = NO_SLOT;
+            let mut landed: Vec<usize> = Vec::new();
             if st != (0, 0, 0)
                 && let Some(j) = t.offset(cells, at, st)
             {
                 up[k0] = pos_of(j) as u32;
+                own_up = j as u32;
             }
             // ... and the cells whose outward step lands on it (they had none before).
             for dx in -1_i64..=1 {
@@ -1413,9 +1471,27 @@ impl Topology {
                         let s = step_of(q);
                         if s != (0, 0, 0) && (q.x + s.0, q.y + s.1, q.z + s.2) == (c.x, c.y, c.z) {
                             up[pos_of(j)] = k032;
+                            landed.push(j);
                         }
                     }
                 }
+            }
+            // The two tables `radial_frame` fills as it builds (`cell_up`, `rsort_pos`), carried
+            // over the same way when the old topology had them.
+            if let (Some(cu), Some(rp)) = (self.cell_up.get(), self.rpos.get()) {
+                let mut cell_up: Vec<u32> = Vec::with_capacity(cells.len());
+                cell_up.extend(cu[..at].iter().map(|&v| shift(v)));
+                cell_up.push(own_up);
+                cell_up.extend(cu[at..].iter().map(|&v| shift(v)));
+                for &j in &landed {
+                    cell_up[j] = at32;
+                }
+                let mut rpos: Vec<u32> = Vec::with_capacity(cells.len());
+                rpos.extend(rp[..at].iter().map(|&v| kshift(v)));
+                rpos.push(k032);
+                rpos.extend(rp[at..].iter().map(|&v| kshift(v)));
+                t.cell_up = std::sync::OnceLock::from(cell_up);
+                t.rpos = std::sync::OnceLock::from(rpos);
             }
             t.r2 = r2;
             t.rsort = rsort;
@@ -1467,30 +1543,46 @@ impl Topology {
                 dx * dx + dy * dy + dz * dz
             })
             .collect();
-        let mut rs: Vec<u32> = (0..cells.len() as u32).collect();
-        rs.sort_by_key(|&i| {
-            let c = cells[i as usize];
-            (self.r2[i as usize], c.y, c.x, c.z)
-        });
-        let up: Vec<u32> = rs
-            .iter()
-            .map(|&i| {
+        // §6t: `ysort` is in (y, x, z) order, so a stable counting sort of it by r2 is the
+        // (r2, y, x, z) order (the keys are distinct), when r2 spans a modest range.
+        let r2max = self.r2.iter().copied().max().unwrap_or(0);
+        let rs: Vec<u32> = if self.ysort.len() == cells.len()
+            && r2max >= 0
+            && (r2max as usize) <= 4 * cells.len() + 1024
+            && !super::p6_rest::full_scans()
+        {
+            counting_sort(&self.ysort, r2max as usize + 1, |i| {
+                self.r2[i as usize] as usize
+            })
+        } else {
+            let mut rs: Vec<u32> = (0..cells.len() as u32).collect();
+            rs.sort_by_key(|&i| {
                 let c = cells[i as usize];
+                (self.r2[i as usize], c.y, c.x, c.z)
+            });
+            rs
+        };
+        // §6t: each cell's outward neighbour in domain order (the cells are read in order), then
+        // gathered into rsort order; the domain-order list is `cell_up` and the ranks are
+        // `rsort_pos`, so both lazy tables are filled here with the values they would build.
+        let up_dom: Vec<u32> = (0..cells.len())
+            .map(|i| {
+                let c = cells[i];
                 let st = super::p6_rest::outward_step((c.x - o.x, c.y - o.y, c.z - o.z));
                 if st == (0, 0, 0) {
                     return NO_SLOT;
                 }
-                self.offset(cells, i as usize, st)
-                    .map_or(NO_SLOT, |j| j as u32)
+                self.offset(cells, i, st).map_or(NO_SLOT, |j| j as u32)
             })
             .collect();
         let mut rank = vec![NO_SLOT; cells.len()];
         for (k, &i) in rs.iter().enumerate() {
             rank[i as usize] = k as u32;
         }
-        self.shell_up = up
+        self.shell_up = rs
             .iter()
-            .map(|&up| {
+            .map(|&i| {
+                let up = up_dom[i as usize];
                 if up == NO_SLOT {
                     NO_SLOT
                 } else {
@@ -1499,6 +1591,13 @@ impl Topology {
             })
             .collect();
         self.rsort = rs;
+        if !super::p6_rest::full_scans() {
+            self.cell_up = std::sync::OnceLock::from(up_dom);
+            self.rpos = std::sync::OnceLock::from(rank);
+        } else {
+            self.cell_up = std::sync::OnceLock::new();
+            self.rpos = std::sync::OnceLock::new();
+        }
     }
 
     /// [`Topology::cell_up`]: each domain cell's outward neighbour (built on first use).

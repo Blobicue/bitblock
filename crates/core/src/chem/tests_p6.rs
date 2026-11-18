@@ -5352,3 +5352,30 @@ fn sparse_collapse_uplift_plume_rise_match_the_full_scans() {
         "a law never fired"
     );
 }
+
+/// §6t: the counting sorts of `Topology::build` / `radial_frame` (y lists, rsort) and the
+/// tables the radial frame fills as it builds (`cell_up`, `rsort_pos`) are exactly what the
+/// comparison sorts and the lazy builders give, on balls, sky shells and slabs.
+#[test]
+fn counting_sorted_topology_matches_the_comparison_sorts() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let worlds = [
+        genesis(&cfg).unwrap(),
+        genesis_sky(&cfg, &sky_params(), 3).unwrap(),
+        genesis_sky_radial(&cfg, &sky_params(), 4).unwrap(),
+        plume_slab(WaterCycle::Driven, 40),
+        relief_plate_deep(WaterCycle::Driven),
+    ];
+    for (n, w) in worlds.iter().enumerate() {
+        let build = |full: bool| {
+            FULL_SCANS.with(|f| f.set(full));
+            let mut t = super::p6::Topology::build(&w.cells);
+            t.radial_frame(&w.cells);
+            FULL_SCANS.with(|f| f.set(false));
+            let _ = (t.cell_up(), t.rsort_pos());
+            format!("{t:?}")
+        };
+        assert_eq!(build(false), build(true), "world {n}");
+    }
+}

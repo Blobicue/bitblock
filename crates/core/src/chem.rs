@@ -1887,7 +1887,7 @@ mod tests {
                             continue;
                         }
                         let mut w = w0.clone();
-                        let _ = w.topology().cell_up(); // a lazily built table, dropped on insert
+                        let _ = w.topology().cell_up(); // the radial frame's tables, carried over on insert
                         let i = w.insert_cell(c);
                         tried += 1;
                         let Some(t) = w.topo.clone() else {
