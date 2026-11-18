@@ -3634,6 +3634,73 @@ This wave is one shippable pass on two first windows: gas r90's, and ocean's rig
 
 Soft DDA, bcc-voxel-demo and abi16 are untouched. There is no Desktop copy, and main is untouched.
 
+## 6r. Mirror uses the material's occupancy; chunk caches fit a domain row; cap raised to 90 (2026-11-18, branch `chem/render-scale-2026-11`) — every hash and book unchanged
+
+This wave is one shippable exact pass, checked against b93b429. The gain came from the mirror's non-FNV costs and the renderer's chunk lookups, not from changing chem laws. The mirror's FNV check, frame spreading and double-tick catch-up are untouched. Each commit passed the full local pre-push gate and was pushed separately with its own CI run.
+
+**1. Wasm/Chrome diagnosis.** Fresh gas r90, CPU profiles of the first 2.5 s; temporary `inline(never)` builds identify passes that the normal build inlines into `step_laws` and `sim_tick`.
+- Within chem, convection dominates: ~55% of chem samples (790 ms of 1434 ms), heat ~18% (264), combine2 ~10% (150). Driven erosion and weather scan the full domain for another ~7% (101).
+- Within the mirror, ~40% of samples were `BitProbe::is_on` (162 of 405 ms); the rest includes the unchanged FNV material hash and changed-cell collection.
+- Every non-air chem material has its occupancy bit on. Every air cell outside bedrock has its bit off: all writes go through `set_mat`, which maintains that invariant. The mirror was still reading the chem world's bit for each changed cell, although it already held that cell's material.
+- The §6q recent-chunk caches were 4 x 4 x 4. A domain row runs `z` fastest across ~12 chunks at r90, so they collided. A whole row fits in 4 x 4 x 16.
+
+**2. Changes (exact).**
+- **ea801a3:** the mirror gets chem occupancy from `ChemWorld::occupancy_of(material, coord)`, falling back to the bit probe only for air at the bedrock cell. A debug assertion compares every result to the actual bit. The play world's occupancy is still probed, so external play edits are treated the same way. Same ordered edits and changed-bit list; the FNV loop is byte-for-byte unchanged.
+- **2f92081:** the delta classify and `IndexedBits` recent-chunk caches grow from 64 to 256 ways (4 x 4 x 16); `World::probe` gets the same cache behind its existing last-chunk slot. They only remember what the maps answered while the world is immutably borrowed, so collisions/misses can change only lookup cost.
+- **Not shipped:** convection loop micro-optimisations (hoisting the roll-table `Option` out of its loop, reducing density-test table loads). The native saving was small and the wasm profile did not justify including them. Chem laws are unchanged. The first-delta-frame CSR build is unchanged too.
+
+**3. Wasm/Chrome A/B (probe builds; first snapshot begins 2 s after the radius change, Low 960×540).**
+
+| gas r90 window | b93b429, 3 runs | §6r, 3 runs |
+|---|---|---|
+| first 2.5 s, ms per chem tick | 60.7, 60.6, 60.1 | 58.6, 57.9, 58.6 |
+| next 2.5 s | 59.5, 58.1, 58.8 | 53.9, 53.8, 54.7 |
+| last 2.5 s | 46.9, 46.9, 47.0 | 45.5, 45.0, 46.3 |
+
+- This leaves ~8 ms under 66.7 in the first window, vs ~6 ms for the base in these runs (earlier §6q runs measured ~65 ms). Absolute costs vary with the run; the alternating A/B shows a real ~2–5 ms saving.
+- CPU profiles of the normal builds corroborate where the saving went: first-window `BitProbe::is_on` self time 151 → 94 ms per 2.5 s, classify hash-table self time 38 → below the top 14 (less than 13), with more idle time. Chem's share did not improve.
+
+**4. Native A/B (instrumented `spike_prof`, cap lifted, mean over chem steps 25–95; sandbox timing is noisy).**
+
+| case | b93b429 step | §6r step | chem | mirror | render mean / p90 / max |
+|---|---|---|---|---|---|
+| gas r88 | 40.6 ms | 38.6 ms | 24.7 → 24.5 | 8.0 → 7.1 | 7.5 / 8.4 / 35 → 6.7 / 8.1 / 35 |
+| gas r90 | 45.6 ms | 41.8 ms | 27.1 → 26.0 | 9.0 → 7.7 | 9.1 / 10.1 / 43 → 7.8 / 9.2 / 44 |
+| ocean r88 | 38.1 ms | 38.4 ms | 25.2 → 25.6 | 4.3 → 4.3 | 7.8 / 23.9 / 74 → 7.8 / 24.0 / 73 |
+| ocean r90 | 40.8 ms | 42.4 ms | 26.6 → 27.8 | 4.7 → 5.0 | 8.7 / 29.9 / 88 → 8.7 / 29.1 / 89 |
+
+- Gas's mirror and render save ~2.6 ms at r90. Ocean's overall time is within noise. The first-delta-frame spike remains: gas r90 step 2 77 → 78 ms; ocean r90 step 1 123 → 123 ms.
+
+**5. Chrome cadence (normal study build of 2f92081 with cap lifted; Low 960×540, chem every 4 ticks, 2 s settle, each run fresh; mean `presented_fps` of 3 snapshots).**
+
+| case | set 1 (4 runs) | set 2 (4 runs) |
+|---|---|---|
+| gas r90 | 15.37, 15.13, 14.93, 15.00; busy 81–83% | 15.07, 15.07, 15.10, 14.93; 79–80% |
+| ocean r90 | 15.03, 15.20, 15.03, 15.07; 73–76% | 15.00, 15.00, 15.00, 15.00; 72–74% |
+| gas r92 (probe) | 13.77 (first 11.2), 13.03 (middle 9.1); 85–87% | — |
+| ocean r92 (probe) | 15.07, 15.37; 75–81% | — |
+
+- All runs end `books=ok energy_drift=0`. The r90 gas first snapshots are 14.6–16.0, no 7–13 fps trough.
+- Same-conditions base comparison: b93b429 gas r90 15.17, **12.53 (first 7.5)**, 15.07, 15.40; §6r an extra four runs 15.03, 15.27, 15.23, 15.03. The base's intermittent double-tick state still reproduces, and did not reproduce in any of the 12 §6r r90 gas runs.
+
+**6. Cap: 88 → 90 (46d8c14, with www refresh).** Both presets hold ~15 fps over two sets of four fresh runs. r92 does not pass: gas dips into the first/middle window again. `CHEM_RADIUS_MAX`, the input max/title and the JS clamp are all 90.
+
+**7. Exactness vs b93b429.**
+- Parity md5s unchanged: chem `8ef8f6828310e98ad1ed5c3e997d5a27`, play `dd849e0b7f30eeeec7f0eda8c64be363`, big `9248e8d75489a64a1468400da6a1c51a`, split `bc8ac3afa8d7d53571373bba315ca32d`.
+- `fp_long 36 600` matches `s6i/fp_ref.txt` byte for byte.
+- `delta_eq` rgba and status equal every step in all 16 cases; every output byte-identical to §6q, compaction counts included (preset 1 r80/r82; ocean r60/r80/r82/r84/r86/r88/r90; gas r36/r80/r82/r84/r86/r88/r90).
+- Native, shipped wasm and b93b429 wasm (`56bffeeb…`) agree on world/frame/books for ocean and gas r88, preset 1 r60 (warm 30, 20 steps). At r90 native equals shipped; the base wasm clamps to 88.
+- Full pre-push gate passes (fmt, clippy both feature sets, workspace tests, release goldens, index drift, bbgraph selftest). Debug checks the new occupancy shortcut against the actual bit on every mirrored change. Lab lines match §6l.
+
+**8. Next wall.** Gas r92's first/middle window still tips over. Convection is ~55% of gas chem, especially the density pass, wide rolls and the outermost-first candidate scan. The mirror's untouched FNV scan still costs several ms over ~3 M material ids. The first delta frame's tile-list build remains a one-off ~50 ms native spike. Any change to FNV, frame spreading or catch-up stays Owen's call.
+
+**Build.** wasm (46d8c14, ABI 17) md5 `267e7b12a5487ef30d0e9204ac9b7bc0` (1,532,949 B), play.html `806759cec0309e4bc8854cc0408d2c27`, bitblock-lab.html `7a0f166651ff6e8f667afc6961244013`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17. Ocean r90 15.0 and gas r90 15.1 fps, both `books=ok energy_drift=0 error=none`. Requesting r94 clamps to 90 and the box shows 90; 1 → 2 and 40.7 → 40. Only favicon 404.
+- Screenshots visually checked: `/workspace/render_scale/s6r/play/{default,chem2_r90,chem4_r90,chem4_r94,radius_box_r94}.png`.
+- Profiles/A/B/exactness: `/workspace/render_scale/s6r/{chrome,chrome_final,ab1,eq}/`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
