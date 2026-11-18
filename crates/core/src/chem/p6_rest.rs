@@ -35,6 +35,9 @@ pub(crate) struct ConvectScratch {
     smat: Vec<MatId>,
     sq: Vec<i32>,
     swaps: Vec<(u32, u32)>,
+    /// Convection candidates: the rsort positions whose gathered pair passes the
+    /// density test (see [`ChemWorld::convect_pass`]).
+    cand: Vec<u32>,
     /// The tick whose outward gas rise left `smat` and `sq` gathered for that tick's
     /// convection (the two passes run back to back, and the rise moves no heat).
     gathered: Option<u64>,
@@ -279,34 +282,64 @@ impl ChemWorld {
             RollKey::Wide(key) => topo.rsort_roll_cells(key, &self.cells),
             RollKey::Lattice(_) => None,
         };
-        for k in (0..n).rev() {
+        // Two phases, the same swaps: a parcel's test reads only gathered values, which a
+        // parcel keeps until it moves, so the density test is run first over every pair at
+        // once (no branches; no parcel has moved yet), and the scan in the original order
+        // then visits only the pairs that pass it, skipping a moved parcel as before. The
+        // roll is a pure function of the cell and tick, so rolling only those pairs is the
+        // same as rolling every pair that reaches it.
+        let cand = &mut sc.cand;
+        cand.clear();
+        cand.resize(n + 1, 0);
+        let mut len = 0usize;
+        for k in 0..n {
+            let ku = topo.shell_up[k];
+            let has_up = ku != NO_SLOT;
+            let ku = if has_up { ku as usize } else { k };
+            let mb = mass[smat[k].0 as usize];
+            let ma = mass[smat[ku].0 as usize];
+            let tb = i64::from(sq[k]) + CONVECT_T0;
+            let ta = i64::from(sq[ku]) + CONVECT_T0;
+            let pass = has_up
+                & (mb != 0)
+                & (ma != 0)
+                & (tb > 0)
+                & (ta > 0)
+                & (mb
+                    .wrapping_mul(ta)
+                    .wrapping_mul(1000 + CONVECT_MARGIN_PERMILLE)
+                    < ma.wrapping_mul(tb).wrapping_mul(1000));
+            cand[len] = k as u32;
+            len += usize::from(pass);
+        }
+        // Driven rolls are read sequentially from the topology's table, so they are rolled
+        // here for every candidate at once and the pairs that fail are dropped (the scan
+        // below then rolls a candidate again only on the lattice path).
+        if let Some(cells) = roll_cells {
+            let tick = self.tick;
+            let mut kept = 0usize;
+            for c in 0..len {
+                let k = cand[c];
+                let pass = wide_roll_finish(cells[k as usize], tick) % 1000 < CONVECT_ODDS;
+                cand[kept] = k;
+                kept += usize::from(pass);
+            }
+            len = kept;
+        }
+        for &k in cand[..len].iter().rev() {
+            let k = k as usize;
             let mb = mass[smat[k].0 as usize];
             if mb == 0 || (!moved.is_empty() && moved[k]) {
                 continue;
             }
-            let ku = topo.shell_up[k];
-            if ku == NO_SLOT {
-                continue;
-            }
-            let ku = ku as usize;
+            let ku = topo.shell_up[k] as usize;
             let ma = mass[smat[ku].0 as usize];
             if ma == 0 || (!moved.is_empty() && moved[ku]) {
                 continue;
             }
-            let tb = i64::from(sq[k]) + CONVECT_T0;
-            let ta = i64::from(sq[ku]) + CONVECT_T0;
-            if tb <= 0 || ta <= 0 {
-                continue;
-            }
-            // lower parcel lighter: rho_b = M_b / T_b < rho_a = M_a / T_a
-            if mb * ta * (1000 + CONVECT_MARGIN_PERMILLE) >= ma * tb * 1000 {
-                continue;
-            }
-            let roll = match roll_cells {
-                Some(cells) => wide_roll_finish(cells[k], self.tick) % 1000,
-                None => self.roll_keyed(topo, convect_key, topo.rsort[k] as usize),
-            };
-            if roll >= CONVECT_ODDS {
+            if roll_cells.is_none()
+                && self.roll_keyed(topo, convect_key, topo.rsort[k] as usize) >= CONVECT_ODDS
+            {
                 continue;
             }
             match parked {

@@ -851,6 +851,30 @@ fn add_shares(dst: &mut [i32], src: &[i32]) {
     }
 }
 
+/// The heat law's first sweep over whole-domain slices: each cell's emission `o = emit(q)`
+/// (truncated), its per-neighbour share `per = o / live` when it emits, and the heat it keeps,
+/// `nq = q - per * live`.
+#[inline(always)]
+fn heat_shares(q: &[i32], live: &[u8], per: &mut [i32], nq: &mut [i32], emit: impl Fn(i32) -> i32) {
+    for (((&qi, &l), p), k) in q.iter().zip(live).zip(per.iter_mut()).zip(nq.iter_mut()) {
+        let o = emit(qi);
+        let share = if o > 0 && l > 0 {
+            match l {
+                1 => o,
+                2 => o / 2,
+                3 => o / 3,
+                4 => o / 4,
+                5 => o / 5,
+                _ => o / 6,
+            }
+        } else {
+            0
+        };
+        *p = share;
+        *k = qi - share * i32::from(l);
+    }
+}
+
 /// `o / live` for a face-neighbour count `live` in `1..=6`, with each divisor a constant (the
 /// same truncating quotient; a constant divisor compiles to a multiply instead of a division).
 #[inline]
@@ -910,6 +934,8 @@ pub(crate) struct ZRuns {
     ny: i64,
     /// `(x - x0) * ny + (y - y0)` to the run index, or `NO_SLOT`.
     at: Vec<u32>,
+    /// Per cell (domain order), its number of face neighbours in the domain (`0..=6`).
+    pub(crate) live: Vec<u8>,
 }
 
 impl ZRuns {
@@ -950,14 +976,28 @@ impl ZRuns {
         for (k, r) in runs.iter().enumerate() {
             at[((r.x - first.x) * ny + (r.y - y0)) as usize] = k as u32;
         }
-        Some(Self {
+        let mut rows = Self {
             runs,
             x0: first.x,
             y0,
             nx,
             ny,
             at,
-        })
+            live: Vec::new(),
+        };
+        let mut live = vec![0_u8; cells.len()];
+        for run in &rows.runs {
+            let beside = rows.beside(run);
+            for z in run.z0..=run.z1 {
+                let mut n = u8::from(z > run.z0) + u8::from(z < run.z1);
+                for r in beside.iter().flatten() {
+                    n += u8::from(z >= r.z0 && z <= r.z1);
+                }
+                live[run.start + (z - run.z0) as usize] = n;
+            }
+        }
+        rows.live = live;
+        Some(rows)
     }
 
     /// The run of row `(x, y)`, if the domain has one.
@@ -1960,24 +2000,29 @@ impl ChemWorld {
                 per.clear();
                 per.resize(n, 0);
             }
-            for run in &rows.runs {
-                let beside = rows.beside(run);
-                for z in run.z0..=run.z1 {
-                    let i = run.start + (z - run.z0) as usize;
-                    let qi = self.q[i];
-                    let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
-                    let mut p: i64 = 0;
-                    let mut live = usize::from(z > run.z0) + usize::from(z < run.z1);
-                    if o > 0 {
-                        for r in beside.iter().flatten() {
-                            live += usize::from(z >= r.z0 && z <= r.z1);
-                        }
-                        if live > 0 {
-                            p = div_by_live(o, live);
-                        }
+            // The runs tile the domain in index order, so one sweep over the cells is the same
+            // as run by run. When `dq` divides 6000, `q * dq / 6000` truncated is `q / (6000 /
+            // dq)` truncated (the same rational), and every quantity fits `i32`: `0 <= p * live
+            // <= o <= q` for an emitting cell.
+            match self.params.dq {
+                300 => heat_shares(&self.q, &rows.live, &mut per, &mut nq, |q| q / 20),
+                d if d > 0 && 6000 % d == 0 => {
+                    let k = 6000 / d;
+                    heat_shares(&self.q, &rows.live, &mut per, &mut nq, |q| q / k);
+                }
+                _ => {
+                    for i in 0..n {
+                        let qi = self.q[i];
+                        let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
+                        let live = usize::from(rows.live[i]);
+                        let p = if o > 0 && live > 0 {
+                            div_by_live(o, live)
+                        } else {
+                            0
+                        };
+                        per[i] = p as i32;
+                        nq[i] = (i64::from(qi) - p * live as i64) as i32;
                     }
-                    per[i] = p as i32;
-                    nq[i] = (i64::from(qi) - p * live as i64) as i32;
                 }
             }
             for run in &rows.runs {
@@ -2242,8 +2287,13 @@ impl ChemWorld {
                     rep.hand[1] += 1;
                 }
             }
-            // N + 3 H -> NH3
-            let mut next = 0;
+            // N + 3 H -> NH3. Exact skip: every firing needs three H cells and this
+            // scan never makes H, so with no H in the domain no N cell can fire.
+            let mut next = if find_mat(&self.mat, 0, MatId::H).is_some() {
+                0
+            } else {
+                self.mat.len()
+            };
             while let Some(i) = find_mat(&self.mat, next, MatId::N) {
                 next = i + 1;
                 if self.q[i] < 250 {
