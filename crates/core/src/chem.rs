@@ -460,6 +460,22 @@ impl fmt::Display for GenesisError {
 
 impl std::error::Error for GenesisError {}
 
+/// The book figures of one [`ChemWorld`] state ([`ChemWorld::book_totals`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BookTotals {
+    /// [`ChemWorld::material_count`].
+    pub material_count: usize,
+    /// [`ChemWorld::lane_totals`].
+    pub lanes: Lanes,
+    /// [`ChemWorld::lane_drift`].
+    pub lane_drift: Lanes,
+    /// [`ChemWorld::energy_total`].
+    pub energy: i64,
+    /// [`ChemWorld::energy_drift`].
+    pub energy_drift: i64,
+    hist: [u64; 256],
+}
+
 /// Why a books check failed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BooksError {
@@ -707,6 +723,23 @@ impl ChemWorld {
         self.mat.len() - self.mat_histogram()[usize::from(MatId::AIR.0)] as usize
     }
 
+    /// Every book figure at once ([`Self::material_count`], [`Self::lane_totals`],
+    /// [`Self::lane_drift`], [`Self::energy_total`], [`Self::energy_drift`]) from one
+    /// material histogram and one heat sum: the same values as the separate calls.
+    pub fn book_totals(&self) -> BookTotals {
+        let hist = self.mat_histogram();
+        let lanes = self.lane_totals_from(&hist);
+        let energy = self.energy_total_from(&hist);
+        BookTotals {
+            material_count: self.mat.len() - hist[usize::from(MatId::AIR.0)] as usize,
+            lanes,
+            lane_drift: std::array::from_fn(|k| lanes[k] - self.t0[k]),
+            energy,
+            energy_drift: energy - self.t0_energy,
+            hist,
+        }
+    }
+
     /// Every domain cell's material, in domain order (index `i` is `domain().nth(i)`).
     pub fn mats(&self) -> &[MatId] {
         &self.mat
@@ -900,12 +933,16 @@ impl ChemWorld {
     /// planet6 `laneTotals`: bag + vapor pairs (4 H + 2 O each) + the
     /// composition of every material voxel.
     pub fn lane_totals(&self) -> Lanes {
+        self.lane_totals_from(&self.mat_histogram())
+    }
+
+    fn lane_totals_from(&self, hist: &[u64; 256]) -> Lanes {
         let mut lanes = self.inv;
         lanes[0] += self.vapor * 4;
         lanes[1] += self.vapor * 2;
         // Per material, count x composition: the same i64 terms as a per-cell sum, regrouped
         // (integer addition is exact and order-free).
-        for (id, &count) in self.mat_histogram().iter().enumerate() {
+        for (id, &count) in hist.iter().enumerate() {
             let m = MatId(id as u8);
             if count == 0 || m == MatId::AIR {
                 continue;
@@ -930,11 +967,15 @@ impl ChemWorld {
     /// heat its evaporation took from the ocean, and keeps its binding),
     /// minus the M1 inbound ledger `input_q` (0 when the energy input is off).
     pub fn energy_total(&self) -> i64 {
+        self.energy_total_from(&self.mat_histogram())
+    }
+
+    fn energy_total_from(&self, hist: &[u64; 256]) -> i64 {
         let mut e = self.space_q - self.input_q
             + self.vapor * i64::from(LATENT_PAIR - self.table.bind(MatId::WATER));
         // The same i64 terms as a per-cell sum, regrouped: all heat, then BIND per material.
         e += self.q.iter().map(|&q| i64::from(q)).sum::<i64>();
-        for (id, &count) in self.mat_histogram().iter().enumerate() {
+        for (id, &count) in hist.iter().enumerate() {
             let m = MatId(id as u8);
             if count != 0 && m != MatId::AIR {
                 e -= i64::from(self.table.bind(m)) * count as i64;
@@ -957,23 +998,76 @@ impl ChemWorld {
 
     /// Verifies the structural invariants, zero lane drift and zero energy drift.
     pub fn check_books(&self) -> Result<(), BooksError> {
+        self.check_books_with(&self.book_totals())
+    }
+
+    /// [`Self::check_books`] given this world's current [`Self::book_totals`].
+    pub fn check_books_with(&self, totals: &BookTotals) -> Result<(), BooksError> {
+        // With no id lacking a table row in the histogram, no cell can fail the material
+        // test, so the cell walk checks only the occupancy bits (same first failure).
+        let all_valid = totals
+            .hist
+            .iter()
+            .enumerate()
+            .all(|(m, &n)| n == 0 || self.table.comp(MatId(m as u8)).is_some());
         let mut probe = self.world.probe();
-        for (c, m) in self.cells.iter().zip(&self.mat) {
-            if self.table.comp(*m).is_none() {
-                return Err(BooksError::BadMaterial(*c, *m));
+        let runs = self
+            .topo
+            .as_ref()
+            .and_then(|t| t.zruns.as_ref())
+            .filter(|_| all_valid);
+        if let Some(rows) = runs {
+            // The z-runs tile the domain in index order (the topology is dropped whenever the
+            // cells change), so walking them visits the same cells in the same order without
+            // reading the 24-byte coordinates.
+            for run in &rows.runs {
+                let mats = &self.mat[run.start..=run.start + (run.z1 - run.z0) as usize];
+                let mut off = 0usize;
+                while off < mats.len() {
+                    let z = run.z0 + off as i64;
+                    let c = Coord::new(run.x, run.y, z);
+                    let (chunk, index) = World::chunk_of(c);
+                    let bits = self.world.chunk_words(chunk).map(|(_, w)| w);
+                    let n = (16 - z.rem_euclid(16) as usize).min(mats.len() - off);
+                    for (k, m) in mats[off..off + n].iter().enumerate() {
+                        // z + 1 steps one 16x16 layer in the same chunk.
+                        let bit = index + k * 256;
+                        let on = bits.is_some_and(|w| w[bit / 64] >> (bit % 64) & 1 == 1);
+                        if *m != MatId::AIR && !on {
+                            return Err(BooksError::MaterialOnOffBit(Coord::new(
+                                run.x,
+                                run.y,
+                                z + k as i64,
+                            )));
+                        }
+                    }
+                    off += n;
+                }
             }
-            if *m != MatId::AIR && !probe.is_on(*c) {
-                return Err(BooksError::MaterialOnOffBit(*c));
+        } else if all_valid {
+            for (c, m) in self.cells.iter().zip(&self.mat) {
+                if *m != MatId::AIR && !probe.is_on(*c) {
+                    return Err(BooksError::MaterialOnOffBit(*c));
+                }
+            }
+        } else {
+            for (c, m) in self.cells.iter().zip(&self.mat) {
+                if self.table.comp(*m).is_none() {
+                    return Err(BooksError::BadMaterial(*c, *m));
+                }
+                if *m != MatId::AIR && !probe.is_on(*c) {
+                    return Err(BooksError::MaterialOnOffBit(*c));
+                }
             }
         }
         if let Some(lane) = self.inv.iter().position(|&n| n < 0) {
             return Err(BooksError::NegativeInventory { lane });
         }
-        let d = self.lane_drift();
+        let d = totals.lane_drift;
         if d.iter().any(|&x| x != 0) {
             return Err(BooksError::Drift(d));
         }
-        let e = self.energy_drift();
+        let e = totals.energy_drift;
         if e != 0 {
             return Err(BooksError::EnergyDrift(e));
         }
@@ -1746,6 +1840,35 @@ mod tests {
     }
 
     const BUDGET: Lanes = [4000, 3000, 400, 120, 300, 350, 200, 60, 180, 150, 40, 30];
+
+    /// The books' occupancy walk over z-runs and chunk words reports exactly what the walk
+    /// over the cell list reports, through chunk borders at negative coordinates too.
+    #[test]
+    fn books_occupancy_walk_by_runs_matches_cell_walk() {
+        let mut w = genesis(&cfg(BUDGET, 7, 20)).unwrap();
+        let _ = w.topology();
+        assert!(w.topo.as_ref().is_some_and(|t| t.zruns.is_some()));
+        let cell_walk = |w: &ChemWorld| {
+            let mut v = w.clone();
+            v.topo = None;
+            v.check_books()
+        };
+        assert_eq!(w.check_books(), Ok(()));
+        assert_eq!(cell_walk(&w), Ok(()));
+        let solid: Vec<usize> = (0..w.cells.len())
+            .filter(|&i| w.mat[i] != MatId::AIR && !is_bedrock(w.cells[i]))
+            .collect();
+        assert!(solid.len() > 100);
+        let mut cuts = 0;
+        for &i in solid.iter().rev().step_by(solid.len() / 37 + 1) {
+            w.world.set_off(w.cells[i]);
+            let got = w.check_books();
+            assert_eq!(got, Err(BooksError::MaterialOnOffBit(w.cells[i])));
+            assert_eq!(got, cell_walk(&w));
+            cuts += 1;
+        }
+        assert!(cuts > 30);
+    }
 
     #[test]
     fn genesis_totals_equal_budget_and_drift_is_zero() {

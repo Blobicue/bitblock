@@ -509,12 +509,11 @@ impl ChemPlay {
         false
     }
 
-    fn drift_abs(&self) -> i64 {
-        self.world.lane_drift().iter().map(|x| x.abs()).sum()
-    }
-
     /// Short fields appended to the play status line in chem mode.
     pub fn status_fields(&self) -> String {
+        // One histogram and heat sum for every book figure (the same values as the separate
+        // calls).
+        let books = self.world.book_totals();
         format!(
             " chem={} seed={} radius={} chem_tick={} auto={} vapor={} materials={} lane_drift={} energy_drift={} chem_last={}{}",
             self.preset_name(),
@@ -523,9 +522,9 @@ impl ChemPlay {
             self.world.tick(),
             self.every,
             self.world.vapor(),
-            self.world.material_count(),
-            self.drift_abs(),
-            self.world.energy_drift(),
+            books.material_count,
+            books.lane_drift.iter().map(|x| x.abs()).sum::<i64>(),
+            books.energy_drift,
             self.last,
             self.error
                 .as_ref()
@@ -543,6 +542,7 @@ impl ChemPlay {
                 .collect::<Vec<_>>()
                 .join(",")
         };
+        let books = self.world.book_totals();
         format!(
             "bitblock_play_chem ok preset={} seed={} radius={} tick={} auto={} queued={} vapor={} evaporated={} rained={} materials={} domain={} space_q={} energy={} energy_drift={} books={} place={} last={} error={} lanes={} drift={} bag={} budget={} atoms={}{}{}",
             self.preset_name(),
@@ -554,12 +554,12 @@ impl ChemPlay {
             self.world.vapor(),
             self.world.evaporated(),
             self.world.rained(),
-            self.world.material_count(),
+            books.material_count,
             self.world.domain_len(),
             self.world.space_q(),
-            self.world.energy_total(),
-            self.world.energy_drift(),
-            if self.world.check_books().is_ok() {
+            books.energy,
+            books.energy_drift,
+            if self.world.check_books_with(&books).is_ok() {
                 "ok"
             } else {
                 "BAD"
@@ -567,8 +567,8 @@ impl ChemPlay {
             mat_name(self.place_mat),
             self.last,
             self.error.as_deref().unwrap_or("none"),
-            lanes(self.world.lane_totals()),
-            lanes(self.world.lane_drift()),
+            lanes(books.lanes),
+            lanes(books.lane_drift),
             lanes(self.world.inventory()),
             lanes(self.budget),
             self.budget.iter().sum::<i64>(),
