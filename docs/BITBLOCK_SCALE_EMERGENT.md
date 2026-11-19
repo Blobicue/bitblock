@@ -4365,6 +4365,83 @@ Dig / place at r92 on :8765 (`placefps6t.mjs`, 8293d28 www):
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; play-loop catch-up and cap rule untouched; 8790/8791 left alone.
 
+## 6ab. Play-loop catch-up after host stalls (Owen approved): the cap goes 92 → 96. Chrome Low r94 and r96 pass both sets for both presets, with first windows included (2026-11-18, branch `chem/render-scale-2026-11`). Every hash and book is unchanged
+
+Owen approved catch-up ("go ahead then"); the cap rule is unchanged. Only scheduling changed: which frame runs which tick. The simulation and the fps measurement were not touched, and the wasm from the catch-up commit is byte-identical to §6aa's (`15096bfa…`).
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| e5bfd75 | play: bounded catch-up. Ticks a paced step leaves unrun are owed to the next frames, still at most one chem step per frame; a backlog past 8 ticks is dropped. Rust doc comments only (line counts kept, so the wasm is byte-identical) | [44442226124](https://github.com/Blobicue/bitblock/actions/runs/44442226124) |
+| 9e4b124 | www refresh plus cap 92 → 96 (`CHEM_RADIUS_MAX` and its doc, the HTML `max` and title, the JS clamp) | [44443549600](https://github.com/Blobicue/bitblock/actions/runs/44443549600) |
+
+**2. How catch-up works.**
+- The §6s paced step (`bitblock_play_step_paced`) is unchanged. It runs at most one chem step per call and stops before a tick whose chem step would be the second one. Before §6ab the client then dropped the ticks left over. Now it adds them back to its accumulator as owed time.
+- Each following frame runs its own ticks plus the owed ones, still with at most one chem step. After a stall, the next few frames each run a chem step back to back (about 37–45 ms each at r94–r96, so 20–25 frames per second) until the debt is paid, then the loop settles back to one chem step every fourth tick.
+- In steady state no tick is left over (dropped = carried = 0 in all 16 Chrome runs but one, which carried 2 ticks), so steady-state behaviour is the §6s single chem step per frame.
+- Bounds:
+  - at most 8 ticks per frame (as before; a longer gap drops the excess and now counts it in `dropped`);
+  - frame gaps are clamped to 250 ms (as before);
+  - the owed backlog is at most `MAX_BACKLOG_TICKS = 8` ticks (two chem steps, ~133 ms). Past that the whole backlog is dropped, not chased.
+- Catch-up cannot spiral, because a frame never runs more than one chem step. Every frame that runs one paints its result.
+- Honest fps: `presented_fps` is still the wasm's render count over the 500 ms window. The fps line gains only `carried=N` (ticks owed that window) next to `dropped=`.
+
+**3. Forced stalls (study build only: a busy-wait at the top of `playLoop` every 3 s; 12 s per run; `trace_pres` = renders/s over the whole run).**
+
+| case | before (§6aa loop) | after (catch-up) |
+|---|---|---|
+| gas r94, 60 ms | 14.98, dropped 0 | 15.00, dropped 0 |
+| gas r94, 100 ms | 14.90, dropped 4 | 15.00, carried 4, dropped 0 |
+| gas r94, 130 ms | 14.68, dropped 8 | 14.92, carried 11, dropped 2 |
+| ocean r94, 130 ms | 14.81, dropped 8 | 14.94, carried 14, dropped 2 |
+| gas r96, 130 ms | 14.70, dropped 8 | 14.92, carried 13, dropped 2 |
+| ocean r96, 130 ms | 14.58, dropped 6 | 14.76, carried 17, dropped 2 |
+| gas r94, 300 ms (past the bound) | 13.80 | 13.96, dropped 21 (backlog dropped, no chase) |
+| gas r94, 100 ms every 400 ms (sustained 25% theft) | 14.39, dropped 31 | 14.98, carried 47, dropped 0; ≤ 8 ticks per frame |
+
+- A stall still empties the 500 ms window it lands in (~11–12 fps): those frames were not presented then. The next window reads 17–19 fps as the owed steps are presented, so the 1 s after a stall holds 14–15 renders.
+- Screenshots right after stalls (gas, ocean, 300 ms, overload) were checked by eye: no tearing, holes or stale regions (`/workspace/render_scale/s6ab/stall/sheet.png`).
+
+**4. Chrome cadence (study build = e5bfd75 with the cap lifted, wasm `15eae4e8…`; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots).**
+
+| radius | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| r94 runs | 15.00, 15.00, 15.00, 15.00 | 15.37, 15.03, 15.70, 15.10 | 15.00, 15.00, 15.00, 15.00 | 15.20, 15.90, 15.03, 15.00 |
+| r94 mean / busy | **15.00** / 65–68% | **15.30** / 68–74% | **15.00** / 65–66% | **15.28** / 67–75% |
+| r96 runs | 15.00, 15.00, 15.00, 15.00 | 15.60, 15.70, 15.87, 15.87 | 15.00, 15.03, 15.03, 15.03 | 15.87, 15.90, 15.77, 15.83 |
+| r96 mean / busy | **15.00** / 70–71% | **15.76** / 74–78% | **15.02** / 71–74% | **15.84** / 76–79% |
+
+**Cap: 92 → 96.** Both sets pass at r94 and at r96 for both presets, first windows included.
+- Caveat: these sets had no large host stalls (gas step_max ≤ 70 ms), so catch-up hardly engaged (carried 0 in 15 of 16 r94 runs). A stall that lands in a sampled window still reads ~12 there (§3).
+- Ocean's high first windows (16–17.7) appear in runs that carried nothing. They are real renders counted the old way and also showed before catch-up (§6aa 15.6–16.8).
+- r98 was not tried. At r96 ocean busy is 74–79% and the node median step is 51.8 ms (gas) / 48.8 ms (ocean).
+
+**5. Exactness.**
+- After e5bfd75: all 16 `delta_eq` outputs and `fp_long` byte-identical, 17/17. Parity md5s unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`.
+- `wasm_parity` §6aa wasm vs §6ab wasm: 7/7 SAME. Wasm 83 tests pass.
+- Frame hashes: no re-baseline; old = new.
+  - default world `pmbj7za5…`, frame `nx4b62u5…`
+  - r90 gas `vbv6ockz…` / `ymhicrsu…`
+  - r90 ocean `wtevn2pz…` / `smmn3aox…`
+  - r92 gas `2lniroz3…` / `6ucp2u65…`
+  - r92 ocean `3skk4kg6…` / `xaiybmjb…`
+  - r94 gas `fd5q23fn…` / `7mz2leqp…`, ocean `d2ntakaz…` / `gnrwiwke…`. These are now reachable in the shipped build and equal the earlier cap-lifted values.
+- New at r96 (shipped = cap-lifted study): gas `kn4uefnn…` / `ezltjrri…`, ocean `iytys4mz…` / `u7pbrwtn…`. r98 clamps to 96 (same hashes).
+
+**Build.** wasm (9e4b124, ABI 17) md5 `90bfaf400556a24f77ecf5f1e62f8ec1` (1,591,047 B), play.html `898ad30b998247beac0aa3078696c8d9`, bitblock-lab.html `27ebea4c5f0b65ef57d09e083525b5dd`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90/r94 run at 15.0 fps (14.9 ocean), dropped = carried = 0.
+  - The only error is the favicon 404.
+- Dig / place at r96 (`placefps6t.mjs`):
+  - gas: 14.9–16.9, gaps ≤ 50 ms.
+  - ocean: dig and place apply (`dig:o2`, `place:o2`); later aims hit a hot or occupied cell and are refused by game rules (`dig_refused_heat`, `place_refused`). Windows 14.0–17.9, with one 12.2 window followed by 17.9 as the catch-up landed; gaps ≤ 100 ms.
+  - `books=ok energy_drift=0 error=none` throughout.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6ab/pt/{play,g96,o96,o96b}/*.png` (contact sheet `s6ab/pt/sheet.png`).
+- Data: `/workspace/render_scale/s6ab/{STATUS.md,eq1,eq1.log,parity1.log,chrome/,chrome96/,stall/}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
