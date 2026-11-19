@@ -1181,6 +1181,50 @@ impl ChemWorld {
         true
     }
 
+    /// §6ah display replica: inserts `coord` into the domain as an air, Q = 0 cell (book
+    /// neutral, like [`Self::place`]'s own insertion) and returns its index. `None` (no
+    /// change) when `coord` is already a domain cell or an occupied non-chem bit. A replica
+    /// replays the host's domain growth with this, in the host's insertion order, so both hold
+    /// the same cell list.
+    pub fn insert_air_cell(&mut self, coord: Coord) -> Option<usize> {
+        if self.index_of(coord).is_some() || (self.world.is_on(coord) && !is_bedrock(coord)) {
+            return None;
+        }
+        Some(self.insert_cell(coord))
+    }
+
+    /// §6ah display replica: overwrites every domain cell's material with `mats` (domain
+    /// order; its length must equal [`Self::domain_len`], else `false` and no change),
+    /// keeping the occupancy bits in step exactly as every material write does. Heat, the bag,
+    /// pools and the books are not touched, so a replica's books are not meaningful: it is a
+    /// display copy (cells, materials, occupancy, the cell lookup) of a world stepped
+    /// elsewhere, and it must never be stepped itself. Builds the cell lookup if it is not
+    /// cached, so [`Self::index_of`] stays one probe. Returns the number of cells changed.
+    pub fn replicate_mats(&mut self, mats: &[MatId]) -> Option<usize> {
+        if mats.len() != self.mat.len() {
+            return None;
+        }
+        if self.topo.is_none() {
+            self.topology();
+        }
+        let mut changed = 0;
+        self.world.defer_octree();
+        for (block, src) in mats.chunks(64).enumerate() {
+            let base = block * 64;
+            if self.mat[base..base + src.len()] == *src {
+                continue;
+            }
+            for (k, &m) in src.iter().enumerate() {
+                if self.mat[base + k] != m {
+                    self.set_mat(base + k, m);
+                    changed += 1;
+                }
+            }
+        }
+        self.world.flush_octree();
+        Some(changed)
+    }
+
     /// Adds an air, Q=0 cell to the domain and returns its index.
     fn insert_cell(&mut self, coord: Coord) -> usize {
         let i = self.cells.binary_search(&coord).unwrap_err();
@@ -2033,6 +2077,63 @@ mod tests {
         }
         assert!(kept > 400, "kept {kept}");
         assert!(dropped > 0, "dropped {dropped}");
+    }
+
+    /// §6ah: a display replica that replays the host's domain growth (`insert_air_cell`, in
+    /// the host's order) and copies its materials (`replicate_mats`) holds the host's cell
+    /// list, materials, occupancy bits and cell lookup after every step, dig and place,
+    /// without ever being stepped.
+    #[test]
+    fn replica_follows_host_cells_materials_and_occupancy() {
+        let mut host = genesis(&cfg(BUDGET, 7, 10)).unwrap();
+        let mut replica = host.clone();
+        assert_eq!(
+            replica.replicate_mats(&host.mat[1..]),
+            None,
+            "length mismatch refused"
+        );
+        let mut grown = 0;
+        for round in 0..12 {
+            host.step().unwrap();
+            let mut inserted = Vec::new();
+            // dig a surface cell and place its material just outside the domain
+            let cells = host.cells.clone();
+            if let Some((c, m)) = cells
+                .iter()
+                .find_map(|&c| host.clone().dig(c).map(|m| (c, m)))
+            {
+                assert_eq!(host.dig(c), Some(m));
+                let up = cells
+                    .iter()
+                    .map(|&c| Coord::new(c.x, c.y + 1 + round, c.z))
+                    .find(|&u| host.index_of(u).is_none() && !host.world.is_on(u))
+                    .unwrap();
+                let before = host.domain_len();
+                if host.place(up, m) && host.domain_len() == before + 1 {
+                    inserted.push(up);
+                }
+            }
+            for &c in &inserted {
+                let i = replica.insert_air_cell(c).expect("new cell");
+                assert_eq!(host.cells[i], c);
+                assert_eq!(replica.insert_air_cell(c), None, "already in the domain");
+                grown += 1;
+            }
+            replica.replicate_mats(&host.mat).expect("same length");
+            assert_eq!(replica.cells, host.cells);
+            assert_eq!(replica.mat, host.mat);
+            assert_eq!(
+                crate::history::world_tag(&replica.world),
+                crate::history::world_tag(&host.world)
+            );
+            for &c in host.cells.iter().step_by(17) {
+                assert_eq!(replica.index_of(c), host.index_of(c));
+            }
+            assert!(replica.topo.is_some(), "lookup stays one probe");
+        }
+        assert!(grown >= 6, "grown {grown}");
+        assert_eq!(replica.replicate_mats(&host.mat), Some(0));
+        assert!(host.check_books().is_ok());
     }
 
     /// §6t: a place that joins the domain leaves the world on exactly the path a rebuilt

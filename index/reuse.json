@@ -602,7 +602,7 @@
     ]
    }
   ],
-  "pub_items": 861,
+  "pub_items": 863,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -807,7 +807,7 @@
    ]
   },
   "test": {
-   "code_lines": 23825,
+   "code_lines": 23906,
    "duplicated_lines": 341,
    "regions": [
     {
