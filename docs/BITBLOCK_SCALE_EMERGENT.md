@@ -4724,6 +4724,69 @@ Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote del
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No merge to main, no remote deletion (`wip/s6e-fingerprint` kept), no Desktop copy; 8790/8791 left alone.
 
+## 6ag. Chem worker thread: design and the measurements that bound it. Workers run from `file://`, but an exact worker gains at most ~13% of a frame (the cap could reach ~102–103). The larger designs need Owen's call; nothing was implemented (2026-11-19, branch `chem/render-scale-2026-11`)
+
+**Goal.** Move the chem step into a Web Worker, so render and input stay on main and chem runs alongside them. The simulation must stay **exact**: same tick sequence, same world, frame and book hashes, `energy_drift = 0`. Only scheduling may change.
+
+**1. What the browser allows (measured on the box, headless Chrome 156; log `/workspace/render_scale/s6ag/environment.log`).**
+- `http://127.0.0.1:8765/play.html`: `crossOriginIsolated = false`, `SharedArrayBuffer` undefined. The dev server sends no COOP/COEP headers, and the server is not ours to change.
+- `file:///…/www/play.html` (what Owen does from `C:\Users\Owen\Desktop\bitblock\`): the page origin is opaque (`file://`), not isolated, and `SharedArrayBuffer` is undefined. A COOP/COEP header cannot be sent from `file://`, so **SharedArrayBuffer is out in both places**. `Atomics.wait` (a blocking main ↔ worker handshake) is out too.
+- **What works in both:** a Blob-URL worker (`new Worker(URL.createObjectURL(blob))`, origin `blob:null/…` under `file://`) and instantiating the shipped wasm bytes inside it.
+  - `play.html` already embeds the wasm as base64, so the Desktop needs no second file.
+  - A compiled `WebAssembly.Module` can be posted to the worker, and transferring an `ArrayBuffer` (an RGBA frame, a delta list) works.
+  - The shipped wasm (ABI 17, md5 `733794f9…`) instantiated in the worker loads `chem:ocean` r12 and steps it (books ok, drift 0) under both http and `file://`.
+  - The current single-thread loop loads gas and ocean in both too.
+  - So a worker build would be **one file**, `play.html`, with an inline worker and the embedded wasm, plus the current loop as the fallback.
+- Caveat: this was headless Linux Chrome. Owen's Windows Chrome treats `file://` the same way as far as I know, but it was not tested on his machine.
+
+**2. Why exactness pins the schedule.** One play tick (`PlaySession::sim_tick`) runs, in order: inputs and camera, then edits, then the chem step (if due), then the mirror, then committing the tick to history.
+- **Edits need chem's answer on the same tick.** `ChemPlay::dig` refuses hot cells (`dig_refused_heat`), `place` draws atoms from the bag, and the answer decides whether the world edit is applied. The main thread cannot know it without the chem state.
+- **Chem at tick T needs that tick's edits.**
+- **Tick T+1 needs tick T's mirror:** aim resolution, the observer's collision and the history chain all read the mirrored world.
+
+So an exact split is **lock-step**: the worker can compute chem tick T only between main's T edits and main's T mirror. Main can still keep the input-event queue and rAF running while it waits.
+
+**3. What lock-step can overlap (Chrome cpuprofiles at Low 960×540: `s6ae/prof/named_2_r100_run1`, `s6ad/prof/named_4_r98_run1`).**
+
+| share of profile | ocean r100 | gas r98 (§6ad) |
+|---|---|---|
+| `ChemPlay::run` (chem step) | 61.3% | 62.5% |
+| chem status UI (`book_totals` etc.) + play status | 6.5% | 6.4% |
+| sim_tick outside chem (mirror, history `apply_edit`/sha256) | 7.7% | 13.7% (mirror since halved in §6ae) |
+| `render_pending` (delta render + compose) | 7.6% | 9.5% |
+| idle | 13.4% | 4.7% |
+
+- **Exact lock-step overlaps only** render plus compose and the status UI with the chem step. That works because render reads no chem state that changes during the step, and the inputs for tick T+4 are fixed before the task that renders T+3.
+- It cannot overlap the mirror or history (they need the step's result) or any tick that has an edit (that needs a round trip).
+- Estimate: −10 to −15% of busy time per presented frame (render 7.6–9.5 plus status 6.5, minus 2–3 for moving the material delta out of wasm and back in).
+- Chem cost grows with r³, so that headroom buys about r × 1.04–1.06: ocean r100 becomes solid and the cap could reach ~102–104.
+- **Genesis stops at r103** (`MAX_GENESIS_RADIUS`; §6af checked the sort key still fits up to 128). Past 103 needs that core limit raised too.
+- Cost: a chem proxy inside `PlaySession`, which today touches `self.chem` at ~120 sites.
+  - Tints, cut, dig and place, status, mirror and due ticks would all need a main-side copy of the chem materials plus an edit round trip.
+  - Plus a new worker protocol and new additive exports (ABI 17 "additive, same number" by the existing convention).
+  - Every step would carry a delta list. For gas that is up to ~0.8M cells; as `(u32 index, u8 mat)` that is ≈4 MB per step to export, transfer and apply.
+
+**4. The designs that pay more, and the decisions they need (Owen's call).**
+- **(a) Exact lock-step chem worker.** About −10–15% of a frame; ocean r100 solid; cap ~102–103 within the genesis limit. A large refactor whose payoff is capped by §2.
+- **(b) Fixed one-chem-step lag.** The chem step started at due tick T lands, with its mirror and edit answers, at the next due tick T+4.
+  - The worker is then busy all the time and main never waits. Frame ≈ max(chem + status, render + mirror) ≈ 45 ms at ocean r100 against ~58 ms today, so about r × 1.08–1.10 (r≈108–110, which needs the genesis limit raised).
+  - It is deterministic, but it **changes the tick sequence and the chem-play hashes**. The single-thread fallback would have to adopt the same lag, so both paths agree, and the play parity and fp_long baselines would be re-cut. Not exact under today's rule.
+- **(c) Speculative stepping with undo.** The worker starts step T+4 as soon as T is done, assuming no edits in T+1..T+4. On an edit it rolls back and redoes the step.
+  - This is exact, and it gets most of (b)'s overlap.
+  - It needs an undo log for every chem write: q swaps for free (heat swaps buffers), but materials need a log at 68 `set_mat` sites plus 23 direct writes, plus scalars, pools, the bag and the world's occupancy edits. Cloning the state per step instead (~120 MB at r100) would cost more than it saves.
+  - It carries a large correctness risk.
+- **(d) Whole `PlaySession` in a worker,** main only painting pixels. Exact by construction and frees the UI thread, but it overlaps only putImageData (~2–3%). It doesn't raise the radius.
+
+**5. Delivery rules for any of them.**
+- Ship one `play.html` with an inline Blob worker, and keep the embedded wasm. Post the compiled `WebAssembly.Module`; don't decode the base64 twice.
+- If `Worker`/`Blob` fails, or `?worker=0` is set, fall back to today's loop.
+- Report chem ticks/s next to presented fps, so a worker can't hide a slow sim.
+- A Desktop copy would then still be the same three files (`bitblock_wasm.wasm`, `play.html`, `bitblock-lab.html`), with no new worker file.
+
+**6. Result.** No code, www, ABI or cap change; the cap stays 100. Docs only, so there is no Desktop copy. The next step needs Owen's choice of (a), (b) or (c), and whether the genesis limit may go past 103.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No merge to main, no remote deletion (`wip/s6e-fingerprint` kept), no Desktop copy; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
