@@ -63,10 +63,14 @@ pub const CHEM_RADIUS_DEFAULT: u32 = 12;
 /// missed r94 by one stalled gas window each time. §6ab (the play loop owes the ticks a paced
 /// step leaves unrun to its next frames, bounded) measured fresh loads at r94 and r96 over two
 /// sets of four runs each, first windows included: at r96 gas presents 15.00-15.03 fps (busy
-/// 70-74%) and ocean 15.60-15.90 (busy 74-79%). So r96 is the largest tested radius that holds
-/// the 15 Hz chem cadence on both presets (§6i/§6j: r76, §6k/§6l: r80, §6m: r82, §6n: r84,
-/// §6o: r86, §6p: r88, §6r: r90, §6x: r92).
-pub const CHEM_RADIUS_MAX: u32 = 96;
+/// 70-74%) and ocean 15.60-15.90 (busy 74-79%). §6ac (flow edits the world once per changed
+/// cell; settle visits only sediment) measured fresh loads at r98, r100 and r102 over two sets
+/// of four runs each, first windows included: at r98 gas presents 14.90-15.17 fps (set means
+/// 15.01 and 15.03, busy 76-79%) and ocean 15.47-16.00 (busy 74-78%); r100 gas missed set two
+/// (mean 14.995). So r98 is the largest tested radius that holds the 15 Hz chem cadence on
+/// both presets (§6i/§6j: r76, §6k/§6l: r80, §6m: r82, §6n: r84, §6o: r86, §6p: r88, §6r: r90,
+/// §6x: r92, §6ab: r96).
+pub const CHEM_RADIUS_MAX: u32 = 98;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.

@@ -52,7 +52,7 @@
     </optgroup>
   </select></label>
   <span id="playChemOpts" hidden title="Chem world: genesis spends the preset's element budget into a sphere; the planet6 tick (heat, phase, reactions, water cycle, surface laws) runs while you play. LMB digs (needs heat ≥ bond energy; atoms go to the bag), RMB places the last dug material paid from the bag.">seed <input id="playChemSeed" type="number" value="7" min="0" max="4294967295" style="width:6em">
-    radius <input id="playChemRadius" type="number" value="12" min="2" max="96" title="sphere radius 2–96 (§6ab). Chrome Low r96: ocean and gas hold 15 presented fps, a fresh load's first seconds included" style="width:3.5em">
+    radius <input id="playChemRadius" type="number" value="12" min="2" max="98" title="sphere radius 2–98 (§6ac). Chrome Low r98: ocean and gas hold 15 presented fps, a fresh load's first seconds included" style="width:3.5em">
     chem step every <input id="playChemEvery" type="number" value="4" min="0" max="600" style="width:3.5em"> ticks (0 = paused)
     <button type="button" id="playChemStep">step chem</button>
     <span id="playChemCutOpts" title="Cross-section (view only — atoms, books and the chem tick are untouched): hides the camera-facing octant (wedge) or the camera-facing half beyond an x / y / z plane through the core, so metal core, mantle, crust and ocean bands show on the cut faces. LMB/RMB act on what you see. Keys while playing: C cycles the mode, [ / ] move the plane.">· <b>cross-section</b> <select id="playChemCut">
@@ -860,7 +860,7 @@
       "A2pBoJTBgABBuKrVgAAQ94mAgAAACwJAIAAtAKWSAkEBRw0AIABBAToApJICQRwhBgwCCyADQQhqIAAgARDGgICAAAsgAEEAOgCmkgIgA0G0A2og" +
       "AEHgjwJqIAAoAuz3ASAAKALw9wEgA0EIahDZh4CAACAAQQE2AsiPAiAAIAP9AAK0A/0LAsyPAiAAIAMoAsQDNgLcjwIgAEEBOgCkkgJBHCEGCyAA" +
       "IAY6AOuSAiAAIAP9AAPIA/0LAOySAiAAIAP9AAPYA/0LAPySAiAAEMWAgIAAQQEhBiAAQQE6AKeSAiAAIAApA+iRAkIBfDcD6JECCyADQZAEaiSA" +
-      "gICAACAGC+ACAgF/CX4jgICAgABBsBNrIgQkgICAgABCACEFIANBAiADQQJLGyIDQeAAIANB4ABJGyIDrSIGIAZ+IQdCACAGfSIIIQkDQCAJIAl+" +
+      "gICAACAGC+ACAgF/CX4jgICAgABBsBNrIgQkgICAgABCACEFIANBAiADQQJLGyIDQeIAIANB4gBJGyIDrSIGIAZ+IQdCACAGfSIIIQkDQCAJIAl+" +
       "IQogCCELA0AgCyALfiAKfCEMIAghDQJAA0AgBSAMIA0gDX58IAdXrXwhBSANIAZZDQEgDSANIAZTrXwiDSAGVw0ACwsCQCALIAZZDQAgCyALIAZT" +
       "rXwiCyAGVw0BCwsCQCAJIAZZDQAgCSAJIAZTrXwiCSAGVw0BCwsgBEEIaiABIAUQ4YCAgAACQAJAAkAgBCkDCEIBUg0AIARB0BJqIARBEGpB4AD8" +
       "CgAAIARBCGogASAEQdASaiACIAMQ0YCAgAAgBCkDCEICUQ0BIAAgBEEIakHIEvwKAAAMAgsgAEICNwMADAELIABCAjcDACAEKAIQIgNFDQAgBCgC" +
@@ -1761,7 +1761,7 @@
       "3IAAIABBkJMCaiSAgICAACABDwtBvMvVgABBDEHIy9WAABD2iYCAAAALQdjL1YAAEPKJgIAAAAvdAQEEfyOAgICAAEEQayIAJICAgIAAAkACQEEA" +
       "KALgrdyAACIBQf////8HTw0AQQAgAUEBajYC4K3cgAAgAEEEakHkrdyAABCuiYCAAEEAQQAoAuCt3IAAQX9qNgLgrdyAACAAKAIEIgFBgICAgHhG" +
       "DQEgACgCCCECAkACQCAAKAIMIgMNAEEAIQMMAQtBk4CAgAAgAiADEJKAgIAAIQMLAkAgAUUNACACIAFBARDGgoCAAAsgAEEQaiSAgICAACADDwtB" +
-      "5JXVgAAQ9ImAgAAAC0GMzdWAABCOiYCAAAALpAICAX8JfiOAgICAAEHwAGsiAiSAgICAAEIAIQMgAUECIAFBAksbIgFB4AAgAUHgAEkbrSIEIAR+" +
+      "5JXVgAAQ9ImAgAAAC0GMzdWAABCOiYCAAAALpAICAX8JfiOAgICAAEHwAGsiAiSAgICAAEIAIQMgAUECIAFBAksbIgFB4gAgAUHiAEkbrSIEIAR+" +
       "IQVCACAEfSIGIQcDQCAHIAd+IQggBiEJA0AgCSAJfiAIfCEKIAYhCwJAA0AgAyAKIAsgC358IAVXrXwhAyALIARZDQEgCyALIARTrXwiCyAEVw0A" +
       "CwsCQCAJIARZDQAgCSAJIARTrXwiCSAEVw0BCwsCQCAHIARZDQAgByAHIARTrXwiByAEVw0BCwsgAkEIaiAAIAMQ4YCAgABBACEBAkACQCACKQMI" +
       "QgFSDQBBACgC2MjegAANAUHgyN6AACACQRBqQeAA/AoAAEEBIQELIAJB8ABqJICAgIAAIAEPC0Hcm9WAABDyiYCAAAALLQACQEEAKAKArtyAAEH/" +
@@ -1801,7 +1801,7 @@
       "AX8jgICAgABB8LgEayIDJICAgIAAIAMgADYCBCADQaimBGogACABIAIQwICAgAACQAJAIAMpA6imBEICUQ0AIANBmJMCaiADQaimBGoQwYCAgAAg" +
       "AykDmJMCQgJRDQAgA0EIaiADQZiTAmpBkJMC/AoAAAwBCyADQYGAgIAArUIghiADQQRqrYQ3A6imBCADQRBqQa6DwIAAIANBqKYEahCtiYCAACAD" +
       "QgI3AwgLIANBCGoQloCAgAAhACADQfC4BGokgICAgAAgAAvbAQEBfyOAgICAAEHApgJrIgIkgICAgAACQEEAKALYyN6AAEH/////B08NACACQQhq" +
-      "QeDI3oAAQeAA/AoAACACQfiTAmpBAyACQQhqIAAgAUECIAFBAksbIgFB4AAgAUHgAEkbENGAgIAAAkACQCACKQP4kwJCAlINACACIAIoAoiUAjYC" +
+      "QeDI3oAAQeAA/AoAACACQfiTAmpBAyACQQhqIAAgAUECIAFBAksbIgFB4gAgAUHiAEkbENGAgIAAAkACQCACKQP4kwJCAlINACACIAIoAoiUAjYC" +
       "eCACIAIpA4CUAjcDcCACQgI3A2gMAQsgAkHoAGogAkH4kwJqEMGAgIAACyACQegAahCWgICAACEBIAJBwKYCaiSAgICAACABDwtBtJjVgAAQ9ImA" +
       "gAAAC7gEAQR/I4CAgIAAQcC5BmsiASSAgICAAAJAAkAgAEEERw0AIAFBCGoQ0oCAgAAMAQsgAUEIaiAAENOAgIAAC0EAIQACQAJAAkACQCABKQMI" +
       "QgJRDQAgAUGYkwJqIAFBCGpBkJMC/AoAACABQaimBGogAUGYkwJqQQAQl4CAgAAgASgCsKYEIgBBgQZPDQFBACgCoKzcgAANAiABKAKspgQhAkEA" +
@@ -17263,7 +17263,7 @@
       "AECgwAAPAAAAQJCgABAAAACA4OAAJwAAAG/DbwAoAAAAkKCwAGUAAADAgP8AagAAADg4OABrAAAA/4BgAGwAAAD/wIAAbwAAAECg4ABwAAAA0MjA" +
       "AHIAAABoVk4AdAAAADDg8AB3AAAA4HDAAHgAAADw8PAAfgAAACBAsACAAAAAkKBwAG9mZndlZGdleHl6AChZFQADAAAAK1kVAAUAAAAwWRUAAQAA" +
       "ADFZFQABAAAAMlkVAAEAAAABAAAAAAAAAG0xc3VuOAAAKFkVAAMAAABkWRUAAgAAAGZZFQAEAAAAEFcVAAEAAABjbGFzc2ljZHJpdmVuAAAAjFkV" +
-      "AAcAAACTWRUABgAAADsxEAAcAAAAKwIAAB4AAAA7MRAAHAAAADMCAAAjAAAAOzEQABwAAAAzAgAAHQAAAGRpZ19yZWZ1c2VkOm5vdF9jaGVtLy8g" +
+      "AAcAAACTWRUABgAAADsxEAAcAAAALwIAAB4AAAA7MRAAHAAAADcCAAAjAAAAOzEQABwAAAA3AgAAHQAAAGRpZ19yZWZ1c2VkOm5vdF9jaGVtLy8g" +
       "VFJJTU1FRCBmcm9tIGNoZW1fbmV0d29yay5nZW4uanMgKGZpbmdlcnByaW50IDJkMjQ4MTM5KSBieSBwNmdvbGRlbi90cmltLmpzOiBzb3VyY2Ug" +
       "cm93cyAwLDEzLDE1LDE2LDYzOSwxMDYyLDEzMjUsMjI1MSwyNTQwLDY5NDksMTQ2MTcKLy8gcmVhY3Rpb24gcm93czogW2EsIHNhLCBiLCBzYiwg" +
       "cGMsIHNjLCBwZCwgc2QsIGRFLCBmbGFnc10KICBjb25zdCBTUEVDSUVTID0gWwp7IGk6IDAsIGY6ICJDYSIsIGM6IFswLDAsMCwwLDAsMV0sIHA6" +
@@ -17299,7 +17299,7 @@
       "NSwxLDAsMSw3LDEsMCw1XSwKWzMsMSw3LDIsMTUsMSwxLDIsLTQsNF0sClszLDIsNSwyLDMsMSwxNSwxLC0yOCw0XSwKWzcsMSwyMSwyLDUsMSwy" +
       "MywxLDQsNF0sClsxNSwxLDIzLDIsMzcsMSw3LDIsNiwwXQogIF07CmdlbmVzaXNva0JBREhPQ05TQ2FGZU5pU2lNZ05hSwAAAPtkFQABAAAA/GQV" +
       "AAEAAAD9ZBUAAQAAAP5kFQABAAAA/2QVAAEAAAAAZRUAAgAAAAJlFQACAAAABGUVAAIAAAAGZRUAAgAAAAhlFQACAAAACmUVAAIAAAAMZRUAAQAA" +
-      "ADsxEAAcAAAAjQEAABwAAABsaXZlIHNlc3Npb24ganVzdCBpbnN0YWxsZWQAwjYQABYAAAAcBAAAGgAAAMI2EAAWAAAAGAQAAB4AAABwbGF5IHNl" +
+      "ADsxEAAcAAAAkQEAABwAAABsaXZlIHNlc3Npb24ganVzdCBpbnN0YWxsZWQAwjYQABYAAAAcBAAAGgAAAMI2EAAWAAAAGAQAAB4AAABwbGF5IHNl" +
       "c3Npb27CNhAAFgAAAEwGAAAZAAAAwjYQABYAAABIBgAAHQAAAG9uZS10aW1lIGluaXRpYWxpemF0aW9uIG1heSBub3QgYmUgcGVyZm9ybWVkIHJl" +
       "Y3Vyc2l2ZWx5xzQQAEwAAADiAAAAFAAAAPsxEABRAAAAGAEAADQAAABpbnRlcm5hbCBlcnJvcjogZW50ZXJlZCB1bnJlYWNoYWJsZSBjb2RlOiBp" +
       "bnZhbGlkIE9uY2Ugc3RhdGXELRAAWwAAADoAAAASAAAAqzEQAE8AAACsAQAAGQAAAFAAAAAMAAAABAAAAFEAAABSAAAAUwAAAAAAAAAAAAAAAQAA" +
@@ -19391,7 +19391,7 @@
     function playChemEveryTicks() { return playNum(playChemEvery, 4, 0, 600); }
     function playChemSeedVal() { return playNum(playChemSeed, 7, 0, 4294967295) >>> 0; }
     function playChemRadiusVal() {
-      const radius = playNum(playChemRadius, 12, 2, 96);
+      const radius = playNum(playChemRadius, 12, 2, 98);
       // Show the radius actually requested from wasm, not an out-of-range input.
       if (playChemRadius) playChemRadius.value = String(radius);
       return radius;

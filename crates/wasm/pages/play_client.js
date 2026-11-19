@@ -293,7 +293,7 @@
     function playChemEveryTicks() { return playNum(playChemEvery, 4, 0, 600); }
     function playChemSeedVal() { return playNum(playChemSeed, 7, 0, 4294967295) >>> 0; }
     function playChemRadiusVal() {
-      const radius = playNum(playChemRadius, 12, 2, 96);
+      const radius = playNum(playChemRadius, 12, 2, 98);
       // Show the radius actually requested from wasm, not an out-of-range input.
       if (playChemRadius) playChemRadius.value = String(radius);
       return radius;
