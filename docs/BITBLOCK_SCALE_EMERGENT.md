@@ -4570,6 +4570,73 @@ The cap rule and the catch-up bounds are unchanged. The shipped wasm was built i
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6ae. The play mirror skips unchanged 64-cell blocks whole and names changed cells from the domain's z-runs: gas r100 −3.4 ms, ocean r100 −3.7 ms (node). The cap stays 100. Ocean r100 is better but not yet solid: one study set missed (14.93) (2026-11-18, branch `chem/render-scale-2026-11`). Every hash and book is unchanged
+
+**1. Where the mirror's time went.** Native r100 (ticks 100–200, instrumented):
+- gas: `mirror_chem` 4.0–4.9 ms (scan 4.07);
+- ocean: 2.9 ms (scan 1.6 plus applying edits 0.7).
+
+Most of the cost was not pushing ~0.8M `(Coord, bool)` entries. It was reading `cells[i]` (24 B per cell over a ~100 MB list) and doing the per-block mask work on blocks where nothing had changed.
+
+**2. Tried and dropped: hand the render masks instead of entries.** A `ChemDelta` mask with a generic `render_tinted_delta_iter` cut the mirror 4.5 → 2.5 ms. But the delta render walks its changes 3–4 times, and each walk re-reads the cell list, so `render_game` went 1.8 → 6.5–7.3 ms. Net loss; reverted.
+
+**3. 0b5569f (CI 44463217314): block skip plus z-run names.**
+- `mirror_chem` XORs the 8 packed words of each 64-cell block against the cache and skips the block when the result is zero.
+- Changed cells get their coordinate from the domain's z-runs (`ChemPlay::mirror_rows`, rebuilt when the domain's length changes) with a forward cursor, instead of from `cells[i]`. A debug assert checks it against `cells[i]`.
+- The delta render API is unchanged: the same `(Coord, bool)` list in the same order.
+- New test `mirror_rows_name_every_domain_cell` covers a place that grows the domain.
+- Native mirror: gas 4.5–4.85 → 2.2–2.35 ms; ocean 2.9 → 1.6 ms (render unchanged).
+
+**4. Node, median ms per chem step (30 warm / 60).**
+
+| case | §6ad wasm | §6ae shipped | §6ae study |
+|---|---|---|---|
+| gas r98 | 50.40 | 48.45 | 49.29 |
+| ocean r98 | 46.96 | 44.43 | 44.20 |
+| gas r100 | 54.42 | 51.06 | 51.46 |
+| ocean r100 | 49.88 | 46.19 | 46.16 |
+
+**5. Chrome cadence (study build = 0b5569f with the cap lifted; Low 960×540; each run fresh; first windows included).**
+
+| radius | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| r100 runs | 14.87, 14.97, 15.00, 15.10 | 14.73, 14.37, 15.00, 15.60 | 15.00, 15.00, 15.03, 15.07 | 15.57, 15.80, 15.77, 15.83 |
+| r100 mean / busy | 14.985 (fail) / 73–78% | 14.925 (fail) / 76–79% | **15.03** / 72–75% | **15.74** / 76–77% |
+| r102 mean / busy | 15.06 / 78–80% | 14.73 (fail) / 79–82% | 15.03 / 77–79% | 14.82 (fail) / 79–80% |
+
+**Cap: stays 100.** r102 ocean fails both sets, so there is no raise.
+- Shipped confirmation (fb9f63a via :8765, 4 runs each, r100):
+  - set 1: gas 14.97, 15.00, 15.00, 15.00 (mean 14.99, a miss by 0.008); ocean **15.51**.
+  - set 2: gas **15.02**; ocean **15.41**.
+  - Busy: gas 71–75%, ocean 75–78%.
+- Caveat: ocean r100 passed both shipped sets but missed study set 1, so it is not solid. Ocean step_max is 87–108 ms against a 67 ms budget, and first windows are bimodal (13.1–14.2 or 16.8–17.7). Gas r100 sits right on 15.0. Going back to 98 is Owen's call.
+
+**6. Exactness.**
+- After 0b5569f: all 16 `delta_eq` outputs and `fp_long` byte-identical, 17/17. Parity md5s unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`. Tests 336 + 84 pass.
+- `wasm_parity` §6ad wasm vs §6ae wasm: 7/7 SAME. r92 and r96 hashes equal §6ad's.
+- r98: gas `lcz6kjpr…` / `2nmoesx2…`, ocean `yrxbcfsd…` / `ahornqzd…`; r100: gas `rmf2hktd…` / `uvf6e3j6…`, ocean `j6bmjxdg…` / `ewggzdvw…` (all unchanged; shipped = study). r102 clamps to 100.
+
+**7. What is left (ocean r100 wasm profile after 0b5569f).**
+- heat 14.7%, step laws 13.7%, combine2 11.2%, phase 8.4%, nb6 5.4%, flow 11.6% inclusive;
+- `apply_edit` 3.9%, of which 3.5% is the sha256 history event tag for each occupancy edit;
+- chem status UI 4.8% plus play status 1.7%.
+
+The mirror is now small. Further gains are in the chem passes themselves. A sparse active domain or a worker thread would be a design decision, not part of this pass.
+
+**Build.** The wasm (fb9f63a, ABI 17) was built from a fresh target folder not shared with bb_u, and it is byte-identical to the interrupted build.
+- md5s: wasm `733794f9c7bb982f5a5fa5c399393401` (1,597,646 B), play.html `2041e20ee72ff9eb0b38d216fc57f802`, bitblock-lab.html `df52c527f51bc1cf2d695e154d298114`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90/r94 run at 15.0 fps, dropped = carried = 0.
+  - The only error is the favicon 404.
+- Dig / place at r100 (`placefps6t.mjs`):
+  - gas: all apply; windows 15.0–17.1, gaps ≤ 117 ms.
+  - ocean: all apply; windows 13.8–18.1, gaps ≤ 100 ms.
+  - `books=ok energy_drift=0 error=none` throughout.
+- Screenshots checked by eye; no holes or tearing: `/workspace/render_scale/s6ae/pt/{play,g100,o100}/*.png` (contact sheet `s6ae/pt/sheet.png`).
+- Data: `/workspace/render_scale/s6ae/{STATUS.md,F.patch,eq1,eq1.log,parity1.log,chrome_set1.log,chrome_set2.log,chrome_ship_r100_set1.log,chrome_ship_r100_set2.log,prof/,pt/}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
