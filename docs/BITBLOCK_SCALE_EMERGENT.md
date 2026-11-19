@@ -4787,6 +4787,110 @@ So an exact split is **lock-step**: the worker can compute chem tick T only betw
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No merge to main, no remote deletion (`wip/s6e-fingerprint` kept), no Desktop copy; 8790/8791 left alone.
 
+## 6ah. Chem in a Web Worker, one tick behind (Owen's option b). Shipped: worker == fallback == fresh run (same hashes), books=ok / drift=0 throughout, main thread drops from 99% to ~30% busy at r100. The cap stays 100: on today's box no build passes the rule at r100, the old one included.
+
+**Schedule (both paths, deterministic).** Each chem session runs a lagged schedule (`crates/wasm/src/chem_link.rs`):
+- A **send tick** forms a `ChemBatch` (the due steps plus every edit queued since the last send, in tick order). The batch is applied and its result published on the **landing tick**, which is the next due tick (or the next tick while auto is paused). The same tick then sends the next batch.
+- The **single-thread fallback** (`?worker=0`, no `Worker`, or any worker error) runs the batch itself at the landing.
+- The **worker path** posts the batch to an inline Blob-URL worker. The worker runs `bitblock_chem_host_*` on its own instance of the embedded wasm bytes. Main keeps a display replica (§6ah core: `insert_air_cell`, `replicate_mats`) and mirrors the result at the landing.
+- Both paths share one code path and differ only in *where* the batch runs, so ticks, world/frame hashes and status are identical by construction.
+- A landing whose result has not arrived waits: the sim stalls, and the ticks are owed like a late frame. It never runs ahead and never skips a chem step. When the result arrives during a stall, the landing runs at once instead of waiting for the next animation frame.
+
+**Edits and conflicts.** Dig, place and exact edits are resolved on main (aim → cell) and queued as ops. Nothing is applied to the world optimistically.
+- The engine re-validates every op at application, in order, on the last published state plus the ops before it:
+  - a dig needs a non-air cell with Q ≥ BIND, so a hot cell is refused with `dig_refused_heat`;
+  - a place needs air or outside-domain and an affordable bag;
+  - exact Off and On are no-ops when the bit already has that state;
+  - a second op on the same cell sees the first op's result (dig, dig → the second is refused).
+- Each op applies or is refused exactly once and is reported in `last=`, so no edit is lost or duplicated. Dynamics menu changes travel as ops too, and status shows the requested mode at once.
+- Worker failure: `bitblock_play_chem_recover` rebuilds the engine from genesis by replaying only the batches already published. The in-flight batch and the queued ops keep their order and landing on the local schedule; the play world, camera, bag and history are untouched. Tested with failure at six different ticks; status, chem status and RGBA equal the never-failed fallback on every tick.
+
+**Conservation figures.** A report's books, lanes, energy and drift are those of the state *before* its batch. The worker computes them while idle, right after posting a result (`bitblock_chem_host_books`), which takes ~11 ms of wasm off its critical path. Every state is still checked, one landing later. All parity and delta_eq lines read `books=ok energy_drift=0`.
+
+**ABI.** It stays 17. Every new export is additive:
+- main: `bitblock_play_chem_remote`, `_step_lagged`, `_chem_blocked`, `_chem_tick`, `_chem_outbox` (+`_ptr`), `_chem_inbox_ptr`/`_commit`, `_chem_recover`;
+- worker: `bitblock_chem_host_load`, `_load_budget`, `_in_ptr`, `_process`, `_out_ptr`, `_books`.
+
+Default non-chem hashes are unchanged (`pmbj7za5…` / `nx4b62u5…`).
+
+**Re-baseline (cut once, after the final semantics; refs `/workspace/render_scale/s6ah/eq_ref`, `s6ah/parity_ref`).**
+
+| suite | old (pre-§6ah) | new |
+|---|---|---|
+| parity chem (ChemWorld only) | `8ef8f682` | `8ef8f682` (unchanged) |
+| parity play | `dd849e0b` | `3f462f38` |
+| parity big | `9248e8d7` | `0165c07b` |
+| parity split | `bc8ac3af` | `46a1f4dd` |
+| fp_long 36×600 (ChemWorld only) | `s6i/fp_ref` | same |
+| wasm_parity, 7 cases at tick 40 | chem tick 10 | chem tick 9 (one behind): world/frame tags new; the gas r20 and r36 worlds are unchanged |
+
+delta_eq, 16 cases (frame tag prefix, old → new). Every case prints "rgba+status equal every step", with delta_frames unchanged:
+
+| case | old → new | case | old → new |
+|---|---|---|---|
+| 1 r80 | dliu2r5x → jl4bqnbh | 4 r36 | jnkzk3wn → wdqawetd |
+| 1 r82 | 2ndo3hxe → ebzzv3gg | 4 r80 | tiar4c43 → 7ahu6xqg |
+| 2 r60 | 5h64zqmw → iil6zasj | 4 r82 | paymfqp5 → rq7jyjnv |
+| 2 r80 | rgf5xrai → immhycqw | 4 r84 | 55kqksvz → jitnhaoe |
+| 2 r82 | xyygoe3b → yx23ikyo | 4 r86 | wb6w4jk2 → pinuipig |
+| 2 r84 | knnv3vuh → 5t63pz6y | 4 r88 | npgyq6mq → 4shvoem3 |
+| 2 r86 | iqxr36nw → ogpzqqeu | 4 r90 | ybxmsqil → sbdix2wh |
+| 2 r88 | vnycnczt → jzcbljsn | | |
+| 2 r90 | wiv37pee → cq42gpkz | | |
+
+A second fresh run of the whole eq suite matches the new refs exactly (eq2: 16 "same" + "same fp_long").
+
+**Determinism.**
+- Rust tests:
+  - `lagged_worker_path_equals_fallback`: status, chem status and RGBA equal every tick, and the replica equals the engine, for presets 2/4/1 over 90 ticks with digs, places and refusals;
+  - `worker_failure_replays_only_published_batches_without_losing_edits`;
+  - `lagged_schedule_is_reproducible`;
+  - `queued_edits_apply_or_refuse_once_in_order`;
+  - `late_worker_results_stall_at_the_landing_tick_only`;
+  - export-level `worker_exports_match_the_fallback`.
+- Node, two wasm instances (`s6ah/det.mjs`, final wasm `9951dfde`): ocean r20, gas r20, rocky r16, ocean r40 and ash r24, each run 160–240 ticks with scripted turns, digs, places and a dynamics change. Worker == fallback and a fresh fallback run == the first run, every tick: 5/5.
+
+**Cap (rule unchanged: 2 sets × 4 fresh runs, headless Chrome Low 960×540, first windows included, gas and ocean mean ≥ 15). Logs `s6ah/cap_r100_set{1,2}.log`.**
+
+| r100, worker | set 1 | set 2 | chem ticks/s | main busy |
+|---|---|---|---|---|
+| gas | 14.79 | 13.80 | = presented (14.8 / 13.8) | 32–36% |
+| ocean | 13.83 | 13.56 | = presented | 25–29% |
+
+- Comparison on the same box today:
+  - fallback (`?worker=0`), same build: gas 13.89, ocean 12.09, main busy 99% (`cap_r100_local.log`);
+  - the **old shipped wasm** (`733794f9`, which passed r100 in §6ad/§6ae): gas 14.20 / 14.57, ocean 12.97 / 11.47.
+- The box is ~25% slower than in §6ae: the old build's busy share was 75% then and is 93% now. So r100 does not pass today for any build, and **the caps stay at CHEM_RADIUS_MAX 100 / HTML max 100 / JS clamp 100 / MAX_GENESIS_RADIUS 103** (nothing to raise to).
+- The worker is the bottleneck: one batch costs 52–75 ms in Chrome at r100 against a 66 ms budget, and the chem step alone is ~45 ms native. At r80 it keeps full pace (0 waits, 60 ticks/s).
+- Chem ticks/s equal presented fps here because the camera is still. Chem keeps pace wherever waits = 0. At r100 the worker runs ~13.5–14.8 chem ticks/s, against 15 nominal.
+
+**Playtest (headless Chrome, Low 960×540; screenshots `s6ah/play_http`, `s6ah/play_file`).**
+- **http://127.0.0.1:8765** (gas r20, ocean r40, ocean r100) and **file:///…/www/play.html** (gas r20, ocean r40), all `chem=worker`:
+  - 3 digs and 2 places each register (`dig:methane`, `dig:o2`, `dig:water`, `place:water`, `place:methane`);
+  - travel (W, Space, wheel) moves the observer;
+  - books=ok and drift=0 throughout;
+  - raf 60 and 15–16 chem ticks/s at r20/r40.
+- No page errors (one favicon 404 on http).
+- Note (pre-existing, not changed): switching from gas to another preset keeps the gas dynamics (sun8 + driven), by the menu's design. Ocean r100 under sun8 + driven costs ~700 ms per step. The old build froze the page at raf 1.3 fps; with the worker the page stays at 60 fps and chem runs ~2 ticks/s.
+
+**Commits (each with full pre-push, own green CI).**
+- e74b07e core: display replica (CI 44537654513)
+- 8060358 wasm: lagged schedule + protocol + exports (CI 44540356907)
+- 3272da7 wasm+www: inline worker client, deferred books, edit-preserving recovery, clean-target www (CI 44545925315)
+
+**Build (clean target `s6ah/target_ship_c`, never bb_u).**
+- wasm md5 `9951dfde516a1b667561ccc21c2dd420` (1,625,524 B)
+- play.html `c111fc679575a1f55c642f380106eea2`
+- bitblock-lab.html `d86d8d4481f52d93d6de0041d783d86f`
+- bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged)
+- No new file: the worker is inline in play.html.
+
+**Next levers (not done).**
+- A sparse result delta: ~1% of cells change per step, against a 4.2 MB full snapshot today (~45–55 ms of GC per 7.5 s window).
+- A cheaper chem step: the worker's step is the bound now.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No merge to main, no remote deletion (`wip/s6e-fingerprint` kept), no Desktop copy; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
