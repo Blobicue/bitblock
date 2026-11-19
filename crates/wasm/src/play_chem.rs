@@ -236,6 +236,12 @@ pub struct ChemPlay {
     pub mirror_mats: Vec<MatId>,
     /// Scratch of `mirror_chem`: the occupancy edits of one mirror, applied after its scan.
     pub mirror_edits: Vec<(Coord, bool)>,
+    /// §6ae: the chem domain's cells as z-runs `(first index, first cell)`: the cells from
+    /// one start to the next are consecutive in z. Lets the mirror name a changed cell
+    /// without reading its coordinate from the domain's cell list. Rebuilt by
+    /// [`ChemPlay::mirror_rows`] whenever the domain's length changes (only a place that grows
+    /// the domain changes its cells).
+    pub mirror_rows: (usize, Vec<(usize, Coord)>),
     /// Render-only cross-section (off by default).
     pub cut: ChemCut,
     /// `CHEM_ENERGY_*` (off by default: planet6 behaviour).
@@ -298,6 +304,7 @@ impl ChemPlay {
             material_changes: 0,
             mirror_mats: Vec::new(),
             mirror_edits: Vec::new(),
+            mirror_rows: (0, Vec::new()),
             cut: ChemCut::default(),
             energy: CHEM_ENERGY_OFF,
             cycle: CHEM_CYCLE_CLASSIC,

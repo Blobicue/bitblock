@@ -1590,6 +1590,33 @@ fn nonzero_bytes(x: u64) -> u64 {
     ((hi >> 7).wrapping_mul(0x0102_0408_1020_4080)) >> 56
 }
 
+/// §6ae: the domain's cells as z-runs `(first index, first cell)` (see
+/// [`crate::play_chem::ChemPlay::mirror_rows`]).
+fn domain_rows(cells: &[Coord]) -> Vec<(usize, Coord)> {
+    let mut rows = Vec::new();
+    for (i, &c) in cells.iter().enumerate() {
+        let continues = i > 0 && {
+            let p = cells[i - 1];
+            p.x == c.x && p.y == c.y && p.z.checked_add(1) == Some(c.z)
+        };
+        if !continues {
+            rows.push((i, c));
+        }
+    }
+    rows
+}
+
+/// §6ae: the cell at domain index `i` from [`domain_rows`], for ascending `i` (the row cursor
+/// `r` only moves forward).
+#[inline]
+fn row_cell(rows: &[(usize, Coord)], r: &mut usize, i: usize) -> Coord {
+    while *r + 1 < rows.len() && rows[*r + 1].0 <= i {
+        *r += 1;
+    }
+    let (start, c) = rows[*r];
+    Coord::new(c.x, c.y, c.z + (i - start) as i64)
+}
+
 fn mirror_chem(
     chem: &mut crate::play_chem::ChemPlay,
     history: &History,
@@ -1622,11 +1649,28 @@ fn mirror_chem(
     // it would see between them.
     let mats = chem.world.mats();
     let cells = chem.world.cells();
+    // §6ae: changed cells are named from the domain's z-runs (a few entries per row) instead
+    // of the cell list (24 bytes per cell, most of them read on a busy tick).
+    let mut rows = std::mem::take(&mut chem.mirror_rows);
+    if rows.0 != cells.len() || rows.1.is_empty() {
+        rows = (cells.len(), domain_rows(cells));
+    }
+    let mut row = 0usize;
     let mut want_probe = chem.world.world().probe();
     let mut have_probe = world.probe();
     let mut edits = std::mem::take(&mut chem.mirror_edits);
     edits.clear();
     for (block, (mats, seen)) in mats.chunks(64).zip(seen.chunks_mut(64)).enumerate() {
+        // §6ae: an unchanged block (most blocks on a quiet tick) is skipped whole.
+        if !full {
+            let mut diff = 0u64;
+            for (m8, s8) in mats.chunks(8).zip(seen.chunks(8)) {
+                diff |= pack8(m8) ^ pack8(s8);
+            }
+            if diff == 0 {
+                continue;
+            }
+        }
         let mut mask = 0u64;
         // §6u: changed cells where neither the old nor the new material is AIR (a gas or rock
         // swap). The play world holds each domain cell's bit as the chem occupancy of its
@@ -1653,7 +1697,8 @@ fn mirror_chem(
             let j = mask.trailing_zeros() as usize;
             let i = block * 64 + j;
             mask &= mask - 1;
-            let coord = cells[i];
+            let coord = row_cell(&rows.1, &mut row, i);
+            debug_assert_eq!(coord, cells[i]);
             if solid >> j & 1 == 1 {
                 debug_assert!(want_probe.is_on(coord) && have_probe.is_on(coord));
                 changed_bits.push((coord, false));
@@ -1680,6 +1725,7 @@ fn mirror_chem(
         }
     }
     chem.mirror_edits = edits;
+    chem.mirror_rows = rows;
     world.flush_octree();
     chem.mirror_mats = seen;
     chem.last_step_changed = changed;
@@ -2676,6 +2722,36 @@ mod chem_play_tests {
         assert!(!s.chem_set_cut(CHEM_CUT_WEDGE, 0));
         assert!(!s.chem_cut().active());
         assert!(s.cut_view.is_none());
+    }
+
+    /// §6ae: the mirror names changed cells from the domain's z-runs; they give every domain
+    /// cell's coordinate, before and after a place grows the domain, and the cached runs follow
+    /// the domain.
+    #[test]
+    fn mirror_rows_name_every_domain_cell() {
+        fn check(s: &PlaySession) {
+            let chem = s.chem.as_ref().unwrap();
+            let cells = chem.world.cells();
+            let rows = domain_rows(cells);
+            let mut r = 0;
+            for (i, &c) in cells.iter().enumerate() {
+                assert_eq!(row_cell(&rows, &mut r, i), c, "cell {i}");
+            }
+            assert_eq!(chem.mirror_rows.0, cells.len());
+            assert_eq!(chem.mirror_rows.1, rows);
+        }
+        let mut s = chem_startup(CHEM_PRESET_ASH);
+        s.step(8);
+        check(&s);
+        let before = s.chem.as_ref().unwrap().world.domain_len();
+        let far = bitblock_core::world::Coord::new(0, 200, 0);
+        s.inputs
+            .edits
+            .push(PendingEdit::Exact(Edit::new(Operation::On, far)));
+        s.step(8);
+        assert_eq!(s.chem.as_ref().unwrap().world.domain_len(), before + 1);
+        check(&s);
+        assert_mirrors_chem(&s);
     }
 
     #[test]
