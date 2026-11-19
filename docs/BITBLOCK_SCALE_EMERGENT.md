@@ -4637,6 +4637,93 @@ The mirror is now small. Further gains are in the chem passes themselves. A spar
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6af. Sparse active chem domain: design and measurements. A domain that skips dormant regions does not pay, because heat changes ~100% of 64-cell blocks on every tick (gas and ocean, r96–r128, ticks 1–512). The one exact per-pass gate that was prototyped was slower. Nothing shipped; the cap stays 100 (2026-11-19, branch `chem/render-scale-2026-11`)
+
+**Question.** Could the chem passes (heat, step laws, flow, combine2, phase, gas convect, mirror) run only over *active* regions, with dormant regions provably unchanged? That would require an active set of 64-cell blocks and wake rules for neighbours, edits, heat gradients and fluid motion. It pays only if most blocks are dormant most of the time, so this pass measured that first.
+
+**1. Method (scratch only; nothing in this section touches main).**
+- `bb_u` was moved to 67a33a3 and given a per-pass probe: after each pass of `step_laws`, every cell's `mat` and `q` are diffed against the previous pass.
+- Changes are binned by 64-cell block in domain order. These are the same blocks the §6ae mirror skips.
+- Sampled ticks: 1, 4, 16, 64, 128, 256, 512 of `ChemPlay::new(preset, 7, r)`; gas runs at sun8 / driven, as in the browser.
+- r128 is past genesis's limit (`MAX_GENESIS_RADIUS` = 103). The probe build lifts it to 128; the `(d2 << 32 | index)` sort key still fits (`3·128² < 2^32`, `257³ < 2^32`).
+- Every sampled tick of every run: `energy_drift = 0`, lane drift 0.
+- Harness: `/workspace/render_scale/s6af/sm` (`main.rs` = probe, `bin/prof.rs` = native per-pass ns, `bin/rise.rs` = gas-rise candidates). Logs: `s6af/act_{4,2}_{96,100,128}.log`.
+
+**2. How much of the planet is active (share of 64-cell blocks changed in one tick; q also as a share of cells).**
+
+| case | tick 1 | 16 | 64 | 128 | 256 | 512 |
+|---|---|---|---|---|---|---|
+| gas r96: q-changed blocks / cells | 100.0% / 35% | 100.0% / 85% | 100.0% / 82% | 100.0% / 63% | 100.0% / 57% | 100.0% / 56% |
+| gas r96: material-changed blocks | 0.0% | 55.6% | 81.6% | 64.9% | 18.0% | 9.4% |
+| gas r100: q-changed blocks / cells | 100.0% / 34% | 100.0% / 84% | 100.0% / 82% | 100.0% / 63% | 100.0% / 57% | 100.0% / 55% |
+| gas r100: material-changed blocks | 0.0% | 53.3% | 80.3% | 66.7% | 20.5% | 10.0% |
+| gas r128: q-changed blocks / cells | 99.9% / 27% | 100.0% / 81% | 100.0% / 80% | 100.0% / 70% | 100.0% / 54% | 100.0% / 50% |
+| gas r128: material-changed blocks | 0.0% | 35.6% | 70.0% | 67.8% | 24.6% | 9.6% |
+| ocean r96: q-changed blocks / cells | 99.7% / 32% | 100.0% / 44% | 100.0% / 55% | 100.0% / 64% | 100.0% / 75% | 99.9% / 73% |
+| ocean r96: material-changed blocks | 20.6% | 26.3% | 14.3% | 8.4% | 1.0% | 0.7% |
+| ocean r100: q-changed blocks / cells | 99.6% / 31% | 99.9% / 43% | 100.0% / 54% | 100.0% / 62% | 100.0% / 74% | 99.9% / 77% |
+| ocean r100: material-changed blocks | 19.6% | 25.6% | 14.6% | 8.6% | 0.9% | 0.6% |
+| ocean r128: q-changed blocks / cells | 98.6% / 26% | 99.1% / 36% | 99.5% / 45% | 99.8% / 53% | 100.0% / 64% | 99.9% / 71% |
+| ocean r128: material-changed blocks | 15.7% | 21.3% | 15.7% | 9.5% | 1.4% | 0.8% |
+
+- **Heat never goes dormant.** 98.6–100% of blocks (26–85% of cells) change `q` on every sampled tick, in both presets, at every radius, through tick 512.
+  - The rim leaks on every tick (`leak_q + v·2/1000`).
+  - Gas also takes sun8 and core input.
+  - The diffusion front is still spreading at tick 512, and the fraction of cells changing heat is *rising* in ocean (31% → 77%).
+- **Materials are sparse only in ocean, and only late.** Ocean combine2 (mostly gas rise) changes 16–26% of blocks for the first ~64 ticks and under 1.5% after tick 256; what is left is flow at ~1%.
+  - Gas convection keeps 10–82% of blocks changing.
+  - A browser load sits at roughly tick 100–300 during the cap-rule windows (the §6ae playtest snapshot was tick 137).
+
+**3. Native cost per tick at r100 (ms, medians; `bin/prof`, idle box, ±15% run to run).**
+- Ocean, ticks 50–200: step 38–45.
+  - heat 8.6–9.7, phase 3.6, combine2 7.5–9.4 (gas rise 6.7–7.6: mark 3.4–4.2, visit 2.4–2.8), water cycle 5.1–6.3, flow 11.6–15.3 (queue 2–3, sweep 9–12 for 31–43k moves per tick).
+  - Ticks 300–450 are about the same (step 36–45) even though material change is under 1% of blocks.
+- Gas, ticks 50–200: step 41.
+  - heat 11.9, combine2 + convect 25.7, erode 2.1; the rest under 0.5 each.
+
+**4. Pass by pass: what could be made sparse exactly, and why most can't.**
+- **heat (Jacobi).** `Δq_i = Σ per_j − live_i·per_i` with `per = max(q,0)/120`.
+  - The exact dormancy rule: a block stays unchanged while `per` is unchanged on the block and its face halo and `Δq` was 0 last tick, and it is not a rim, lit or core cell.
+  - The rule is sound, but per the table it never fires: there are no dormant blocks to skip.
+  - A cell-granular heat pass would skip at most 15–74% of cells, and the pass is already a branch-free whole-slice sweep. **Not sparse.**
+- **Every pass with a `q` threshold inherits heat's density.** That covers phase (WATER below `FREEZE_AT`, ICE above `MELT_AT`), the hand families (`q ≥ 300`), net burn (`q ≥ 250`), condense (`q < 150`) and the convection density test (`Q` sets density).
+  - A cell's eligibility can flip without any material change near it, because its `q` changed.
+  - The most phase can do is fuse into heat's write (testing the new `q` as it is stored); that is not sparsity.
+- **Passes that roll per tick (`roll(seed, cell, tick)`).** These are water cycle evaporation and rain, the gas-rise roll, the hand-family rolls, flow side picks and weathering. A candidate whose non-roll precondition holds must be visited on every tick, because the roll changes. Only cells whose *material* precondition fails can be skipped exactly. The water cycle's 5–6 ms in ocean is surface-water candidates rolled on every tick, so that time is real.
+- **Global couplings: always dense.**
+  - The vapor pool and its bins (rain picks drop sites across the planet).
+  - `co2n` (the greenhouse counts CO2 over the whole domain on every tick).
+  - `space_q`, `input_q` and the book totals.
+  - The sun direction `sun_dir3(tick)` (the lit faces move every tick).
+- **flow: already sparse.** Classic flow visits only the WATER faces of AIR cells plus the faces a move vacates (the §6t queue, §6ac commit).
+  - Its 10–15 ms is real work: 31–50k moves per tick (the surface dithers sideways into AIR), each a few random slot lookups.
+  - Sleeping cells would not cut this; only cheaper lookups would.
+- **gas convect: real activity** (10–82% of blocks) and density depends on `Q`. **Not sparse.**
+- **The mirror** already skips unchanged 64-cell blocks (§6ae).
+- **gas rise (classic): the one exact per-pass gate tried.**
+  - Candidates are rising cells (157,044 in ocean r100, 3.7%). Of these, 10–54k have AIR or WATER above them in ticks 1–128 and none from tick 256 on.
+  - Prototype (scratch only): a queue of the pairs eligible at the start of the pass. After each swap it queues the pair whose lower cell is `up` and the pair whose upper cell is `i`, if they come later in rise order and their lower cell was rising when the pass started.
+  - Proof sketch: a pair can only become eligible mid-pass through a swap that writes its upper cell, and that cell is the swapping pair's `i`.
+  - Result: exact (world fingerprint equal to base at ticks 200 and 450: `1698304765`, `735512007`) but **slower**. Gas rise went from 5.9–6.7 to 10.1–10.8 ms: the start-of-pass eligibility needs the same per-cell rising scan plus a random read of each candidate's upper cell, and a 64-wide id-compare mark (many rising ids) took 73 ms.
+  - Dropped; nothing kept.
+
+**5. What a sparse design would need, if Owen wants to pursue it.**
+- The only route left is **material sparsity, not domain sparsity**: heat (and everything gated on `q`) stays a dense sweep.
+- Mechanism: a persistent per-block summary (one bit per material class: rising gas, AIR, WATER, SED, C/Ca/N/O/H/STEAM, …), kept current at **every** material write.
+  - Today that is 68 `set_mat` call sites plus 23 direct `mat[..] =` / swap writes in `chem.rs`, `p6.rs`, `p6_rest.rs` and `net.rs`, and every one must update it.
+  - A debug build would re-derive the summary after each pass and assert equality; a missed write is otherwise a silent desync.
+- That would make the gas-rise mark, the flow queue build and the hand-family and presence scans cost per *block holding candidates* rather than per cell.
+- Upper bound at ocean r100 native: about 6–8 ms of 34–45 ms (gas rise mark and visit ~6, flow queue 2–3, presence scans <1), i.e. ≤ ~15–20%. Gas gains ~nothing, because heat and convection are dense and convection's density is `Q`-driven.
+- Blast radius:
+  - GitNexus: `heat_pass` upstream has 4 direct callers in 3 processes (`step`, `step_profiled`, `step_profiled_fine`); risk HIGH. The index is 205 commits behind, so treat this as indicative.
+  - bbgraph: `impact chem` gives 23 tests and no dependent modules; `gates` all pass.
+  - Every chem pass and `ChemPlay`'s edit path would carry the new invariant.
+- A worker thread or a different heat model (for example coarser heat cells) are the alternatives with a larger payoff, but each is a design decision. Neither was started.
+
+**6. Result.** Nothing committed except this section. No code, www, cap or hash change, so there is no Desktop copy. The cap stays 100.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No merge to main, no remote deletion (`wip/s6e-fingerprint` kept), no Desktop copy; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
