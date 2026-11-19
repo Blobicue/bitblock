@@ -67,10 +67,13 @@ pub const CHEM_RADIUS_DEFAULT: u32 = 12;
 /// cell; settle visits only sediment) measured fresh loads at r98, r100 and r102 over two sets
 /// of four runs each, first windows included: at r98 gas presents 14.90-15.17 fps (set means
 /// 15.01 and 15.03, busy 76-79%) and ocean 15.47-16.00 (busy 74-78%); r100 gas missed set two
-/// (mean 14.995). So r98 is the largest tested radius that holds the 15 Hz chem cadence on
-/// both presets (§6i/§6j: r76, §6k/§6l: r80, §6m: r82, §6n: r84, §6o: r86, §6p: r88, §6r: r90,
-/// §6x: r92, §6ab: r96).
-pub const CHEM_RADIUS_MAX: u32 = 98;
+/// (mean 14.995). §6ad (the convection density test reads runs of outward neighbours as
+/// slices) measured r98 and r100 the same way: at r100 gas presents 14.97-15.17 fps (set
+/// means 15.07 and 15.01, busy 76-79%) and ocean 15.13-15.53 (busy 78-79%); r102 ocean
+/// missed (mean 14.67). So r100 is the largest tested radius that holds the 15 Hz chem
+/// cadence on both presets (§6i/§6j: r76, §6k/§6l: r80, §6m: r82, §6n: r84, §6o: r86, §6p:
+/// r88, §6r: r90, §6x: r92, §6ab: r96, §6ac: r98).
+pub const CHEM_RADIUS_MAX: u32 = 100;
 /// Default auto-step cadence: one chem step every 4 sim ticks (15 Hz at 60 Hz).
 pub const CHEM_EVERY_DEFAULT: u32 = 4;
 /// Manual steps drained per sim tick at most.
