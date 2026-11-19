@@ -162,8 +162,33 @@ pub(crate) struct ConvectScratch {
     /// One bit per `Topology::rise` pair: its lower cell is rising (see
     /// [`ChemWorld::gas_rise_up`]).
     rise_cand: Vec<u64>,
+    /// The cells a flow pass wrote, see [`FlowLog`].
+    flow_log: FlowLog,
     /// One bit per rsort position: the parcel there moved this tick.
     moved: Vec<u64>,
+}
+
+/// §6ac: the cells one [`ChemWorld::flow_pass`] wrote, each with whether it was AIR when the
+/// pass first wrote it (`seen` holds one bit per domain cell and is all zero between passes).
+/// The pass writes materials only; its occupancy edits are applied once at the end, for the
+/// cells whose AIR-ness the pass changed. A sloshing cell that is emptied and refilled in the
+/// same pass (most of them) then costs no world edit.
+#[derive(Default)]
+pub(crate) struct FlowLog {
+    seen: Vec<u64>,
+    cells: Vec<(u32, bool)>,
+}
+
+impl FlowLog {
+    /// Records `i` (AIR or not before its first write in this pass).
+    #[inline]
+    fn touch(&mut self, i: usize, was_air: bool) {
+        let (w, b) = (i / 64, 1u64 << (i % 64));
+        if self.seen[w] & b == 0 {
+            self.seen[w] |= b;
+            self.cells.push((i as u32, was_air));
+        }
+    }
 }
 
 /// A clone starts with empty scratch: the buffers hold no state between steps.
@@ -2448,10 +2473,13 @@ impl ChemWorld {
             self.flow_core(topo, rep, o);
             return;
         }
+        let mut log = std::mem::take(&mut self.convect_scratch.flow_log);
+        log.seen.resize(self.mat.len().div_ceil(64), 0);
         let Some(air) = self.sparse_air() else {
             for &i in &topo.ysort {
-                self.flow_cell(topo, i as usize, rep);
+                self.flow_cell(topo, i as usize, rep, &mut log);
             }
+            self.flow_commit(log);
             return;
         };
         // A WATER cell moves only into an AIR face neighbour, so with sparse AIR the scan
@@ -2484,7 +2512,7 @@ impl ChemWorld {
             queue[w] = bits & (bits - 1);
             let next = w * 64 + b;
             let i = topo.ysort[next] as usize;
-            if self.flow_cell(topo, i, rep) {
+            if self.flow_cell(topo, i, rep, &mut log) {
                 for j in topo.nb6(&self.cells, i).into_iter().flatten() {
                     let p = ypos[j] as usize;
                     if p > next {
@@ -2494,6 +2522,37 @@ impl ChemWorld {
             }
         }
         self.convect_scratch.flow_queue = queue;
+        self.flow_commit(log);
+    }
+
+    /// §6ac: applies a flow pass's occupancy edits ([`FlowLog`]): `set_on` for each logged
+    /// cell the pass turned from AIR to WATER, then `set_off` for each it turned from WATER to
+    /// AIR (bedrock stays on, as in `set_mat`). The world's bits, counts, chunk bounds and `len`
+    /// end as the per-move `set_mat` edits leave them (a bit's final value is its cell's final
+    /// AIR-ness either way), and the deferred octree and world bounds are rebuilt from the
+    /// final bits at the flush. The ons go first, so a chunk is dropped only when the pass
+    /// leaves it empty.
+    fn flow_commit(&mut self, mut log: FlowLog) {
+        for &(i, was_air) in &log.cells {
+            let i = i as usize;
+            if was_air && self.mat[i] != MatId::AIR {
+                self.world.set_on(self.cells[i]);
+            }
+        }
+        for &(i, was_air) in &log.cells {
+            let i = i as usize;
+            if !was_air && self.mat[i] == MatId::AIR {
+                let c = self.cells[i];
+                if !crate::world::is_bedrock(c) {
+                    self.world.set_off(c);
+                }
+            }
+        }
+        for &(i, _) in &log.cells {
+            log.seen[i as usize / 64] = 0;
+        }
+        log.cells.clear();
+        self.convect_scratch.flow_log = log;
     }
 
     /// The AIR cells in index order when they are few enough (at most 1/8 of the domain)
@@ -2515,9 +2574,16 @@ impl ChemWorld {
         Some(air)
     }
 
-    /// One `stepFlow` visit of cell `i`; `true` when its WATER moved (`i` is now AIR).
+    /// One `stepFlow` visit of cell `i`; `true` when its WATER moved (`i` is now AIR). The
+    /// move writes the two materials only and logs both cells for [`Self::flow_commit`].
     #[inline]
-    fn flow_cell(&mut self, topo: &Topology, i: usize, rep: &mut StepReport) -> bool {
+    fn flow_cell(
+        &mut self,
+        topo: &Topology,
+        i: usize,
+        rep: &mut StepReport,
+        log: &mut FlowLog,
+    ) -> bool {
         if self.mat[i] != MatId::WATER {
             return false;
         }
@@ -2533,8 +2599,11 @@ impl ChemWorld {
         let Some(t) = target else {
             return false;
         };
-        self.set_mat(t, MatId::WATER);
-        self.set_mat(i, MatId::AIR);
+        // t is AIR and i is WATER here
+        log.touch(t, true);
+        log.touch(i, false);
+        self.mat[t] = MatId::WATER;
+        self.mat[i] = MatId::AIR;
         rep.flowed += 1;
         self.mark(t, if down.is_some() { MARK_FALL } else { MARK_SIDE });
         true
