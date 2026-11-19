@@ -44,6 +44,12 @@
     // Ticks simulated per rAF are capped; beyond that the backlog is dropped (no spiral of death).
     const MAX_TICKS_PER_FRAME = 8;
     const MAX_FRAME_GAP_MS = 250;
+    // §6ab catch-up: ticks a paced step leaves unrun (it stops before a second chem step) stay
+    // owed and run on the next frames, still at most one chem step per frame, so the frames a
+    // host stall delayed are made up within a window or two. The debt is bounded: once it
+    // would pass MAX_BACKLOG_TICKS (two chem steps at the default cadence, ~133 ms) the whole
+    // backlog is dropped instead of chased. Every frame that runs a chem step still paints.
+    const MAX_BACKLOG_TICKS = 8;
     const STATUS_UI_MS = 100;   // ~10 Hz DOM status refresh while the loop runs
     const IDLE_HASH_MS = 250;   // hash the shown frame (frame=#bb.frame…) once idle this long
     const FPS_UI_MS = 500;
@@ -55,7 +61,7 @@
     let playLastPaintAt = 0;
     let playHeld = Object.create(null);
     // FPS / frame-ms readout (performance.now / rAF timestamps).
-    const playStats = { since: performance.now(), raf: 0, painted: 0, ticks: 0, dropped: 0, stepMs: 0, stepMax: 0, paintMs: 0, paintMax: 0, rafGapMax: 0, renders0: 0 };
+    const playStats = { since: performance.now(), raf: 0, painted: 0, ticks: 0, dropped: 0, owed: 0, stepMs: 0, stepMax: 0, paintMs: 0, paintMax: 0, rafGapMax: 0, renders0: 0 };
 
     function f64bits(n) {
       const buf = new ArrayBuffer(8);
@@ -175,8 +181,10 @@
       // Canvas backing store is resized at the next paint (no blank flash in between).
     }
     // Live step: n sim ticks, then at most one frame; paint only if a frame was finalised.
-    // §6s: the paced step runs at most one chem step per frame and drops the ticks past it, so
-    // one late frame no longer makes the next run two chem steps (and stay late).
+    // §6s: the paced step runs at most one chem step per frame and stops before the ticks past
+    // it, so one late frame never makes the next run two chem steps (and stay late). §6ab: the
+    // ticks it did not run are returned in playLeft for the loop's bounded catch-up.
+    let playLeft = 0;
     function playStepAndPaint(ticks) {
       const playStepPaced = instance.exports.bitblock_play_step_paced;
       const t0 = performance.now();
@@ -192,7 +200,7 @@
       playStats.stepMs += dt;
       if (dt > playStats.stepMax) playStats.stepMax = dt;
       playStats.ticks += ran;
-      playStats.dropped += ticks - ran;
+      playLeft = ticks - ran;
       if (painted) playPaint();
       return painted;
     }
@@ -207,14 +215,14 @@
       const stepAvg = playStats.raf ? playStats.stepMs / playStats.raf : 0;
       const paintAvg = playStats.painted ? playStats.paintMs / playStats.painted : 0;
       const busy = (playStats.stepMs + playStats.paintMs) / span * 100;
-      playFpsEl.textContent = "raf_fps="+rafFps.toFixed(1)+" presented_fps="+frameFps.toFixed(1)+" tick_rate="+(playStats.ticks*1000/span).toFixed(1)+"/s dropped="+playStats.dropped
+      playFpsEl.textContent = "raf_fps="+rafFps.toFixed(1)+" presented_fps="+frameFps.toFixed(1)+" tick_rate="+(playStats.ticks*1000/span).toFixed(1)+"/s dropped="+playStats.dropped+" carried="+playStats.owed
         + "\nstep_ms avg="+stepAvg.toFixed(2)+" max="+playStats.stepMax.toFixed(2)
         + "  paint_ms avg="+paintAvg.toFixed(2)+" max="+playStats.paintMax.toFixed(2)
         + "  ms_per_presented_frame(step+paint)="+(playStats.painted ? (playStats.stepMs + playStats.paintMs) / playStats.painted : 0).toFixed(2)
         + "  raf_gap_max="+playStats.rafGapMax.toFixed(1)+"ms  main_thread_busy="+busy.toFixed(0)+"%"
         + "\noutput="+playCanvas.width+"x"+playCanvas.height+" (presented_fps counts only changed frames; idle view = 0 by design)";
       playFpsEl.className = rafFps >= 30 ? "ok" : "err";
-      playStats.since = now; playStats.raf = 0; playStats.painted = 0; playStats.ticks = 0; playStats.dropped = 0;
+      playStats.since = now; playStats.raf = 0; playStats.painted = 0; playStats.ticks = 0; playStats.dropped = 0; playStats.owed = 0;
       playStats.stepMs = 0; playStats.stepMax = 0; playStats.paintMs = 0; playStats.paintMax = 0; playStats.rafGapMax = 0;
       playStats.renders0 = renders;
     }
@@ -229,9 +237,20 @@
       playAccum += gap;
       playStats.raf++;
       let ticks = Math.floor(playAccum / TICK_MS);
-      if (ticks > MAX_TICKS_PER_FRAME) { ticks = MAX_TICKS_PER_FRAME; playAccum = 0; }
+      if (ticks > MAX_TICKS_PER_FRAME) { playStats.dropped += ticks - MAX_TICKS_PER_FRAME; ticks = MAX_TICKS_PER_FRAME; playAccum = 0; }
       else playAccum -= ticks * TICK_MS;
+      playLeft = 0;
       const painted = ticks > 0 && playStepAndPaint(ticks);
+      // §6ab: owe the unrun ticks to the next frames, or drop the whole backlog past the bound.
+      if (playLeft > 0) {
+        if (playAccum + playLeft * TICK_MS <= MAX_BACKLOG_TICKS * TICK_MS) {
+          playAccum += playLeft * TICK_MS;
+          playStats.owed += playLeft;
+        } else {
+          playStats.dropped += playLeft + Math.floor(playAccum / TICK_MS);
+          playAccum -= Math.floor(playAccum / TICK_MS) * TICK_MS;
+        }
+      }
       const now = performance.now();
       // The status refresh sums the books over every chem cell (~5 ms at r78), so a frame that
       // just stepped and painted leaves it to a later frame, at most one period late.

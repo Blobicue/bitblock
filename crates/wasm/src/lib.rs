@@ -1684,8 +1684,8 @@ pub extern "C" fn bitblock_play_step(ticks: u32) -> u32 {
 }
 
 /// §6s live loop: like `bitblock_play_step`, but stops before a second chem step in one call
-/// (see `PlaySession::step_paced`). Returns `painted | ticks_run << 1`; the client drops the
-/// ticks that did not run instead of catching up.
+/// (see `PlaySession::step_paced`). Returns `painted | ticks_run << 1`; the client owes the
+/// ticks that did not run to its next frames (§6ab), dropping the backlog only past a bound.
 #[unsafe(no_mangle)]
 pub extern "C" fn bitblock_play_step_paced(ticks: u32) -> u32 {
     with_play(|session| {

@@ -728,9 +728,9 @@ impl PlaySession {
     /// §6s browser live step that never catches up with a second chem step: runs up to `ticks`
     /// fixed simulation ticks but stops before a tick on which a chem step is due once one has
     /// run in this call, then finalises at most ONE frame (live policy) like [`Self::step`].
-    /// Returns whether a frame was finalised and how many ticks ran; the caller drops the rest
-    /// (the simulation falls behind wall time instead of running two chem steps in one frame,
-    /// which after one late frame kept every later frame late). The ticks that run are exactly
+    /// Returns whether a frame was finalised and how many ticks ran; the caller owes the rest to
+    /// later calls (§6ab, bounded) or drops them. It never runs two chem steps in one frame,
+    /// which after one late frame kept every later frame late. The ticks that run are exactly
     /// the next ones `fixed_tick` would run, so world / history / books evolve as with that
     /// many `fixed_tick` calls; only which ticks get presented differs.
     pub fn step_paced(&mut self, ticks: u32) -> (bool, u32) {
