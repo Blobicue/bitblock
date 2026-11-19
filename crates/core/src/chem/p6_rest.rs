@@ -154,6 +154,9 @@ pub(crate) struct ConvectScratch {
     /// One bit per rsort position: its pair passes the density test (and, on the driven
     /// path, the roll); see [`ChemWorld::convect_pass`].
     cand: Vec<u64>,
+    /// One bit per domain cell: its pair passes the density test (see
+    /// [`ChemWorld::convect_pass`]).
+    pass: Vec<u64>,
     /// One bit per domain cell: it and its outward neighbour swap this tick.
     swapped: Vec<u64>,
     /// One bit per `ysort` position still to visit in the sparse flow scan (see
@@ -409,8 +412,8 @@ impl ChemWorld {
         // has already written its trades back), and so does any test the scan reaches before
         // either parcel moved. The tests therefore run first, once per domain cell in domain
         // order against its outward neighbour (`Topology::cell_up`, a few rows or planes away,
-        // so the reads stay near each other), 64 cells to a word whose passing pairs are
-        // rolled at once (§6u: one pass, no per-cell bit array). The scan then visits, in
+        // so the reads stay near each other), 64 cells to a word, and the passing pairs are
+        // then rolled (§6ad: the tests read runs of cells, see below). The scan then visits, in
         // the original order, only the rsort positions whose bit is set, and skips a pair one
         // of whose parcels already moved (the test could have read nothing else that differs).
         // The roll is a pure function of the cell and tick, so rolling only those pairs is the
@@ -441,33 +444,42 @@ impl ChemWorld {
         let rising: [bool; 256] = std::array::from_fn(|m| mass[m] != 0);
         let (mat, q) = (&self.mat[..n], &self.q[..n]);
         let cell_up = &cell_up[..n];
-        for w in 0..words {
-            let lo = w * 64;
-            let hi = (lo + 64).min(n);
-            let mut bits = 0u64;
-            for (j, ((&u, &mi), &qi)) in cell_up[lo..hi]
-                .iter()
-                .zip(&mat[lo..hi])
-                .zip(&q[lo..hi])
-                .enumerate()
-            {
-                let has_up = u != NO_SLOT;
-                let u = if has_up { u as usize } else { lo + j };
-                let mu = mat[u];
-                let mb = below_mass[mi.0 as usize];
-                let ma = above_mass[mu.0 as usize];
-                let tb = i64::from(qi) + CONVECT_T0;
-                let ta = i64::from(q[u]) + CONVECT_T0;
-                let pass = has_up
-                    & rising[mi.0 as usize]
-                    & rising[mu.0 as usize]
-                    & (tb > 0)
-                    & (ta > 0)
-                    & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
-                bits |= u64::from(pass) << j;
+        // §6ad: the tests run over the runs of cells whose outward neighbours are consecutive
+        // too (`Topology::up_runs`, ~30 cells each), so both parcels are read as slices; a
+        // cell with no outward neighbour passes nothing.
+        let pass = &mut sc.pass;
+        pass.clear();
+        pass.resize(words, 0);
+        for &[start, len, up] in topo.up_runs() {
+            let (start, len, up) = (start as usize, len as usize, up as usize);
+            // Split the run at word boundaries so each word's bits gather in a register.
+            let mut a = start;
+            while a < start + len {
+                let b = ((a / 64 + 1) * 64).min(start + len);
+                let u = up + (a - start);
+                let below = mat[a..b].iter().zip(&q[a..b]);
+                let above = mat[u..u + (b - a)].iter().zip(&q[u..u + (b - a)]);
+                let mut bits = 0u64;
+                for (j, ((&mi, &qi), (&mu, &qu))) in (a % 64..).zip(below.zip(above)) {
+                    let mb = below_mass[mi.0 as usize];
+                    let ma = above_mass[mu.0 as usize];
+                    let tb = i64::from(qi) + CONVECT_T0;
+                    let ta = i64::from(qu) + CONVECT_T0;
+                    let ok = rising[mi.0 as usize]
+                        & rising[mu.0 as usize]
+                        & (tb > 0)
+                        & (ta > 0)
+                        & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
+                    bits |= u64::from(ok) << j;
+                }
+                pass[a / 64] |= bits;
+                a = b;
             }
+        }
+        for (w, &word) in pass.iter().enumerate() {
+            let mut bits = word;
             while bits != 0 {
-                let i = lo + bits.trailing_zeros() as usize;
+                let i = w * 64 + bits.trailing_zeros() as usize;
                 bits &= bits - 1;
                 let rolled = roll_cells
                     .is_none_or(|cells| wide_roll_finish(cells[i], tick) % 1000 < CONVECT_ODDS);

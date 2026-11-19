@@ -5379,6 +5379,41 @@ fn sparse_collapse_uplift_plume_rise_match_the_full_scans() {
     );
 }
 
+/// §6ad: `Topology::up_runs` lists exactly the cells with an outward neighbour, each with
+/// `cell_up`'s neighbour, in domain order, and its runs are maximal.
+#[test]
+fn up_runs_expand_to_cell_up() {
+    let cfg = small_budget();
+    let worlds = [
+        genesis(&cfg).unwrap(),
+        genesis_sky(&cfg, &sky_params(), 3).unwrap(),
+        genesis_sky_radial(&cfg, &sky_params(), 4).unwrap(),
+        plume_slab(WaterCycle::Driven, 40),
+        relief_plate_deep(WaterCycle::Driven),
+    ];
+    for (n, w) in worlds.iter().enumerate() {
+        let mut t = super::p6::Topology::build(&w.cells);
+        t.radial_frame(&w.cells);
+        let up = t.cell_up().to_vec();
+        let mut expanded = vec![super::p6::NO_SLOT; up.len()];
+        let mut last_end = None;
+        for &[start, len, u] in t.up_runs() {
+            assert!(len > 0, "world {n}");
+            if let Some((end, end_up)) = last_end {
+                assert!(start >= end, "world {n}");
+                assert!(start > end || u != end_up, "world {n}: run not maximal");
+            }
+            for k in 0..len {
+                assert_ne!(u + k, super::p6::NO_SLOT, "world {n}");
+                expanded[(start + k) as usize] = u + k;
+            }
+            last_end = Some((start + len, u + len));
+        }
+        assert_eq!(expanded, up, "world {n}");
+        assert!(up.iter().any(|&u| u != super::p6::NO_SLOT), "world {n}");
+    }
+}
+
 /// §6t: the counting sorts of `Topology::build` / `radial_frame` (y lists, rsort) and the
 /// tables the radial frame fills as it builds (`cell_up`, `rsort_pos`) are exactly what the
 /// comparison sorts and the lazy builders give, on balls, sky shells and slabs.

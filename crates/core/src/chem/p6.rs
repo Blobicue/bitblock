@@ -1249,6 +1249,11 @@ pub(crate) struct Topology {
     /// `cell_up[rsort[k]] == rsort[shell_up[k]]`, `NO_SLOT` where `shell_up` is), built on
     /// first use. Lets the convection density test run in domain order.
     cell_up: std::sync::OnceLock<Vec<u32>>,
+    /// §6ad: `cell_up` as runs `[start, len, up]`: cells `start..start + len` have outward
+    /// neighbours `up..up + len` (runs of `NO_SLOT` are left out), built on first use from
+    /// `cell_up` and dropped whenever `cell_up` changes. Lets the convection density test
+    /// read the outward parcels as slices.
+    up_runs: std::sync::OnceLock<Vec<[u32; 3]>>,
     /// Each cell's position in `rise` as its lower cell, `NO_SLOT` for a cell with no cell
     /// above (built on first use). Lets the +y gas rise visit only its rising cells.
     rise_pos: std::sync::OnceLock<Vec<u32>>,
@@ -1329,6 +1334,7 @@ impl Topology {
             cell_roll: std::sync::OnceLock::new(),
             rpos: std::sync::OnceLock::new(),
             cell_up: std::sync::OnceLock::new(),
+            up_runs: std::sync::OnceLock::new(),
             rise_pos: std::sync::OnceLock::new(),
             ypos: std::sync::OnceLock::new(),
             zruns: ZRuns::build(cells),
@@ -1499,6 +1505,7 @@ impl Topology {
         self.rise_pos = std::sync::OnceLock::new();
         self.ypos = std::sync::OnceLock::new();
         let old_cell_up = self.cell_up.take();
+        self.up_runs = std::sync::OnceLock::new();
         let old_rpos = self.rpos.take();
         self.keys.insert(at, cell_key(c));
         // ysort: (y, x, z) ascending.
@@ -1749,6 +1756,7 @@ impl Topology {
             })
             .collect();
         self.rsort = rs;
+        self.up_runs = std::sync::OnceLock::new();
         if !super::p6_rest::full_scans() {
             self.cell_up = std::sync::OnceLock::from(up_dom);
             self.rpos = std::sync::OnceLock::from(rank);
@@ -1768,6 +1776,31 @@ impl Topology {
                 }
             }
             up
+        })
+    }
+
+    /// [`Topology::up_runs`]: [`Topology::cell_up`] as maximal runs of consecutive cells whose
+    /// outward neighbours are consecutive too (built on first use).
+    pub(crate) fn up_runs(&self) -> &[[u32; 3]] {
+        self.up_runs.get_or_init(|| {
+            let up = self.cell_up();
+            let mut runs = Vec::new();
+            let mut i = 0;
+            while i < up.len() {
+                let mut j = i + 1;
+                if up[i] == NO_SLOT {
+                    while j < up.len() && up[j] == NO_SLOT {
+                        j += 1;
+                    }
+                } else {
+                    while j < up.len() && up[j] != NO_SLOT && up[j] == up[j - 1].wrapping_add(1) {
+                        j += 1;
+                    }
+                    runs.push([i as u32, (j - i) as u32, up[i]]);
+                }
+                i = j;
+            }
+            runs
         })
     }
 
