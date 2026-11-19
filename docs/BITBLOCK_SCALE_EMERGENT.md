@@ -4510,6 +4510,66 @@ Gas is now the binding preset.
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6ad. The convection density test reads runs of outward neighbours as slices: gas r98 −4.3 ms (node), busy 76–80% → 71–74%, and the cap goes 98 → 100. Chrome Low r100 passes both sets for both presets, with first windows included; one shipped ocean check missed (14.91) (2026-11-18, branch `chem/render-scale-2026-11`). Every hash and book is unchanged
+
+The cap rule and the catch-up bounds are unchanged. The shipped wasm was built in a fresh target dir that `bb_u` never uses, and its node timings and hashes were checked against the study build before the push (§6ac §5).
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| 8293a93 | chem: `Topology::up_runs` holds `cell_up` as maximal runs `[start, len, up]` (cells `start..start + len` have outward neighbours `up..up + len`), built on first use and dropped whenever `cell_up` changes. The convection density test walks the runs, reading both parcels as slices, gathers each word's bits in a register, and rolls the passing pairs afterwards. New test `up_runs_expand_to_cell_up` | [44456690985](https://github.com/Blobicue/bitblock/actions/runs/44456690985) |
+| f4bd7d3 | www refresh plus cap 98 → 100 (`CHEM_RADIUS_MAX` and its doc, the HTML `max` and title, the JS clamp); wasm from a clean target | [44459603109](https://github.com/Blobicue/bitblock/actions/runs/44459603109) |
+
+**2. Profile at r98 (gas, native, chem ticks 100–200).**
+- STEP ~33 ms; convect 13.2–14.0 ms: density test 7.4, rolls 2.7, scan 1.85, apply 1.2. Heat 6.3–6.9.
+- 90% of the 3.94M domain cells are rising gas; 0.4–0.8M pairs pass the test and 0.19–0.39M swap per tick. So skipping non-gas cells buys nothing.
+- Q changes in 68–85% of cells every tick, and every 64-cell word has a change, so there is no temporal sparsity to exploit.
+- `cell_up` falls into 131.5k runs of consecutive cells with consecutive outward neighbours (30 cells on average; 97% of cells sit in runs of 8 or more). The §6x word-level fast path qualified only 1.9% of words, because a 64-cell word rarely shares one offset; a run does by construction.
+- Native convect after 8293a93: 11.8–12.2 ms (was 13.1–14.1). A first version that OR-ed each cell's bit into memory was slower (a store-to-load chain per cell) and was dropped before the commit.
+
+**3. Node (wasm, 30 warm + 60 measured steps, median ms per chem step).**
+
+| case | §6ac wasm | §6ad wasm |
+|---|---|---|
+| gas r98 | 53.8–54.8 | 49.6–50.0 |
+| ocean r98 | 47.3 | 46.2–46.5 |
+| gas r100 | — | 54.3 |
+| ocean r100 | — | 48.5 |
+
+**4. Chrome cadence (study build = 8293a93 with the cap lifted, wasm `e8b755d9…`; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots).**
+
+| radius | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| r98 mean / busy | **15.00** / 71–72% | **15.86** / 74–77% | **15.02** / 72–74% | **15.97** / 75–77% |
+| r100 runs | 15.03, 15.17, 15.00, 15.07 | 15.20, 15.17, 15.17, 15.20 | 15.03, 15.03, 14.97, 15.00 | 15.13, 15.20, 15.53, 15.50 |
+| r100 mean / busy | **15.07** / 77–79% | **15.19** / 78% | **15.01** / 76–79% | **15.34** / 78–79% |
+| r102 mean (one set, for information) | 15.12 / 82–85% | 14.67 (fail) | — | — |
+
+**Cap: 98 → 100.** Both sets pass at r100 for both presets.
+- Shipped confirmation (f4bd7d3 via :8765, 4 runs each): first set gas 15.19, ocean 14.80, 14.97, 14.83, 15.03 (mean **14.91, a miss**; busy 78–81%); second set gas 15.09, ocean 15.31.
+- Caveat: r100 is at the edge for ocean. Its windows sit at ~15.0–15.2 and one shipped set read 14.91. Gas at r98 now has ~5 points of busy headroom (71–74%), and at r100 sits where r98 was in §6ac (76–79%).
+
+**5. Exactness.**
+- After 8293a93: all 16 `delta_eq` outputs and `fp_long` byte-identical, 17/17. Parity md5s unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`. Tests 336 + 83 pass.
+- `wasm_parity` §6ac wasm vs §6ad wasm: 7/7 SAME. r92 and r96 hashes equal §6ac's.
+- r98: gas `lcz6kjpr…` / `2nmoesx2…`, ocean `yrxbcfsd…` / `ahornqzd…` (unchanged). New at r100 (shipped = study): gas `rmf2hktd…` / `uvf6e3j6…`, ocean `j6bmjxdg…` / `ewggzdvw…`. r102 clamps to 100.
+
+**6. What is left.** In the wasm profile at gas r98, after 8293a93: step laws 40%, heat 16%, and the play mirror (`mirror_chem`) 11.5%, about 7–8 ms per step. The mirror compares every cell's material with its cache and pushes a `(Coord, bool)` entry for each of the ~0.8M cells convection swapped. Beyond that come combine2 (3.7%), the delta render (~4.5%) and the chem status UI (~5%). The mirror is the largest cost outside chem; cutting it means changing what the play loop hands the delta render. Ocean binds at r102 (step_max ~100 ms against a 67 ms frame budget).
+
+**Build.** wasm (f4bd7d3, ABI 17) md5 `86ee27bf0ec5ee95c796265cba8f0cc3` (1,595,129 B), play.html `a9876089eff6b949377a1cfcac828fd2`, bitblock-lab.html `3ea9d3beb1fa0c04f90bf1f3aa55d167`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90/r94 run at 15.0 fps, dropped = carried = 0.
+  - The only error is the favicon 404.
+- Dig / place at r100 (`placefps6t.mjs`):
+  - gas: all three digs and three places apply; windows 15.0–16.9, gaps ≤ 117 ms.
+  - ocean: all digs and places apply (`dig:N`, `place:N`). The first place grows the domain: one 11.5 window (gap 217 ms), then 17.4 as the catch-up lands; the other windows are 14.2–17.4.
+  - `books=ok energy_drift=0 error=none` throughout.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6ad/pt/{play,g100,o100}/*.png` (contact sheet `s6ad/pt/sheet.png`).
+- Data: `/workspace/render_scale/s6ad/{STATUS.md,eq1,eq1.log,parity1.log,chrome_set1.log,chrome_set2.log,chrome_set1_r102.log,chrome_ship_r100.log,chrome_ship2_r100.log,prof/,pt/}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
