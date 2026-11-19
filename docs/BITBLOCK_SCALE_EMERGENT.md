@@ -4442,6 +4442,74 @@ Owen approved catch-up ("go ahead then"); the cap rule is unchanged. Only schedu
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
 
+## 6ac. Flow edits the world once per changed cell and settle visits only sediment: ocean r96 −6 ms (node), and the cap goes 96 → 98. Chrome Low r98 passes both sets for both presets, with first windows included; r100 misses set 2 gas by 0.005 (2026-11-18, branch `chem/render-scale-2026-11`). Every hash and book is unchanged
+
+The cap rule and the catch-up bounds are unchanged.
+
+**1. Commits.**
+
+| commit | change | CI |
+|---|---|---|
+| f75a027 | chem: `flow_cell` writes materials only and logs each cell whose occupancy may change; `flow_commit` applies the net edits once at the end of the pass (all AIR → non-AIR first, then non-AIR → AIR, bedrock skipped). A cell emptied and refilled in one pass costs no world edit | [44447951107](https://github.com/Blobicue/bitblock/actions/runs/44447951107) |
+| af35c4a | chem: the non-core `settle_pass` returns at once when there is no SED; otherwise it marks the SED cells in a ysort bitset and visits only them, in ysort order. `full_scans()` keeps the full loop | [44449164798](https://github.com/Blobicue/bitblock/actions/runs/44449164798) |
+| 28b413a | www refresh plus cap 96 → 98 (`CHEM_RADIUS_MAX` and its doc, the HTML `max` and title, the JS clamp). Its wasm turned out stale (see §5) | [44452212253](https://github.com/Blobicue/bitblock/actions/runs/44452212253) |
+| 366016c | www: the same source rebuilt from a clean target, so the shipped wasm carries f75a027 and af35c4a | [44453650791](https://github.com/Blobicue/bitblock/actions/runs/44453650791) |
+
+**2. Profile at r96 (native, chem ticks 100–200, ms per step).**
+- Ocean, STEP 34.0: flow 9.5, heat 6.2, combine2 4.6 (of which `gas_rise_up` 3.5: build 2.3, sweep 1.2), water cycle 3.7, phase 3.1, settle 1.95, render plus tag 4.8.
+- Gas, STEP 30.7: convect 12.7, heat 6.2, combine2 2.1, render plus tag 5.7.
+- Flow visits ~67–80k cells and moves 26–33k per tick; ~2 ms of it was world occupancy edits, most of them undone later in the same pass by the sloshing water.
+- After both changes: native flow 9.51 → 7.34, settle 1.95 → 0.18 (ocean has no SED outside storm windows).
+- Tried and dropped (no gain): a branch-free rising mask in the `gas_rise_up` build; `#[inline(always)]` on `nb6` (+15 KB wasm); a flow queue that reuses the neighbours `flow_cell` already found. Only ~200–340 `gas_rise_up` trades per tick pass through AIR, so the flow trick doesn't carry over. Heat and gas convect had no new exact idea.
+
+**3. Node (wasm, 30 warm + 60 measured steps, median ms per chem step).**
+
+| case | §6ab wasm | §6ac wasm |
+|---|---|---|
+| ocean r96 | 49.4–50.6 | 43.0–44.1 |
+| gas r96 | 52.2–52.9 | 51.3–51.7 |
+| ocean r98 | — | 45.6–45.8 |
+| gas r98 | — | 55.5–55.8 |
+
+Gas is now the binding preset.
+
+**4. Chrome cadence (study build = af35c4a with the cap lifted, wasm `2f383af5…`; Low 960×540; each run fresh; mean `presented_fps` of 3 snapshots).**
+
+| radius | set 1 gas | set 1 ocean | set 2 gas | set 2 ocean |
+|---|---|---|---|---|
+| r98 runs | 14.97, 15.07, 15.00, 15.00 | 15.73, 15.90, 15.90, 16.00 | 14.90, 15.17, 15.03, 15.03 | 16.00, 15.47, 15.90, 15.93 |
+| r98 mean / busy | **15.01** / 77–79% | **15.88** / 74–78% | **15.03** / 76–79% | **15.83** / 75–76% |
+| r100 mean / busy | 15.19 / 82–87% | 15.18 / 78–79% | **14.995** / 82–86% | 15.02 / 78–79% |
+| r102 mean | — | — | 14.98 | 14.55 |
+
+**Cap: 96 → 98.** Both sets pass at r98 for both presets. r100 fails set 2 gas, so it is not taken.
+- Shipped confirmation (366016c via :8765, read-only page loads, 4 runs each): first set gas 15.00, 15.03, 15.03, 14.93 (mean 14.9975, just under 15), ocean mean 15.99; second set gas 15.00, 15.00, 15.10, 15.00 (mean 15.025), ocean mean 15.88.
+- Caveat: gas at r98 sits at the edge (busy 76–80%, means 14.9975–15.03). Ocean has ~1 fps of margin.
+
+**5. Stale wasm in 28b413a (fixed in 366016c).**
+- 28b413a's wasm (`c63fc2e4…`) was built in a target dir shared with the `bb_u` worktree. Cargo reused a `bitblock-core` rlib built minutes earlier from `bb_u` at 461253d: same crate hash across worktrees, and the main checkout's sources had older mtimes. So that wasm had the new cap but not f75a027 / af35c4a.
+- Results were unaffected (both changes are exact, all hashes equal), but it ran at §6ab speed (node ocean r96 ~50 ms). The Chrome sets in §4 used the study build, which did carry both changes.
+- 366016c rebuilt from a fresh target dir; its timings and hashes equal the study's.
+
+**6. Exactness.**
+- After f75a027 and after af35c4a: all 16 `delta_eq` outputs and `fp_long` byte-identical, 17/17 each time. Parity md5s unchanged: chem `8ef8f682…`, play `dd849e0b…`, big `9248e8d7…`, split `bc8ac3af…`. Tests 335 + 83 pass.
+- `wasm_parity` §6ab wasm vs 366016c wasm: 7/7 SAME.
+- Frame hashes: no re-baseline; old = new. r90–r96 as in §6ab (r96 gas `kn4uefnn…` / `ezltjrri…`, ocean `iytys4mz…` / `u7pbrwtn…`).
+- New at r98 (shipped = cap-lifted study): gas `lcz6kjpr…` / `2nmoesx2…`, ocean `yrxbcfsd…` / `ahornqzd…`. r100 clamps to 98.
+
+**Build.** wasm (366016c, ABI 17) md5 `27c964b58e6269d86e255a556f93b50e` (1,593,605 B), play.html `01de6478855e966ed2f513e2f0decf8a`, bitblock-lab.html `207245fd8b416446787c6fc639ae2e10`, bitblock.html `814320ae5671a4f5c14ccc0015b1e5e7` (unchanged).
+- :8765 playtest: default world `pmbj7za5…`, frame `nx4b62u5…`, ABI 17.
+  - Ocean r90 and gas r90/r94 run at 15.0–15.1 fps, dropped = carried = 0.
+  - The only error is the favicon 404.
+- Dig / place at r98 (`placefps6t.mjs`):
+  - gas: all three digs and three places apply; windows 12.9–18.3 (a place window dips and the next catches up), gaps ≤ 183 ms.
+  - ocean: dig and place apply; later aims hit a hot or occupied cell and are refused by game rules (`dig_refused_heat`, `place_refused`). Windows 14.4–16.8; gaps ≤ 83 ms.
+  - `books=ok energy_drift=0 error=none` throughout.
+- Screenshots of every dig/place were checked by eye; no holes or tearing: `/workspace/render_scale/s6ac/pt_final/{play,g98,o98}/*.png` (contact sheet `s6ac/pt_final/sheet.png`).
+- Data: `/workspace/render_scale/s6ac/{STATUS.md,chrome_set1_r98_100.log,chrome_set2_r98_102.log,chrome_ship_r98.log,chrome_ship2_r98.log,node_final.log,pt_final/}`.
+
+Soft DDA, bcc-voxel-demo and abi16 untouched. No Desktop copy, merge, remote deletion, hash or frame change; 8790/8791 left alone.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
