@@ -6,6 +6,7 @@
 //! `file://` canvas demos.
 
 mod browser_storage;
+pub mod chem_link;
 mod gap;
 pub mod play;
 pub mod play_chem;
@@ -138,6 +139,12 @@ thread_local! {
         const { RefCell::new([0; bitblock_core::chem::NE]) };
     /// Why the last chem load failed ("" after a successful one).
     static PLAY_CHEM_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
+    // §6ah worker path: the main thread's outbox / inbox bytes, and the worker's engine.
+    static PLAY_CHEM_OUTBOX: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static PLAY_CHEM_INBOX: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static CHEM_HOST: RefCell<Option<play_chem::ChemPlay>> = const { RefCell::new(None) };
+    static CHEM_HOST_IN: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static CHEM_HOST_OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 struct LiveSession {
@@ -1952,7 +1959,152 @@ pub extern "C" fn bitblock_play_chem_dynamics_get() -> u32 {
     })
 }
 
+/// §6ah: switch the chem session to the worker path (`on != 0`): from then on its chem world
+/// is a display replica and every batch must be posted to a worker running
+/// `bitblock_chem_host_*`. Only before the first batch (call right after the load). Returns 1
+/// on success, 0 otherwise. Ticks, hashes and books are identical to the fallback path.
 #[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_remote(on: u32) -> u32 {
+    with_play(|session| u32::from(session.chem_set_remote(on != 0)))
+}
+
+/// §6ah worker-path live step: like `bitblock_play_step_paced`, but stops before a tick that
+/// waits for the worker and returns right after a tick that sent a batch. Returns
+/// `painted | sent << 1 | ticks_run << 2`.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_step_lagged(ticks: u32) -> u32 {
+    with_play(|session| {
+        let (painted, sent, ran) = session.step_lagged(ticks);
+        u32::from(painted) | u32::from(sent) << 1 | ran << 2
+    })
+}
+
+/// §6ah: 1 if the next tick must wait for the worker's result, else 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_blocked() -> u32 {
+    with_play(|session| u32::from(session.chem_blocked()))
+}
+
+/// §6ah: the engine's chem tick as of the last landing (what the screen shows), or 0
+/// outside chem mode. Sampled over time it gives chem ticks/s.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_tick() -> u32 {
+    with_play(|session| session.chem_published_tick().unwrap_or(0) as u32)
+}
+
+/// §6ah worker path: moves the pending batch into the outbox buffer and returns its length
+/// (0 if none). Read it at `bitblock_play_chem_outbox_ptr` and post it to the worker.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_outbox() -> u32 {
+    let bytes = with_play(|session| session.chem_take_outbox()).unwrap_or_default();
+    let len = bytes.len() as u32;
+    PLAY_CHEM_OUTBOX.with(|cell| *cell.borrow_mut() = bytes);
+    len
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_outbox_ptr() -> *const u8 {
+    ptr_of(&PLAY_CHEM_OUTBOX)
+}
+
+/// §6ah worker path: a `len`-byte buffer for the worker's result; write it there, then call
+/// `bitblock_play_chem_inbox_commit(len)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_inbox_ptr(len: u32) -> *mut u8 {
+    PLAY_CHEM_INBOX.with(|cell| {
+        let mut buf = cell.borrow_mut();
+        buf.clear();
+        buf.resize(len as usize, 0);
+        buf.as_mut_ptr()
+    })
+}
+
+/// §6ah worker path: delivers the inbox bytes as the result of the batch in flight. Returns 1,
+/// or 0 (ignored) if no batch is in flight, a result is already waiting, or `len` is wrong.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_inbox_commit(len: u32) -> u32 {
+    let bytes = PLAY_CHEM_INBOX.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+    if bytes.len() != len as usize {
+        return 0;
+    }
+    with_play(|session| u32::from(session.chem_put_inbox(bytes)))
+}
+
+/// §6ah worker side: builds the engine for a `bitblock_play_load_chem(preset, seed, radius)`
+/// session (same genesis). Returns 1, or 0 (reason via `bitblock_play_chem_error`).
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_load(preset: u32, seed: u32, radius: u32) -> u32 {
+    install_host(
+        play_chem::ChemPlay::new(preset, seed, radius)
+            .ok_or_else(|| format!("unknown_chem_preset_{preset}")),
+    )
+}
+
+/// §6ah worker side: like `bitblock_play_load_chem_budget` (budget buffer lanes).
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_load_budget(seed: u32, radius: u32) -> u32 {
+    let lanes = PLAY_CHEM_BUDGET.with(|cell| *cell.borrow());
+    install_host(play_chem::ChemPlay::with_budget(lanes, seed, radius))
+}
+
+fn install_host(loaded: Result<play_chem::ChemPlay, String>) -> u32 {
+    match loaded {
+        Ok(chem) => {
+            PLAY_CHEM_ERROR.with(|e| e.borrow_mut().clear());
+            CHEM_HOST.with(|cell| *cell.borrow_mut() = Some(chem));
+            1
+        }
+        Err(err) => {
+            PLAY_CHEM_ERROR.with(|e| *e.borrow_mut() = err);
+            CHEM_HOST.with(|cell| *cell.borrow_mut() = None);
+            0
+        }
+    }
+}
+
+/// §6ah worker side: a `len`-byte buffer for one batch from the main thread.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_in_ptr(len: u32) -> *mut u8 {
+    CHEM_HOST_IN.with(|cell| {
+        let mut buf = cell.borrow_mut();
+        buf.clear();
+        buf.resize(len as usize, 0);
+        buf.as_mut_ptr()
+    })
+}
+
+/// §6ah worker side: runs the batch in the input buffer on the engine and encodes the result
+/// (read at `bitblock_chem_host_out_ptr`). Returns its length, or 0 for no engine / bad batch.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_process(len: u32) -> u32 {
+    let bytes = CHEM_HOST_IN.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+    let out = CHEM_HOST.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        let chem = slot.as_mut()?;
+        if bytes.len() != len as usize {
+            return None;
+        }
+        let batch = chem_link::decode_batch(&bytes)?;
+        let (report, refused) = chem.process(&batch);
+        Some(chem_link::encode_delta(chem, &report, refused))
+    });
+    let out = out.unwrap_or_default();
+    let n = out.len() as u32;
+    CHEM_HOST_OUT.with(|cell| *cell.borrow_mut() = out);
+    n
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_out_ptr() -> *const u8 {
+    ptr_of(&CHEM_HOST_OUT)
+}
+
+#[unsafe(no_mangle)]
+/// 17 (additive, same number, §6ah): worker path — main `bitblock_play_chem_remote`,
+/// `_step_lagged`, `_chem_blocked`, `_chem_tick`, `_chem_outbox` / `_outbox_ptr`,
+/// `_chem_inbox_ptr` / `_inbox_commit`; worker `bitblock_chem_host_load`, `_load_budget`,
+/// `_in_ptr`, `_process`, `_out_ptr`. Chem now runs one tick behind (lagged schedule) on both
+/// paths; no existing export changed signature.
 /// 17 (additive, same number, §6s): `bitblock_play_step_paced(ticks)` (live step with at most
 /// one chem step per call; returns `painted | ticks_run << 1`).
 /// 17 (additive, same number, §5y): gas preset `bitblock_play_load_chem(4, ..)` (loads with
@@ -1987,6 +2139,78 @@ mod tests {
         PLAY_RESULT.with(|r| String::from_utf8(r.borrow()[..len as usize].to_vec()).unwrap())
     }
 
+    /// Runs `ticks` live ticks of a gas world through the exports, on the worker path (this
+    /// instance's `bitblock_chem_host_*` engine stands in for the worker) or the fallback.
+    /// Returns the play status after every tick plus the final chem tick.
+    fn lagged_export_run(remote: bool, ticks: u32) -> (Vec<String>, u32) {
+        assert!(bitblock_play_load_chem(4, 7, 10) > 0);
+        bitblock_play_set_layout(320, 180, 0);
+        if remote {
+            assert_eq!(bitblock_play_chem_remote(1), 1);
+            assert_eq!(bitblock_chem_host_load(4, 7, 10), 1);
+        }
+        let mut seen = Vec::new();
+        let mut done = 0;
+        while done < ticks {
+            let r = bitblock_play_step_lagged(1);
+            done += r >> 2;
+            if r & 2 != 0 {
+                assert!(remote);
+                let n = bitblock_play_chem_outbox();
+                assert!(n > 0);
+                let batch = unsafe {
+                    std::slice::from_raw_parts(bitblock_play_chem_outbox_ptr(), n as usize)
+                }
+                .to_vec();
+                let dst = bitblock_chem_host_in_ptr(n);
+                unsafe { std::ptr::copy_nonoverlapping(batch.as_ptr(), dst, batch.len()) };
+                let m = bitblock_chem_host_process(n);
+                assert!(m > 0);
+                let out =
+                    unsafe { std::slice::from_raw_parts(bitblock_chem_host_out_ptr(), m as usize) }
+                        .to_vec();
+                // Not deliverable twice, and only while a batch is in flight.
+                let dst = bitblock_play_chem_inbox_ptr(m);
+                unsafe { std::ptr::copy_nonoverlapping(out.as_ptr(), dst, out.len()) };
+                assert_eq!(bitblock_play_chem_inbox_commit(m), 1);
+                assert_eq!(bitblock_play_chem_inbox_commit(0), 0);
+                bitblock_play_step_lagged(0);
+            } else if r >> 2 == 0 {
+                panic!(
+                    "stalled at tick {done} (blocked={})",
+                    bitblock_play_chem_blocked()
+                );
+            }
+            if r >> 2 == 1 {
+                seen.push(play_text(bitblock_play_status(1)));
+                seen.push(chem_text(bitblock_play_chem_status()));
+            }
+        }
+        assert_eq!(
+            bitblock_play_chem_remote(0),
+            0,
+            "only before the first batch"
+        );
+        (seen, bitblock_play_chem_tick())
+    }
+
+    #[test]
+    fn worker_exports_match_the_fallback() {
+        let (local, lt) = lagged_export_run(false, 41);
+        let (remote, rt) = lagged_export_run(true, 41);
+        let (again, at) = lagged_export_run(false, 41);
+        assert_eq!(local.len(), 82);
+        assert_eq!(local, remote);
+        assert_eq!(local, again);
+        assert_eq!((lt, rt, at), (lt, lt, lt));
+        assert!(lt > 0);
+        let last = local.last().unwrap();
+        assert!(
+            last.contains(" books=ok ") && last.contains(" energy_drift=0 "),
+            "{last}"
+        );
+    }
+
     #[test]
     fn chem_exports_smoke() {
         assert_eq!(bitblock_wasm_abi(), 17);
@@ -1997,7 +2221,8 @@ mod tests {
         assert_eq!(bitblock_play_chem_auto(0), 1);
         assert_eq!(bitblock_play_chem_step(2), 1);
         bitblock_play_set_layout(320, 180, 0);
-        assert_eq!(bitblock_play_step(1), 1);
+        // §6ah: queued steps are sent on one tick and published on the next.
+        assert_eq!(bitblock_play_step(2), 1);
         let n = bitblock_play_chem_status();
         let st = PLAY_CHEM_RESULT
             .with(|r| String::from_utf8(r.borrow()[..n as usize].to_vec()).unwrap());
@@ -2038,7 +2263,8 @@ mod tests {
         assert_eq!(bitblock_play_chem_auto(0), 1);
         assert_eq!(bitblock_play_chem_step(6), 1);
         bitblock_play_set_layout(320, 180, 0);
-        assert_eq!(bitblock_play_step(1), 1);
+        // §6ah: queued steps are sent on one tick and published on the next.
+        assert_eq!(bitblock_play_step(2), 1);
         let st = chem_text(bitblock_play_chem_status());
         assert!(
             st.contains(" tick=6 ") && st.contains(" books=ok ") && st.contains(" energy_drift=0 "),

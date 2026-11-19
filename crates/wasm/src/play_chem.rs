@@ -17,6 +17,8 @@ use bitblock_core::chem::{
 };
 use bitblock_core::world::{Coord, World};
 
+use crate::chem_link::ChemReport;
+
 /// planet6's trimmed reaction table (11 mounted rows, 2.8 KB). The full 24k-row
 /// table stays test / PC-only.
 const TRIMMED_NET: &str = include_str!("../../core/src/chem/fixtures/chemnet_trimmed.js.txt");
@@ -101,6 +103,24 @@ pub const CHEM_ENERGY_NAMES: [&str; 3] = ["off", "m1", "sun8"];
 pub const CHEM_CYCLE_CLASSIC: u32 = 0;
 pub const CHEM_CYCLE_DRIVEN: u32 = 1;
 pub const CHEM_CYCLE_NAMES: [&str; 2] = ["classic", "driven"];
+
+/// ` energy=m1` / ` cycle=driven` for non-default dynamics `(energy, cycle)`, else empty.
+pub fn dynamics_suffix_of(energy: u32, cycle: u32) -> String {
+    let mut s = String::new();
+    if energy != CHEM_ENERGY_OFF {
+        s += &format!(
+            " energy={}",
+            CHEM_ENERGY_NAMES.get(energy as usize).unwrap_or(&"?")
+        );
+    }
+    if cycle != CHEM_CYCLE_CLASSIC {
+        s += &format!(
+            " cycle={}",
+            CHEM_CYCLE_NAMES.get(cycle as usize).unwrap_or(&"?")
+        );
+    }
+    s
+}
 
 /// Render-only cross-section of the chem sphere. Never touches chem atoms, the play world or
 /// history: the renderer (and the aim ray) see a filtered copy of the occupancy world with the
@@ -248,6 +268,9 @@ pub struct ChemPlay {
     pub energy: u32,
     /// `CHEM_CYCLE_*` (classic by default: planet6 behaviour).
     pub cycle: u32,
+    /// §6ah: cells the current [`Self::process`] added to the domain, in insertion order (the
+    /// worker path's replica replays them).
+    pub inserted: Vec<Coord>,
 }
 
 impl ChemPlay {
@@ -308,6 +331,7 @@ impl ChemPlay {
             cut: ChemCut::default(),
             energy: CHEM_ENERGY_OFF,
             cycle: CHEM_CYCLE_CLASSIC,
+            inserted: Vec::new(),
         };
         if preset == CHEM_PRESET_GAS {
             play.set_dynamics(CHEM_ENERGY_SUN8, CHEM_CYCLE_DRIVEN);
@@ -355,20 +379,7 @@ impl ChemPlay {
     /// ` energy=m1` / ` cycle=driven` for non-default dynamics, else empty (status text with the
     /// defaults is byte-identical to before the feature).
     pub fn dynamics_suffix(&self) -> String {
-        let mut s = String::new();
-        if self.energy != CHEM_ENERGY_OFF {
-            s += &format!(
-                " energy={}",
-                CHEM_ENERGY_NAMES.get(self.energy as usize).unwrap_or(&"?")
-            );
-        }
-        if self.cycle != CHEM_CYCLE_CLASSIC {
-            s += &format!(
-                " cycle={}",
-                CHEM_CYCLE_NAMES.get(self.cycle as usize).unwrap_or(&"?")
-            );
-        }
-        s
+        dynamics_suffix_of(self.energy, self.cycle)
     }
 
     pub fn preset_name(&self) -> &'static str {
@@ -498,6 +509,11 @@ impl ChemPlay {
             && (self.queued > 0 || (self.every > 0 && tick.is_multiple_of(u64::from(self.every))))
     }
 
+    /// Whether auto-step is running (a cadence set and no stuck step).
+    pub fn auto_running(&self) -> bool {
+        self.every > 0 && self.error.is_none()
+    }
+
     /// Chem steps due on sim tick `tick` (auto cadence plus queued manual steps).
     pub fn take_due(&mut self, tick: u64) -> u32 {
         if self.error.is_some() {
@@ -531,7 +547,6 @@ impl ChemPlay {
         let before = self.world.material(coord);
         match self.world.dig(coord) {
             Some(m) => {
-                self.edited_in_mirror_cache(coord);
                 self.place_mat = m;
                 self.last = format!("dig:{}", mat_name(m));
                 true
@@ -547,34 +562,20 @@ impl ChemPlay {
         }
     }
 
-    /// §6s: a dig / place changes one cell's material outside a mirror, and the play session
-    /// applies the same occupancy edit to the play world at once. The mirror cache records the
-    /// new material for that cell, so the cache keeps describing what the play world holds: a
-    /// later chem step that changes the cell again (water flowing back into a dug cell) is
-    /// then seen by the next mirror. Before, the cache still held the old material, and a cell
-    /// refilled with it before the next mirror was skipped, leaving the play world off there.
-    /// A place that grows the domain leaves the cache short, which makes the next mirror a
-    /// full scan.
-    /// §6t: a place outside the chem domain inserts one cell into it (`ChemWorld::place`, at
-    /// its sorted index). The mirror cache gets the same slot, so it keeps matching the domain
-    /// cell for cell and the next mirror stays incremental (before, the length mismatch forced
-    /// a full scan of every domain cell and a full re-render: a ~1.3-1.5 s step at r90). The
-    /// slot holds air, the cell's material before the place (outside the domain the play world
-    /// had its bit off, as for air); `edited_in_mirror_cache` then records the placed material,
-    /// as for any place, since the play session applies the same edit to the play world.
+    /// §6t / §6ah: a place outside the chem domain inserts one cell into it
+    /// (`ChemWorld::place`, at its sorted index). The mirror cache gets the same slot, so it
+    /// keeps matching the domain cell for cell and the next mirror stays incremental (before,
+    /// the length mismatch forced a full scan of every domain cell and a full re-render: a
+    /// ~1.3-1.5 s step at r90). The slot holds air, the cell's material before the place
+    /// (outside the domain the play world has its bit off, as for air), so the next mirror
+    /// sees the placed material and switches the bit on. §6ah: dig / place no longer edit the
+    /// play world themselves (every chem change reaches it through the mirror), so the cache
+    /// otherwise keeps the materials of the last mirror.
     fn joined_mirror_cache(&mut self, coord: Coord, cells: usize) {
         if self.mirror_mats.len() == cells
             && let Some(i) = self.world.index_of(coord)
         {
             self.mirror_mats.insert(i, MatId::AIR);
-        }
-    }
-
-    fn edited_in_mirror_cache(&mut self, coord: Coord) {
-        if self.mirror_mats.len() == self.world.domain_len()
-            && let Some(i) = self.world.index_of(coord)
-        {
-            self.mirror_mats[i] = self.world.mats()[i];
         }
     }
 
@@ -584,8 +585,8 @@ impl ChemPlay {
             if self.world.place(coord, m) {
                 if self.world.domain_len() == cells + 1 {
                     self.joined_mirror_cache(coord, cells);
+                    self.inserted.push(coord);
                 }
-                self.edited_in_mirror_cache(coord);
                 self.last = format!("place:{}", mat_name(m));
                 return true;
             }
@@ -594,70 +595,148 @@ impl ChemPlay {
         false
     }
 
-    /// Short fields appended to the play status line in chem mode.
+    /// §6ah engine: applies `batch`'s ops in order (each re-validated on the current chem
+    /// state; see [`crate::chem_link`]), then runs its steps. Returns the readout figures after
+    /// it and how many edits were refused. [`Self::inserted`] lists the cells it added to the
+    /// domain.
+    pub fn process(&mut self, batch: &crate::chem_link::ChemBatch) -> (ChemReport, u32) {
+        use crate::chem_link::ChemOp;
+        use bitblock_core::program::Operation;
+        self.inserted.clear();
+        let mut refused = 0;
+        for op in &batch.ops {
+            let ok = match op {
+                ChemOp::Dig(c) => self.dig(*c),
+                ChemOp::Place(c) => self.place(*c),
+                ChemOp::Exact(o, c) => {
+                    let on = self.world.world().is_on(*c);
+                    match o {
+                        Operation::Off => !on || self.dig(*c),
+                        Operation::On => on || self.place(*c),
+                        Operation::Toggle if on => self.dig(*c),
+                        Operation::Toggle => self.place(*c),
+                    }
+                }
+                ChemOp::Refuse(why) => {
+                    self.last.clone_from(why);
+                    false
+                }
+                ChemOp::Dynamics(e, c) => {
+                    self.set_dynamics(*e, *c);
+                    true
+                }
+            };
+            refused += u32::from(!ok);
+        }
+        self.run(batch.steps);
+        (ChemReport::of(self), refused)
+    }
+
+    /// §6ah worker path: makes this (display replica) world show the engine's result `d` of
+    /// `batch`: the cells it added (the mirror cache gets their air slots, as for a local
+    /// place), every cell's material and occupancy, the dynamics it applied, and the engine's
+    /// readout fields (last action, place material, steps, a stuck step's error). Never steps
+    /// and never touches heat or books. Returns false (a protocol error) if the result does not
+    /// fit this replica.
+    pub fn replicate(
+        &mut self,
+        d: &crate::chem_link::ChemDelta,
+        batch: &crate::chem_link::ChemBatch,
+    ) -> bool {
+        for &c in &d.inserted {
+            let cells = self.world.domain_len();
+            if self.world.insert_air_cell(c).is_none() {
+                return false;
+            }
+            self.joined_mirror_cache(c, cells);
+        }
+        if self.world.replicate_mats(&d.mats).is_none() {
+            return false;
+        }
+        for op in &batch.ops {
+            if let crate::chem_link::ChemOp::Dynamics(e, c) = op {
+                self.set_dynamics(*e, *c);
+            }
+        }
+        self.last.clone_from(&d.report.last);
+        self.place_mat = d.report.place_mat;
+        self.steps_run = d.report.steps_run;
+        if d.report.error.is_some() && self.error.is_none() {
+            self.error.clone_from(&d.report.error);
+            self.every = 0;
+            self.queued = 0;
+        }
+        true
+    }
+
+    /// Short fields appended to the play status line in chem mode (live figures).
     pub fn status_fields(&self) -> String {
-        // One histogram and heat sum for every book figure (the same values as the separate
-        // calls).
-        let books = self.world.book_totals();
+        self.status_fields_with(&ChemReport::of(self), (self.energy, self.cycle))
+    }
+
+    /// [`Self::status_fields`] with the engine figures of `r` (§6ah: the last landed batch)
+    /// and the requested `dynamics` (§6ah: including modes still queued for the engine).
+    pub fn status_fields_with(&self, r: &ChemReport, dynamics: (u32, u32)) -> String {
         format!(
             " chem={} seed={} radius={} chem_tick={} auto={} vapor={} materials={} lane_drift={} energy_drift={} chem_last={}{}",
             self.preset_name(),
             self.seed,
             self.radius,
-            self.world.tick(),
+            r.tick,
             self.every,
-            self.world.vapor(),
-            books.material_count,
-            books.lane_drift.iter().map(|x| x.abs()).sum::<i64>(),
-            books.energy_drift,
-            self.last,
+            r.vapor,
+            r.material_count,
+            r.lane_drift.iter().map(|x| x.abs()).sum::<i64>(),
+            r.energy_drift,
+            r.last,
             self.error
                 .as_ref()
                 .map(|e| format!(" chem_error={e}"))
                 .unwrap_or_default(),
-        ) + &self.dynamics_suffix()
+        ) + &dynamics_suffix_of(dynamics.0, dynamics.1)
             + &self.cut_suffix()
     }
 
-    /// Full chem readout for the debug panel.
+    /// Full chem readout for the debug panel (live figures).
     pub fn status(&self) -> String {
+        self.status_with(&ChemReport::of(self), (self.energy, self.cycle))
+    }
+
+    /// [`Self::status`] with the engine figures of `r` (§6ah: the last landed batch) and the
+    /// requested `dynamics`.
+    pub fn status_with(&self, r: &ChemReport, dynamics: (u32, u32)) -> String {
         let lanes = |l: Lanes| {
             (0..NE)
                 .map(|k| format!("{}:{}", SYM[k], l[k]))
                 .collect::<Vec<_>>()
                 .join(",")
         };
-        let books = self.world.book_totals();
         format!(
             "bitblock_play_chem ok preset={} seed={} radius={} tick={} auto={} queued={} vapor={} evaporated={} rained={} materials={} domain={} space_q={} energy={} energy_drift={} books={} place={} last={} error={} lanes={} drift={} bag={} budget={} atoms={}{}{}",
             self.preset_name(),
             self.seed,
             self.radius,
-            self.world.tick(),
+            r.tick,
             self.every,
             self.queued,
-            self.world.vapor(),
-            self.world.evaporated(),
-            self.world.rained(),
-            books.material_count,
-            self.world.domain_len(),
-            self.world.space_q(),
-            books.energy,
-            books.energy_drift,
-            if self.world.check_books_with(&books).is_ok() {
-                "ok"
-            } else {
-                "BAD"
-            },
-            mat_name(self.place_mat),
-            self.last,
+            r.vapor,
+            r.evaporated,
+            r.rained,
+            r.material_count,
+            r.domain_len,
+            r.space_q,
+            r.energy,
+            r.energy_drift,
+            if r.books_ok { "ok" } else { "BAD" },
+            mat_name(r.place_mat),
+            r.last,
             self.error.as_deref().unwrap_or("none"),
-            lanes(books.lanes),
-            lanes(books.lane_drift),
-            lanes(self.world.inventory()),
+            lanes(r.lanes),
+            lanes(r.lane_drift),
+            lanes(r.inventory),
             lanes(self.budget),
             self.budget.iter().sum::<i64>(),
-            self.dynamics_suffix(),
+            dynamics_suffix_of(dynamics.0, dynamics.1),
             self.cut_suffix(),
         )
     }
