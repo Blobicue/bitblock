@@ -2446,20 +2446,55 @@ impl ChemWorld {
             self.settle_core(topo, rep, o);
             return;
         }
-        for &i in &topo.ysort {
-            let i = i as usize;
-            if self.mat[i] != MatId::SED {
-                continue;
+        if full_scans() {
+            for &i in &topo.ysort {
+                self.settle_cell(topo, i as usize, rep);
             }
-            let Some(j) = topo.face(&self.cells, i, 2) else {
-                continue;
-            };
-            let below = self.mat[j];
-            if (below == MatId::AIR || below == MatId::WATER) && !self.shell_blocked(j) {
-                self.set_mat(j, MatId::SED);
-                self.set_mat(i, below);
-                rep.settled += 1;
+            return;
+        }
+        // §6ac: only a cell that is SED when visited can sink, and those are exactly the SED
+        // cells at the start, in `ysort` order. A sink writes SED only into the cell below
+        // (lower `y`, so earlier in the (y, x, z) order: already visited) and the visited cell
+        // itself, and the cell below was AIR or WATER, so no start SED cell changes before its
+        // visit and no other cell becomes SED before its own. With no SED nothing sinks.
+        let Some(first) = find_mat(&self.mat, 0, MatId::SED) else {
+            return;
+        };
+        let ypos = topo.ysort_pos();
+        let mut todo = std::mem::take(&mut self.convect_scratch.flow_queue);
+        todo.clear();
+        todo.resize(topo.ysort.len().div_ceil(64), 0);
+        let mut next = first;
+        while let Some(i) = find_mat(&self.mat, next, MatId::SED) {
+            next = i + 1;
+            let p = ypos[i] as usize;
+            todo[p / 64] |= 1 << (p % 64);
+        }
+        for (w, &word) in todo.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let p = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                self.settle_cell(topo, topo.ysort[p] as usize, rep);
             }
+        }
+        self.convect_scratch.flow_queue = todo;
+    }
+
+    /// One `stepSettle` visit of cell `i`: SED sinks into the AIR or WATER cell below.
+    #[inline]
+    fn settle_cell(&mut self, topo: &Topology, i: usize, rep: &mut StepReport) {
+        if self.mat[i] != MatId::SED {
+            return;
+        }
+        let Some(j) = topo.face(&self.cells, i, 2) else {
+            return;
+        };
+        let below = self.mat[j];
+        if (below == MatId::AIR || below == MatId::WATER) && !self.shell_blocked(j) {
+            self.set_mat(j, MatId::SED);
+            self.set_mat(i, below);
+            rep.settled += 1;
         }
     }
 
