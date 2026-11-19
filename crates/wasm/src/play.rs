@@ -838,6 +838,45 @@ impl PlaySession {
         true
     }
 
+    /// Recover a failed worker without resetting the play session or losing edits. Rebuild
+    /// the engine from genesis and replay only the already-published batches. The in-flight
+    /// batch and pending ops keep their original landing/order on the local lagged schedule.
+    /// Replay does not touch the play world, camera, inputs, bag or history.
+    pub fn chem_recover_local(&mut self) -> bool {
+        if !self.link.remote {
+            return false;
+        }
+        let Some(c) = self.chem.as_mut() else {
+            return false;
+        };
+        let mut engine = if c.preset == crate::play_chem::CHEM_PRESET_CUSTOM {
+            crate::play_chem::ChemPlay::with_budget(c.budget, c.seed, c.radius).ok()
+        } else {
+            crate::play_chem::ChemPlay::new(c.preset, c.seed, c.radius)
+        }
+        .expect("same genesis already loaded successfully");
+        for batch in &self.link.published_batches {
+            engine.process(batch);
+        }
+        assert_eq!(engine.world.cells(), c.world.cells(), "recovery domain");
+        assert_eq!(engine.world.mats(), c.world.mats(), "recovery materials");
+        // Only replace the replica's engine data. Its mirror cache/render state, requested
+        // cadence, manual queue and cut settings still describe the published play world.
+        c.world = engine.world;
+        c.place_mat = engine.place_mat;
+        c.last = engine.last;
+        c.steps_run = engine.steps_run;
+        c.energy = engine.energy;
+        c.cycle = engine.cycle;
+        c.error = engine.error;
+        c.books_ahead = None;
+        self.link.remote = false;
+        self.link.inbox = None;
+        self.link.outbox = None;
+        self.link.published_batches.clear();
+        true
+    }
+
     /// §6ah worker path: the encoded batch of the last send tick, if not taken yet.
     pub fn chem_take_outbox(&mut self) -> Option<Vec<u8>> {
         self.link.outbox.take()
@@ -1040,6 +1079,7 @@ impl PlaySession {
                     "chem result fits the replica"
                 );
                 self.link.report = delta.report;
+                self.link.published_batches.push(batch.clone());
                 delta.refused
             } else {
                 let (report, refused) = chem.process(&batch);
@@ -3072,6 +3112,11 @@ mod chem_play_tests {
         let (report, refused) = host.process(&batch);
         let delta = crate::chem_link::encode_delta(host, &report, refused);
         assert!(s.chem_put_inbox(delta));
+        // The worker precomputes the next report's books while idle (on alternate batches
+        // here): the reports must not depend on it.
+        if s.link.sent.is_multiple_of(2) {
+            host.precompute_books();
+        }
         true
     }
 
@@ -3182,6 +3227,39 @@ mod chem_play_tests {
     /// §6ah: a late worker result holds the session at the landing tick (ticks before it
     /// run; the landing waits) and changes nothing once delivered: the session then equals
     /// one that got every result at once, tick for tick.
+    #[test]
+    fn worker_failure_replays_only_published_batches_without_losing_edits() {
+        for failure_tick in [0, 1, 4, 11, 36, 69] {
+            let mk = || {
+                let mut s = PlaySession::with_chem(2, 7, 10).unwrap();
+                s.set_layout(320, 180, true);
+                s.set_capture(true);
+                s
+            };
+            let (mut local, mut remote) = (mk(), mk());
+            assert!(remote.chem_set_remote(true));
+            let mut host = ChemPlay::new(2, 7, 10).unwrap();
+            for k in 0..90 {
+                script(&mut local, k);
+                script(&mut remote, k);
+                if k == failure_tick {
+                    assert!(remote.chem_recover_local());
+                    assert!(!remote.chem_recover_local());
+                }
+                local.step(1);
+                remote.step(1);
+                shuttle(&mut remote, &mut host);
+                assert_eq!(local.status(), remote.status(), "fail={failure_tick} k={k}");
+                assert_eq!(local.chem_status(), remote.chem_status());
+                assert_eq!(local.rgba(), remote.rgba());
+            }
+            assert_eq!(local.link.landed, remote.link.landed);
+            assert_mirrors_chem(&remote);
+            assert_eq!(remote.chem.as_ref().unwrap().world.check_books(), Ok(()));
+            assert_eq!(remote.chem.as_ref().unwrap().world.energy_drift(), 0);
+        }
+    }
+
     #[test]
     fn late_worker_results_stall_at_the_landing_tick_only() {
         let mk = || {

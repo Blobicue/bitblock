@@ -1968,6 +1968,14 @@ pub extern "C" fn bitblock_play_chem_remote(on: u32) -> u32 {
     with_play(|session| u32::from(session.chem_set_remote(on != 0)))
 }
 
+/// §6ah: recover a failed worker locally, preserving published state, queued edits,
+/// in-flight batch, camera and history. Replays published batches from genesis. Returns 1
+/// if switched to local, or 0 if not remote. No ABI signature changes.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_recover() -> u32 {
+    with_play(|session| u32::from(session.chem_recover_local()))
+}
+
 /// §6ah worker-path live step: like `bitblock_play_step_paced`, but stops before a tick that
 /// waits for the worker and returns right after a tick that sent a batch. Returns
 /// `painted | sent << 1 | ticks_run << 2`.
@@ -2094,6 +2102,18 @@ pub extern "C" fn bitblock_chem_host_process(len: u32) -> u32 {
     n
 }
 
+/// §6ah worker side: precomputes the engine's conservation figures for the next result
+/// (call while idle, right after posting a result). Returns 1, or 0 without an engine.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_books() -> u32 {
+    CHEM_HOST.with(|cell| {
+        cell.borrow_mut().as_mut().map_or(0, |c| {
+            c.precompute_books();
+            1
+        })
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn bitblock_chem_host_out_ptr() -> *const u8 {
     ptr_of(&CHEM_HOST_OUT)
@@ -2103,7 +2123,7 @@ pub extern "C" fn bitblock_chem_host_out_ptr() -> *const u8 {
 /// 17 (additive, same number, §6ah): worker path — main `bitblock_play_chem_remote`,
 /// `_step_lagged`, `_chem_blocked`, `_chem_tick`, `_chem_outbox` / `_outbox_ptr`,
 /// `_chem_inbox_ptr` / `_inbox_commit`; worker `bitblock_chem_host_load`, `_load_budget`,
-/// `_in_ptr`, `_process`, `_out_ptr`. Chem now runs one tick behind (lagged schedule) on both
+/// `_in_ptr`, `_process`, `_out_ptr`, `_books`. Chem now runs one tick behind (lagged schedule) on both
 /// paths; no existing export changed signature.
 /// 17 (additive, same number, §6s): `bitblock_play_step_paced(ticks)` (live step with at most
 /// one chem step per call; returns `painted | ticks_run << 1`).
@@ -2166,6 +2186,7 @@ mod tests {
                 unsafe { std::ptr::copy_nonoverlapping(batch.as_ptr(), dst, batch.len()) };
                 let m = bitblock_chem_host_process(n);
                 assert!(m > 0);
+                assert_eq!(bitblock_chem_host_books(), 1);
                 let out =
                     unsafe { std::slice::from_raw_parts(bitblock_chem_host_out_ptr(), m as usize) }
                         .to_vec();

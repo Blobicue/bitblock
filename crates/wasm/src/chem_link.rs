@@ -104,23 +104,57 @@ impl Default for ChemReport {
     }
 }
 
-impl ChemReport {
+/// The conservation figures of a report (one full pass over the chem cells plus the
+/// occupancy walk of the books check). §6ah: a report carries the figures of the engine state
+/// *before* its batch, so the worker can compute them while it waits for the next batch (off
+/// the critical path, [`ChemPlay::precompute_books`]); every state is still checked, one
+/// landing later.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Books {
+    pub material_count: u64,
+    pub energy: i64,
+    pub energy_drift: i64,
+    pub books_ok: bool,
+    pub lanes: Lanes,
+    pub lane_drift: Lanes,
+}
+
+impl Books {
     pub fn of(c: &ChemPlay) -> Self {
         let books = c.world.book_totals();
+        Self {
+            material_count: books.material_count as u64,
+            energy: books.energy,
+            energy_drift: books.energy_drift,
+            books_ok: c.world.check_books_with(&books).is_ok(),
+            lanes: books.lanes,
+            lane_drift: books.lane_drift,
+        }
+    }
+}
+
+impl ChemReport {
+    /// Every figure from `c` as it is now (genesis / tests).
+    pub fn of(c: &ChemPlay) -> Self {
+        Self::with_books(c, Books::of(c))
+    }
+
+    /// `c`'s counters and readouts now, with the conservation figures `b`.
+    pub fn with_books(c: &ChemPlay, b: Books) -> Self {
         Self {
             tick: c.world.tick(),
             steps_run: c.steps_run,
             vapor: c.world.vapor(),
             evaporated: c.world.evaporated(),
             rained: c.world.rained(),
-            material_count: books.material_count as u64,
+            material_count: b.material_count,
             domain_len: c.world.domain_len() as u64,
             space_q: c.world.space_q(),
-            energy: books.energy,
-            energy_drift: books.energy_drift,
-            books_ok: c.world.check_books_with(&books).is_ok(),
-            lanes: books.lanes,
-            lane_drift: books.lane_drift,
+            energy: b.energy,
+            energy_drift: b.energy_drift,
+            books_ok: b.books_ok,
+            lanes: b.lanes,
+            lane_drift: b.lane_drift,
             inventory: c.world.inventory(),
             place_mat: c.place_mat,
             last: c.last.clone(),
@@ -157,6 +191,9 @@ pub struct ChemLink {
     pub report: ChemReport,
     pub sent: u64,
     pub landed: u64,
+    /// Remote-only recovery journal: precisely the batches whose results were published.
+    /// Replayed from genesis on worker failure; the still-in-flight batch is NOT replayed.
+    pub published_batches: Vec<ChemBatch>,
 }
 
 impl ChemLink {

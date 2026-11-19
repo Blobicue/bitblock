@@ -271,6 +271,9 @@ pub struct ChemPlay {
     /// §6ah: cells the current [`Self::process`] added to the domain, in insertion order (the
     /// worker path's replica replays them).
     pub inserted: Vec<Coord>,
+    /// §6ah worker engine: the conservation figures of the current state, computed while
+    /// idle ([`Self::precompute_books`]); [`Self::process`] uses them for its report.
+    pub books_ahead: Option<crate::chem_link::Books>,
 }
 
 impl ChemPlay {
@@ -332,6 +335,7 @@ impl ChemPlay {
             energy: CHEM_ENERGY_OFF,
             cycle: CHEM_CYCLE_CLASSIC,
             inserted: Vec::new(),
+            books_ahead: None,
         };
         if preset == CHEM_PRESET_GAS {
             play.set_dynamics(CHEM_ENERGY_SUN8, CHEM_CYCLE_DRIVEN);
@@ -597,11 +601,17 @@ impl ChemPlay {
 
     /// §6ah engine: applies `batch`'s ops in order (each re-validated on the current chem
     /// state; see [`crate::chem_link`]), then runs its steps. Returns the readout figures after
-    /// it and how many edits were refused. [`Self::inserted`] lists the cells it added to the
+    /// it (conservation figures: before it, see [`crate::chem_link::Books`]) and how many edits
+    /// were refused. [`Self::inserted`] lists the cells it added to the
     /// domain.
     pub fn process(&mut self, batch: &crate::chem_link::ChemBatch) -> (ChemReport, u32) {
         use crate::chem_link::ChemOp;
         use bitblock_core::program::Operation;
+        // The report's conservation figures are those of the state before the batch (§6ah).
+        let books = self
+            .books_ahead
+            .take()
+            .unwrap_or_else(|| crate::chem_link::Books::of(self));
         self.inserted.clear();
         let mut refused = 0;
         for op in &batch.ops {
@@ -629,7 +639,16 @@ impl ChemPlay {
             refused += u32::from(!ok);
         }
         self.run(batch.steps);
-        (ChemReport::of(self), refused)
+        (ChemReport::with_books(self, books), refused)
+    }
+
+    /// §6ah worker engine: computes the current state's conservation figures now (while the
+    /// worker waits for the next batch) so the next [`Self::process`] need not. Same report
+    /// either way.
+    pub fn precompute_books(&mut self) {
+        if self.books_ahead.is_none() {
+            self.books_ahead = Some(crate::chem_link::Books::of(self));
+        }
     }
 
     /// §6ah worker path: makes this (display replica) world show the engine's result `d` of
