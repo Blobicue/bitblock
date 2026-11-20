@@ -4935,6 +4935,41 @@ The old-reference row shows the box was at about the same speed as during §6ai.
 
 **Playtest** at :8765 and on `file://` (lock, dig ×3, place ×2, travel, settle). Gas r20/r100 and ocean r40/r100 kept books=ok and energy_drift=0 throughout. The playtest world `chem2_r100` runs at ~2 ticks/s, the same as in §6ah, so this was not introduced here.
 
+## 6ak. wasm SIMD, second round: ocean evaporation and the block hit mask. Two exact wasm-only changes shipped (native code paths unchanged); the ocean worker step at r100 drops a further ~5 ms. The cap stays 100: gas and ocean both fail the rule at r100 (2026-11-19, branch `chem/render-scale-2026-11`)
+
+| Commit | Pass | wasm change | ms per batch, ocean r100 (paired runs) |
+|---|---|---|---|
+| e89b31f | water_cycle evaporation | Each row's surface/heat test (`WATER & !above WATER & Q > 200`) is computed 16 cells at a time as one mask, against a copy of the row above; set bits are visited in order. | 7.7 → 5.2 |
+| e092a48 | `hit_mask` (phase, and the other 64-block scans) | The tests are computed as bytes and packed with `i8x16_bitmask`. The u64 shift-or form had compiled to two lanes per step with lane extracts. This commit also fixes a clippy lint that only fires on the simd128 build. | phase 5.0 → ~3.5 |
+| 94ff60e | www | Clean-target simd128 ship build. | wasm bbcc56dd, play.html 05f56e92, bitblock-lab.html 8e963917 |
+
+**Looked at but left alone:**
+- Convect roll: a 64-bit splitmix per passing pair plus a scatter by rsort position. A SIMD version would need the emulated `i64x2.mul`.
+- Convect scan: sequential, because each step reads the moved bits.
+- Ocean flow (full `ysort` scan with `nb6`): I found no exact batching.
+- Erode: periodic, and the remaining cost is the per-row exposure loop.
+
+**Exactness** (all match §6ah):
+- `wasm_parity`: 7/7 SAME.
+- `det.mjs` worker == fallback == fresh: matches `s6ah/det_c`.
+- delta_eq ×16 and `fp_long`: same.
+- chemparity md5s: 8ef8f682 / 3f462f38 / 0165c07b / 46a1f4dd.
+- Default hashes: pmbj7za5 / nx4b62u5, ABI 17.
+- The 150 chem tests pass on wasm32-wasip1 with simd128.
+- New: clippy run on the wasm32 simd128 build, 0 warnings.
+
+**Cap rule** (Chrome Low, fresh pages, r100; presented fps = chem ticks/s):
+
+| Run | Gas | Ocean |
+|---|---|---|
+| Set 1 | 14.04 | 14.22 |
+| Set 2 | 13.29 | 14.87 |
+| Old 733794f9 reference, same session | 14.65 | 13.14 |
+
+All runs fail. Gas gets no help from this pass and swung 12.4–15.1 between runs, which is box noise; in §6aj it passed set 1 at 15.13. Ocean moved toward the bar (§6aj: 14.27 / 13.91). books=ok, drift 0, no errors. The caps are unchanged.
+
+**Playtest** at :8765 (gas r20, ocean r40/r100) and on `file://` (gas r20, ocean r40): dig, place and travel OK, books=ok, drift 0. The ocean-after-gas r100 case is still ~2 ticks/s, as in §6ah.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
