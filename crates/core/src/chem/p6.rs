@@ -885,12 +885,34 @@ pub(crate) fn mats_present<const K: usize>(mat: &[MatId], ids: [MatId; K]) -> [b
 pub(crate) fn hit_mask(mat: &[MatId], q: &[i32], hit: impl Fn(MatId, i32) -> bool) -> u64 {
     debug_assert!(mat.len() <= 64 && mat.len() == q.len());
     if let (Ok(m), Ok(q)) = (<&[MatId; 64]>::try_from(mat), <&[i32; 64]>::try_from(q)) {
-        // a whole block: a fixed trip count the compiler turns into vector compares
-        let mut b = 0u64;
-        for k in 0..64 {
-            b |= (hit(m[k], q[k]) as u64) << k;
+        // §6ak, wasm: the same tests as one byte each (vector compares in 16 byte lanes),
+        // then 16 bytes at a time to bits; the u64 shift-or form compiled to two lanes.
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        {
+            use core::arch::wasm32::{i8x16_bitmask, v128, v128_load};
+            let mut bytes = [0u8; 64];
+            for k in 0..64 {
+                bytes[k] = 0u8.wrapping_sub(u8::from(hit(m[k], q[k])));
+            }
+            let mut b = 0u64;
+            for j in 0..4 {
+                // SAFETY: `bytes` is 64 bytes, so bytes `16 * j..16 * j + 16` are in bounds,
+                // and `v128_load` has no alignment requirement.
+                let v = unsafe { v128_load(bytes.as_ptr().add(16 * j).cast::<v128>()) };
+                b |= u64::from(i8x16_bitmask(v)) << (16 * j);
+            }
+            #[allow(clippy::needless_return)]
+            return b;
         }
-        return b;
+        // a whole block: a fixed trip count the compiler turns into vector compares
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+        {
+            let mut b = 0u64;
+            for k in 0..64 {
+                b |= (hit(m[k], q[k]) as u64) << k;
+            }
+            return b;
+        }
     }
     mat.iter()
         .zip(q)

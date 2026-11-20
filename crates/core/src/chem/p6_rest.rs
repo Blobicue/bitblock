@@ -2466,9 +2466,9 @@ impl ChemWorld {
                 u32::from(i8x16_bitmask(cand))
             } else {
                 let mut b = 0u32;
-                for k in k0..len {
+                for (k, &up) in above.iter().enumerate().skip(k0) {
                     let i = s + k;
-                    let f = (self.mat[i] == MatId::WATER) & (above[k] != water) & (self.q[i] > 200);
+                    let f = (self.mat[i] == MatId::WATER) & (up != water) & (self.q[i] > 200);
                     b |= u32::from(f) << (k - k0);
                 }
                 b
