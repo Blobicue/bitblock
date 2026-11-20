@@ -192,6 +192,65 @@ fn convect_tests_bytes(
     }
 }
 
+/// §6aj, wasm: the candidate bits of [`ChemWorld::gas_rise_up`], the same bits: 16
+/// materials at a time are looked up in the rising set with two nibble shuffles (bit `h` of
+/// `by_lo[h / 8][lo]` is `rising[16 * h + lo]`), and only the rising ones are read further.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn rise_candidates(mat: &[MatId], rising: &[bool; 256], rise_pos: &[u32], cand: &mut [u64]) {
+    use core::arch::wasm32::{
+        i8x16_bitmask, i8x16_swizzle, u8x16, u8x16_lt, u8x16_ne, u8x16_shr, u8x16_splat, v128,
+        v128_and, v128_bitselect, v128_load,
+    };
+    let mut by_lo = [[0u8; 16]; 2];
+    for (m, &r) in rising.iter().enumerate() {
+        if r {
+            by_lo[m / 128][m % 16] |= 1 << ((m / 16) % 8);
+        }
+    }
+    // SAFETY: each table is 16 bytes and `v128_load` has no alignment requirement.
+    let (ta, tb) = unsafe {
+        (
+            v128_load(by_lo[0].as_ptr().cast::<v128>()),
+            v128_load(by_lo[1].as_ptr().cast::<v128>()),
+        )
+    };
+    let hbit = u8x16(1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128);
+    let (lo_mask, eight, zero) = (u8x16_splat(15), u8x16_splat(8), u8x16_splat(0));
+    let mut mark = |i: usize| {
+        let k = rise_pos[i];
+        if k != NO_SLOT {
+            cand[k as usize / 64] |= 1 << (k % 64);
+        }
+    };
+    let n = mat.len();
+    let mut i = 0;
+    while i + 16 <= n {
+        let m: &[MatId; 16] = mat[i..i + 16].try_into().expect("16 materials");
+        let v = u8x16(
+            m[0].0, m[1].0, m[2].0, m[3].0, m[4].0, m[5].0, m[6].0, m[7].0, m[8].0, m[9].0,
+            m[10].0, m[11].0, m[12].0, m[13].0, m[14].0, m[15].0,
+        );
+        let (lo, hi) = (v128_and(v, lo_mask), u8x16_shr(v, 4));
+        let row = v128_bitselect(
+            i8x16_swizzle(ta, lo),
+            i8x16_swizzle(tb, lo),
+            u8x16_lt(hi, eight),
+        );
+        let hit = u8x16_ne(v128_and(row, i8x16_swizzle(hbit, hi)), zero);
+        let mut bits = i8x16_bitmask(hit);
+        while bits != 0 {
+            mark(i + bits.trailing_zeros() as usize);
+            bits &= bits - 1;
+        }
+        i += 16;
+    }
+    for (j, m) in mat.iter().enumerate().skip(i) {
+        if rising[m.0 as usize] {
+            mark(j);
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct ConvectScratch {
     smat: Vec<MatId>,
@@ -761,6 +820,9 @@ impl ChemWorld {
         let cand = &mut sc.rise_cand;
         cand.clear();
         cand.resize(topo.rise.len().div_ceil(64), 0);
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        rise_candidates(&self.mat, &rising, rise_pos, cand);
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
         for (i, m) in self.mat.iter().enumerate() {
             if rising[m.0 as usize] {
                 let k = rise_pos[i];
