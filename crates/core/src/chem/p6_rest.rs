@@ -147,6 +147,51 @@ impl TopScan {
 /// materials gathered into rsort order and its swaps, the convection density, candidate,
 /// move and swap bits), kept across steps so a step does not allocate per domain cell. Each pass
 /// clears or rewrites every buffer it reads before reading it.
+/// §6aj, wasm: the density tests of [`ChemWorld::convect_pass`] in two steps, each cell's
+/// result as a byte (a loop short enough to keep its values in registers, where the bit
+/// gathering one spilled them), then 16 bytes at a time to bits. The same tests on the same
+/// values: each cell's test reads only its own pair, so its byte is what its bit was.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn convect_tests_bytes(
+    up_runs: &[[u32; 3]],
+    (mat, q): (&[MatId], &[i32]),
+    (below_mass, above_mass, rising): (&[i64; 256], &[i64; 256], &[bool; 256]),
+    bytes: &mut Vec<u8>,
+    pass: &mut [u64],
+) {
+    use core::arch::wasm32::{i8x16_bitmask, v128_load};
+    bytes.clear();
+    bytes.resize(pass.len() * 64, 0);
+    for &[start, len, up] in up_runs {
+        let (a, m, u) = (start as usize, len as usize, up as usize);
+        let below = mat[a..a + m].iter().zip(&q[a..a + m]);
+        let above = mat[u..u + m].iter().zip(&q[u..u + m]);
+        for (o, ((&mi, &qi), (&mu, &qu))) in bytes[a..a + m].iter_mut().zip(below.zip(above)) {
+            let mb = below_mass[mi.0 as usize];
+            let ma = above_mass[mu.0 as usize];
+            let tb = i64::from(qi) + CONVECT_T0;
+            let ta = i64::from(qu) + CONVECT_T0;
+            let ok = rising[mi.0 as usize]
+                & rising[mu.0 as usize]
+                & (tb > 0)
+                & (ta > 0)
+                & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
+            // 0xff for a pass: the bitmask below reads each byte's top bit.
+            *o = 0u8.wrapping_sub(u8::from(ok));
+        }
+    }
+    for (word, b) in pass.iter_mut().zip(bytes.chunks_exact(64)) {
+        let mut bits = 0u64;
+        for k in 0..4 {
+            // SAFETY: `b` is 64 bytes, so its bytes `16 * k..16 * k + 16` are in bounds, and
+            // `v128_load` has no alignment requirement.
+            let v = unsafe { v128_load(b.as_ptr().add(16 * k).cast()) };
+            bits |= u64::from(i8x16_bitmask(v)) << (16 * k);
+        }
+        *word = bits;
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct ConvectScratch {
     smat: Vec<MatId>,
@@ -157,6 +202,10 @@ pub(crate) struct ConvectScratch {
     /// One bit per domain cell: its pair passes the density test (see
     /// [`ChemWorld::convect_pass`]).
     pass: Vec<u64>,
+    /// §6aj, wasm: one byte per domain cell, the density test's result (see
+    /// [`convect_tests_bytes`]).
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    pass_bytes: Vec<u8>,
     /// One bit per domain cell: it and its outward neighbour swap this tick.
     swapped: Vec<u64>,
     /// One bit per `ysort` position still to visit in the sparse flow scan (see
@@ -450,6 +499,15 @@ impl ChemWorld {
         let pass = &mut sc.pass;
         pass.clear();
         pass.resize(words, 0);
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        convect_tests_bytes(
+            topo.up_runs(),
+            (mat, q),
+            (&below_mass, &above_mass, &rising),
+            &mut sc.pass_bytes,
+            pass,
+        );
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
         for &[start, len, up] in topo.up_runs() {
             let (start, len, up) = (start as usize, len as usize, up as usize);
             // Split the run at word boundaries so each word's bits gather in a register.
