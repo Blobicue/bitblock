@@ -4891,6 +4891,50 @@ A second fresh run of the whole eq suite matches the new refs exactly (eq2: 16 "
 
 Soft DDA, bcc-voxel-demo and abi16 untouched. No merge to main, no remote deletion (`wip/s6e-fingerprint` kept), no Desktop copy; 8790/8791 left alone.
 
+## 6aj. wasm SIMD (simd128) on the chem worker's hot passes. Shipped four exact wasm-only changes (native code paths unchanged): worker host_process at r100 drops ~62 → ~54 ms (gas) and ~75 → ~67 ms (ocean). Every §6ah reference holds. The cap stays 100: gas passes one set of the rule, ocean fails both (2026-11-19, branch `chem/render-scale-2026-11`)
+
+The www wasm was already built with `-C target-feature=+simd128` (headless Chrome has supported it since 91). In this pass the hot passes got explicit `core::arch::wasm32` code or SIMD-friendly loops. Each one is behind `#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]`, so native builds compile exactly the code they compiled before.
+
+| Commit | Pass | wasm change | Per-batch ms, r100 (paired runs, same box noise) |
+|---|---|---|---|
+| 16b4cd0 | heat | Shares `q/120` computed as `(q * 0x88888889) >> 38` with a 16-bit split multiply-high in i32x4 (checked exhaustively for 0..2^31). Rim cells patched per x plane, one plane ahead of the gather. The six gather adds fused over the z range that all six sources cover. | 13.2 → 10.3 (gas), 13.2 → 10.5 (ocean) |
+| 4980b15 | convect density tests | Each cell's test is written as a byte, then the bytes are packed 16 at a time with `i8x16_bitmask`. The old loop gathered bits in a register and V8 spilled it. | 28.3 → 27.0 |
+| 89ebf26 | books occupancy walk | Within each 16-wide x slab, every chunk is transposed once (simd128) into 256 sixteen-bit z columns. Each in-chunk segment then compares its non-air mask with one column word. Same cells, same order, same first failure. | 5.8 → 3.4 |
+| 872b383 | ocean `gas_rise_up` candidates | Materials are tested against the rising set 16 at a time with two nibble `i8x16_swizzle` lookups. Only cells that hit are read further. | 9.9 → 7.5 (ocean) |
+| cdc80a1 | www | Clean-target simd128 ship build. | wasm 33a0969b, play.html 1979f5d6, bitblock-lab.html a8c12632 |
+
+Books are checked exactly as often as before. Only the check itself got faster.
+
+Tried and dropped:
+- `u64x2_extmul`: V8 lowers it to an emulated `i64x2.mul`.
+- f64 `trunc_sat`: it gets scalarized.
+- f32 quotient with a correction step: exact, but only −0.7 ms.
+- Hoisted splat constants: no gain.
+- A per-column chunk cache for books without transposition: no gain.
+
+**Exactness.** All of these held:
+- `wasm_parity` against §6ah new_c: 7/7 SAME for every change.
+- `det.mjs` (worker == fallback == fresh, 5 cases): matched `s6ah/det_c` for every change.
+- delta_eq 16 cases plus `fp_long`: all same.
+- chemparity md5s unchanged (8ef8f682 / 3f462f38 / 0165c07b / 46a1f4dd).
+- Default hashes pmbj7za5 / nx4b62u5, ABI 17.
+
+New in this pass: all 150 chem library tests also pass on the wasm SIMD path itself, under `cargo test --target wasm32-wasip1` with simd128 in wasmtime.
+
+**Cap rule** (Chrome Low, fresh pages, r100, presented fps = chem ticks/s):
+
+| Run | Gas | Ocean |
+|---|---|---|
+| Set 1 | 15.13, PASS | 14.27, FAIL |
+| Set 2 | 14.72, FAIL | 13.91, FAIL |
+| Old 733794f9 reference | 14.39 | 12.12 |
+| §6ai on a similar box | 12.66 / 12.79 | 11.75 / 12.66 |
+| `?worker=0` fallback | 14.13 | 12.40 |
+
+The old-reference row shows the box was at about the same speed as during §6ai. Main-thread busy time was 31–38% with the worker, against 92% for the old build. No errors. `CHEM_RADIUS_MAX`, the HTML max, the JS clamp and `MAX_GENESIS_RADIUS` are unchanged.
+
+**Playtest** at :8765 and on `file://` (lock, dig ×3, place ×2, travel, settle). Gas r20/r100 and ocean r40/r100 kept books=ok and energy_drift=0 throughout. The playtest world `chem2_r100` runs at ~2 ticks/s, the same as in §6ah, so this was not introduced here.
+
 ## 6. Non-goals
 - Noise/Perlin/simplex heightmaps, biome maps, cave carvers or cloud textures as an authority over world
   contents (a debug visualisation that reads chem state is fine).
