@@ -918,6 +918,191 @@ fn heat_shares_six(q: &[i32], per: &mut [i32], nq: &mut [i32], emit: impl Fn(i32
     }
 }
 
+/// The heat law's gather for one z-run: each cell of `run` adds the shares of its face
+/// neighbours (its z neighbours in the run, then the overlapping cells of the four rows
+/// beside it) to its `nq`.
+#[inline(always)]
+fn heat_gather_run(rows: &ZRuns, run: &ZRun, per: &[i32], nq: &mut [i32]) {
+    let s = run.start;
+    let len = (run.z1 - run.z0 + 1) as usize;
+    add_shares(&mut nq[s + 1..s + len], &per[s..s + len - 1]);
+    add_shares(&mut nq[s..s + len - 1], &per[s + 1..s + len]);
+    for r in rows.beside(run).into_iter().flatten() {
+        let (lo, hi) = (run.z0.max(r.z0), run.z1.min(r.z1));
+        if lo > hi {
+            continue;
+        }
+        let m = (hi - lo + 1) as usize;
+        let a = s + (lo - run.z0) as usize;
+        let b = r.start + (lo - r.z0) as usize;
+        add_shares(&mut nq[a..a + m], &per[b..b + m]);
+    }
+}
+
+/// §6aj, wasm: the heat law's z-run path for the default `dq` (`q / 20` emitted, so the
+/// six-way share is `q.max(0) / 120`), one x plane at a time: the shares and own rests of
+/// plane `x + 1` (rim cells patched with their live count, as the whole-domain sweep does),
+/// then the gather of plane `x`, whose neighbours lie in planes `x - 1 ..= x + 1` and are all
+/// final by then. Every cell gets the same share and the same wrapping sums as with the two
+/// whole-domain sweeps; the planes are only visited while their shares are still in cache.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn heat_piped_120(q: &[i32], rows: &ZRuns, rim: &[(u32, u8)], per: &mut [i32], nq: &mut [i32]) {
+    let runs = &rows.runs;
+    let mut rim_at = 0;
+    let mut prev: Option<(usize, usize)> = None;
+    let mut lo = 0;
+    loop {
+        let cur = (lo < runs.len()).then(|| {
+            let mut hi = lo + 1;
+            while hi < runs.len() && runs[hi].x == runs[lo].x {
+                hi += 1;
+            }
+            (lo, hi)
+        });
+        if let Some((a, b)) = cur {
+            // The runs tile the domain in index order, so a plane is one index range.
+            let last = &runs[b - 1];
+            let (c0, c1) = (runs[a].start, last.start + (last.z1 - last.z0) as usize + 1);
+            heat_shares_six_120(&q[c0..c1], &mut per[c0..c1], &mut nq[c0..c1]);
+            while rim_at < rim.len() && (rim[rim_at].0 as usize) < c1 {
+                let i = rim[rim_at].0 as usize;
+                let o = q[i] / 20;
+                let live = usize::from(rows.live[i]);
+                let p = if o > 0 && live > 0 {
+                    div_by_live(i64::from(o), live) as i32
+                } else {
+                    0
+                };
+                per[i] = p;
+                nq[i] = q[i] - p * live as i32;
+                rim_at += 1;
+            }
+        }
+        if let Some((a, b)) = prev {
+            for run in &runs[a..b] {
+                heat_gather_run_fused(rows, run, per, nq);
+            }
+        }
+        match cur {
+            Some((_, b)) => {
+                prev = cur;
+                lo = b;
+            }
+            None => break,
+        }
+    }
+}
+
+/// §6aj, wasm: [`heat_gather_run`] with the six adds fused over the z range every source
+/// covers (the run's inner cells that have both z neighbours and a cell in each of the four
+/// rows beside, each such row one run): `nq` is read and written once there instead of six
+/// times. The rest of each source's range is added as before; the sums wrap in `i32`, so the
+/// grouping does not change them.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn heat_gather_run_fused(rows: &ZRuns, run: &ZRun, per: &[i32], nq: &mut [i32]) {
+    let beside = rows.beside(run);
+    let one = |rs: &[ZRun]| match rs {
+        [r] => Some(*r),
+        _ => None,
+    };
+    let (Some(r0), Some(r1), Some(r2), Some(r3)) = (
+        one(beside[0]),
+        one(beside[1]),
+        one(beside[2]),
+        one(beside[3]),
+    ) else {
+        return heat_gather_run(rows, run, per, nq);
+    };
+    let rs = [r0, r1, r2, r3];
+    let lo = rs.iter().fold(run.z0 + 1, |l, r| l.max(r.z0));
+    let hi = rs.iter().fold(run.z1 - 1, |h, r| h.min(r.z1));
+    if lo > hi {
+        return heat_gather_run(rows, run, per, nq);
+    }
+    let s = run.start;
+    let at = |z: i64| s + (z - run.z0) as usize;
+    // Adds `per[from(z)]` to `nq` of cell `z` for `z` in `a..=b` (nothing when `a > b`).
+    let mut add = |a: i64, b: i64, from: usize| {
+        if a <= b {
+            let m = (b - a + 1) as usize;
+            let d = at(a);
+            add_shares(&mut nq[d..d + m], &per[from..from + m]);
+        }
+    };
+    // Each source's range less the fused one: z-1, z+1, then the rows beside.
+    add(run.z0 + 1, lo - 1, s);
+    add(hi + 1, run.z1, at(hi));
+    add(run.z0, lo - 1, s + 1);
+    add(hi + 1, run.z1 - 1, at(hi + 2));
+    for r in &rs {
+        let (a, b) = (run.z0.max(r.z0), run.z1.min(r.z1));
+        add(a, lo - 1, r.start + (a - r.z0) as usize);
+        add(hi + 1, b, r.start + (hi + 1 - r.z0) as usize);
+    }
+    let m = (hi - lo + 1) as usize;
+    let d = at(lo);
+    let src = |r: &ZRun| &per[r.start + (lo - r.z0) as usize..][..m];
+    let (p0, p1, p2, p3) = (src(&r0), src(&r1), src(&r2), src(&r3));
+    let (down, up) = (&per[d - 1..d - 1 + m], &per[d + 1..d + 1 + m]);
+    for (j, t) in nq[d..d + m].iter_mut().enumerate() {
+        let sum = down[j]
+            .wrapping_add(up[j])
+            .wrapping_add(p0[j])
+            .wrapping_add(p1[j])
+            .wrapping_add(p2[j])
+            .wrapping_add(p3[j]);
+        *t = t.wrapping_add(sum);
+    }
+}
+
+/// [`heat_shares_six`] with `emit(q) = q.max(0) / 120` (the default `dq`).
+#[inline(always)]
+fn heat_shares_six_120(q: &[i32], per: &mut [i32], nq: &mut [i32]) {
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        // §6aj: wasm has no integer vector division (nor a 32-bit multiply-high), so the
+        // quotient compiled to four scalar ones per vector. Four lanes at a time instead:
+        // `q / 120 == (q * 0x8888_8889) >> 38` for every `q` in `0..2^31`, with the high word
+        // of the 64-bit product built from 16-bit halves in `i32` lanes (`q = qh 2^16 + ql`,
+        // the multiplier `mh 2^16 + ml`; every partial product fits 32 bits and the carries of
+        // the middle terms are summed below bit 32). Checked against `q / 120` for every `q`.
+        use core::arch::wasm32::*;
+        let n = q.len().min(per.len()).min(nq.len());
+        let (zero, six, lo16) = (i32x4_splat(0), i32x4_splat(6), u32x4_splat(0xffff));
+        let (mh, ml) = (u32x4_splat(0x8888), u32x4_splat(0x8889));
+        let mut i = 0;
+        while i + 4 <= n {
+            // SAFETY: `i + 4 <= n` and every slice holds at least `n` elements, so each access
+            // reads or writes four in-bounds `i32`s (wasm loads and stores need no alignment).
+            unsafe {
+                let v = v128_load(q.as_ptr().add(i).cast());
+                let c = i32x4_max(v, zero);
+                let (qh, ql) = (u32x4_shr(c, 16), v128_and(c, lo16));
+                let b1 = i32x4_mul(qh, ml);
+                let b2 = i32x4_mul(ql, mh);
+                let t = i32x4_add(
+                    u32x4_shr(i32x4_mul(ql, ml), 16),
+                    i32x4_add(v128_and(b1, lo16), v128_and(b2, lo16)),
+                );
+                let hi = i32x4_add(
+                    i32x4_add(i32x4_mul(qh, mh), u32x4_shr(b1, 16)),
+                    i32x4_add(u32x4_shr(b2, 16), u32x4_shr(t, 16)),
+                );
+                let share = u32x4_shr(hi, 6);
+                v128_store(per.as_mut_ptr().add(i).cast(), share);
+                v128_store(
+                    nq.as_mut_ptr().add(i).cast(),
+                    i32x4_sub(v, i32x4_mul(share, six)),
+                );
+            }
+            i += 4;
+        }
+        heat_shares_six(&q[i..n], &mut per[i..n], &mut nq[i..n], |q| q.max(0) / 120);
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    heat_shares_six(q, per, nq, |q| q.max(0) / 120);
+}
+
 /// `o / live` for a face-neighbour count `live` in `1..=6`, with each divisor a constant (the
 /// same truncating quotient; a constant divisor compiles to a multiply instead of a division).
 #[inline]
@@ -2633,7 +2818,16 @@ impl ChemWorld {
             // as run by run. When `dq` divides 6000, `q * dq / 6000` truncated is `q / (6000 /
             // dq)` truncated (the same rational), and every quantity fits `i32`: `0 <= p * live
             // <= o <= q` for an emitting cell.
+            // §6aj: on wasm the default `dq` takes the plane-pipelined form instead (the same
+            // shares and sums, see `heat_piped_120`).
+            let piped = cfg!(all(target_arch = "wasm32", target_feature = "simd128"))
+                && self.params.dq == 300;
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            if piped {
+                heat_piped_120(&self.q, rows, &topo.space_faces, &mut per, &mut nq);
+            }
             match self.params.dq {
+                _ if piped => {}
                 d if d > 0 && 6000 % d == 0 => {
                     let divisor = 6000 / d;
                     // All but the rim cells have six neighbours. Do that branch-free whole-
@@ -2642,7 +2836,7 @@ impl ChemWorld {
                     // `(q / divisor).max(0) / 6` in one quotient: for `q >= 0` truncation
                     // composes (`q / d / 6 == q / (6 d)`), and for `q < 0` both are 0.
                     if divisor == 20 {
-                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q.max(0) / 120);
+                        heat_shares_six_120(&self.q, &mut per, &mut nq);
                     } else {
                         let six = 6 * divisor;
                         heat_shares_six(&self.q, &mut per, &mut nq, |q| q.max(0) / six);
@@ -2675,20 +2869,9 @@ impl ChemWorld {
                     }
                 }
             }
-            for run in &rows.runs {
-                let s = run.start;
-                let len = (run.z1 - run.z0 + 1) as usize;
-                add_shares(&mut nq[s + 1..s + len], &per[s..s + len - 1]);
-                add_shares(&mut nq[s..s + len - 1], &per[s + 1..s + len]);
-                for r in rows.beside(run).into_iter().flatten() {
-                    let (lo, hi) = (run.z0.max(r.z0), run.z1.min(r.z1));
-                    if lo > hi {
-                        continue;
-                    }
-                    let m = (hi - lo + 1) as usize;
-                    let a = s + (lo - run.z0) as usize;
-                    let b = r.start + (lo - r.z0) as usize;
-                    add_shares(&mut nq[a..a + m], &per[b..b + m]);
+            if !piped {
+                for run in &rows.runs {
+                    heat_gather_run(rows, run, &per, &mut nq);
                 }
             }
             self.heat_scratch.per = per;
