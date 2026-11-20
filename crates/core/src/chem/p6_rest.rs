@@ -2363,31 +2363,119 @@ impl ChemWorld {
         tkey: u64,
         rep: &mut StepReport,
     ) {
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
         let mut surf: Vec<bool> = Vec::new();
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        let mut above: Vec<u8> = Vec::new();
         for run in &zr.runs {
             let (s, len) = (run.start, (run.z1 - run.z0 + 1) as usize);
             let row = &self.mat[s..s + len];
             if !row.iter().fold(false, |h, &m| h | (m == MatId::WATER)) {
                 continue;
             }
-            surf.clear();
-            surf.extend(row.iter().map(|&m| m == MatId::WATER));
-            if let Some(a) = zr.row(Some(run.x), run.y.checked_add(1)) {
-                let (lo, hi) = (run.z0.max(a.z0), run.z1.min(a.z1));
-                if lo <= hi {
-                    let m = (hi - lo + 1) as usize;
-                    let off = (lo - run.z0) as usize;
-                    let at = a.start + (lo - a.z0) as usize;
-                    for (f, &u) in surf[off..off + m].iter_mut().zip(&self.mat[at..at + m]) {
-                        *f &= u != MatId::WATER; // buried: not surface
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            self.evaporate_row_simd(topo, zr, run, tkey, &mut above, rep);
+            #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+            {
+                surf.clear();
+                surf.extend(row.iter().map(|&m| m == MatId::WATER));
+                if let Some(a) = zr.row(Some(run.x), run.y.checked_add(1)) {
+                    let (lo, hi) = (run.z0.max(a.z0), run.z1.min(a.z1));
+                    if lo <= hi {
+                        let m = (hi - lo + 1) as usize;
+                        let off = (lo - run.z0) as usize;
+                        let at = a.start + (lo - a.z0) as usize;
+                        for (f, &u) in surf[off..off + m].iter_mut().zip(&self.mat[at..at + m]) {
+                            *f &= u != MatId::WATER; // buried: not surface
+                        }
+                    }
+                }
+                for (k, &f) in surf.iter().enumerate() {
+                    let i = s + k;
+                    if !f || self.q[i] <= 200 {
+                        continue;
+                    }
+                    if self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
+                        self.set_mat(i, MatId::AIR);
+                        self.vapor += 1;
+                        self.evaporated += 1;
+                        self.q[i] = (self.q[i] - LATENT_PAIR).max(0);
+                        rep.evaporated += 1;
                     }
                 }
             }
-            for (k, &f) in surf.iter().enumerate() {
-                let i = s + k;
-                if !f || self.q[i] <= 200 {
-                    continue;
+        }
+    }
+
+    /// §6ak, wasm: one row of [`Self::evaporate_rows`], the same visits in the same order.
+    /// The row above is copied into `above` (lanes it does not cover hold a non-WATER
+    /// byte), then 16 cells at a time take `WATER & !above WATER & Q > 200` as one mask
+    /// and visit its bits in order. A visit writes only its own cell, never another cell's
+    /// material, heat or the row above, so each test reads what the row-wide one read.
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    fn evaporate_row_simd(
+        &mut self,
+        topo: &Topology,
+        zr: &super::p6::ZRuns,
+        run: &super::p6::ZRun,
+        tkey: u64,
+        above: &mut Vec<u8>,
+        rep: &mut StepReport,
+    ) {
+        use core::arch::wasm32::{
+            i8x16_bitmask, i8x16_narrow_i16x8, i16x8_narrow_i32x4, i32x4_gt, i32x4_splat, u8x16,
+            u8x16_eq, u8x16_splat, v128, v128_and, v128_andnot, v128_load,
+        };
+        let (s, len) = (run.start, (run.z1 - run.z0 + 1) as usize);
+        let water = MatId::WATER.0;
+        above.clear();
+        above.resize(len, !water);
+        if let Some(a) = zr.row(Some(run.x), run.y.checked_add(1)) {
+            let (lo, hi) = (run.z0.max(a.z0), run.z1.min(a.z1));
+            if lo <= hi {
+                let m = (hi - lo + 1) as usize;
+                let off = (lo - run.z0) as usize;
+                let at = a.start + (lo - a.z0) as usize;
+                for (d, u) in above[off..off + m].iter_mut().zip(&self.mat[at..at + m]) {
+                    *d = u.0;
                 }
+            }
+        }
+        let (wv, hot) = (u8x16_splat(water), i32x4_splat(200));
+        let mut k0 = 0;
+        while k0 < len {
+            let mut bits: u32 = if k0 + 16 <= len {
+                let m: &[MatId; 16] = self.mat[s + k0..s + k0 + 16].try_into().expect("16");
+                let row = u8x16(
+                    m[0].0, m[1].0, m[2].0, m[3].0, m[4].0, m[5].0, m[6].0, m[7].0, m[8].0, m[9].0,
+                    m[10].0, m[11].0, m[12].0, m[13].0, m[14].0, m[15].0,
+                );
+                let q = &self.q[s + k0..s + k0 + 16];
+                // SAFETY: `above` has `len >= k0 + 16` bytes and `q` is 16 i32 (64 bytes),
+                // so every load is in bounds; `v128_load` has no alignment requirement.
+                let (up, g) = unsafe {
+                    let qp = q.as_ptr().cast::<v128>();
+                    let g = [0, 1, 2, 3].map(|j| i32x4_gt(v128_load(qp.add(j)), hot));
+                    (v128_load(above.as_ptr().add(k0).cast::<v128>()), g)
+                };
+                let gt = i8x16_narrow_i16x8(
+                    i16x8_narrow_i32x4(g[0], g[1]),
+                    i16x8_narrow_i32x4(g[2], g[3]),
+                );
+                let cand = v128_and(v128_andnot(u8x16_eq(row, wv), u8x16_eq(up, wv)), gt);
+                u32::from(i8x16_bitmask(cand))
+            } else {
+                let mut b = 0u32;
+                for k in k0..len {
+                    let i = s + k;
+                    let f = (self.mat[i] == MatId::WATER) & (above[k] != water) & (self.q[i] > 200);
+                    b |= u32::from(f) << (k - k0);
+                }
+                b
+            };
+            while bits != 0 {
+                let i = s + k0 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
                 if self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
                     self.set_mat(i, MatId::AIR);
                     self.vapor += 1;
@@ -2396,6 +2484,7 @@ impl ChemWorld {
                     rep.evaporated += 1;
                 }
             }
+            k0 += 16;
         }
     }
 
