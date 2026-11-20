@@ -1042,6 +1042,9 @@ impl ChemWorld {
             // The z-runs tile the domain in index order (the topology is dropped whenever the
             // cells change), so walking them visits the same cells in the same order without
             // reading the 24-byte coordinates.
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            self.books_occupancy_transposed(&rows.runs)?;
+            #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
             for run in &rows.runs {
                 let mats = &self.mat[run.start..=run.start + (run.z1 - run.z0) as usize];
                 let mut off = 0usize;
@@ -1092,6 +1095,90 @@ impl ChemWorld {
         let e = totals.energy_drift;
         if e != 0 {
             return Err(BooksError::EnergyDrift(e));
+        }
+        Ok(())
+    }
+
+    /// §6aj, wasm: the z-run occupancy walk of [`Self::check_books_with`], the same cells in
+    /// the same order with the same first failure. A cell's bit is read from a transposed
+    /// copy of its chunk instead (one 16-bit z column per `(x, y)`, built with simd128 the
+    /// first time a chunk is reached within the current 16-wide x slab, where the walk reads
+    /// each chunk 16 times), and each in-chunk segment of at most 16 cells compares its
+    /// non-air mask with its column's bits at once.
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    fn books_occupancy_transposed(&self, runs: &[p6::ZRun]) -> Result<(), BooksError> {
+        use core::arch::wasm32::{
+            i16x8_ne, u16x8, u16x8_splat, v128, v128_and, v128_or, v128_store,
+        };
+        let Some(first) = runs.first() else {
+            return Ok(());
+        };
+        let (mut y0, mut y1, mut z0, mut z1) = (first.y, first.y, first.z0, first.z1);
+        for r in runs {
+            (y0, y1, z0, z1) = (y0.min(r.y), y1.max(r.y), z0.min(r.z0), z1.max(r.z1));
+        }
+        let (cy0, cz0) = (y0.div_euclid(16), z0.div_euclid(16));
+        let ncz = (z1.div_euclid(16) - cz0 + 1) as usize;
+        let slots = (y1.div_euclid(16) - cy0 + 1) as usize * ncz;
+        // `cols[slot * 256 + x + 16 * y]`: bit `z` is the chunk's bit at local `(x, y, z)`.
+        let mut cols = vec![0u16; slots * 256];
+        let mut built = vec![false; slots];
+        let mut slab = None;
+        let lane = u16x8(1, 2, 4, 8, 16, 32, 64, 128);
+        for run in runs {
+            let cx = run.x.div_euclid(16);
+            if slab != Some(cx) {
+                built.fill(false);
+                slab = Some(cx);
+            }
+            let xy = run.x.rem_euclid(16) as usize + 16 * run.y.rem_euclid(16) as usize;
+            let row = (run.y.div_euclid(16) - cy0) as usize * ncz;
+            let mats = &self.mat[run.start..=run.start + (run.z1 - run.z0) as usize];
+            let mut off = 0usize;
+            while off < mats.len() {
+                let z = run.z0 + off as i64;
+                let slot = row + (z.div_euclid(16) - cz0) as usize;
+                let col = &mut cols[slot * 256..slot * 256 + 256];
+                if !built[slot] {
+                    built[slot] = true;
+                    let (chunk, _) = World::chunk_of(Coord::new(run.x, run.y, z));
+                    match self.world.chunk_words(chunk) {
+                        None => col.fill(0),
+                        Some((_, w)) => {
+                            // Eight `(x, y)` at a time: word `4 * z + g / 8` holds their bits
+                            // `8 * (g % 8)..`, one per lane, for layer `z`.
+                            for (g, out) in col.chunks_exact_mut(8).enumerate() {
+                                let mut acc = u16x8_splat(0);
+                                for (lz, layer) in w.chunks_exact(4).enumerate() {
+                                    let byte = (layer[g / 8] >> (8 * (g % 8))) as u16 & 0xff;
+                                    let on =
+                                        i16x8_ne(v128_and(u16x8_splat(byte), lane), u16x8_splat(0));
+                                    acc = v128_or(acc, v128_and(on, u16x8_splat(1 << lz)));
+                                }
+                                // SAFETY: `out` is 8 u16 (16 bytes) and `v128_store` has no
+                                // alignment requirement.
+                                unsafe { v128_store(out.as_mut_ptr().cast::<v128>(), acc) };
+                            }
+                        }
+                    }
+                }
+                let lz = z.rem_euclid(16) as usize;
+                let n = (16 - lz).min(mats.len() - off);
+                let mut solid = 0u32;
+                for (k, m) in mats[off..off + n].iter().enumerate() {
+                    solid |= u32::from(*m != MatId::AIR) << k;
+                }
+                let bad = solid & !(u32::from(col[xy]) >> lz);
+                if bad != 0 {
+                    let k = bad.trailing_zeros() as i64;
+                    return Err(BooksError::MaterialOnOffBit(Coord::new(
+                        run.x,
+                        run.y,
+                        z + k,
+                    )));
+                }
+                off += n;
+            }
         }
         Ok(())
     }
