@@ -1021,7 +1021,18 @@ impl TickOutcome {
             }
         })?;
         let mut cursor = PREFIX_BEFORE_ATTEMPTS_LEN;
+        let attempts_end = bytes.len().saturating_sub(SUFFIX_AFTER_ATTEMPTS_LEN);
         for index in 0..attempt_count {
+            if cursor >= attempts_end {
+                let expected = cursor
+                    .checked_add(1)
+                    .and_then(|next| next.checked_add(SUFFIX_AFTER_ATTEMPTS_LEN))
+                    .ok_or(TickProtocolError::PayloadLengthOverflow)?;
+                return Err(TickProtocolError::WrongPayloadLength {
+                    expected,
+                    actual: bytes.len(),
+                });
+            }
             let code = bytes[cursor];
             cursor += 1;
             let attempt = match code {
@@ -1031,7 +1042,7 @@ impl TickOutcome {
                     let end = cursor
                         .checked_add(EDIT_CANONICAL_LEN)
                         .ok_or(TickProtocolError::PayloadLengthOverflow)?;
-                    if end > bytes.len().saturating_sub(SUFFIX_AFTER_ATTEMPTS_LEN) {
+                    if end > attempts_end {
                         return Err(TickProtocolError::TruncatedAttempt { index, code });
                     }
                     let edit = Edit::decode_canonical(&bytes[cursor..end])
@@ -2901,5 +2912,56 @@ mod tests {
         assert_eq!(format!("{:x}", Sha256::digest(&payload)), payload_hash);
         assert_eq!(outcome.tag().to_string(), tag);
         assert_eq!(TickOutcome::decode_canonical(&payload), Ok(outcome.clone()));
+    }
+
+    #[test]
+    fn decode_rejects_crafted_mixed_attempts_entering_suffix_without_panicking() {
+        let base = TickOutcome::new(
+            None,
+            0,
+            sequence_tag(TagKind::World, 0x10),
+            sequence_tag(TagKind::Receipt, 0x20),
+            TickInputState::new(
+                TickInputFlags::new(
+                    false, false, false, false, false, false, false, false, false, true, false,
+                ),
+                0.0,
+                0.0,
+                0.0,
+                801,
+                801,
+                1201,
+                801,
+            )
+            .unwrap(),
+            TickActionLedger::empty(),
+            Vec::new(),
+            sequence_tag(TagKind::World, 0x10),
+            sequence_tag(TagKind::Receipt, 0x20),
+            TickCameraState::capture(&Camera::for_observer_spawn()),
+            None,
+            None,
+        )
+        .unwrap();
+        let template = base.encode_canonical();
+        // 469 fixed bytes + 286 extra bytes = 755 total bytes, leaving 286 attempt bytes.
+        // Eleven 26-byte executed delete attempts fill all 286 attempt bytes; the remaining
+        // 275 declared attempts (code 0x00) would cross into the 274-byte suffix and past EOF.
+        let mut crafted = Vec::with_capacity(TICK_OUTCOME_FIXED_PAYLOAD_LEN + 286);
+        crafted.extend_from_slice(&template[..PREFIX_BEFORE_ATTEMPTS_LEN]);
+        crafted[187..195].copy_from_slice(&286_u64.to_be_bytes());
+        let edit_bytes = Edit::new(Operation::Off, Coord::new(1, 0, 0)).encode_canonical();
+        for _ in 0..11 {
+            crafted.push(2);
+            crafted.extend_from_slice(&edit_bytes);
+        }
+        crafted.resize(TICK_OUTCOME_FIXED_PAYLOAD_LEN + 286, 0);
+        assert_eq!(
+            TickOutcome::decode_canonical(&crafted),
+            Err(TickProtocolError::WrongPayloadLength {
+                expected: crafted.len() + 1,
+                actual: crafted.len(),
+            })
+        );
     }
 }

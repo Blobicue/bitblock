@@ -1,5 +1,6 @@
 /target/
 proof/.lake/
+proof/ladderlang-transition-v1/.lake/
 __pycache__/
 mirror-worktree/
 mirror-wt/

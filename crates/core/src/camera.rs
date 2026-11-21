@@ -533,7 +533,8 @@ impl Camera {
         let log_distance = self.observation_distance.ln() - wheel_delta * log_step;
         let distance = log_distance
             .clamp(min_distance.ln(), max_distance.ln())
-            .exp();
+            .exp()
+            .clamp(min_distance, max_distance);
         self.set_observation_distance(distance)
     }
 
@@ -616,7 +617,8 @@ impl Camera {
         let basis = self.basis();
         let camera_x = (pixel_x - f64::from(viewport_width) * 0.5) / focal_length;
         let camera_y = -(pixel_y - f64::from(viewport_height) * 0.5) / focal_length;
-        let direction = (basis.forward + basis.right * camera_x + basis.up * camera_y).normalized();
+        let direction =
+            (basis.forward + basis.right * camera_x + basis.up * camera_y).try_normalized()?;
 
         Some(Ray {
             origin: self.position,
@@ -792,7 +794,8 @@ fn bounds_corners(min: Vec3, max: Vec3) -> [Vec3; 8] {
 }
 
 fn wrap_yaw(yaw_radians: f64) -> f64 {
-    (yaw_radians + PI).rem_euclid(TAU) - PI
+    let wrapped = (yaw_radians + PI).rem_euclid(TAU) - PI;
+    if wrapped >= PI { -PI } else { wrapped }
 }
 
 fn clamp_pitch(pitch_radians: f64) -> f64 {
@@ -1139,5 +1142,30 @@ mod tests {
             Vec3::new(-1.0, -1.0, 5.0),
             Vec3::new(f64::INFINITY, 1.0, 6.0),
         ));
+    }
+
+    #[test]
+    fn wrap_yaw_stays_strictly_below_pi_and_ray_for_pixel_handles_huge_finite_coords() {
+        let one_ulp_below_neg_pi = f64::from_bits(0xc009_21fb_5444_2d19);
+        let wrapped = wrap_yaw(one_ulp_below_neg_pi);
+        assert!(
+            (-PI..PI).contains(&wrapped),
+            "wrapped yaw {wrapped:?} must lie in [-PI, PI)"
+        );
+        assert_eq!(wrapped, -PI);
+
+        let mut camera = Camera::for_observer_spawn();
+        camera.rotate(one_ulp_below_neg_pi, 0.0);
+        assert!((-PI..PI).contains(&camera.yaw_radians()));
+
+        let clamped = camera.dolly_clamped(
+            10_000.0,
+            DEFAULT_DOLLY_LOG_STEP,
+            MIN_OBSERVATION_DISTANCE,
+            MAX_OBSERVATION_DISTANCE,
+        );
+        assert!((MIN_OBSERVATION_DISTANCE..=MAX_OBSERVATION_DISTANCE).contains(&clamped));
+
+        assert_eq!(camera.ray_for_pixel(1.0e200, 1.0e200, 801, 801), None);
     }
 }

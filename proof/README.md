@@ -27,6 +27,14 @@ Powered theorems separate left-associated PAIR, reversed-bit, and left-list
 mutants even though their costs can coincide. Its SK syntax has no evaluator:
 the results do not establish executable edit semantics.
 
+`BitblockProof.ChunkRefinement` proves the arithmetic bijection between 3D
+signed coordinates and `(ChunkCoord, localIndex)` under Euclidean division by
+16 (`div_euclid`/`rem_euclid`), `i64` chunk-coordinate range bounds, depth-1
+octant parent/child division, linear `0..4096` local voxel flattening, and a
+negative control showing truncated division (`tdiv`/`tmod`) breaks `-1`. It
+proves coordinate-mapping arithmetic only, not a full chunked `HashMap`
+simulation refinement.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own
@@ -37,8 +45,11 @@ not a claim that the two repositories share a verified compiler.
 `ladderlang-transition-v1/` is a separate, self-contained copy of the exact
 two-source transitive closure needed to run a finite one-bit transition truth
 table under LadderLang's actual bounded reducer. Its verifier checks copied
-source SHA-256 values before building. It retains `HOLD`, `RAN`, and `GREW`
-outcomes, and is not a Rust refinement or general semantic bridge.
+source SHA-256 values before building (`verify.ps1` on Windows, or manifest
+SHA-256 verification + `lake build` + `lake env lean --trust=0
+BitblockLadderTransition.lean` on Linux/macOS, also enforced in CI). It retains
+`HOLD`, `RAN`, and `GREW` outcomes, and is not a Rust refinement or general
+semantic bridge.
 
 These are abstract mathematical models. They do not prove that the Rust world,
 renderer, hash/receipt encoding, network, or consensus implementation refines

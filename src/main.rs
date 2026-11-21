@@ -343,7 +343,7 @@ fn load_startup_mode() -> Result<StartupMode, Box<dyn Error>> {
         .into());
     }
 
-    let source = std::fs::read_to_string(&path)?;
+    let source = read_bounded_utf8(&path, HEADLESS_SIMULATION_MAX_SOURCE_BYTES)?;
     // A startup program's edits are all submitted to the first tick, so a program
     // larger than one tick can account for is refused here rather than panicking
     // later inside the fold.
@@ -579,6 +579,7 @@ fn optional_u64(value: Option<u64>) -> String {
 struct Display {
     surface: WindowsPixelSurface,
     window: Arc<Window>,
+    surface_sized: bool,
 }
 
 #[cfg(not(windows))]
@@ -587,6 +588,7 @@ struct Display {
     surface: Surface<Arc<Window>, Arc<Window>>,
     _context: Context<Arc<Window>>,
     window: Arc<Window>,
+    surface_sized: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -1376,12 +1378,14 @@ fn retained_successors(
     Ok(retained.into_boxed_slice())
 }
 
+#[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
 enum SubmitFrameError<E> {
     Backend(E),
     Protocol(FrameProtocolError),
 }
 
+#[cfg(test)]
 fn submit_and_record<E>(
     ledger: &mut FrameLedger,
     pending: PendingRenderedFrame,
@@ -1402,6 +1406,7 @@ fn submit_and_record<E>(
     })
 }
 
+#[cfg(test)]
 fn submit_pair_and_record<E>(
     game_ledger: &mut FrameLedger,
     output_ledger: &mut FrameLedger,
@@ -1436,6 +1441,34 @@ enum LiveFrameSubmissionError<E> {
     V2(FramePairAdmissionV2Error<E>),
 }
 
+fn prepare_legacy_receipt(
+    ledger: &FrameLedger,
+    pending: PendingRenderedFrame,
+) -> Result<FrameReceipt, FrameProtocolError> {
+    let receipt = FrameReceipt::new(
+        pending.parent,
+        pending.source_tick,
+        pending.input,
+        pending.frame.tag,
+    )?;
+    let expected_parent = ledger.head();
+    if receipt.parent() != expected_parent {
+        return Err(FrameProtocolError::ParentMismatch {
+            expected: expected_parent,
+            actual: receipt.parent(),
+        });
+    }
+    if let Some(previous) = ledger.receipts().last()
+        && receipt.source_tick() <= previous.source_tick()
+    {
+        return Err(FrameProtocolError::NonIncreasingTick {
+            previous: previous.source_tick(),
+            next: receipt.source_tick(),
+        });
+    }
+    Ok(receipt)
+}
+
 fn submit_live_frame_pair<E>(
     outcomes: &[TickOutcome],
     game_ledger: &mut FrameLedger,
@@ -1457,19 +1490,12 @@ fn submit_live_frame_pair<E>(
     )
     .map_err(LiveFrameSubmissionError::Pending)?;
 
-    let mut next_game_ledger = game_ledger.clone();
-    let mut next_output_ledger = output_ledger.clone();
-    let (legacy_game, legacy_output) = submit_pair_and_record(
-        &mut next_game_ledger,
-        &mut next_output_ledger,
-        game,
-        output,
-        || Ok::<(), std::convert::Infallible>(()),
-    )
-    .map_err(|error| match error {
-        SubmitFrameError::Backend(never) => match never {},
-        SubmitFrameError::Protocol(source) => LiveFrameSubmissionError::Legacy(source),
-    })?;
+    let prepared_game_receipt = game
+        .map(|pending| prepare_legacy_receipt(game_ledger, pending))
+        .transpose()
+        .map_err(LiveFrameSubmissionError::Legacy)?;
+    let prepared_output_receipt =
+        prepare_legacy_receipt(output_ledger, output).map_err(LiveFrameSubmissionError::Legacy)?;
 
     let LiveFrameLedgersV2 {
         game: game_v2,
@@ -1497,8 +1523,26 @@ fn submit_live_frame_pair<E>(
     )
     .map_err(LiveFrameSubmissionError::V2)?;
 
-    *game_ledger = next_game_ledger;
-    *output_ledger = next_output_ledger;
+    let legacy_game = match (game, prepared_game_receipt) {
+        (Some(pending), Some(receipt)) => {
+            let committed = *game_ledger
+                .append(receipt)
+                .expect("prevalidated legacy game receipt must append");
+            Some(LegacyPresentedFrameObservation {
+                legacy_receipt: committed,
+                frame: pending.frame,
+            })
+        }
+        (None, None) => None,
+        _ => unreachable!("prepared legacy game receipt presence must match pending game frame"),
+    };
+    let committed_output = *output_ledger
+        .append(prepared_output_receipt)
+        .expect("prevalidated legacy composite receipt must append");
+    let legacy_output = LegacyPresentedFrameObservation {
+        legacy_receipt: committed_output,
+        frame: output.frame,
+    };
     let presented_game = match (legacy_game, receipts_v2.game()) {
         (Some(legacy), Some(receipt_v2)) => Some(PresentedFrameObservation {
             legacy_receipt: legacy.legacy_receipt,
@@ -1613,6 +1657,8 @@ struct App {
     display: Option<Display>,
     world: World,
     history: History,
+    verified_world_revision: u64,
+    verified_world_tag: ContentTag,
     camera: Camera,
     renderer: Renderer,
     compositor: FrameCompositor,
@@ -1711,10 +1757,14 @@ impl App {
         }
         let world = World::new();
         let history = History::new(&world);
+        let verified_world_revision = world.revision();
+        let verified_world_tag = history.current_world();
         Self {
             display: None,
             world,
             history,
+            verified_world_revision,
+            verified_world_tag,
             camera: Camera::for_observer_spawn(),
             renderer: Renderer::new(INITIAL_VIEWPORT, INITIAL_VIEWPORT),
             compositor: FrameCompositor::new(
@@ -1904,6 +1954,7 @@ impl App {
                 .surface
                 .resize(width, height)
                 .expect("failed to resize physical-pixel surface");
+            display.surface_sized = true;
         }
         let sidebar_width = SIDEBAR_WIDTH.min(size.width.saturating_sub(1));
         let simulation_width = size.width - sidebar_width;
@@ -2058,11 +2109,17 @@ impl App {
             .try_reserve(1)
             .expect("fixed tick must reserve its outcome-history slot before mutating state");
         let pre_world = self.history.current_world();
-        assert_eq!(
-            world_tag(&self.world),
-            pre_world,
-            "live world diverged from coordinate-history identity before the fixed tick"
-        );
+        if self.world.revision() != self.verified_world_revision
+            || pre_world != self.verified_world_tag
+        {
+            assert_eq!(
+                world_tag(&self.world),
+                pre_world,
+                "live world diverged from coordinate-history identity before the fixed tick"
+            );
+            self.verified_world_revision = self.world.revision();
+            self.verified_world_tag = pre_world;
+        }
         let pre_history = self.history.head();
         let tick_input = TickInputState::new(
             TickInputFlags::new(
@@ -2161,6 +2218,8 @@ impl App {
             Some(receipt) => receipt.post_world(),
             None => pre_world,
         };
+        self.verified_world_revision = self.world.revision();
+        self.verified_world_tag = post_world;
         self.last_tick_batch = Some(batch);
         debug_assert_eq!(
             world_tag(&self.world),
@@ -2378,6 +2437,9 @@ impl App {
         let Some(display) = self.display.as_mut() else {
             return;
         };
+        if !display.surface_sized {
+            return;
+        }
         let frame = FrameRef::new(
             self.compositor.width(),
             self.compositor.height(),
@@ -2423,7 +2485,7 @@ impl App {
         #[cfg(all(windows, feature = "protocol-research"))]
         let mut presentation_timing = None;
         #[cfg(windows)]
-        let submitted = submit_live_frame_pair(
+        let submitted = match submit_live_frame_pair(
             &self.tick_outcomes,
             &mut self.frame_ledger,
             &mut self.output_frame_ledger,
@@ -2455,10 +2517,15 @@ impl App {
                     }
                 })
             },
-        )
-        .unwrap_or_else(|error| panic!("failed to submit canonical v2 frame pair: {error:?}"));
+        ) {
+            Ok(pair) => pair,
+            Err(error) => {
+                eprintln!("live-present-failed\t{error:?}");
+                return;
+            }
+        };
         #[cfg(not(windows))]
-        let submitted = submit_live_frame_pair(
+        let submitted = match submit_live_frame_pair(
             &self.tick_outcomes,
             &mut self.frame_ledger,
             &mut self.output_frame_ledger,
@@ -2468,8 +2535,13 @@ impl App {
             game_pending,
             output_pending,
             |_| buffer.present(),
-        )
-        .unwrap_or_else(|error| panic!("failed to submit canonical v2 frame pair: {error:?}"));
+        ) {
+            Ok(pair) => pair,
+            Err(error) => {
+                eprintln!("live-present-failed\t{error:?}");
+                return;
+            }
+        };
         let PresentedFramePair {
             game: presented_game,
             output: presented_output,
@@ -3701,6 +3773,8 @@ fn disable_window_corner_clipping(window: &Window) -> Result<(), i32> {
         return Err(-1);
     };
     let preference = DWMWCP_DONOTROUND;
+    // SAFETY: `hwnd` is owned by the live `window` reference and `preference` is a valid stack
+    // `i32` whose exact byte size is passed to `DwmSetWindowAttribute`.
     let result = unsafe {
         DwmSetWindowAttribute(
             hwnd,
@@ -3769,7 +3843,11 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         #[cfg(windows)]
         {
-            self.display = Some(Display { surface, window });
+            self.display = Some(Display {
+                surface,
+                window,
+                surface_sized: false,
+            });
         }
         #[cfg(not(windows))]
         {
@@ -3777,6 +3855,7 @@ impl ApplicationHandler for App {
                 surface,
                 _context: context,
                 window,
+                surface_sized: false,
             });
         }
         self.apply_infallible_accepted_action(AcceptedAction::Resize(size.width, size.height));

@@ -242,8 +242,7 @@ impl OctreeInternalNodeV1 {
 
     /// Computes the canonical `ContentTag` for this `OctreeInternalNodeV1`.
     pub fn tag(&self) -> ContentTag {
-        let payload_len =
-            INTERNAL_NODE_HEADER_LEN as u64 + 32 * (self.child_mask.count_ones() as u64);
+        let payload_len = self.encoded_len() as u64;
         hash_canonical(
             TagKind::World,
             OCTREE_INTERNAL_NODE_V1_SCHEMA,
@@ -1451,5 +1450,18 @@ mod tests {
             far_octree.root_tag().to_string(),
             "#bb.world.sha256.j2yx5roy6ct2pmqnvnzrx72gsm7rmi3o7zol2p6sokh76lahiyaa"
         );
+    }
+
+    #[test]
+    fn internal_node_tag_matches_encoded_len_without_panicking_on_mismatched_fields() {
+        let malformed = OctreeInternalNodeV1 {
+            branch_depth: 0,
+            prefix_bits_180b: [0u8; 23],
+            child_mask: 0b0000_0011,
+            child_digests: vec![[0xaa; 32]],
+        };
+        assert!(!malformed.is_canonical());
+        let tag = malformed.tag();
+        assert_eq!(tag.kind(), TagKind::World);
     }
 }

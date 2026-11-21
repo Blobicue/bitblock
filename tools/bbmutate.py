@@ -81,19 +81,26 @@ def main(argv: list[str]) -> int:
         return 2
 
     wanted = set(argv[1:])
+    windows_only = {"windows_present", "windows_timing", "windows_topology"}
     targets = []
+    skipped_platform = []
     for path in sorted(p for d in SRC_DIRS for p in d.glob("*.rs")):
         if wanted and path.stem not in wanted:
             continue
         text = path.read_text(encoding="utf-8")
         edge = test_boundary(text.splitlines())
         if "to_be_bytes()" in "\n".join(text.splitlines()[:edge]):
+            if sys.platform != "win32" and path.stem in windows_only:
+                skipped_platform.append(path.stem)
+                continue
             targets.append(path)
     if not targets:
         print("bbmutate: no module in scope has a canonical encoder to mutate")
         return 2
 
     print("bbmutate  %d modules, one whole-module byte-order flip each" % len(targets))
+    if skipped_platform:
+        print("  skipped on %s (cfg(windows)): %s" % (sys.platform, ", ".join(skipped_platform)))
     print("  a KILLED module has its canonical bytes pinned; a SURVIVED one does not\n")
     killed, survived, broken = [], [], []
     started = time.time()

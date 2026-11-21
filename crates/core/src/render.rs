@@ -1540,7 +1540,7 @@ pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> 
 pub fn coord_containing(point: Vec3) -> Option<Coord> {
     fn axis(value: f64) -> Option<i64> {
         let centered = (value + 0.5).floor();
-        (centered.is_finite() && centered >= i64::MIN as f64 && centered <= i64::MAX as f64)
+        (centered.is_finite() && centered >= i64::MIN as f64 && centered < i64::MAX as f64)
             .then_some(centered as i64)
     }
 
@@ -3559,5 +3559,17 @@ mod tests {
                 "sweep_point mismatch on trial {trial}"
             );
         }
+    }
+
+    #[test]
+    fn coord_containing_rejects_two_to_the_63_saturation() {
+        let two_pow_63 = i64::MAX as f64;
+        assert_eq!(coord_containing(Vec3::new(two_pow_63, 0.0, 0.0)), None);
+        assert_eq!(coord_containing(Vec3::new(0.0, two_pow_63, 0.0)), None);
+        assert_eq!(coord_containing(Vec3::new(0.0, 0.0, two_pow_63)), None);
+        assert_eq!(
+            coord_containing(Vec3::new(i64::MIN as f64, 0.0, 0.0)),
+            Some(Coord::new(i64::MIN, 0, 0))
+        );
     }
 }

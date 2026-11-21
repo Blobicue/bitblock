@@ -1,7 +1,8 @@
 //! Exclusive-writer filesystem journal for canonical storage records.
 //!
 //! The journal is deliberately narrower than a database. On Windows it retains one read/write
-//! handle opened with sharing disabled, appends one fully encoded [`StorageRecord`] at the
+//! handle opened with sharing disabled; on Unix it retains one non-symlink handle locked with
+//! non-blocking `flock(LOCK_EX | LOCK_NB)`. It appends one fully encoded [`StorageRecord`] at the
 //! verified end of file, calls [`std::fs::File::sync_all`], and only then publishes the new local
 //! head. Recovery admits the longest canonical parent-linked prefix and exposes the entire
 //! rejected suffix. It never truncates, skips, or resynchronizes automatically.
@@ -1033,10 +1034,14 @@ fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
 
 #[cfg(unix)]
 fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     use std::os::unix::io::AsRawFd;
 
     let mut options = OpenOptions::new();
-    options.read(true).write(true);
+    options
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     let phase = if create_new {
         options.create_new(true);
         JournalIoPhase::CreateNew
@@ -1047,10 +1052,33 @@ fn open_exclusive(path: &Path, create_new: bool) -> Result<File, JournalError> {
         .open(path)
         .map_err(|source| JournalError::Io { phase, source })?;
 
-    let res = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    if res != 0 {
+    loop {
+        // SAFETY: `file` owns a live file descriptor for the duration of this call.
+        let res = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if res == 0 {
+            break;
+        }
         let source = io::Error::last_os_error();
+        if source.kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
         return Err(JournalError::Io { phase, source });
+    }
+
+    // Confirm the locked fd still refers to the same inode at `path` (closes open->flock TOCTOU).
+    let fd_meta = file
+        .metadata()
+        .map_err(|source| JournalError::Io { phase, source })?;
+    let path_meta =
+        std::fs::symlink_metadata(path).map_err(|source| JournalError::Io { phase, source })?;
+    if fd_meta.dev() != path_meta.dev() || fd_meta.ino() != path_meta.ino() {
+        return Err(JournalError::Io {
+            phase,
+            source: io::Error::new(
+                io::ErrorKind::ResourceBusy,
+                "journal path changed before exclusive lock completed",
+            ),
+        });
     }
     Ok(file)
 }
@@ -1067,9 +1095,8 @@ impl fmt::Display for JournalError {
             Self::Io { phase, source } => {
                 write!(formatter, "journal {phase:?} I/O failed: {source}")
             }
-            Self::UnsupportedExclusivePlatform => {
-                formatter.write_str("exclusive journal custody is implemented only on Windows")
-            }
+            Self::UnsupportedExclusivePlatform => formatter
+                .write_str("exclusive journal custody is implemented only on Windows and Unix"),
             Self::NotRegularFile => formatter.write_str("journal handle is not a regular file"),
             Self::FileTooLarge { actual, max } => {
                 write!(formatter, "journal has {actual} bytes; read cap is {max}")
