@@ -2,7 +2,7 @@
 /**
  * Automated V8 WebAssembly byte-exact parity verifier for bitblock-wasm.
  *
- * Extracts all 35 pinned known-answer constants directly from
+ * Extracts all 39 pinned known-answer constants directly from
  * `crates/wasm/www/bitblock-lab.html` (single source of truth; no duplicated
  * `#bb.*` literals here), instantiates a `wasm32-unknown-unknown` binary under
  * V8, and asserts:
@@ -22,7 +22,8 @@
  *   5. All 3 browser storage carriers (`journal`, `history`, `display`) clean
  *      roundtrips plus numeric torn-tail truncation, header-corruption, and
  *      empty-carrier negative controls.
- *   6. All 13 `bitblock_research_*` known-answer digests.
+ *   6. All 17 `bitblock_research_*` known-answer digests (covering 20/20
+ *      portable `bitblock-research` modules together with the 3 storage stores).
  *   7. Chem simulation step execution (`bitblock_play_chem_step` drained via
  *      `bitblock_play_tick`), asserting `tick >= 2`, `queued=0`, `space_q > 0`,
  *      `books=ok`, `energy_drift=0`, all 12 element lane drifts == 0,
@@ -88,6 +89,10 @@ const REQUIRED_CONSTANTS = [
   "RESEARCH_OPTIMIZATION",
   "RESEARCH_PRESENTATION_OUTPUT",
   "RESEARCH_PRESENTATION_OUTPUT_V2",
+  "RESEARCH_COMMIT_R1",
+  "RESEARCH_OCTREE_COMMIT",
+  "RESEARCH_SCALE_ASSAY",
+  "RESEARCH_LOCAL_BOUNDS",
 ];
 
 function usage() {
@@ -680,7 +685,7 @@ async function main() {
     pass(`storage-${store}-and-negatives`);
   }
 
-  // 9. All 13 bitblock_research_* exports
+  // 9. All 17 bitblock_research_* exports (20/20 portable bitblock-research modules with storage)
   const researchCases = [
     ["RESEARCH_STORAGE", "bitblock_research_storage", K.RESEARCH_STORAGE],
     ["RESEARCH_SEQUENTIAL", "bitblock_research_sequential", K.RESEARCH_SEQUENTIAL],
@@ -703,6 +708,10 @@ async function main() {
       "bitblock_research_presentation_output_v2",
       K.RESEARCH_PRESENTATION_OUTPUT_V2,
     ],
+    ["RESEARCH_COMMIT_R1", "bitblock_research_commit_r1", K.RESEARCH_COMMIT_R1],
+    ["RESEARCH_OCTREE_COMMIT", "bitblock_research_octree_commit", K.RESEARCH_OCTREE_COMMIT],
+    ["RESEARCH_SCALE_ASSAY", "bitblock_research_scale_assay", K.RESEARCH_SCALE_ASSAY],
+    ["RESEARCH_LOCAL_BOUNDS", "bitblock_research_local_bounds", K.RESEARCH_LOCAL_BOUNDS],
   ];
   for (const [label, fnName, expected] of researchCases) {
     const status = readUtf8(ex[fnName](), "bitblock_research_ptr");
@@ -843,7 +852,7 @@ async function main() {
 
   const elapsedMs = (performance.now() - started).toFixed(0);
   console.log(
-    `wasm_parity_check PASS: abi=${EXPECTED_ABI}, 35/35 known-answer constants, ` +
+    `wasm_parity_check PASS: abi=${EXPECTED_ABI}, ${REQUIRED_CONSTANTS.length}/${REQUIRED_CONSTANTS.length} known-answer constants, ` +
       `${checks} check groups, wasm=${path.relative(ROOT, wasmPath)} (${wasmBytes.length} bytes, ` +
       `sha256=${wasmSha.slice(0, 16)}…${embeddedNote}) in ${elapsedMs}ms`
   );

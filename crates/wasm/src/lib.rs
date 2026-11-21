@@ -27,9 +27,16 @@ use bitblock_core::protocol::{ContentTag, hash_canonical};
 use bitblock_core::render::{Renderer, bounds_aabb, coord_containing, raycast};
 use bitblock_core::sidebar::{DisplayStatus, FrameCompositor, SidebarSnapshot};
 use bitblock_core::world::{Coord, World, is_bedrock};
+use bitblock_research::commit_r1::{
+    CoordinateKeyV1, MerklePatriciaTrie, MortonGapStreamV1, MortonKeyV1, SparseMerkleTree,
+};
 use bitblock_research::coordinate_episode::CoordinateEpisodeEvidence;
 use bitblock_research::display_artifact::DisplayCaptureArtifact;
 use bitblock_research::ladder_bridge::quote_edit;
+use bitblock_research::local_bounds::LocalStorageProfile;
+use bitblock_research::octree_commit::{
+    OctreePointProofV1, SparseOctreeV1, VerkleR1FeasibilityReportV1,
+};
 use bitblock_research::output_color::OutputColorObservation;
 use bitblock_research::output_topology::{
     AcquisitionAttempt, AcquisitionFacts, OutputTopologyObservation,
@@ -45,6 +52,7 @@ use bitblock_research::replay_evidence::{
     LocalReplayBuild, LocalReplayContext, LocalReplayEndpoint, LocalReplayEvidence,
     ReplayFrameCommitment,
 };
+use bitblock_research::scale_assay::ScaleWorkloadReportV1;
 use bitblock_research::sequential::{
     open_local_mode_tag, sequential_function_tag, sequential_mode_tag,
 };
@@ -895,6 +903,160 @@ pub fn research_output_topology_status() -> String {
     )
 }
 
+/// `COMMIT-R1` SMT/MPT world roots, 3-key inclusion proofs (with cross-key spoof rejection),
+/// Morton key, and 5-key `MortonGapStreamV1` pinned by `tools/commit_r1_vectors.py`.
+pub fn research_commit_r1_status() -> String {
+    let bedrock = World::new();
+    let bedrock_smt = SparseMerkleTree::from_world(&bedrock);
+    let bedrock_mpt = MerklePatriciaTrie::from_world(&bedrock);
+
+    let mut three = World::new();
+    let q_coord = Coord::new(1, 2, 3);
+    let other_coord = Coord::new(4, 5, 6);
+    three.set_on(q_coord);
+    three.set_on(other_coord);
+    let smt_3 = SparseMerkleTree::from_world(&three);
+    let mpt_3 = MerklePatriciaTrie::from_world(&three);
+    let q_key = CoordinateKeyV1::from_coord(q_coord);
+    let other_key = CoordinateKeyV1::from_coord(other_coord);
+    let smt_proof = smt_3.prove(&q_key);
+    if !SparseMerkleTree::verify_proof(smt_3.root(), &q_key, &smt_proof) {
+        panic!("commit_r1 SMT 3-key proof did not verify");
+    }
+    let mpt_proof = mpt_3.prove(&q_key);
+    if MerklePatriciaTrie::verify_proof(mpt_3.root(), &q_key, &mpt_proof) != Some(true) {
+        panic!("commit_r1 Patricia 3-key proof did not verify");
+    }
+    if MerklePatriciaTrie::verify_proof(mpt_3.root(), &other_key, &mpt_proof).is_some() {
+        panic!("commit_r1 Patricia proof accepted spoofed coordinate");
+    }
+
+    let zero_morton = MortonKeyV1::from_coord(Coord::new(0, 0, 0));
+    let stream_coords = [
+        Coord::new(0, 0, 0),
+        Coord::new(-1, -1, -1),
+        Coord::new(-16, -16, -16),
+        Coord::new(-17, 0, 15),
+        Coord::new(1, 2, 3),
+    ];
+    let gap_stream = MortonGapStreamV1::from_coords(&stream_coords).expect("5-key gap stream");
+    let encoded_gap = gap_stream.encode();
+    let decoded_gap = MortonGapStreamV1::decode(&encoded_gap).expect("gap stream decodes");
+    if decoded_gap.tag() != gap_stream.tag() {
+        panic!("MortonGapStreamV1 tag did not round-trip");
+    }
+
+    format!(
+        "bitblock_browser_research ok module=commit_r1 smt={} patricia={} smt_proof={} patricia_proof={} morton={} gap_stream={} gap_bytes={}",
+        bedrock_smt.root_tag(),
+        bedrock_mpt.root_tag(),
+        smt_proof.proof_tag(),
+        mpt_proof.proof_tag(),
+        zero_morton.tag(),
+        gap_stream.tag(),
+        encoded_gap.len(),
+    )
+}
+
+/// Arity-8 `SparseOctreeV1` roots, multi-chunk point proof (with absence & spoof negative
+/// controls), and `VerkleR1FeasibilityReportV1` pinned by `tools/octree_commit_vectors.py`.
+pub fn research_octree_commit_status() -> String {
+    let empty_tree = SparseOctreeV1::empty();
+    let origin_tree = SparseOctreeV1::from_world(&World::new());
+
+    let mut multi_world = World::new();
+    for coord in [
+        Coord::new(-17, 2, 15),
+        Coord::new(-16, -16, -16),
+        Coord::new(32, 48, -16),
+        Coord::new(33, 48, -16),
+        Coord::new(64, 48, -16),
+    ] {
+        multi_world.set_on(coord);
+    }
+    let multi_tree = SparseOctreeV1::from_world(&multi_world);
+    let present_proof = multi_tree.prove(Coord::new(33, 48, -16));
+    if SparseOctreeV1::verify_proof(multi_tree.root(), &present_proof) != Some(true) {
+        panic!("octree_commit present proof did not verify");
+    }
+    let encoded_proof = present_proof.encode();
+    let decoded_proof =
+        OctreePointProofV1::decode(&encoded_proof).expect("octree point proof decodes");
+    if decoded_proof != present_proof {
+        panic!("octree_commit point proof did not round-trip");
+    }
+    let absent_proof = multi_tree.prove(Coord::new(35, 48, -16));
+    if SparseOctreeV1::verify_proof(multi_tree.root(), &absent_proof) != Some(false) {
+        panic!("octree_commit absent proof did not verify");
+    }
+    let mut spoofed = present_proof.clone();
+    spoofed.query_coord = Coord::new(32, -48, -16);
+    if SparseOctreeV1::verify_proof(multi_tree.root(), &spoofed).is_some() {
+        panic!("octree_commit accepted spoofed coordinate");
+    }
+
+    let verkle = VerkleR1FeasibilityReportV1::canonical();
+    if !verkle.is_canonical() {
+        panic!("VerkleR1FeasibilityReportV1::canonical() was not canonical");
+    }
+    let verkle_bytes = verkle.encode();
+
+    format!(
+        "bitblock_browser_research ok module=octree_commit empty={} origin={} multi={} proof={} verkle={} verkle_bytes={}",
+        empty_tree.root_tag(),
+        origin_tree.root_tag(),
+        multi_tree.root_tag(),
+        present_proof.tag(),
+        verkle.tag(),
+        verkle_bytes.len(),
+    )
+}
+
+/// `SCALE-1` comparative workload assay report (`ScaleWorkloadReportV1::canonical()`)
+/// pinned by `tools/scale_assay_vectors.py`.
+pub fn research_scale_assay_status() -> String {
+    let report = ScaleWorkloadReportV1::canonical();
+    report.validate().expect("canonical scale assay validates");
+    let encoded = report.encode();
+    let decoded = ScaleWorkloadReportV1::decode(&encoded).expect("scale assay decodes");
+    if decoded != report {
+        panic!("scale_assay report did not round-trip");
+    }
+    format!(
+        "bitblock_browser_research ok module=scale_assay report={} bytes={} workloads={} dense_buried={} sparse_octants={}",
+        report.tag(),
+        encoded.len(),
+        report.entries.len(),
+        report.entries[1].fully_buried_voxels_u64,
+        report.entries[4].active_root_octants_u64,
+    )
+}
+
+/// `LOCAL-BOUNDS-1` default storage profile (`LocalStorageProfile::DEFAULT`) and checked
+/// staged-allocation bounds pinned by `tools/local_bounds_vectors.py`.
+pub fn research_local_bounds_status() -> String {
+    let profile = LocalStorageProfile::DEFAULT;
+    let encoded = profile.encode_canonical();
+    let decoded = LocalStorageProfile::decode_canonical(&encoded).expect("local bounds decodes");
+    if decoded != profile {
+        panic!("local_bounds profile did not round-trip");
+    }
+    if profile.check_staged_allocation(4, 1024) != Ok(4096) {
+        panic!("local_bounds valid staged allocation rejected");
+    }
+    if profile.check_staged_allocation(u64::MAX, 2).is_ok() {
+        panic!("local_bounds overflow staged allocation accepted");
+    }
+    format!(
+        "bitblock_browser_research ok module=local_bounds profile={} bytes={} max_record={} max_staged={} max_history={}",
+        profile.tag(),
+        encoded.len(),
+        profile.max_record_bytes,
+        profile.max_staged_write_bytes,
+        profile.max_retained_history_records,
+    )
+}
+
 /// Origin-world render plus [`FrameCompositor`] at 1201×801. No native window.
 pub struct SidebarComposite {
     pub frame_tag: ContentTag,
@@ -1400,6 +1562,26 @@ pub extern "C" fn bitblock_research_presentation_output() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn bitblock_research_presentation_output_v2() -> u32 {
     publish_research(&gap::research_presentation_output_v2_status())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_research_commit_r1() -> u32 {
+    publish_research(&research_commit_r1_status())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_research_octree_commit() -> u32 {
+    publish_research(&research_octree_commit_status())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_research_scale_assay() -> u32 {
+    publish_research(&research_scale_assay_status())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_research_local_bounds() -> u32 {
+    publish_research(&research_local_bounds_status())
 }
 
 #[unsafe(no_mangle)]
@@ -2120,6 +2302,9 @@ pub extern "C" fn bitblock_chem_host_out_ptr() -> *const u8 {
 }
 
 #[unsafe(no_mangle)]
+/// 17 (additive, same number): remaining portable research modules — `bitblock_research_commit_r1`,
+/// `_octree_commit`, `_scale_assay`, `_local_bounds` (20/20 portable `bitblock-research` modules
+/// covered; no existing export changed signature).
 /// 17 (additive, same number, §6ah): worker path — main `bitblock_play_chem_remote`,
 /// `_step_lagged`, `_chem_blocked`, `_chem_tick`, `_chem_outbox` / `_outbox_ptr`,
 /// `_chem_inbox_ptr` / `_inbox_commit`; worker `bitblock_chem_host_load`, `_load_budget`,
@@ -2797,6 +2982,46 @@ mod tests {
         assert_eq!(
             status,
             "bitblock_browser_research ok module=physical_sensor policy=#bb.policy.sha256.o5lo24retmb5tnqnsjxh2defm2za6txgcntog5tpzxeannjzd4dq not_applicable=#bb.physical-sensor-observation.sha256.ojrmsd5622e42zrvqwlcelaia5kzrvl3v4b6yglg2s27dmzm4uvq profile=#bb.policy.sha256.wkxyvnyqua22wdm6cbv4nkt3lttnazsbwrq4jse5zrgnyynqob5q challenge=#bb.policy.sha256.5a5ldpfnswugam6677eqhtmu7a34cawh5fhh52chadkudd5apnpq observation=#bb.physical-sensor-observation.sha256.cbwsp5lz3nl4ux3spzakh57ag46takzn4m6yv42tjdmtl45nv2ta"
+        );
+    }
+
+    #[test]
+    fn research_commit_r1_matches_python_vectors() {
+        let status = research_commit_r1_status();
+        assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
+        assert_eq!(
+            status,
+            "bitblock_browser_research ok module=commit_r1 smt=#bb.world.sha256.s62smydfcpkdz2fmdnmmiwn3k5o2uurmtqhhymvtxl5wk73cim3a patricia=#bb.world.sha256.szkkbgkgckrmeembx2lifcleyel2zydi2i4e6lsdi6c3kr25uwcq smt_proof=#bb.receipt.sha256.ke5w46p75ibf4owqccyjxqaryc6dpq3u5lglb7a56upvck4tinia patricia_proof=#bb.receipt.sha256.rjm2d4ykhamhdxkbc3gv2pmeqdgjeiop7gfvq3cf4py4rejonnqq morton=#bb.world.sha256.ml3dfiypdfxv6jfv5stpsau5fmux6wffg3vdw62lul2gmcjc5r7q gap_stream=#bb.receipt.sha256.zs7hrcgejo572r64u3f3m2voxtty62sp242jk7k66ldu55vfou5q gap_bytes=83"
+        );
+    }
+
+    #[test]
+    fn research_octree_commit_matches_python_vectors() {
+        let status = research_octree_commit_status();
+        assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
+        assert_eq!(
+            status,
+            "bitblock_browser_research ok module=octree_commit empty=#bb.world.sha256.5obybgly3kj2356d426gjijnuezscj3rz556r2el3xue7mccedea origin=#bb.world.sha256.lmjzqddt5hcdszpiwkaf3ckxdtk25mcdm4go4zav6i3r4gn6kksa multi=#bb.world.sha256.23yz24urod2pxhthrpvpeumsctsphytdbzjkkayvrguu7evdt3aq proof=#bb.receipt.sha256.uhtkmfstiktj3fnu6kbeon3s5gjp2wq3bhx4rr5load72iy2etva verkle=#bb.receipt.sha256.j3xacn27gfhq6f4wrxvn5upcvvufq5soltxncytvglb2recohp7a verkle_bytes=198"
+        );
+    }
+
+    #[test]
+    fn research_scale_assay_matches_python_vectors() {
+        let status = research_scale_assay_status();
+        assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
+        assert_eq!(
+            status,
+            "bitblock_browser_research ok module=scale_assay report=#bb.receipt.sha256.xq6oxiyyao3khyp3i7r6zbz3zwewouc75btw4s733xp62zeic3ma bytes=929 workloads=5 dense_buried=2744 sparse_octants=9"
+        );
+    }
+
+    #[test]
+    fn research_local_bounds_matches_python_vectors() {
+        let status = research_local_bounds_status();
+        assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
+        assert_eq!(
+            status,
+            "bitblock_browser_research ok module=local_bounds profile=#bb.policy.sha256.gvc7zlvkyaeidfzsivb4xdlx32wc5q7kmfmlk274cd6szzhgfx7a bytes=56 max_record=16777216 max_staged=67108864 max_history=262144"
         );
     }
 
