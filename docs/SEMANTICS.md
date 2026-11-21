@@ -85,9 +85,12 @@ same tick path. The crosshair is drawn into the simulation viewport and identifi
 aimed client-raster pixel.
 
 Scroll depth spans the one-pixel view through a block-filling view. Below the one-pixel
-saturation level, the current correctness-first renderer traverses every on bit and rasterizes
-its projected contribution. This preserves the intended projection semantics but is not yet a
-hierarchical near-infinite renderer: large worlds still cost real traversal time.
+saturation level, the renderer traverses active chunks with conservative frustum culling,
+front-to-back depth ordering, coarse/tile analytically bounded hidden-bit occlusion culling,
+and span rasterization while preserving exact bit-for-bit parity with the unordered reference
+traversal. Raycast and swept-point collision use chunk-bounds AABB pruning with exact reference
+parity. This preserves the intended projection semantics without claiming an unlimited LOD
+renderer: large dense views still cost real traversal and rasterization time.
 
 The live app currently starts with `Camera::for_observer_spawn()` beside the origin at distance
 `1.0`. `Camera::for_single_pixel_voxel()` is an exact reusable constructor for the requested
@@ -137,14 +140,17 @@ evidence that the named bytes match, not an independent claim that those bytes a
 owned, persisted, consensually accepted, or visible as light.
 
 The default binary keeps research/proof surfaces off the hot render path. Optional surfaces cover
-typed storage, local sequential replay, coordinate issuance episodes, presentation artifacts,
-Windows timing/topology/configuration observations, RGB challenge carriers, and a verifier-first
+typed storage, local storage bounds (`local_bounds`), local sequential replay, coordinate issuance
+episodes and occupancy episode ledgers (`coordinate_episode`), side-by-side authenticated-state
+research (`commit_r1`, `octree_commit`, `scale_assay`), presentation artifacts, Windows
+timing/topology/configuration observations, RGB challenge carriers, and a verifier-first
 representation bridge. Each surface keeps unavailable and unbound states explicit.
 
 The Lean capsules prove bounded statements about the abstract coordinate world, edit/replay
-rules, and quoted-byte representation formulas. The LadderLang transition capsule checks a
-separate finite target under its pinned reducer. These capsules do not yet prove that the chunked
-Rust implementation refines the abstract world, that camera floats are exact over all `i64`
+rules, Euclidean chunk/index coordinate bijections (`ChunkRefinement`), and quoted-byte
+representation formulas. The LadderLang transition capsule checks a separate finite target under
+its pinned reducer. These capsules do not yet prove that the chunked Rust `HashMap`/octree
+implementation refines the abstract world, that camera floats are exact over all `i64`
 coordinates, that a physical monitor emitted the raster, or that Bitblock has Proof-of-History,
 Proof-of-Stake, consensus, currency, or Layer 1 status.
 

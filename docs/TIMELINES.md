@@ -12,14 +12,16 @@ repository's work.
 These CI jobs gate every push and pull request (`.github/workflows/ci.yml` is the
 authority; this list is a summary):
 
-- **rust (windows-latest)** — `cargo fmt --check`, `cargo clippy --all-targets
-  -D warnings`, `cargo test`. The pinned `1.96.0` toolchain comes from
+- **rust (windows-latest)** — `cargo fmt --check`, `cargo clippy --workspace
+  --all-targets -D warnings`, and `cargo test --workspace --features
+  protocol-research`. The pinned `1.96.0` toolchain comes from
   `rust-toolchain.toml`.
-- **rust (ubuntu-latest)** — `cargo clippy --all-targets --features protocol-research
-  -D warnings`, `cargo test --workspace --features protocol-research`, and the headless replay
-  of every example tape, uploaded as an artifact. Added 2026-11-03.
+- **rust (ubuntu-latest)** — `cargo clippy --workspace --all-targets --features
+  protocol-research -D warnings`, `cargo test --workspace --features
+  protocol-research`, and the headless replay of every example tape, uploaded
+  as an artifact. Added 2026-11-03.
 - **generated index (ubuntu-latest)** — regenerates `index/`, fails on drift, then runs the
-  `bbgraph.py selftest` expectations.
+  90-check `bbgraph.py selftest` expectations.
 - **python vector tools (ubuntu-latest)** — every standalone `tools/*.py`
   vector tool must exit zero; `tools/check_planning_docs.py --self-test` runs
   the powered planning/audit/receipt/link controls, exact planning-authority inventory, and frozen
