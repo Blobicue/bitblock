@@ -364,31 +364,42 @@ impl OccupancyEpisodeLedger {
         }
     }
 
-    /// Reconstructs the ledger state by replaying a verified History.
+    /// Reconstructs the ledger state by semantically replaying a verified History.
     pub fn from_history(
         initial_world: &World,
         history: &History,
     ) -> Result<Self, CoordinateEpisodeError> {
-        let mut ledger = Self::new(history.genesis());
-        for receipt in history.receipts() {
+        let verified = verify_in_memory_history_with_limits(
+            initial_world,
+            history,
+            HistoryReplayLimits::DEFAULT,
+        )?;
+        let verified_history = verified.history();
+        let mut ledger = Self::new(verified_history.genesis());
+        for receipt in verified_history.receipts() {
             ledger.apply_receipt(receipt)?;
         }
-        if !ledger.verify_consistency(history, initial_world) {
+        if !ledger.verify_consistency(verified_history, initial_world) {
             return Err(CoordinateEpisodeError::DerivationMismatch);
         }
         Ok(ledger)
     }
 
-    /// Applies one verified history receipt to advance the active episode map.
+    /// Applies one verified history receipt atomically to advance the active episode map.
     pub fn apply_receipt(&mut self, receipt: &Receipt) -> Result<(), CoordinateEpisodeError> {
-        for effect in receipt.effects() {
-            self.apply_effect(effect)?;
+        if receipt.parent() != self.history_head {
+            return Err(CoordinateEpisodeError::DerivationMismatch);
         }
-        self.history_head = receipt.tag();
+        let mut staged = self.clone();
+        for effect in receipt.effects() {
+            staged.apply_effect(effect)?;
+        }
+        staged.history_head = receipt.tag();
+        *self = staged;
         Ok(())
     }
 
-    /// Applies one transition effect.
+    /// Applies one transition effect atomically without leaving partial state on error.
     pub fn apply_effect(
         &mut self,
         effect: &TransitionEffect,
@@ -415,11 +426,11 @@ impl OccupancyEpisodeLedger {
                 event,
                 consumed_mint,
             } => {
-                // Bedrock coordinates already on at genesis close no post-genesis episode
+                // Mutable coordinates already on at genesis close no post-genesis episode.
                 if consumed_mint == self.history_genesis {
                     return Ok(());
                 }
-                let Some(mint_coord) = self.active_by_mint.remove(&consumed_mint) else {
+                let Some(&mint_coord) = self.active_by_mint.get(&consumed_mint) else {
                     return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
                         burn: event,
                         consumed_mint,
@@ -433,7 +444,7 @@ impl OccupancyEpisodeLedger {
                         actual_coord: coord,
                     });
                 }
-                let Some(episode) = self.active_by_coord.remove(&coord) else {
+                let Some(episode) = self.active_by_coord.get(&coord) else {
                     return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
                         burn: event,
                         consumed_mint,
@@ -447,6 +458,8 @@ impl OccupancyEpisodeLedger {
                         actual_coord: coord,
                     });
                 }
+                self.active_by_mint.remove(&consumed_mint);
+                self.active_by_coord.remove(&coord);
                 self.total_burns += 1;
             }
             TransitionEffect::NoOp { .. } => {}
@@ -494,13 +507,30 @@ impl OccupancyEpisodeLedger {
         self.history_head
     }
 
-    /// Checks that the active episodes match the history's circulating supply and active mints.
-    pub fn verify_consistency(&self, history: &History, _initial_world: &World) -> bool {
-        if self.active_count() != history.circulating_supply() {
+    /// Checks that the active episodes match the verified history's genesis, head, supply, and active mints.
+    pub fn verify_consistency(&self, history: &History, initial_world: &World) -> bool {
+        if self.history_genesis != history.genesis()
+            || self.history_head != history.head()
+            || self.active_by_coord.len() != self.active_by_mint.len()
+        {
+            return false;
+        }
+        let Ok(verified) = verify_in_memory_history_with_limits(
+            initial_world,
+            history,
+            HistoryReplayLimits::DEFAULT,
+        ) else {
+            return false;
+        };
+        let verified_history = verified.history();
+        if self.active_count() != verified_history.circulating_supply() {
             return false;
         }
         for (&coord, episode) in &self.active_by_coord {
-            if history.active_mint(coord) != Some(episode.mint) {
+            if self.active_by_mint.get(&episode.mint) != Some(&coord) {
+                return false;
+            }
+            if verified_history.active_mint(coord) != Some(episode.mint) {
                 return false;
             }
         }
@@ -1246,5 +1276,42 @@ mod tests {
             ledger.apply_effect(&fake_burn),
             Err(CoordinateEpisodeError::BurnWithoutOpenMint { .. })
         ));
+    }
+
+    #[test]
+    fn occupancy_ledger_preserves_state_on_burn_mismatch_and_rejects_wrong_parent() {
+        let (initial, history) = episode_history();
+        let mut ledger = OccupancyEpisodeLedger::from_history(&initial, &history).unwrap();
+        let active_mint = ledger.get_active(B).unwrap().mint();
+
+        let bad_burn = TransitionEffect::Burn {
+            coord: A,
+            event: ContentTag::from_digest(TagKind::Event, [9; 32]),
+            consumed_mint: active_mint,
+        };
+        assert!(matches!(
+            ledger.apply_effect(&bad_burn),
+            Err(CoordinateEpisodeError::BurnProvenanceMismatch {
+                expected_coord,
+                actual_coord,
+                ..
+            }) if expected_coord == B && actual_coord == A
+        ));
+        // Both maps must remain completely intact after the refused burn.
+        assert!(ledger.is_active_mint(active_mint));
+        assert_eq!(ledger.get_active(B).unwrap().mint(), active_mint);
+        assert!(ledger.verify_consistency(&history, &initial));
+
+        // Re-applying an earlier receipt with the wrong parent fails closed.
+        assert!(matches!(
+            ledger.apply_receipt(&history.receipts()[0]),
+            Err(CoordinateEpisodeError::DerivationMismatch)
+        ));
+
+        // Wrong initial_world fails semantic replay verification.
+        let mut wrong_initial = World::new();
+        wrong_initial.set_on(Coord::new(99, 99, 99));
+        assert!(OccupancyEpisodeLedger::from_history(&wrong_initial, &history).is_err());
+        assert!(!ledger.verify_consistency(&history, &wrong_initial));
     }
 }

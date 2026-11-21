@@ -431,9 +431,9 @@ impl DwmTimingSnapshot {
             || self.qpc_frame_pending > earlier.qpc_frame_pending
             || self.c_refresh_next_displayed > earlier.c_refresh_next_displayed
             || self.c_refresh_next_presented > earlier.c_refresh_next_presented
-            || self.c_frames_displayed != 0
-            || self.c_frames_available != 0
-            || self.c_frames_dropped != 0
+            || self.c_frames_displayed > earlier.c_frames_displayed
+            || self.c_frames_available > earlier.c_frames_available
+            || self.c_frames_dropped > earlier.c_frames_dropped
     }
 }
 
@@ -1459,6 +1459,19 @@ mod tests {
         assert_eq!(
             envelope.tag().to_string(),
             "#bb.presentation-artifact.sha256.sw2i52veohfmc3lqe74tzd72n6ppwxxshejxmazclwikgniqx2sq"
+        );
+    }
+
+    #[test]
+    fn identical_nonzero_frame_count_snapshots_report_comparable_no_progress() {
+        let same = vector_snapshot(0);
+        assert!(
+            same.c_frames_displayed > 0 || same.c_frames_available > 0 || same.c_frames_dropped > 0
+        );
+        let unchanged = envelope(Some(same), Some(same));
+        assert_eq!(
+            unchanged.progress(),
+            CompositionProgress::ComparableNoProgress
         );
     }
 }

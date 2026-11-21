@@ -1,8 +1,8 @@
 # Using this repo as an index
 
-Bitblock is ~61,000 lines of Rust across 37 modules, ~8,600 lines of protocol
+Bitblock is ~68,500 lines of Rust across 38 indexed modules, ~8,600 lines of protocol
 prose, a 1,112-family metric registry, 37 independent Python vector suites, and
-a Lean proof capsule. `index/` turns that into something an agent can query
+two Lean 4 proof capsules. `index/` turns that into something an agent can query
 instead of scan.
 
 **The source tree is the only source of truth. Everything in `index/` is
@@ -51,14 +51,15 @@ python tools/bbgraph.py node frame
 `node` answers the question you actually have before editing: what a module
 pulls in, what breaks if you change it, which protocol objects it owns, whether
 anything independently checks those objects, and **which cfg gate it lives
-behind** — 20 of 37 modules do not exist in a default build, which is the single
-most common way to waste an hour here.
+behind** — 23 of 38 modules do not exist in a default library build (20
+`protocol-research`, 3 `windows`), which is the single most common way to waste
+an hour here.
 
 ```bash
 python tools/bbgraph.py schema
 ```
 
-`schema` is the coverage report the tree cannot state about itself. 74 protocol objects, every one with an independent Python reconstruction. That
+`schema` is the coverage report the tree cannot state about itself. 75 protocol objects, every one with an independent Python reconstruction. That
 number is derived, not authored: a tool that declares the identical schema
 string has independently rebuilt that payload, so the uncovered set is a fact
 about the tree rather than a TODO list someone forgot to update.
@@ -72,7 +73,7 @@ decisive. Structural rank — how many modules transitively reach a module —
 orders results but never decides them, and applies only inside a subsystem the
 query already matched.
 
-That last rule is not decoration. `protocol` is reached by 34 of 37 modules;
+That last rule is not decoration. `protocol` is reached by 36 of 38 modules;
 with an unconditional load-bearing multiplier it won `ask "canonical framebuffer
 bytes"` outright, over `frame`. It is the same failure a download count produces
 in a curated list, and `bbselftest.json` guards it.
@@ -89,11 +90,11 @@ still LOW, and that is recorded as correct behaviour rather than a bug.
 python tools/bbindex.py
 ```
 
-Stdlib only, no network, no build. Three stages, each printing its own numbers:
+Stdlib only, no network, no build. Four stages, each printing its own numbers:
 
 | Stage | Reads | Writes |
 |---|---|---|
-| `extract` | `src/*.rs`, `tools/*.py`, `docs/**`, `proof/**`, `examples/*` | `index/nodes.jsonl` |
+| `extract` | `crates/*/src/*.rs`, `src/*.rs`, `tools/*.py`, `docs/**`, `proof/**`, `examples/*` | `index/nodes.jsonl` |
 | `link` | the extracted nodes | `index/edges.jsonl`, `index/dag.json`, `index/subsystems.json` |
 | `reuse` | the module sources again | `index/reuse.json` |
 | `audit` | the whole index | `index/coverage.json`, and the three gates |
@@ -141,9 +142,10 @@ It regenerates and compares bytes. A failure leaves the tree **already
 corrected** — the fix is to commit the diff, not to re-run anything.
 
 **Answers — catches the query surface regressing.** `tools/bbselftest.json`
-records what "the index works" means: twelve queries with their expected leading
-module, two that must match nothing, six confidence expectations, the index
-counts, three DAG shape assertions, and three schema-coverage assertions.
+records what "the index works" means across a 90-check suite covering ranked
+queries, no-match guards, confidence expectations, index counts, DAG structure,
+parallel wave schedules, schema coverage, reuse baselines, symbol/caller/impact
+triangulation, and pinned content tags.
 
 ```bash
 python tools/bbgraph.py selftest
@@ -156,12 +158,11 @@ python tools/bbgraph.py selftest
 
 ## Model
 
-**Modules** are the 37 Rust files under `crates/core/src/`, `crates/research/src/` and
-`src/` (the two crate-root `lib.rs` re-export files aside), each carrying its `//!` doc comment, its
-public items, its test count, its cfg gate, and the schemas it declares.
+**Modules** are the 38 Rust files under `crates/core/src/`, `crates/research/src/` and
+`src/` (the crate-root `lib.rs` re-export files aside), each carrying its `//!` doc comment, its
+public items (`1,333/1,333` documented with `///`), its test count, its cfg gate, and the schemas it declares.
 Dependencies come from `crate::` and `bitblock::` paths — the binary reaches the
-library through the latter, and matching only `crate::` reported `main.rs`,
-5,967 lines over 22 modules, as a leaf.
+library through the latter, and matching only `crate::` once reported `main.rs` as a leaf.
 
 **Schemas** are the canonical `bitblock/<path>/vN` strings. They are the real
 spine of this repo: every content-addressed object names one inside its hashed
@@ -190,9 +191,10 @@ python tools/bbverify.py list      # what each check reads
 ```
 
 "Nothing broke" means something specific in this repository: **no canonical byte
-moved**. 101 literal content tags are asserted across the Rust tests, and the 37
+moved**. Literal content tags are asserted across the Rust test suites, and the 37
 `tools/*_vectors.py` suites rebuild those same payloads without importing any Rust, so a moved
-byte fails both from opposite directions.
+byte fails both from opposite directions. `full` also runs `tools/check_planning_docs.py --self-test`
+as an explicit planning-doc gate.
 
 | what changed | full | quick |
 |---|---:|---:|
@@ -259,7 +261,7 @@ suite that passes. `bbverify` now records a floor per tier and fails below it,
 and both it and CI use `--workspace`.
 
 **Every protocol object has an independent vector suite** (58 objects when this
-was closed, 74 now; `bbgraph.py schema` is the current count), closed by two
+was closed, 75 now; `bbgraph.py schema` is the current count), closed by two
 agents working disjoint halves of the tree. That number was wrong here before
 they ran: this page claimed every object was guarded while the index said 44 of
 58, and the agents flagged it rather than quietly matching the prose.
@@ -303,8 +305,9 @@ worth optimising is always the longest pole, never the largest sum.
 ### The workspace
 
 ```
-crates/core/       bitblock-core       13 modules, no dependencies
-crates/research/   bitblock-research   22 modules, depends on core
+crates/core/       bitblock-core       14 modules, minimal dependencies (sha2 + win32)
+crates/research/   bitblock-research   22 modules (20 portable + 2 Windows), depends on core
+crates/wasm/       bitblock-wasm       browser ABI-17 cdylib + zero-copy HTML5 canvas pages
 src/               bitblock            the binary, plus a facade lib
 ```
 
@@ -366,7 +369,7 @@ were measured, not assumed.
 ### How sensitive it actually is
 
 ```bash
-python tools/bbmutate.py           # 25 modules, a few minutes
+python tools/bbmutate.py           # 29 modules (28 on Linux; skips cfg(windows) off-platform)
 python tools/bbmutate.py frame     # before refactoring one module
 ```
 
@@ -377,10 +380,11 @@ scope becomes `to_le_bytes()` -- a byte-order flip inside the hashed domain, no
 behaviour, no error text, no control flow. If a module's canonical bytes are
 pinned, this must fail.
 
-**25 of 25 modules are killed.** That is the number that licenses refactoring:
-the suite demonstrably notices a canonical byte moving in every module that
-encodes one. Run it against a module before restructuring it; it takes seconds
-and tells you whether the net is under you.
+**100% of compiled canonical-encoder modules are killed** (28 of 28 on Linux
+with `windows_present` skipped as `cfg(windows)`; all 29 on Windows). That is
+the number that licenses refactoring: the suite demonstrably notices a canonical
+byte moving in every module that encodes one. Run it against a module before
+restructuring it; it takes seconds and tells you whether the net is under you.
 
 It found one genuine hole. `main.rs`'s only canonical encoders are three
 headless local-replay policy tags, and nothing asserted their values -- all
@@ -400,11 +404,14 @@ it from git.
 
 ### What still is not covered
 
-CI runs `cargo test --workspace --features protocol-research` on Windows and on
-Linux, so the `all(windows, feature = "protocol-research")` modules are compiled
-and tested on Windows. Not covered by CI: macOS and non-x86-64 targets (no job),
-`bbmutate` (local only), and `proof/LadderLangQuotedByteParity.lean`, which needs
-the unpublished LadderLang checkout.
+CI runs Rust (`windows-latest` and `ubuntu-latest`, standalone `bitblock-core`,
+default + `protocol-research` clippy and test passes), Linux `wasm32-unknown-unknown`
+`+simd128` release build + automated V8 byte-exact parity (`tools/wasm_parity_check.mjs`),
+all standalone Python vector tools + planning-doc self-tests, the `index/` staleness +
+selftest job, and both Lean 4 capsules (`proof/` and `proof/ladderlang-transition-v1/`)
+under `--trust=0`. Not covered by CI: macOS and non-x86-64 native targets (no job),
+`bbmutate` (local only), physical monitor / OS display-pipeline verification, and
+`proof/LadderLangQuotedByteParity.lean`, which needs the unpublished LadderLang checkout.
 
 ## How compressible is this tree
 
@@ -417,9 +424,9 @@ python tools/bbgraph.py dead
 
 | Avenue | Recoverable | What it costs |
 |---|---:|---|
-| Repeated production regions | 416 lines (1.4%) | extraction overhead eats much of it |
-| Repeated test-scope regions | 341 lines (1.9%) | fixtures are also the refactor's gate |
-| Public items nothing names | 4 items | nothing, but ~20 lines |
+| Repeated production regions | 407 lines (1.2%) | extraction overhead eats much of it |
+| Repeated test-scope regions | 341 lines (1.5%) | fixtures are also the refactor's gate |
+| Public items nothing names | 3 items | nothing, but ~20 lines |
 | Error enum + `Display` behind a macro | ~2,100 lines (4%) | **removes ~800 lines from `cargo fmt --check`** |
 | Deleting superseded v1 codecs | ~1,800 lines | orphans recorded receipt history |
 
@@ -442,8 +449,8 @@ for, and it is why the `output_color` <-> `output_topology` pair routes to
 `protocol` while the `presentation_output` pair routes to `display_artifact`.
 
 `dead` reports what `clippy -D warnings` structurally cannot: a `pub` item in a
-library is reachable by definition, so an unused one raises nothing. 4 items are
-named nowhere in the tree and 72 are named only inside their own module. Confirm
+library is reachable by definition, so an unused one raises nothing. 3 items are
+named nowhere in the tree and 98 are named only inside their own module. Confirm
 by deleting and compiling before acting on either list -- a name can also be
 reached through a trait impl or a macro, which the scan does not model.
 

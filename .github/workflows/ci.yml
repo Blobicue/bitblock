@@ -16,13 +16,18 @@ jobs:
         run: rustup component add rustfmt clippy
       - name: format
         run: cargo fmt --check
-      - name: clippy
+      - name: standalone core check
+        run: cargo check -p bitblock-core
+      - name: clippy (default)
         run: cargo clippy --workspace --all-targets -- -D warnings
-      # --workspace, or cargo tests only the root package and the 343 library
-      # tests in bitblock-core and bitblock-research never run. --features, or
-      # the all(windows, feature) modules are never compiled. Both gaps were
-      # silent: the job stayed green while running 43 of 397 tests.
-      - name: test
+      - name: clippy (protocol-research)
+        run: cargo clippy --workspace --all-targets --features protocol-research -- -D warnings
+      # Test default features first to catch protocol-research leaks into the
+      # default binary, then test with --features protocol-research so all
+      # windows + research modules compile and run.
+      - name: test (default)
+        run: cargo test --workspace
+      - name: test (protocol-research)
         run: cargo test --workspace --features protocol-research
 
   # The README lists Linux as supported for the library suites and headless
@@ -35,11 +40,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: components
-        run: rustup component add clippy
-      - name: clippy
+        run: rustup component add rustfmt clippy
+      - name: format
+        run: cargo fmt --check
+      - name: standalone core check
+        run: cargo check -p bitblock-core
+      - name: clippy (default)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: clippy (protocol-research)
         run: cargo clippy --workspace --all-targets --features protocol-research -- -D warnings
-      - name: test
+      - name: test (default)
+        run: cargo test --workspace
+      - name: test (protocol-research)
         run: cargo test --workspace --features protocol-research
+      - name: examples (protocol-research)
+        run: cargo check --examples --features protocol-research
       - name: headless replay
         run: |
           cargo build --release
@@ -50,6 +65,21 @@ jobs:
         with:
           name: replay-linux
           path: replay-*.txt
+      - name: wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+      - name: wasm32 clippy & release (+simd128)
+        env:
+          RUSTFLAGS: "-C target-feature=+simd128"
+          CARGO_PROFILE_RELEASE_PANIC: "abort"
+          CARGO_TARGET_DIR: "target/wasm-ci"
+        run: |
+          cargo check -p bitblock-core --target wasm32-unknown-unknown
+          cargo clippy -p bitblock-core -p bitblock-research -p bitblock-wasm --target wasm32-unknown-unknown -- -D warnings
+          cargo build --release --target wasm32-unknown-unknown -p bitblock-wasm
+      - name: wasm32 V8 byte-exact parity
+        run: |
+          node tools/wasm_parity_check.mjs target/wasm-ci/wasm32-unknown-unknown/release/bitblock_wasm.wasm
+          node tools/wasm_parity_check.mjs crates/wasm/www/bitblock_wasm.wasm --check-embedded
 
   python-tools:
     name: python vector tools (ubuntu-latest)
@@ -118,4 +148,21 @@ jobs:
       # checkout) and is not CI'd.
       - name: build proof capsule
         working-directory: proof
-        run: lake build
+        run: |
+          lake build
+          lake env lean --trust=0 BitblockProof.lean
+      - name: verify ladderlang-transition-v1 capsule
+        working-directory: proof/ladderlang-transition-v1
+        run: |
+          python3 - <<'PY'
+          import csv, hashlib
+          from pathlib import Path
+          with open("source-manifest.tsv") as f:
+              rows = list(csv.DictReader(f, delimiter="\t"))
+          assert len(rows) == 2, f"expected 2 manifest rows, got {len(rows)}"
+          for row in rows:
+              actual = hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest()
+              assert actual == row["sha256"].strip().lower(), f"SHA-256 mismatch for {row['path']}"
+          PY
+          lake build
+          lake env lean --trust=0 BitblockLadderTransition.lean

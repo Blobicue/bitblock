@@ -696,6 +696,7 @@ fn validate_facts(
                 && facts.qpc_end >= facts.qpc_start
         }
         DisplayOutcome::Mismatch => {
+            let pixel_count = u64::from(width) * u64::from(height);
             facts.stage == CaptureStage::Complete
                 && facts.error_code == 0
                 && width > 0
@@ -703,9 +704,9 @@ fn validate_facts(
                 && facts.dpi > 0
                 && facts.captured.is_some()
                 && facts.mismatch_count > 0
-                && facts
-                    .first_mismatch
-                    .is_some_and(|index| index < u64::from(width) * u64::from(height))
+                && facts.first_mismatch.is_some_and(|index| {
+                    index < pixel_count && facts.mismatch_count <= pixel_count - index
+                })
                 && complete_geometry
                 && facts.flush_before
                 && facts.compositor_flush
@@ -2106,6 +2107,29 @@ mod tests {
         assert_eq!(
             forged.append_existing(receipt),
             Err(DisplayProtocolError::ReceiptTagMismatch)
+        );
+    }
+
+    #[test]
+    fn mismatch_count_cannot_exceed_pixels_from_first_mismatch() {
+        let expected_words = [0x0011_2233, 0x0044_5566];
+        let mismatched_words = [0x0011_2233, 0x0077_8899];
+        let expected = FrameRef::new(2, 1, &expected_words).unwrap();
+        let frame_receipt = tag(TagKind::FrameReceipt, b"submitted");
+        let mut inflated = capture(expected, mismatched_words.to_vec()).facts;
+        assert_eq!(inflated.first_mismatch, Some(1));
+        assert_eq!(inflated.mismatch_count, 1);
+
+        inflated.mismatch_count = 2;
+        assert_eq!(
+            DisplayLedger::default().append(frame_receipt, expected.content_tag(), 2, 1, inflated,),
+            Err(DisplayProtocolError::InconsistentFacts)
+        );
+
+        inflated.mismatch_count = u64::MAX;
+        assert_eq!(
+            DisplayLedger::default().append(frame_receipt, expected.content_tag(), 2, 1, inflated,),
+            Err(DisplayProtocolError::InconsistentFacts)
         );
     }
 }

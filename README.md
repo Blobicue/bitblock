@@ -7,7 +7,7 @@ For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md). The broader
 [`docs/CAPABILITY_TREE.md`](docs/CAPABILITY_TREE.md). Read [`docs/SEMANTICS.md`](docs/SEMANTICS.md)
 and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md) before changing the simulation boundary.
 
-Rather than reading 61,000 lines of Rust across 37 modules, query the generated index or compile the standalone interactive HTML observatory:
+Rather than reading 68,500 lines of Rust across 38 modules, query the generated index or compile the standalone interactive HTML observatory:
 
 ```powershell
 python tools/bbgraph.py ask "canonical framebuffer bytes"
@@ -25,9 +25,9 @@ python tools/bbgraph.py html
 Stdlib Python only, no network and no build. Every line of output cites a path, so
 any claim it makes can be checked against the source that produced it. It reports
 what the tree cannot state about itself: which modules are load-bearing (`protocol`
-is reached by 34 of 37; `world` by 26), whether every protocol object has an independent
-Python vector reconstruction (74 of 74 schemas covered, 0 uncovered), and public symbol
-documentation coverage (1,306 of 1,306 public symbols documented with `///`). All three
+is reached by 36 of 38; `world` by 27), whether every protocol object has an independent
+Python vector reconstruction (75 of 75 schemas covered, 0 uncovered), and public symbol
+documentation coverage (1,333 of 1,333 public symbols documented with `///`). All three
 are derived rather than authored. Running `python tools/bbgraph.py html` compiles a
 zero-server, self-contained interactive browser dashboard at `target/bitblock_graph.html`
 with a live BM25 query trace, 10-stratum DAG map, 4-tier blast-radius simulator, symbol
@@ -40,6 +40,7 @@ documents the index, its three gates, and its limits.
 | --- | --- | --- |
 | Rust | `1.96.0` (`edition = "2024"`) | Pinned automatically by [`rust-toolchain.toml`](rust-toolchain.toml) (`rustfmt` + `clippy` components) |
 | Python | Python `3.10+` (stdlib only) | Zero `pip` dependencies; drives `bbverify.py`, `bbgraph.py`, `bbindex.py`, and all 37 vector suites |
+| Node.js | Node `20+` (optional, stdlib only) | Zero `npm` dependencies; runs V8 WebAssembly parity checks via [`tools/wasm_parity_check.mjs`](tools/wasm_parity_check.mjs) |
 | Lean 4 | `leanprover/lean4:v4.33.0` (optional) | Pinned by [`proof/lean-toolchain`](proof/lean-toolchain); required only when building [`proof/`](proof/) via `elan` / `lake` |
 
 | Surface | Crate / Path | Platform Support | Command |
@@ -47,10 +48,11 @@ documents the index, its three gates, and its limits.
 | Full verification gauntlet | [`tools/bbverify.py`](tools/bbverify.py) | Windows, Linux | `python tools/bbverify.py full` |
 | Fast edit-loop check | [`tools/bbverify.py`](tools/bbverify.py) | Windows, Linux | `python tools/bbverify.py quick` |
 | Interactive HTML observatory | [`tools/bbgraph.py`](tools/bbgraph.py) | Any browser (offline HTML) | `python tools/bbgraph.py html` |
-| Core + research library suites | `bitblock-core`, `bitblock-research`, `bitblock` | Windows, Linux (CI) | `cargo test --workspace --features protocol-research` |
+| Core + research + wasm library suites | `bitblock-core`, `bitblock-research`, `bitblock-wasm`, `bitblock` | Windows, Linux (CI) | `cargo test --workspace --features protocol-research` |
+| Browser `wasm32` `+simd128` & V8 parity | [`crates/wasm/`](crates/wasm/), [`tools/wasm_parity_check.mjs`](tools/wasm_parity_check.mjs) | `wasm32-unknown-unknown` / V8 (Linux CI) | `node tools/wasm_parity_check.mjs crates/wasm/www/bitblock_wasm.wasm --check-embedded` |
 | Headless deterministic tape replay | [`src/main.rs`](src/main.rs) (`--simulate-actions`) | Windows, Linux (CI) | `cargo run --release -- --simulate-actions examples/observer_walk.tape` |
 | Live interactive observer window | [`src/main.rs`](src/main.rs) + GDI/DWM audit (`F4`/`F5`) | Windows desktop | `cargo run --release` |
-| Formal Lean 4 proof capsules | [`proof/`](proof/) | Linux (CI), Windows | `cd proof && lake build` |
+| Formal Lean 4 proof capsules | [`proof/`](proof/), [`proof/ladderlang-transition-v1/`](proof/ladderlang-transition-v1/) | Linux (CI), Windows | `cd proof && lake build && lake env lean --trust=0 BitblockProof.lean` |
 
 Platform column: "CI" means a GitHub Actions job runs it on every push. macOS has no CI job
 and has not been tested; it is omitted rather than claimed.

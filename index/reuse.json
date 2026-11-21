@@ -476,12 +476,6 @@
     ]
    },
    {
-    "item": "apply_receipt",
-    "modules": [
-     "coordinate_episode"
-    ]
-   },
-   {
     "item": "bridge_policy_tag",
     "modules": [
      "ladder_bridge"
@@ -626,7 +620,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 35893,
+   "code_lines": 36042,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -655,7 +649,7 @@
      "right": "presentation_output_v2:394"
     },
     {
-     "left": "display:1146",
+     "left": "display:1147",
      "lines": 16,
      "right": "frame:609"
     },
@@ -670,9 +664,9 @@
      "right": "presentation_output:467"
     },
     {
-     "left": "display:896",
+     "left": "display:897",
      "lines": 13,
-     "right": "tick:1254"
+     "right": "tick:1265"
     },
     {
      "left": "display_artifact:428",
@@ -715,17 +709,17 @@
      "right": "interaction:1328"
     },
     {
-     "left": "coordinate_episode:696",
+     "left": "coordinate_episode:726",
      "lines": 9,
      "right": "physical_sensor:1384"
     },
     {
-     "left": "coordinate_episode:893",
+     "left": "coordinate_episode:923",
      "lines": 9,
-     "right": "display:1149"
+     "right": "display:1150"
     },
     {
-     "left": "display:1105",
+     "left": "display:1106",
      "lines": 9,
      "right": "frame:590"
     },
@@ -750,12 +744,12 @@
      "right": "storage:783"
     },
     {
-     "left": "display:1192",
+     "left": "display:1193",
      "lines": 8,
      "right": "display_artifact:778"
     },
     {
-     "left": "display:1201",
+     "left": "display:1202",
      "lines": 8,
      "right": "frame:633"
     },
@@ -807,7 +801,7 @@
    ]
   },
   "test": {
-   "code_lines": 23981,
+   "code_lines": 24161,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -833,7 +827,7 @@
     {
      "left": "display_store:1705",
      "lines": 19,
-     "right": "main:4148"
+     "right": "main:4227"
     },
     {
      "left": "output_topology:1499",
@@ -841,9 +835,9 @@
      "right": "presentation_output:678"
     },
     {
-     "left": "main:4190",
+     "left": "main:4269",
      "lines": 17,
-     "right": "main:5502"
+     "right": "main:5581"
     },
     {
      "left": "presentation_output:708",
@@ -853,7 +847,7 @@
     {
      "left": "display_store:1669",
      "lines": 12,
-     "right": "main:4107"
+     "right": "main:4186"
     },
     {
      "left": "history:1206",
@@ -871,7 +865,7 @@
      "right": "optimization:1699"
     },
     {
-     "left": "journal:1278",
+     "left": "journal:1305",
      "lines": 10,
      "right": "storage:994"
     },
@@ -881,14 +875,14 @@
      "right": "presentation:1172"
     },
     {
-     "left": "display:1587",
+     "left": "display:1588",
      "lines": 9,
      "right": "display_artifact:805"
     },
     {
      "left": "display_store:1509",
      "lines": 8,
-     "right": "journal:1831"
+     "right": "journal:1858"
     },
     {
      "left": "display_store:1647",
@@ -898,7 +892,7 @@
     {
      "left": "frame_v2:997",
      "lines": 8,
-     "right": "main:4924"
+     "right": "main:5003"
     },
     {
      "left": "history_store:1669",
@@ -908,7 +902,7 @@
     {
      "left": "history_store:2133",
      "lines": 8,
-     "right": "journal:1829"
+     "right": "journal:1856"
     },
     {
      "left": "physical_sensor:1693",
