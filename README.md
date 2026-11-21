@@ -49,10 +49,10 @@ documents the index, its three gates, and its limits.
 | Fast edit-loop check | [`tools/bbverify.py`](tools/bbverify.py) | Windows, Linux | `python tools/bbverify.py quick` |
 | Interactive HTML observatory | [`tools/bbgraph.py`](tools/bbgraph.py) | Any browser (offline HTML) | `python tools/bbgraph.py html` |
 | Core + research + wasm library suites | `bitblock-core`, `bitblock-research`, `bitblock-wasm`, `bitblock` | Windows, Linux (CI) | `cargo test --workspace --features protocol-research` |
-| Browser `wasm32` `+simd128` & V8 parity | [`crates/wasm/`](crates/wasm/), [`tools/wasm_parity_check.mjs`](tools/wasm_parity_check.mjs) | `wasm32-unknown-unknown` / V8 (local) | `node tools/wasm_parity_check.mjs crates/wasm/www/bitblock_wasm.wasm --check-embedded` |
+| Browser `wasm32` `+simd128` & V8 parity | [`crates/wasm/`](crates/wasm/), [`tools/wasm_parity_check.mjs`](tools/wasm_parity_check.mjs) | `wasm32-unknown-unknown` / V8 (Linux CI) | `node tools/wasm_parity_check.mjs crates/wasm/www/bitblock_wasm.wasm --check-embedded` |
 | Headless deterministic tape replay | [`src/main.rs`](src/main.rs) (`--simulate-actions`) | Windows, Linux (CI) | `cargo run --release -- --simulate-actions examples/observer_walk.tape` |
 | Live interactive observer window | [`src/main.rs`](src/main.rs) + GDI/DWM audit (`F4`/`F5`) | Windows desktop | `cargo run --release` |
-| Formal Lean 4 proof capsules | [`proof/`](proof/), [`proof/ladderlang-transition-v1/`](proof/ladderlang-transition-v1/) | Linux (CI for `proof/`), Windows | `cd proof && lake build && lake env lean --trust=0 BitblockProof.lean` |
+| Formal Lean 4 proof capsules | [`proof/`](proof/), [`proof/ladderlang-transition-v1/`](proof/ladderlang-transition-v1/) | Linux (CI), Windows | `cd proof && lake build && lake env lean --trust=0 BitblockProof.lean` |
 
 Platform column: "CI" means a GitHub Actions job runs it on every push. macOS has no CI job
 and has not been tested; it is omitted rather than claimed.

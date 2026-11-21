@@ -404,17 +404,14 @@ it from git.
 
 ### What still is not covered
 
-CI runs `cargo test --workspace --features protocol-research` on Windows and
-Linux, all standalone Python vector tools + planning-doc self-tests, the
-`index/` staleness + 90-check selftest job, and `lake build` in `proof/`.
-Local verifiers additionally cover `wasm32-unknown-unknown` `+simd128` release
-builds and V8 byte-exact parity (`tools/wasm_parity_check.mjs`),
-`proof/ladderlang-transition-v1/` at `--trust=0`, and `bbmutate`. Not covered
-by CI: macOS and non-x86-64 native targets, `wasm32`/V8 parity (pending
-workflow-scope CI update), `proof/ladderlang-transition-v1/`, `bbmutate`
-(local only), physical monitor / OS display-pipeline verification, and
-`proof/LadderLangQuotedByteParity.lean`, which needs the unpublished
-LadderLang checkout.
+CI runs Rust (`windows-latest` and `ubuntu-latest`, standalone `bitblock-core`,
+default + `protocol-research` clippy and test passes), Linux `wasm32-unknown-unknown`
+`+simd128` release build + automated V8 byte-exact parity (`tools/wasm_parity_check.mjs`),
+all standalone Python vector tools + planning-doc self-tests, the `index/` staleness +
+selftest job, and both Lean 4 capsules (`proof/` and `proof/ladderlang-transition-v1/`)
+under `--trust=0`. Not covered by CI: macOS and non-x86-64 native targets (no job),
+`bbmutate` (local only), physical monitor / OS display-pipeline verification, and
+`proof/LadderLangQuotedByteParity.lean`, which needs the unpublished LadderLang checkout.
 
 ## How compressible is this tree
 

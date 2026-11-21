@@ -47,8 +47,9 @@ two-source transitive closure needed to run a finite one-bit transition truth
 table under LadderLang's actual bounded reducer. Its verifier checks copied
 source SHA-256 values before building (`verify.ps1` on Windows, or manifest
 SHA-256 verification + `lake build` + `lake env lean --trust=0
-BitblockLadderTransition.lean` on Linux/macOS). It retains `HOLD`, `RAN`, and
-`GREW` outcomes, and is not a Rust refinement or general semantic bridge.
+BitblockLadderTransition.lean` on Linux/macOS, also enforced in CI). It retains
+`HOLD`, `RAN`, and `GREW` outcomes, and is not a Rust refinement or general
+semantic bridge.
 
 These are abstract mathematical models. They do not prove that the Rust world,
 renderer, hash/receipt encoding, network, or consensus implementation refines
