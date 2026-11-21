@@ -488,19 +488,45 @@ pub enum WaterCycle {
 /// Wide deterministic roll for the driven mode: a splitmix64 chain over the
 /// seed/salt, the full cell coordinate and the full 64-bit time key.
 pub fn wide_roll(s: u32, c: Coord, t: u64) -> u32 {
-    #[inline]
-    fn mix(mut z: u64) -> u64 {
-        z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    }
-    let mut h = mix(u64::from(s) ^ 0x5bd1_e995);
+    wide_roll_keyed(wide_roll_key(s), c, t)
+}
+
+#[inline]
+fn wide_mix(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
+/// The first link of [`wide_roll`]'s chain, which depends on the seed/salt alone: a scan
+/// that rolls many cells under one salt computes it once.
+#[inline]
+pub(crate) fn wide_roll_key(s: u32) -> u64 {
+    wide_mix(u64::from(s) ^ 0x5bd1_e995)
+}
+
+/// [`wide_roll`] from its precomputed [`wide_roll_key`].
+#[inline]
+pub(crate) fn wide_roll_keyed(key: u64, c: Coord, t: u64) -> u32 {
+    wide_roll_finish(wide_roll_cell(key, c), t)
+}
+
+/// The links of [`wide_roll`]'s chain that depend on the salt and the cell alone: static for a
+/// cell under one salt, so a scan repeated every tick can keep them.
+#[inline]
+pub(crate) fn wide_roll_cell(key: u64, c: Coord) -> u64 {
+    let mix = wide_mix;
+    let mut h = key;
     h = mix(h ^ c.x as u64);
     h = mix(h ^ c.y as u64);
-    h = mix(h ^ c.z as u64);
-    h = mix(h ^ t);
-    (h >> 32) as u32
+    mix(h ^ c.z as u64)
+}
+
+/// The last link of [`wide_roll`]'s chain: the time key over [`wide_roll_cell`].
+#[inline]
+pub(crate) fn wide_roll_finish(cell: u64, t: u64) -> u32 {
+    (wide_mix(cell ^ t) >> 32) as u32
 }
 
 impl Default for EnergyInput {
@@ -779,7 +805,7 @@ impl std::error::Error for StepError {}
 
 /// Neighbour lookup over a domain: a dense slot box when the domain is
 /// compact, else a hash map.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Lookup {
     Boxed {
         min: [i64; 3],
@@ -789,10 +815,608 @@ enum Lookup {
     Hashed(HashMap<Coord, u32>),
 }
 
-const NO_SLOT: u32 = u32::MAX;
+pub(crate) const NO_SLOT: u32 = u32::MAX;
+
+/// A salt's precomputed part of a [`ChemWorld::roll`] (see [`ChemWorld::roll_key`]).
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum RollKey {
+    Lattice(u32),
+    Wide(u64),
+}
+
+/// The first index at or after `from` whose material is `a` or `b` ([`find_mat`] for two ids,
+/// with the same visiting guarantee).
+#[inline]
+pub(crate) fn find_mat2(mat: &[MatId], from: usize, a: MatId, b: MatId) -> Option<usize> {
+    const BLOCK: usize = 64;
+    let mut i = from;
+    while i < mat.len() {
+        let end = (i + BLOCK).min(mat.len());
+        let block = &mat[i..end];
+        if block
+            .iter()
+            .fold(false, |hit, &x| hit | (x == a) | (x == b))
+        {
+            return block.iter().position(|&x| x == a || x == b).map(|k| i + k);
+        }
+        i = end;
+    }
+    None
+}
+
+/// The first index at or after `from` whose material is `m`. A scan that walks the cells of one
+/// material in index order calls it again after each visit, so a visit's writes are seen
+/// exactly as a cell-by-cell scan would see them (the cells it skips are not `m` and nothing
+/// writes between the call and the visit). Blocks of cells are tested at once.
+#[inline]
+pub(crate) fn find_mat(mat: &[MatId], from: usize, m: MatId) -> Option<usize> {
+    const BLOCK: usize = 64;
+    let mut i = from;
+    while i < mat.len() {
+        let end = (i + BLOCK).min(mat.len());
+        let block = &mat[i..end];
+        if block.iter().fold(false, |hit, &x| hit | (x == m)) {
+            return block.iter().position(|&x| x == m).map(|k| i + k);
+        }
+        i = end;
+    }
+    None
+}
+
+/// §6y: which of `ids` occur in `mat`, in one pass over 64-cell blocks (the same block
+/// test as [`find_mat`]); stops once every id has been seen.
+pub(crate) fn mats_present<const K: usize>(mat: &[MatId], ids: [MatId; K]) -> [bool; K] {
+    let mut seen = [false; K];
+    for block in mat.chunks(64) {
+        for (s, &id) in seen.iter_mut().zip(&ids) {
+            *s |= block.iter().fold(false, |hit, &x| hit | (x == id));
+        }
+        if seen.iter().all(|&s| s) {
+            break;
+        }
+    }
+    seen
+}
+
+/// Bit `k` set iff `hit(mat[k], q[k])`, for one block of at most 64 cells. A scan whose visits
+/// write only the visited cell (and test only that cell's own material and heat to decide
+/// whether it acts) may take a block's hits at once: no visit changes another cell's test.
+#[inline]
+pub(crate) fn hit_mask(mat: &[MatId], q: &[i32], hit: impl Fn(MatId, i32) -> bool) -> u64 {
+    debug_assert!(mat.len() <= 64 && mat.len() == q.len());
+    if let (Ok(m), Ok(q)) = (<&[MatId; 64]>::try_from(mat), <&[i32; 64]>::try_from(q)) {
+        // §6ak, wasm: the same tests as one byte each (vector compares in 16 byte lanes),
+        // then 16 bytes at a time to bits; the u64 shift-or form compiled to two lanes.
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        {
+            use core::arch::wasm32::{i8x16_bitmask, v128, v128_load};
+            let mut bytes = [0u8; 64];
+            for k in 0..64 {
+                bytes[k] = 0u8.wrapping_sub(u8::from(hit(m[k], q[k])));
+            }
+            let mut b = 0u64;
+            for j in 0..4 {
+                // SAFETY: `bytes` is 64 bytes, so bytes `16 * j..16 * j + 16` are in bounds,
+                // and `v128_load` has no alignment requirement.
+                let v = unsafe { v128_load(bytes.as_ptr().add(16 * j).cast::<v128>()) };
+                b |= u64::from(i8x16_bitmask(v)) << (16 * j);
+            }
+            #[allow(clippy::needless_return)]
+            return b;
+        }
+        // a whole block: a fixed trip count the compiler turns into vector compares
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+        {
+            let mut b = 0u64;
+            for k in 0..64 {
+                b |= (hit(m[k], q[k]) as u64) << k;
+            }
+            return b;
+        }
+    }
+    mat.iter()
+        .zip(q)
+        .enumerate()
+        .fold(0u64, |b, (k, (&m, &x))| b | ((hit(m, x) as u64) << k))
+}
+
+/// `dst[k] += src[k]` wrapping, the heat law's share additions over one row slice.
+#[inline]
+fn add_shares(dst: &mut [i32], src: &[i32]) {
+    for (d, s) in dst.iter_mut().zip(src) {
+        *d = d.wrapping_add(*s);
+    }
+}
+
+/// The heat law's first sweep assuming six neighbours. Rim cells are patched with their
+/// actual live count before any share is read. `emit(q)` is the same truncating quotient as
+/// the law (this path is used only when dq divides 6000).
+#[inline(always)]
+fn heat_shares_six(q: &[i32], per: &mut [i32], nq: &mut [i32], emit: impl Fn(i32) -> i32) {
+    for ((&qi, p), k) in q.iter().zip(per.iter_mut()).zip(nq.iter_mut()) {
+        let share = emit(qi);
+        *p = share;
+        *k = qi - share * 6;
+    }
+}
+
+/// The heat law's gather for one z-run: each cell of `run` adds the shares of its face
+/// neighbours (its z neighbours in the run, then the overlapping cells of the four rows
+/// beside it) to its `nq`.
+#[inline(always)]
+fn heat_gather_run(rows: &ZRuns, run: &ZRun, per: &[i32], nq: &mut [i32]) {
+    let s = run.start;
+    let len = (run.z1 - run.z0 + 1) as usize;
+    add_shares(&mut nq[s + 1..s + len], &per[s..s + len - 1]);
+    add_shares(&mut nq[s..s + len - 1], &per[s + 1..s + len]);
+    for r in rows.beside(run).into_iter().flatten() {
+        let (lo, hi) = (run.z0.max(r.z0), run.z1.min(r.z1));
+        if lo > hi {
+            continue;
+        }
+        let m = (hi - lo + 1) as usize;
+        let a = s + (lo - run.z0) as usize;
+        let b = r.start + (lo - r.z0) as usize;
+        add_shares(&mut nq[a..a + m], &per[b..b + m]);
+    }
+}
+
+/// §6aj, wasm: the heat law's z-run path for the default `dq` (`q / 20` emitted, so the
+/// six-way share is `q.max(0) / 120`), one x plane at a time: the shares and own rests of
+/// plane `x + 1` (rim cells patched with their live count, as the whole-domain sweep does),
+/// then the gather of plane `x`, whose neighbours lie in planes `x - 1 ..= x + 1` and are all
+/// final by then. Every cell gets the same share and the same wrapping sums as with the two
+/// whole-domain sweeps; the planes are only visited while their shares are still in cache.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn heat_piped_120(q: &[i32], rows: &ZRuns, rim: &[(u32, u8)], per: &mut [i32], nq: &mut [i32]) {
+    let runs = &rows.runs;
+    let mut rim_at = 0;
+    let mut prev: Option<(usize, usize)> = None;
+    let mut lo = 0;
+    loop {
+        let cur = (lo < runs.len()).then(|| {
+            let mut hi = lo + 1;
+            while hi < runs.len() && runs[hi].x == runs[lo].x {
+                hi += 1;
+            }
+            (lo, hi)
+        });
+        if let Some((a, b)) = cur {
+            // The runs tile the domain in index order, so a plane is one index range.
+            let last = &runs[b - 1];
+            let (c0, c1) = (runs[a].start, last.start + (last.z1 - last.z0) as usize + 1);
+            heat_shares_six_120(&q[c0..c1], &mut per[c0..c1], &mut nq[c0..c1]);
+            while rim_at < rim.len() && (rim[rim_at].0 as usize) < c1 {
+                let i = rim[rim_at].0 as usize;
+                let o = q[i] / 20;
+                let live = usize::from(rows.live[i]);
+                let p = if o > 0 && live > 0 {
+                    div_by_live(i64::from(o), live) as i32
+                } else {
+                    0
+                };
+                per[i] = p;
+                nq[i] = q[i] - p * live as i32;
+                rim_at += 1;
+            }
+        }
+        if let Some((a, b)) = prev {
+            for run in &runs[a..b] {
+                heat_gather_run_fused(rows, run, per, nq);
+            }
+        }
+        match cur {
+            Some((_, b)) => {
+                prev = cur;
+                lo = b;
+            }
+            None => break,
+        }
+    }
+}
+
+/// §6aj, wasm: [`heat_gather_run`] with the six adds fused over the z range every source
+/// covers (the run's inner cells that have both z neighbours and a cell in each of the four
+/// rows beside, each such row one run): `nq` is read and written once there instead of six
+/// times. The rest of each source's range is added as before; the sums wrap in `i32`, so the
+/// grouping does not change them.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn heat_gather_run_fused(rows: &ZRuns, run: &ZRun, per: &[i32], nq: &mut [i32]) {
+    let beside = rows.beside(run);
+    let one = |rs: &[ZRun]| match rs {
+        [r] => Some(*r),
+        _ => None,
+    };
+    let (Some(r0), Some(r1), Some(r2), Some(r3)) = (
+        one(beside[0]),
+        one(beside[1]),
+        one(beside[2]),
+        one(beside[3]),
+    ) else {
+        return heat_gather_run(rows, run, per, nq);
+    };
+    let rs = [r0, r1, r2, r3];
+    let lo = rs.iter().fold(run.z0 + 1, |l, r| l.max(r.z0));
+    let hi = rs.iter().fold(run.z1 - 1, |h, r| h.min(r.z1));
+    if lo > hi {
+        return heat_gather_run(rows, run, per, nq);
+    }
+    let s = run.start;
+    let at = |z: i64| s + (z - run.z0) as usize;
+    // Adds `per[from(z)]` to `nq` of cell `z` for `z` in `a..=b` (nothing when `a > b`).
+    let mut add = |a: i64, b: i64, from: usize| {
+        if a <= b {
+            let m = (b - a + 1) as usize;
+            let d = at(a);
+            add_shares(&mut nq[d..d + m], &per[from..from + m]);
+        }
+    };
+    // Each source's range less the fused one: z-1, z+1, then the rows beside.
+    add(run.z0 + 1, lo - 1, s);
+    add(hi + 1, run.z1, at(hi));
+    add(run.z0, lo - 1, s + 1);
+    add(hi + 1, run.z1 - 1, at(hi + 2));
+    for r in &rs {
+        let (a, b) = (run.z0.max(r.z0), run.z1.min(r.z1));
+        add(a, lo - 1, r.start + (a - r.z0) as usize);
+        add(hi + 1, b, r.start + (hi + 1 - r.z0) as usize);
+    }
+    let m = (hi - lo + 1) as usize;
+    let d = at(lo);
+    let src = |r: &ZRun| &per[r.start + (lo - r.z0) as usize..][..m];
+    let (p0, p1, p2, p3) = (src(&r0), src(&r1), src(&r2), src(&r3));
+    let (down, up) = (&per[d - 1..d - 1 + m], &per[d + 1..d + 1 + m]);
+    for (j, t) in nq[d..d + m].iter_mut().enumerate() {
+        let sum = down[j]
+            .wrapping_add(up[j])
+            .wrapping_add(p0[j])
+            .wrapping_add(p1[j])
+            .wrapping_add(p2[j])
+            .wrapping_add(p3[j]);
+        *t = t.wrapping_add(sum);
+    }
+}
+
+/// [`heat_shares_six`] with `emit(q) = q.max(0) / 120` (the default `dq`).
+#[inline(always)]
+fn heat_shares_six_120(q: &[i32], per: &mut [i32], nq: &mut [i32]) {
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        // §6aj: wasm has no integer vector division (nor a 32-bit multiply-high), so the
+        // quotient compiled to four scalar ones per vector. Four lanes at a time instead:
+        // `q / 120 == (q * 0x8888_8889) >> 38` for every `q` in `0..2^31`, with the high word
+        // of the 64-bit product built from 16-bit halves in `i32` lanes (`q = qh 2^16 + ql`,
+        // the multiplier `mh 2^16 + ml`; every partial product fits 32 bits and the carries of
+        // the middle terms are summed below bit 32). Checked against `q / 120` for every `q`.
+        use core::arch::wasm32::*;
+        let n = q.len().min(per.len()).min(nq.len());
+        let (zero, six, lo16) = (i32x4_splat(0), i32x4_splat(6), u32x4_splat(0xffff));
+        let (mh, ml) = (u32x4_splat(0x8888), u32x4_splat(0x8889));
+        let mut i = 0;
+        while i + 4 <= n {
+            // SAFETY: `i + 4 <= n` and every slice holds at least `n` elements, so each access
+            // reads or writes four in-bounds `i32`s (wasm loads and stores need no alignment).
+            unsafe {
+                let v = v128_load(q.as_ptr().add(i).cast());
+                let c = i32x4_max(v, zero);
+                let (qh, ql) = (u32x4_shr(c, 16), v128_and(c, lo16));
+                let b1 = i32x4_mul(qh, ml);
+                let b2 = i32x4_mul(ql, mh);
+                let t = i32x4_add(
+                    u32x4_shr(i32x4_mul(ql, ml), 16),
+                    i32x4_add(v128_and(b1, lo16), v128_and(b2, lo16)),
+                );
+                let hi = i32x4_add(
+                    i32x4_add(i32x4_mul(qh, mh), u32x4_shr(b1, 16)),
+                    i32x4_add(u32x4_shr(b2, 16), u32x4_shr(t, 16)),
+                );
+                let share = u32x4_shr(hi, 6);
+                v128_store(per.as_mut_ptr().add(i).cast(), share);
+                v128_store(
+                    nq.as_mut_ptr().add(i).cast(),
+                    i32x4_sub(v, i32x4_mul(share, six)),
+                );
+            }
+            i += 4;
+        }
+        heat_shares_six(&q[i..n], &mut per[i..n], &mut nq[i..n], |q| q.max(0) / 120);
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    heat_shares_six(q, per, nq, |q| q.max(0) / 120);
+}
+
+/// `o / live` for a face-neighbour count `live` in `1..=6`, with each divisor a constant (the
+/// same truncating quotient; a constant divisor compiles to a multiply instead of a division).
+#[inline]
+pub(crate) fn div_by_live(o: i64, live: usize) -> i64 {
+    match live {
+        1 => o,
+        2 => o / 2,
+        3 => o / 3,
+        4 => o / 4,
+        5 => o / 5,
+        6 => o / 6,
+        _ => o / live as i64,
+    }
+}
+
+/// Per-cell buffers of [`ChemWorld::heat_pass`], kept across steps so a step does not
+/// allocate (and fault in) a fresh heat field. Every entry is written before it is read in
+/// a step: the z-run path writes each cell's `nq` and `per` in its first sweep, the general
+/// path clears `nq`. After the pass `nq` holds the previous heat field, which nothing reads.
+#[derive(Default)]
+pub(crate) struct HeatScratch {
+    nq: Vec<i32>,
+    per: Vec<i32>,
+}
+
+/// A clone starts with empty scratch: the buffers hold no state between steps.
+impl Clone for HeatScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for HeatScratch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HeatScratch({} cells)", self.nq.len())
+    }
+}
+
+/// One `(x, y)` row of the domain: cells `start..=start + (z1 - z0)` are `(x, y, z0..=z1)`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ZRun {
+    pub(crate) x: i64,
+    pub(crate) y: i64,
+    pub(crate) z0: i64,
+    pub(crate) z1: i64,
+    pub(crate) start: usize,
+}
+
+/// The domain as z-runs: each `(x, y)` row of it is one or more contiguous z ranges, in index
+/// order (a ball or a box has one per row). A cell's face neighbours are then plain index
+/// arithmetic on the runs of four neighbouring rows. §6x: a row may hold several runs (a
+/// domain-growing place off the end of a row leaves a gap), so such a domain keeps the row
+/// slices instead of every cell's face lookups; passes that read a row as one run check
+/// [`Self::contiguous`].
+#[derive(Clone, Debug)]
+pub(crate) struct ZRuns {
+    pub(crate) runs: Vec<ZRun>,
+    /// Runs that follow another run of the same row (0 when every row is one z range).
+    split: usize,
+    x0: i64,
+    y0: i64,
+    nx: i64,
+    ny: i64,
+    /// `(x - x0) * ny + (y - y0)` to the index of the row's first run, or `NO_SLOT`.
+    at: Vec<u32>,
+    /// Per cell (domain order), its number of face neighbours in the domain (`0..=6`).
+    pub(crate) live: Vec<u8>,
+}
+
+/// §6w: spare capacity kept in the per-cell tables of an `n`-cell domain (1/64 more).
+fn growth_room(n: usize) -> usize {
+    n / 64 + 16
+}
+
+impl ZRuns {
+    /// §6w: the rows after domain cell `at` was inserted (`cells` is the new domain,
+    /// `nbrs` the new cell's face neighbours by new index), exactly as [`Self::build`] makes
+    /// them for `cells`: the new cell extends its row at one end or starts a row of its own,
+    /// later rows start one cell later, and the new cell and its neighbours count each other.
+    /// Falls back to `build` where the row box would change or the row has or gets a gap.
+    fn inserted(mut self, cells: &[Coord], at: usize, nbrs: &[Option<usize>]) -> Option<Self> {
+        let c = cells[at];
+        let (rx, ry) = (c.x - self.x0, c.y - self.y0);
+        if rx < 0
+            || ry < 0
+            || rx >= self.nx
+            || ry >= self.ny
+            || self.runs.len() + 1 >= NO_SLOT as usize
+        {
+            return Self::build(cells);
+        }
+        let cell = (rx * self.ny + ry) as usize;
+        let k = match self.at[cell] {
+            NO_SLOT => {
+                let k = self.runs.partition_point(|r| (r.x, r.y) < (c.x, c.y));
+                for v in &mut self.at {
+                    if *v != NO_SLOT && *v as usize >= k {
+                        *v += 1;
+                    }
+                }
+                self.at[cell] = k as u32;
+                self.runs.insert(
+                    k,
+                    ZRun {
+                        x: c.x,
+                        y: c.y,
+                        z0: c.z,
+                        z1: c.z,
+                        start: at,
+                    },
+                );
+                k
+            }
+            k => {
+                let k = k as usize;
+                if self
+                    .runs
+                    .get(k + 1)
+                    .is_some_and(|n| (n.x, n.y) == (c.x, c.y))
+                {
+                    return Self::build(cells); // a row of several runs
+                }
+                let r = &mut self.runs[k];
+                if c.z.checked_add(1) == Some(r.z0) {
+                    r.z0 = c.z;
+                } else if r.z1.checked_add(1) == Some(c.z) {
+                    r.z1 = c.z;
+                } else {
+                    return Self::build(cells); // a gap in the row: a second run, as `build` makes it
+                }
+                k
+            }
+        };
+        for r in &mut self.runs[k + 1..] {
+            r.start += 1;
+        }
+        self.live.insert(at, nbrs.iter().flatten().count() as u8);
+        for &j in nbrs.iter().flatten() {
+            self.live[j] += 1;
+        }
+        Some(self)
+    }
+
+    fn build(cells: &[Coord]) -> Option<Self> {
+        let first = cells.first()?;
+        let mut runs: Vec<ZRun> = Vec::new();
+        let mut split = 0;
+        for (i, c) in cells.iter().enumerate() {
+            match runs.last_mut() {
+                // cells are sorted and distinct, so the run continues iff z steps by one
+                Some(r) if r.x == c.x && r.y == c.y && r.z1.checked_add(1) == Some(c.z) => {
+                    r.z1 = c.z;
+                }
+                Some(r) if r.x == c.x && r.y == c.y => {
+                    split += 1; // a gap: the row's next run
+                    runs.push(ZRun {
+                        x: c.x,
+                        y: c.y,
+                        z0: c.z,
+                        z1: c.z,
+                        start: i,
+                    });
+                }
+                _ => runs.push(ZRun {
+                    x: c.x,
+                    y: c.y,
+                    z0: c.z,
+                    z1: c.z,
+                    start: i,
+                }),
+            }
+        }
+        let (mut x1, mut y0, mut y1) = (first.x, first.y, first.y);
+        for r in &runs {
+            x1 = x1.max(r.x);
+            y0 = y0.min(r.y);
+            y1 = y1.max(r.y);
+        }
+        let nx = x1.checked_sub(first.x)?.checked_add(1)?;
+        let ny = y1.checked_sub(y0)?.checked_add(1)?;
+        let area = nx.checked_mul(ny)?;
+        if area > 4 * runs.len() as i64 + 64 || runs.len() >= NO_SLOT as usize {
+            return None;
+        }
+        let mut at = vec![NO_SLOT; area as usize];
+        for (k, r) in runs.iter().enumerate().rev() {
+            at[((r.x - first.x) * ny + (r.y - y0)) as usize] = k as u32; // the row's first run
+        }
+        let mut rows = Self {
+            runs,
+            split,
+            x0: first.x,
+            y0,
+            nx,
+            ny,
+            at,
+            live: Vec::new(),
+        };
+        let mut live = vec![0_u8; cells.len()];
+        for run in &rows.runs {
+            let beside = rows.beside(run);
+            for z in run.z0..=run.z1 {
+                let mut n = u8::from(z > run.z0) + u8::from(z < run.z1);
+                for r in beside.iter().copied().flatten() {
+                    n += u8::from(z >= r.z0 && z <= r.z1);
+                }
+                live[run.start + (z - run.z0) as usize] = n;
+            }
+        }
+        rows.live = live;
+        Some(rows)
+    }
+
+    /// Whether every row is one z range, so [`Self::row`] is the whole row.
+    pub(crate) fn contiguous(&self) -> bool {
+        self.split == 0
+    }
+
+    /// The first run of row `(x, y)`, if the domain has one: the whole row when
+    /// [`Self::contiguous`].
+    pub(crate) fn row(&self, x: Option<i64>, y: Option<i64>) -> Option<ZRun> {
+        self.row_runs(x, y).first().copied()
+    }
+
+    /// The runs of row `(x, y)` in z order (empty if the domain has none there).
+    pub(crate) fn row_runs(&self, x: Option<i64>, y: Option<i64>) -> &[ZRun] {
+        let (Some(rx), Some(ry)) = (
+            x.and_then(|x| x.checked_sub(self.x0)),
+            y.and_then(|y| y.checked_sub(self.y0)),
+        ) else {
+            return &[];
+        };
+        if rx < 0 || ry < 0 || rx >= self.nx || ry >= self.ny {
+            return &[];
+        }
+        let k = self.at[(rx * self.ny + ry) as usize];
+        if k == NO_SLOT {
+            return &[];
+        }
+        let k = k as usize;
+        let (x, y) = (self.runs[k].x, self.runs[k].y);
+        let mut end = k + 1;
+        if self.split > 0 {
+            while self.runs.get(end).is_some_and(|r| (r.x, r.y) == (x, y)) {
+                end += 1;
+            }
+        }
+        &self.runs[k..end]
+    }
+
+    /// The runs of the four rows beside `run` in `NB6` order: `x - 1`, `x + 1`, `y - 1`,
+    /// `y + 1`.
+    pub(crate) fn beside(&self, run: &ZRun) -> [&[ZRun]; 4] {
+        [
+            self.row_runs(run.x.checked_sub(1), Some(run.y)),
+            self.row_runs(run.x.checked_add(1), Some(run.y)),
+            self.row_runs(Some(run.x), run.y.checked_sub(1)),
+            self.row_runs(Some(run.x), run.y.checked_add(1)),
+        ]
+    }
+
+    /// The face neighbours of cell `(run.x, run.y, z)` (index `i`), in `NB6` order, as the
+    /// first `n` entries of the array (the tests check the rows against the offset lookups).
+    #[cfg(test)]
+    pub(crate) fn neighbours(
+        run: &ZRun,
+        beside: &[&[ZRun]; 4],
+        z: i64,
+        i: usize,
+    ) -> ([usize; 6], usize) {
+        let mut js = [0usize; 6];
+        let mut n = 0;
+        for r in beside.iter().copied().flatten() {
+            if z >= r.z0 && z <= r.z1 {
+                js[n] = r.start + (z - r.z0) as usize;
+                n += 1;
+            }
+        }
+        if z > run.z0 {
+            js[n] = i - 1;
+            n += 1;
+        }
+        if z < run.z1 {
+            js[n] = i + 1;
+            n += 1;
+        }
+        (js, n)
+    }
+}
 
 /// Cached domain topology (rebuilt when the domain changes).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Topology {
     lookup: Lookup,
     pub(crate) keys: Vec<u32>,
@@ -814,6 +1438,37 @@ pub(crate) struct Topology {
     /// Every cell in coreward scan order: `r2` ascending, then planet6's
     /// `(y, x, z)` (empty with no core).
     pub(crate) rsort: Vec<u32>,
+    /// The outward neighbour of `rsort[k]` at index `k`, as an rsort position: the `k'` with
+    /// `rsort[k']` the domain cell one [`outward_step`](super::p6_rest::outward_step) from
+    /// `rsort[k]` away from the core, or `NO_SLOT` at the core or where that step leaves the
+    /// domain. Static for the topology's life (the domain and the core are fixed), so the
+    /// outermost-first gas-rise and convection scans read it in scan order instead of
+    /// recomputing the step and probing the lookup per cell, and a scan over parcels gathered
+    /// into rsort order stays in that order.
+    pub(crate) shell_up: Vec<u32>,
+    /// [`wide_roll_cell`] of every domain cell, in domain order, under one wide-roll key (the
+    /// first key asked for; built on first use). Lets convection, which rolls the cells that
+    /// pass its density test every tick, read one word per cell instead of its coordinate.
+    cell_roll: std::sync::OnceLock<(u64, Vec<u64>)>,
+    /// Each cell's position in `rsort` (the inverse permutation, built on first use).
+    rpos: std::sync::OnceLock<Vec<u32>>,
+    /// The outward neighbour of each domain cell as a cell index (`shell_up` in domain order:
+    /// `cell_up[rsort[k]] == rsort[shell_up[k]]`, `NO_SLOT` where `shell_up` is), built on
+    /// first use. Lets the convection density test run in domain order.
+    cell_up: std::sync::OnceLock<Vec<u32>>,
+    /// §6ad: `cell_up` as runs `[start, len, up]`: cells `start..start + len` have outward
+    /// neighbours `up..up + len` (runs of `NO_SLOT` are left out), built on first use from
+    /// `cell_up` and dropped whenever `cell_up` changes. Lets the convection density test
+    /// read the outward parcels as slices.
+    up_runs: std::sync::OnceLock<Vec<[u32; 3]>>,
+    /// Each cell's position in `rise` as its lower cell, `NO_SLOT` for a cell with no cell
+    /// above (built on first use). Lets the +y gas rise visit only its rising cells.
+    rise_pos: std::sync::OnceLock<Vec<u32>>,
+    /// The inverse of `ysort` (built on first use): `ysort[ypos[i]] == i`. Lets a sparse scan
+    /// visit a few cells in `ysort` order without walking all of it.
+    ypos: std::sync::OnceLock<Vec<u32>>,
+    /// The domain's rows as z-runs, when each row is one contiguous run.
+    pub(crate) zruns: Option<ZRuns>,
 }
 
 pub(crate) const NB6: [(i64, i64, i64); 6] = [
@@ -824,6 +1479,45 @@ pub(crate) const NB6: [(i64, i64, i64); 6] = [
     (0, 0, -1),
     (0, 0, 1),
 ];
+
+/// §6t: `(y0, span)` of a domain in strictly ascending coordinate order whose y values span a
+/// modest range, for [`counting_sort`] by y; `None` sends the caller to its comparison sort
+/// (always under the test-only full scans).
+fn counting_span(cells: &[Coord]) -> Option<(i64, usize)> {
+    if super::p6_rest::full_scans() || cells.is_empty() || cells.len() >= NO_SLOT as usize {
+        return None;
+    }
+    if !cells.windows(2).all(|w| w[0] < w[1]) {
+        return None;
+    }
+    let (lo, hi) = cells.iter().fold((i64::MAX, i64::MIN), |(lo, hi), c| {
+        (lo.min(c.y), hi.max(c.y))
+    });
+    let span = hi.checked_sub(lo)?.checked_add(1)?;
+    (span as u64 <= 4 * cells.len() as u64 + 1024).then_some((lo, span as usize))
+}
+
+/// §6t: `items` stably sorted by `key` (each below `span`): the order a stable comparison
+/// sort by that key alone gives.
+fn counting_sort<T: Copy>(items: &[T], span: usize, key: impl Fn(T) -> usize) -> Vec<T> {
+    let mut start = vec![0usize; span + 1];
+    for &it in items {
+        start[key(it) + 1] += 1;
+    }
+    for k in 0..span {
+        start[k + 1] += start[k];
+    }
+    let Some(&first) = items.first() else {
+        return Vec::new();
+    };
+    let mut out = vec![first; items.len()];
+    for &it in items {
+        let k = key(it);
+        out[start[k]] = it;
+        start[k] += 1;
+    }
+    out
+}
 
 impl Topology {
     pub(crate) fn build(cells: &[Coord]) -> Self {
@@ -843,14 +1537,31 @@ impl Topology {
             ysort: Vec::new(),
             r2: Vec::new(),
             rsort: Vec::new(),
+            shell_up: Vec::new(),
+            cell_roll: std::sync::OnceLock::new(),
+            rpos: std::sync::OnceLock::new(),
+            cell_up: std::sync::OnceLock::new(),
+            up_runs: std::sync::OnceLock::new(),
+            rise_pos: std::sync::OnceLock::new(),
+            ypos: std::sync::OnceLock::new(),
+            zruns: ZRuns::build(cells),
             space_faces: Vec::new(),
             core: None,
         };
+        // §6t: a domain in strictly ascending (x, y, z) order (as the chem world keeps it) is,
+        // within one y, in (x, z) order, so a stable counting sort by y alone gives the same
+        // lists as the comparison sorts by (y, x, z) and (-y, x, z) (the keys are distinct).
+        let y_span = counting_span(cells);
         let mut ysort: Vec<u32> = (0..cells.len() as u32).collect();
-        ysort.sort_by_key(|&i| {
-            let c = cells[i as usize];
-            (c.y, c.x, c.z)
-        });
+        match y_span {
+            Some((y0, span)) => {
+                ysort = counting_sort(&ysort, span, |i| (cells[i as usize].y - y0) as usize);
+            }
+            None => ysort.sort_by_key(|&i| {
+                let c = cells[i as usize];
+                (c.y, c.x, c.z)
+            }),
+        }
         t.ysort = ysort;
         let mut rise: Vec<(u32, u32)> = Vec::new();
         for i in 0..cells.len() {
@@ -858,10 +1569,17 @@ impl Topology {
                 rise.push((i as u32, up as u32));
             }
         }
-        rise.sort_by_key(|&(i, _)| {
-            let c = cells[i as usize];
-            (std::cmp::Reverse(c.y), c.x, c.z)
-        });
+        match y_span {
+            Some((y0, span)) => {
+                rise = counting_sort(&rise, span, |(i, _)| {
+                    span - 1 - (cells[i as usize].y - y0) as usize
+                });
+            }
+            None => rise.sort_by_key(|&(i, _)| {
+                let c = cells[i as usize];
+                (std::cmp::Reverse(c.y), c.x, c.z)
+            }),
+        }
         t.rise = rise;
         for i in 0..cells.len() {
             let mut mask = 0u8;
@@ -903,6 +1621,257 @@ impl Topology {
         t
     }
 
+    /// §6t: this topology with one cell inserted at domain index `at` (`cells` is the new
+    /// domain, `cells[at]` the new cell), exactly as [`Self::build`] plus
+    /// [`Self::radial_frame`] would make it for `cells` with the core cell `core` (the pinned
+    /// core's new index, or `None` to take the bounding-box rule). Every list is the old one
+    /// with indices at or after `at` shifted by one and the new cell's entries (and its
+    /// neighbours' changed ones) put in their sorted places: linear passes, no sort. Returns
+    /// `None` where that does not hold cheaply, so the caller rebuilds: a hashed lookup, a cell
+    /// outside the lookup box (the box and the core rule would change), or a core that moves.
+    /// Lazily built tables start empty, as after `build`.
+    pub(crate) fn inserted(
+        mut self,
+        cells: &[Coord],
+        at: usize,
+        core: Option<u32>,
+    ) -> Option<Self> {
+        // §6w: the tables are updated in place (shifted where they hold cell indices, the new
+        // entries inserted), so a growing place neither allocates nor copies a second set of
+        // whole-domain arrays; the result is the same topology as before.
+        let n_old = self.keys.len();
+        if cells.len() != n_old + 1 || at >= cells.len() || n_old + 1 >= NO_SLOT as usize {
+            return None;
+        }
+        let c = cells[at];
+        let at32 = at as u32;
+        let shift = |v: &mut u32| {
+            if *v != NO_SLOT && *v >= at32 {
+                *v += 1;
+            }
+        };
+        // Lookup: the same box (the new cell must lie in it, so the bounding box, and with it
+        // `boxed`'s choice and the core rule's centre, stay as they were).
+        let (min, dim) = match &self.lookup {
+            Lookup::Boxed { min, dim, .. } => (*min, *dim),
+            _ => return None,
+        };
+        let (rx, ry, rz) = (c.x - min[0], c.y - min[1], c.z - min[2]);
+        if rx < 0 || ry < 0 || rz < 0 || rx >= dim[0] || ry >= dim[1] || rz >= dim[2] {
+            return None;
+        }
+        // Core: pinned (given), or the bounding-box rule over the same box, where the new cell
+        // can only take over as the strictly nearer cell or the lower index on a tie.
+        let old_core = self.core.map(|mut v| {
+            shift(&mut v);
+            v
+        });
+        let core = match core {
+            Some(pin) => Some(pin),
+            None => {
+                let m2: [i128; 3] =
+                    std::array::from_fn(|k| 2 * i128::from(min[k]) + i128::from(dim[k]) - 1);
+                let d2 = |q: Coord| -> i128 {
+                    [q.x, q.y, q.z]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(k, v)| {
+                            let e = 2 * i128::from(v) - m2[k];
+                            e * e
+                        })
+                        .sum()
+                };
+                let o = old_core?;
+                let (dn, dold) = (d2(c), d2(cells[o as usize]));
+                if dn < dold || (dn == dold && at32 < o) {
+                    return None; // the core moves: every radial table changes
+                }
+                Some(o)
+            }
+        };
+        if core != old_core {
+            return None;
+        }
+        if let Lookup::Boxed { slot, .. } = &mut self.lookup {
+            slot.iter_mut().for_each(shift);
+            slot[((rx * dim[1] + ry) * dim[2] + rz) as usize] = at32;
+        }
+        self.core = core;
+        let nbrs = NB6.map(|d| self.offset(cells, at, d));
+        self.zruns = match self.zruns.take() {
+            Some(z) => z.inserted(cells, at, &nbrs),
+            None => ZRuns::build(cells),
+        };
+        // The lazy tables: the wide-roll words are per cell in domain order, so the new cell's
+        // word is inserted; the inverse tables of `rise` and `ysort` are rebuilt on next use.
+        let cell_roll = self.cell_roll.take().map(|(key, mut table)| {
+            table.insert(at, wide_roll_cell(key, c));
+            (key, table)
+        });
+        self.cell_roll = cell_roll.map_or_else(std::sync::OnceLock::new, std::sync::OnceLock::from);
+        self.rise_pos = std::sync::OnceLock::new();
+        self.ypos = std::sync::OnceLock::new();
+        let old_cell_up = self.cell_up.take();
+        self.up_runs = std::sync::OnceLock::new();
+        let old_rpos = self.rpos.take();
+        self.keys.insert(at, cell_key(c));
+        // ysort: (y, x, z) ascending.
+        let yk = |i: u32| {
+            let q = cells[i as usize];
+            (q.y, q.x, q.z)
+        };
+        self.ysort.iter_mut().for_each(shift);
+        let k = self.ysort.partition_point(|&v| yk(v) < yk(at32));
+        self.ysort.insert(k, at32);
+        // rise: (cell, cell above) by the lower cell's (y descending, x, z); the new cell gains
+        // the pair to the cell above it, and the cell below it gains the pair to it.
+        let rk = |i: u32| {
+            let q = cells[i as usize];
+            (std::cmp::Reverse(q.y), q.x, q.z)
+        };
+        for (a, b) in self.rise.iter_mut() {
+            shift(a);
+            shift(b);
+        }
+        if let Some(up) = self.offset(cells, at, (0, 1, 0)) {
+            let k = self.rise.partition_point(|&(a, _)| rk(a) < rk(at32));
+            self.rise.insert(k, (at32, up as u32));
+        }
+        if let Some(below) = self.offset(cells, at, (0, -1, 0)) {
+            let b = below as u32;
+            let k = self.rise.partition_point(|&(a, _)| rk(a) < rk(b));
+            self.rise.insert(k, (b, at32));
+        }
+        // space_faces, in index order: the new cell's mask, and each face neighbour loses the
+        // face toward it (dropped when it no longer touches space).
+        for (i, _) in self.space_faces.iter_mut() {
+            shift(i);
+        }
+        let mut mask = 0u8;
+        for (k, d) in NB6.iter().enumerate() {
+            match self.offset(cells, at, *d) {
+                None => mask |= 1 << k,
+                Some(j) => {
+                    // NB6 pairs opposite directions as (0, 1), (2, 3), (4, 5).
+                    let back = k ^ 1;
+                    let faces = &mut self.space_faces;
+                    let pos = faces.partition_point(|&(i, _)| (i as usize) < j);
+                    if let Some(e) = faces.get_mut(pos)
+                        && e.0 as usize == j
+                    {
+                        e.1 &= !(1 << back);
+                        if e.1 == 0 {
+                            faces.remove(pos);
+                        }
+                    }
+                }
+            }
+        }
+        if mask != 0 {
+            let pos = self.space_faces.partition_point(|&(i, _)| i < at32);
+            self.space_faces.insert(pos, (at32, mask));
+        }
+        // Radial frame around the same core cell.
+        if let Some(co) = core {
+            let o = cells[co as usize];
+            let r2c = {
+                let (dx, dy, dz) = (c.x - o.x, c.y - o.y, c.z - o.z);
+                dx * dx + dy * dy + dz * dz
+            };
+            self.r2.insert(at, r2c);
+            let r2 = &self.r2;
+            let sk = |i: u32| {
+                let q = cells[i as usize];
+                (r2[i as usize], q.y, q.x, q.z)
+            };
+            let rsort = &mut self.rsort;
+            rsort.iter_mut().for_each(shift);
+            let k0 = rsort.partition_point(|&v| sk(v) < sk(at32));
+            rsort.insert(k0, at32);
+            let k032 = k0 as u32;
+            let kshift = |v: &mut u32| {
+                if *v != NO_SLOT && *v >= k032 {
+                    *v += 1;
+                }
+            };
+            let up = &mut self.shell_up;
+            up.iter_mut().for_each(kshift);
+            up.insert(k0, NO_SLOT);
+            let rsort = &self.rsort;
+            let pos_of = |i: usize| rsort.partition_point(|&v| sk(v) < sk(i as u32));
+            let step_of =
+                |q: Coord| super::p6_rest::outward_step((q.x - o.x, q.y - o.y, q.z - o.z));
+            // The new cell's own outward neighbour ...
+            let st = step_of(c);
+            let mut own_up = NO_SLOT;
+            let mut landed: Vec<usize> = Vec::new();
+            let mut up_writes: Vec<(usize, u32)> = Vec::new();
+            if st != (0, 0, 0)
+                && let Some(j) = self.offset(cells, at, st)
+            {
+                up_writes.push((k0, pos_of(j) as u32));
+                own_up = j as u32;
+            }
+            // ... and the cells whose outward step lands on it (they had none before).
+            for dx in -1_i64..=1 {
+                for dy in -1_i64..=1 {
+                    for dz in -1_i64..=1 {
+                        if (dx, dy, dz) == (0, 0, 0) {
+                            continue;
+                        }
+                        let Some(j) = self.offset(cells, at, (dx, dy, dz)) else {
+                            continue;
+                        };
+                        let q = cells[j];
+                        let s = step_of(q);
+                        if s != (0, 0, 0) && (q.x + s.0, q.y + s.1, q.z + s.2) == (c.x, c.y, c.z) {
+                            up_writes.push((pos_of(j), k032));
+                            landed.push(j);
+                        }
+                    }
+                }
+            }
+            for (k, v) in up_writes {
+                self.shell_up[k] = v;
+            }
+            // The two tables `radial_frame` fills as it builds (`cell_up`, `rsort_pos`), carried
+            // over the same way when the old topology had them.
+            if let (Some(mut cell_up), Some(mut rpos)) = (old_cell_up, old_rpos) {
+                cell_up.iter_mut().for_each(shift);
+                cell_up.insert(at, own_up);
+                for &j in &landed {
+                    cell_up[j] = at32;
+                }
+                rpos.iter_mut().for_each(kshift);
+                rpos.insert(at, k032);
+                self.cell_up = std::sync::OnceLock::from(cell_up);
+                self.rpos = std::sync::OnceLock::from(rpos);
+            }
+        }
+        Some(self)
+    }
+
+    /// §6w: reserves [`growth_room`] in each per-cell table [`Self::inserted`] grows.
+    fn reserve_growth(&mut self) {
+        let room = growth_room(self.keys.len());
+        self.keys.reserve(room);
+        self.ysort.reserve(room);
+        self.rise.reserve(room);
+        self.space_faces.reserve(room);
+        self.r2.reserve(room);
+        self.rsort.reserve(room);
+        self.shell_up.reserve(room);
+        if let Some(z) = &mut self.zruns {
+            z.live.reserve(room);
+        }
+        for v in [self.cell_up.get_mut(), self.rpos.get_mut()]
+            .into_iter()
+            .flatten()
+        {
+            v.reserve(room);
+        }
+    }
+
     fn boxed(cells: &[Coord]) -> Option<Lookup> {
         let first = cells.first()?;
         let mut lo = [first.x, first.y, first.z];
@@ -931,13 +1900,12 @@ impl Topology {
         Some(Lookup::Boxed { min: lo, dim, slot })
     }
 
-    /// Domain index of `cells[i] + d`, if that cell is in the domain.
-    #[inline]
-    /// Fill [`Topology::r2`] and [`Topology::rsort`] from the (possibly
-    /// pinned) core cell; clears them with no core.
+    /// Fill [`Topology::r2`], [`Topology::rsort`] and [`Topology::shell_up`] from the
+    /// (possibly pinned) core cell; clears them with no core.
     pub(crate) fn radial_frame(&mut self, cells: &[Coord]) {
         self.r2.clear();
         self.rsort.clear();
+        self.shell_up.clear();
         let Some(o) = self.core else { return };
         let o = cells[o as usize];
         self.r2 = cells
@@ -947,14 +1915,199 @@ impl Topology {
                 dx * dx + dy * dy + dz * dz
             })
             .collect();
-        let mut rs: Vec<u32> = (0..cells.len() as u32).collect();
-        rs.sort_by_key(|&i| {
-            let c = cells[i as usize];
-            (self.r2[i as usize], c.y, c.x, c.z)
-        });
+        // §6t: `ysort` is in (y, x, z) order, so a stable counting sort of it by r2 is the
+        // (r2, y, x, z) order (the keys are distinct), when r2 spans a modest range.
+        let r2max = self.r2.iter().copied().max().unwrap_or(0);
+        let rs: Vec<u32> = if self.ysort.len() == cells.len()
+            && r2max >= 0
+            && (r2max as usize) <= 4 * cells.len() + 1024
+            && !super::p6_rest::full_scans()
+        {
+            counting_sort(&self.ysort, r2max as usize + 1, |i| {
+                self.r2[i as usize] as usize
+            })
+        } else {
+            let mut rs: Vec<u32> = (0..cells.len() as u32).collect();
+            rs.sort_by_key(|&i| {
+                let c = cells[i as usize];
+                (self.r2[i as usize], c.y, c.x, c.z)
+            });
+            rs
+        };
+        // §6t: each cell's outward neighbour in domain order (the cells are read in order), then
+        // gathered into rsort order; the domain-order list is `cell_up` and the ranks are
+        // `rsort_pos`, so both lazy tables are filled here with the values they would build.
+        let up_dom: Vec<u32> = (0..cells.len())
+            .map(|i| {
+                let c = cells[i];
+                let st = super::p6_rest::outward_step((c.x - o.x, c.y - o.y, c.z - o.z));
+                if st == (0, 0, 0) {
+                    return NO_SLOT;
+                }
+                self.offset(cells, i, st).map_or(NO_SLOT, |j| j as u32)
+            })
+            .collect();
+        let mut rank = vec![NO_SLOT; cells.len()];
+        for (k, &i) in rs.iter().enumerate() {
+            rank[i as usize] = k as u32;
+        }
+        self.shell_up = rs
+            .iter()
+            .map(|&i| {
+                let up = up_dom[i as usize];
+                if up == NO_SLOT {
+                    NO_SLOT
+                } else {
+                    rank[up as usize]
+                }
+            })
+            .collect();
         self.rsort = rs;
+        self.up_runs = std::sync::OnceLock::new();
+        if !super::p6_rest::full_scans() {
+            self.cell_up = std::sync::OnceLock::from(up_dom);
+            self.rpos = std::sync::OnceLock::from(rank);
+        } else {
+            self.cell_up = std::sync::OnceLock::new();
+            self.rpos = std::sync::OnceLock::new();
+        }
     }
 
+    /// [`Topology::cell_up`]: each domain cell's outward neighbour (built on first use).
+    pub(crate) fn cell_up(&self) -> &[u32] {
+        self.cell_up.get_or_init(|| {
+            let mut up = vec![NO_SLOT; self.rsort.len()];
+            for (&i, &ku) in self.rsort.iter().zip(&self.shell_up) {
+                if ku != NO_SLOT {
+                    up[i as usize] = self.rsort[ku as usize];
+                }
+            }
+            up
+        })
+    }
+
+    /// [`Topology::up_runs`]: [`Topology::cell_up`] as maximal runs of consecutive cells whose
+    /// outward neighbours are consecutive too (built on first use).
+    pub(crate) fn up_runs(&self) -> &[[u32; 3]] {
+        self.up_runs.get_or_init(|| {
+            let up = self.cell_up();
+            let mut runs = Vec::new();
+            let mut i = 0;
+            while i < up.len() {
+                let mut j = i + 1;
+                if up[i] == NO_SLOT {
+                    while j < up.len() && up[j] == NO_SLOT {
+                        j += 1;
+                    }
+                } else {
+                    while j < up.len() && up[j] != NO_SLOT && up[j] == up[j - 1].wrapping_add(1) {
+                        j += 1;
+                    }
+                    runs.push([i as u32, (j - i) as u32, up[i]]);
+                }
+                i = j;
+            }
+            runs
+        })
+    }
+
+    /// [`Topology::rise_pos`]: each cell's position in `rise` (built on first use).
+    pub(crate) fn rise_pos(&self) -> &[u32] {
+        self.rise_pos.get_or_init(|| {
+            let mut pos = vec![NO_SLOT; self.ysort.len()];
+            for (k, &(i, _)) in self.rise.iter().enumerate() {
+                pos[i as usize] = k as u32;
+            }
+            pos
+        })
+    }
+
+    /// Each cell's position in `ysort` (the inverse permutation, built on first use).
+    pub(crate) fn ysort_pos(&self) -> &[u32] {
+        self.ypos.get_or_init(|| {
+            let mut pos = vec![0u32; self.ysort.len()];
+            for (k, &i) in self.ysort.iter().enumerate() {
+                pos[i as usize] = k as u32;
+            }
+            pos
+        })
+    }
+
+    /// [`wide_roll_cell`] of every domain cell under `key`, in domain order; `None` when the
+    /// cached table was built for another key (the caller then rolls per cell).
+    /// The key of the wide-roll words, when they are built.
+    #[cfg(test)]
+    pub(crate) fn cell_roll_key(&self) -> Option<u64> {
+        self.cell_roll.get().map(|&(k, _)| k)
+    }
+
+    pub(crate) fn cell_roll_cells(&self, key: u64, cells: &[Coord]) -> Option<&[u64]> {
+        let (k, table) = self.cell_roll.get_or_init(|| {
+            let mut table = Vec::with_capacity(cells.len() + growth_room(cells.len()));
+            table.extend(cells.iter().map(|&c| wide_roll_cell(key, c)));
+            (key, table)
+        });
+        (*k == key).then_some(table.as_slice())
+    }
+
+    /// Each cell's position in `rsort` (the inverse permutation, built on first use).
+    pub(crate) fn rsort_pos(&self) -> &[u32] {
+        self.rpos.get_or_init(|| {
+            let mut pos = vec![0u32; self.rsort.len()];
+            for (k, &i) in self.rsort.iter().enumerate() {
+                pos[i as usize] = k as u32;
+            }
+            pos
+        })
+    }
+
+    /// The `rsort` scan outermost first: `(cell, outward neighbour)` with the
+    /// neighbour `None` at the core or where the outward step leaves the domain (the tests
+    /// check it against the offset lookups; the scans read `shell_up` directly).
+    #[cfg(test)]
+    pub(crate) fn rsort_outward_first(&self) -> impl Iterator<Item = (usize, Option<usize>)> + '_ {
+        self.rsort
+            .iter()
+            .zip(&self.shell_up)
+            .rev()
+            .map(|(&i, &ku)| {
+                (
+                    i as usize,
+                    (ku != NO_SLOT).then(|| self.rsort[ku as usize] as usize),
+                )
+            })
+    }
+
+    /// The outward neighbour of `rsort[k]` as a cell index, or `NO_SLOT`.
+    #[cfg(test)]
+    pub(crate) fn rsort_up(&self, k: usize) -> u32 {
+        let ku = self.shell_up[k];
+        if ku == NO_SLOT {
+            NO_SLOT
+        } else {
+            self.rsort[ku as usize]
+        }
+    }
+
+    /// The cell index of `c`, or `None` when `c` is not a domain cell: the same answer as a
+    /// binary search of the sorted cell list, in one box probe.
+    pub(crate) fn locate(&self, c: Coord) -> Option<usize> {
+        match &self.lookup {
+            Lookup::Boxed { min, dim, slot } => {
+                let rx = c.x.checked_sub(min[0])?;
+                let ry = c.y.checked_sub(min[1])?;
+                let rz = c.z.checked_sub(min[2])?;
+                if rx < 0 || ry < 0 || rz < 0 || rx >= dim[0] || ry >= dim[1] || rz >= dim[2] {
+                    return None;
+                }
+                let s = slot[((rx * dim[1] + ry) * dim[2] + rz) as usize];
+                (s != NO_SLOT).then_some(s as usize)
+            }
+            Lookup::Hashed(m) => m.get(&c).map(|s| *s as usize),
+        }
+    }
+
+    /// Domain index of `cells[i] + d`, if that cell is in the domain.
     pub(crate) fn offset(&self, cells: &[Coord], i: usize, d: (i64, i64, i64)) -> Option<usize> {
         let c = cells[i];
         let (x, y, z) = (
@@ -978,7 +2131,58 @@ impl Topology {
     /// The 6 face neighbours in planet6 order.
     #[inline]
     pub(crate) fn nb6(&self, cells: &[Coord], i: usize) -> [Option<usize>; 6] {
+        if let Lookup::Boxed { min, dim, slot } = &self.lookup {
+            // The same six `offset` lookups, with the box index built once. `cells[i]` lies in
+            // the box, so `r*` is in `0..dim` and no step below can overflow. A face step
+            // leaves the box exactly when `offset`'s range test fails (an absolute coordinate
+            // whose `checked_add` overflows is outside the box too).
+            let c = cells[i];
+            let (rx, ry, rz) = (c.x - min[0], c.y - min[1], c.z - min[2]);
+            let (sy, sx) = (dim[2], dim[1] * dim[2]);
+            let base = (rx * dim[1] + ry) * dim[2] + rz;
+            let at = |inside: bool, k: i64| {
+                if !inside {
+                    return None;
+                }
+                let s = slot[k as usize];
+                (s != NO_SLOT).then_some(s as usize)
+            };
+            return [
+                at(rx > 0, base - sx),
+                at(rx + 1 < dim[0], base + sx),
+                at(ry > 0, base - sy),
+                at(ry + 1 < dim[1], base + sy),
+                at(rz > 0, base - 1),
+                at(rz + 1 < dim[2], base + 1),
+            ];
+        }
         NB6.map(|d| self.offset(cells, i, d))
+    }
+
+    /// Face neighbour `k` of cell `i` ([`NB6`] order): `nb6(cells, i)[k]`, the same answer as
+    /// `offset(cells, i, NB6[k])`, with the one box probe.
+    #[inline]
+    pub(crate) fn face(&self, cells: &[Coord], i: usize, k: usize) -> Option<usize> {
+        if let Lookup::Boxed { min, dim, slot } = &self.lookup {
+            // As in `nb6`: `cells[i]` lies in the box, so no step below can overflow.
+            let c = cells[i];
+            let (rx, ry, rz) = (c.x - min[0], c.y - min[1], c.z - min[2]);
+            let base = (rx * dim[1] + ry) * dim[2] + rz;
+            let (inside, at) = match k {
+                0 => (rx > 0, base - dim[1] * dim[2]),
+                1 => (rx + 1 < dim[0], base + dim[1] * dim[2]),
+                2 => (ry > 0, base - dim[2]),
+                3 => (ry + 1 < dim[1], base + dim[2]),
+                4 => (rz > 0, base - 1),
+                _ => (rz + 1 < dim[2], base + 1),
+            };
+            if !inside {
+                return None;
+            }
+            let s = slot[at as usize];
+            return (s != NO_SLOT).then_some(s as usize);
+        }
+        self.offset(cells, i, NB6[k])
     }
 
     /// The in-domain cells of the `(2r+1)^3 - 1` cube in planet6 order.
@@ -1035,6 +2239,38 @@ impl Topology {
 }
 
 impl ChemWorld {
+    /// §6t: keeps the cached topology through one inserted domain cell (index `at`), when
+    /// [`Topology::inserted`] can; otherwise drops it, to be rebuilt on next use.
+    pub(crate) fn topology_after_insert(&mut self, at: usize) {
+        let Some(old) = self.topo.take() else { return };
+        let pin = self
+            .core_pin
+            .and_then(|p| self.cells.binary_search(&p).ok())
+            .map(|i| i as u32);
+        if self.core_pin.is_some() && pin.is_none() {
+            return;
+        }
+        // The vapor regions built for the old topology carry over (§6w): the same core cell, so
+        // every old cell keeps its region.
+        // Driven only: there the next tick's `vapor_sync` would build exactly this geometry
+        // before anything reads it.
+        let driven = self.params.cycle == WaterCycle::Driven;
+        let mode = self.params.vapor_local;
+        let n = self.cells.len();
+        let geo = self.vgeo.take_if(|g| {
+            driven && g.for_topology(&old) && g.mode == mode && g.patch.len() + 1 == n
+        });
+        self.topo = Arc::unwrap_or_clone(old)
+            .inserted(&self.cells, at, pin)
+            .map(Arc::new);
+        if let Some(g) = geo {
+            self.vgeo = Some(match &self.topo {
+                Some(t) => Arc::new(g.inserted(&self.cells, t, at)),
+                None => g, // the topology is rebuilt on next use, and the regions with it
+            });
+        }
+    }
+
     pub(crate) fn topology(&mut self) -> Arc<Topology> {
         if let Some(t) = &self.topo {
             return t.clone();
@@ -1046,6 +2282,13 @@ impl ChemWorld {
             t.core = Some(i as u32);
         }
         t.radial_frame(&self.cells);
+        // §6w: room for a growing domain, so the first places after a (re)build insert in place
+        // rather than copying every per-cell array into a larger one.
+        t.reserve_growth();
+        let room = growth_room(self.cells.len());
+        self.cells.reserve(room);
+        self.mat.reserve(room);
+        self.q.reserve(room);
         let t = Arc::new(t);
         self.topo = Some(t.clone());
         t
@@ -1054,6 +2297,24 @@ impl ChemWorld {
     #[inline]
     pub(crate) fn roll(&self, topo: &Topology, salt: u32, i: usize) -> u32 {
         self.roll_at(topo, salt, i, self.tick)
+    }
+
+    /// [`Self::roll`] for a scan that rolls many cells under one salt: the salt's part of the
+    /// roll is computed once by [`Self::roll_key`].
+    #[inline]
+    pub(crate) fn roll_keyed(&self, topo: &Topology, key: RollKey, i: usize) -> u32 {
+        match key {
+            RollKey::Lattice(s) => lattice(s, topo.keys[i], self.tick as u32) % 1000,
+            RollKey::Wide(k) => wide_roll_keyed(k, self.cells[i], self.tick) % 1000,
+        }
+    }
+
+    /// The per-salt part of [`Self::roll`], for [`Self::roll_keyed`].
+    pub(crate) fn roll_key(&self, salt: u32) -> RollKey {
+        match self.params.cycle {
+            WaterCycle::Classic => RollKey::Lattice(self.params.seed ^ salt),
+            WaterCycle::Driven => RollKey::Wide(wide_roll_key(self.params.seed ^ salt)),
+        }
     }
 
     /// A roll in `0..1000` on an explicit time key (evaporation uses
@@ -1071,6 +2332,16 @@ impl ChemWorld {
     /// combine, combine2 (hand families, network law, netBurn, condense, gas
     /// rise), water cycle, erode, dissolve, settle, flow.
     pub fn step(&mut self) -> Result<StepReport, StepError> {
+        // Laws flip occupancy bits through `set_mat`; the occupancy world's octree is rebuilt
+        // once per changed chunk at the end instead of on every flip (exact, see
+        // `World::defer_octree`). No law reads the octree or the world bounds.
+        self.world.defer_octree();
+        let report = self.step_laws();
+        self.world.flush_octree();
+        report
+    }
+
+    fn step_laws(&mut self) -> Result<StepReport, StepError> {
         self.tick += 1;
         let topo = self.topology();
         if self.params.cycle == WaterCycle::Driven {
@@ -1123,6 +2394,15 @@ impl ChemWorld {
     #[cfg(not(target_arch = "wasm32"))]
     #[doc(hidden)]
     pub fn step_profiled_fine(&mut self) -> Result<(StepReport, [u64; 18]), StepError> {
+        // Same deferred octree upkeep as [`Self::step`], so the stage times match it.
+        self.world.defer_octree();
+        let profiled = self.step_profiled_fine_laws();
+        self.world.flush_octree();
+        profiled
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn step_profiled_fine_laws(&mut self) -> Result<(StepReport, [u64; 18]), StepError> {
         use std::time::Instant;
         assert_eq!(self.params.cycle, WaterCycle::Driven);
         let mut ns = [0u64; 18];
@@ -1189,6 +2469,15 @@ impl ChemWorld {
     #[cfg(not(target_arch = "wasm32"))]
     #[doc(hidden)]
     pub fn step_profiled(&mut self) -> Result<(StepReport, [u64; 9]), StepError> {
+        // Same deferred octree upkeep as [`Self::step`], so the stage times match it.
+        self.world.defer_octree();
+        let profiled = self.step_profiled_laws();
+        self.world.flush_octree();
+        profiled
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn step_profiled_laws(&mut self) -> Result<(StepReport, [u64; 9]), StepError> {
         use std::time::Instant;
         let mut ns = [0u64; 9];
         let mut t = Instant::now();
@@ -1523,34 +2812,113 @@ impl ChemWorld {
         let dq = i64::from(self.params.dq);
         let co2n: i64 = match self.params.greenhouse {
             Greenhouse::Off => 0,
-            _ => self.mat.iter().filter(|m| **m == MatId::CO2).count() as i64,
+            // Counted 255 cells at a time in `u8` lanes (the same count, vectorised).
+            _ => self
+                .mat
+                .chunks(255)
+                .map(|c| i64::from(c.iter().map(|m| u8::from(*m == MatId::CO2)).sum::<u8>()))
+                .sum(),
         };
-        let mut nq = vec![0i32; n];
-        // bit k set = the cell's NB6[k] face borders space (0 = interior)
-        let mut surface = vec![0u8; n];
-        for i in 0..n {
-            let qi = self.q[i];
-            let nbs = topo.nb6(&self.cells, i);
-            for (k, j) in nbs.iter().enumerate() {
-                if j.is_none() {
-                    surface[i] |= 1 << k;
-                }
+        let mut nq = std::mem::take(&mut self.heat_scratch.nq);
+        // Each emitting cell adds the same `per` to each face neighbour and keeps the rest;
+        // the additions wrap in `i32`, so their order does not matter.
+        if let Some(rows) = &topo.zruns {
+            // Gathered: every cell's share `per` first, then each cell takes its own rest plus
+            // the shares of its face neighbours (the face relation is symmetric), row slice by
+            // row slice. Every cell lies in exactly one run, so the first sweep writes all of
+            // `nq` and `per`.
+            let mut per = std::mem::take(&mut self.heat_scratch.per);
+            if nq.len() != n {
+                nq.clear();
+                nq.resize(n, 0);
             }
-            let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
-            let mut deg: i64 = 0;
-            if o > 0 {
-                let live = nbs.iter().filter(|j| j.is_some()).count() as i64;
-                if live > 0 {
-                    let per = o / live;
-                    if per != 0 {
-                        for j in nbs.into_iter().flatten() {
-                            nq[j] = nq[j].wrapping_add(per as i32);
-                            deg += per;
-                        }
+            if per.len() != n {
+                per.clear();
+                per.resize(n, 0);
+            }
+            // The runs tile the domain in index order, so one sweep over the cells is the same
+            // as run by run. When `dq` divides 6000, `q * dq / 6000` truncated is `q / (6000 /
+            // dq)` truncated (the same rational), and every quantity fits `i32`: `0 <= p * live
+            // <= o <= q` for an emitting cell.
+            // §6aj: on wasm the default `dq` takes the plane-pipelined form instead (the same
+            // shares and sums, see `heat_piped_120`).
+            let piped = cfg!(all(target_arch = "wasm32", target_feature = "simd128"))
+                && self.params.dq == 300;
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            if piped {
+                heat_piped_120(&self.q, rows, &topo.space_faces, &mut per, &mut nq);
+            }
+            match self.params.dq {
+                _ if piped => {}
+                d if d > 0 && 6000 % d == 0 => {
+                    let divisor = 6000 / d;
+                    // All but the rim cells have six neighbours. Do that branch-free whole-
+                    // slice case first, then patch just the rim (live < 6) with the original
+                    // per-live quotient, before any cell reads a share.
+                    // `(q / divisor).max(0) / 6` in one quotient: for `q >= 0` truncation
+                    // composes (`q / d / 6 == q / (6 d)`), and for `q < 0` both are 0.
+                    if divisor == 20 {
+                        heat_shares_six_120(&self.q, &mut per, &mut nq);
+                    } else {
+                        let six = 6 * divisor;
+                        heat_shares_six(&self.q, &mut per, &mut nq, |q| q.max(0) / six);
+                    }
+                    for &(i, _) in &topo.space_faces {
+                        let i = i as usize;
+                        let o = self.q[i] / divisor;
+                        let live = usize::from(rows.live[i]);
+                        let p = if o > 0 && live > 0 {
+                            div_by_live(i64::from(o), live) as i32
+                        } else {
+                            0
+                        };
+                        per[i] = p;
+                        nq[i] = self.q[i] - p * live as i32;
+                    }
+                }
+                _ => {
+                    for i in 0..n {
+                        let qi = self.q[i];
+                        let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
+                        let live = usize::from(rows.live[i]);
+                        let p = if o > 0 && live > 0 {
+                            div_by_live(o, live)
+                        } else {
+                            0
+                        };
+                        per[i] = p as i32;
+                        nq[i] = (i64::from(qi) - p * live as i64) as i32;
                     }
                 }
             }
-            nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
+            if !piped {
+                for run in &rows.runs {
+                    heat_gather_run(rows, run, &per, &mut nq);
+                }
+            }
+            self.heat_scratch.per = per;
+        } else {
+            nq.clear();
+            nq.resize(n, 0);
+            for i in 0..n {
+                let qi = self.q[i];
+                let o = i64::from(qi) * dq / 6000; // trunc toward zero, like `| 0`
+                let mut deg: i64 = 0;
+                if o > 0 {
+                    let nbs = topo.nb6(&self.cells, i);
+                    let live = nbs.iter().filter(|j| j.is_some()).count() as i64;
+                    if live > 0 {
+                        let per = o / live;
+                        if per != 0 {
+                            for j in nbs.into_iter().flatten() {
+                                nq[j] = nq[j].wrapping_add(per as i32);
+                                deg += per;
+                            }
+                        }
+                    }
+                }
+                nq[i] = nq[i].wrapping_add((i64::from(qi) - deg) as i32);
+            }
         }
         let gh_on =
             self.params.cycle == WaterCycle::Driven && self.params.greenhouse != Greenhouse::Off;
@@ -1564,20 +2932,17 @@ impl ChemWorld {
                 .zip(&g.rim)
                 .map(|(&v, &r)| vapor_trap(v, r))
                 .collect(),
-            _ if gh_on => vec![vapor_trap(
-                self.vapor,
-                surface.iter().filter(|s| **s != 0).count() as i64,
-            )],
+            _ if gh_on => vec![vapor_trap(self.vapor, topo.space_faces.len() as i64)],
             _ => vec![0],
         };
         let local = traps.len() > 1;
         let mut leaked: i64 = 0;
         let mut trapped: i64 = 0;
         let mut back: Vec<(usize, usize, i64)> = Vec::new();
-        for i in 0..n {
-            if surface[i] == 0 {
-                continue;
-            }
+        // The rim cells (a face on space) in index order, with their space-face masks (bit k
+        // set = the NB6[k] face borders space): static for the topology's life.
+        for &(i, m) in &topo.space_faces {
+            let i = i as usize;
             let v = i64::from(nq[i]);
             let mut leak = i64::from(self.params.leak_q) + v * 2 / 1000;
             if co2n > 0 {
@@ -1611,7 +2976,6 @@ impl ChemWorld {
                     // cell, but downward, to the first non-AIR cell inward from
                     // one of its space faces: faces tried in an order rotating
                     // by tick and cell, first one whose column is not all AIR.
-                    let m = surface[i];
                     let faces: Vec<usize> = (0..6).filter(|k| m & (1 << k) != 0).collect();
                     let r0 = (self.tick as usize + i) % faces.len();
                     let t = (0..faces.len())
@@ -1640,24 +3004,46 @@ impl ChemWorld {
         }
         self.space_q += leaked;
         self.trapped_q += trapped;
-        self.q = nq;
+        self.heat_scratch.nq = std::mem::replace(&mut self.q, nq);
         (leaked, trapped)
     }
 
     fn phase_pass(&mut self, rep: &mut StepReport) {
-        for i in 0..self.cells.len() {
-            let m = self.mat[i];
-            if m == MatId::WATER && self.q[i] < FREEZE_AT {
-                self.set_mat(i, MatId::ICE);
-                self.q[i] = self.q[i].wrapping_add(2 * SL_FUSE);
-                rep.froze += 1;
-                self.mark(i, super::p6_rest::MARK_PHASE);
-            } else if m == MatId::ICE && self.q[i] > MELT_AT {
-                self.set_mat(i, MatId::WATER);
-                self.q[i] = self.q[i].wrapping_sub(2 * SL_FUSE);
-                rep.melted += 1;
-                self.mark(i, super::p6_rest::MARK_PHASE);
+        // Only WATER below FREEZE_AT and ICE above MELT_AT change, and each visit writes
+        // only its own cell, so a block's hits are known before its first visit.
+        let n = self.mat.len();
+        let mut base = 0;
+        while base < n {
+            let end = (base + 64).min(n);
+            if find_mat2(&self.mat[base..end], 0, MatId::WATER, MatId::ICE).is_none() {
+                base = end;
+                continue;
             }
+            let mut bits = hit_mask(&self.mat[base..end], &self.q[base..end], |m, q| {
+                (m == MatId::WATER) & (q < FREEZE_AT) | (m == MatId::ICE) & (q > MELT_AT)
+            });
+            while bits != 0 {
+                let i = base + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                self.phase_cell(i, rep);
+            }
+            base = end;
+        }
+    }
+
+    #[inline]
+    fn phase_cell(&mut self, i: usize, rep: &mut StepReport) {
+        let m = self.mat[i];
+        if m == MatId::WATER && self.q[i] < FREEZE_AT {
+            self.set_mat(i, MatId::ICE);
+            self.q[i] = self.q[i].wrapping_add(2 * SL_FUSE);
+            rep.froze += 1;
+            self.mark(i, super::p6_rest::MARK_PHASE);
+        } else if m == MatId::ICE && self.q[i] > MELT_AT {
+            self.set_mat(i, MatId::WATER);
+            self.q[i] = self.q[i].wrapping_sub(2 * SL_FUSE);
+            rep.melted += 1;
+            self.mark(i, super::p6_rest::MARK_PHASE);
         }
     }
 
@@ -1674,8 +3060,10 @@ impl ChemWorld {
         }
         let mut hs = Vec::new();
         let mut cube = Vec::new();
-        for i in 0..self.cells.len() {
-            if self.mat[i] != MatId::O || self.q[i] < 300 {
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::O) {
+            next = i + 1;
+            if self.q[i] < 300 {
                 continue;
             }
             let Some(partner) = topo
@@ -1716,16 +3104,48 @@ impl ChemWorld {
     }
 
     /// planet6 `stepCombine2` (everything after its `elements` gate).
-    fn combine2_pass(&mut self, topo: &Topology, rep: &mut StepReport) -> Result<(), StepError> {
+    pub(crate) fn combine2_pass(
+        &mut self,
+        topo: &Topology,
+        rep: &mut StepReport,
+    ) -> Result<(), StepError> {
         if !self.params.elements {
             return Ok(());
         }
-        let n = self.cells.len();
         let mut cube = Vec::new();
+        // §6y: no rule below makes C, Ca, N, O, H or STEAM (the burn rewrites a C cell as C),
+        // so a scan for an id the domain lacks when the pass starts (or, after the network,
+        // which can make any material, when it ends) finds nothing: one fused presence pass
+        // stands in for those scans. The test-only full scans skip nothing.
+        let present = |mat: &[MatId], ids| {
+            if super::p6_rest::full_scans() {
+                [true; 6]
+            } else {
+                mats_present(mat, ids)
+            }
+        };
+        const IDS: [MatId; 6] = [
+            MatId::C,
+            MatId::CA,
+            MatId::N,
+            MatId::O,
+            MatId::H,
+            MatId::STEAM,
+        ];
+        let needs_scan = self.params.combine || self.params.condense || self.net.is_some();
+        let [mut has_c, has_ca, has_n, has_o, has_h, mut has_steam] = if needs_scan {
+            present(&self.mat, IDS)
+        } else {
+            [true; 6]
+        };
+        let end = self.mat.len();
+        let from = |has: bool| if has { 0 } else { end };
         if self.params.combine {
             // C + 2 O -> CO2
-            for i in 0..n {
-                if self.mat[i] != MatId::C || self.q[i] < 300 {
+            let mut next = from(has_c);
+            while let Some(i) = find_mat(&self.mat, next, MatId::C) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 let os: Vec<usize> = topo
@@ -1746,8 +3166,10 @@ impl ChemWorld {
                 }
             }
             // Ca + S + 4 O -> ROCK (O from the +-2 cube)
-            for i in 0..n {
-                if self.mat[i] != MatId::CA || self.q[i] < 300 {
+            let mut next = from(has_ca);
+            while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 let Some(sj) = self.first_nb6(topo, i, |j| self.mat[j] == MatId::S) else {
@@ -1773,9 +3195,22 @@ impl ChemWorld {
                     rep.hand[1] += 1;
                 }
             }
-            // N + 3 H -> NH3
-            for i in 0..n {
-                if self.mat[i] != MatId::N || self.q[i] < 250 {
+            // N + 3 H -> NH3. Exact skip: every firing needs three H cells and this
+            // scan never makes H, so with fewer than three H in the domain no N cell can
+            // fire (the test-only full scans skip only with none).
+            let need = if super::p6_rest::full_scans() { 1 } else { 3 };
+            let mut h_cells = 0;
+            let mut at = from(has_h);
+            while h_cells < need
+                && let Some(h) = find_mat(&self.mat, at, MatId::H)
+            {
+                h_cells += 1;
+                at = h + 1;
+            }
+            let mut next = if h_cells >= need { from(has_n) } else { end };
+            while let Some(i) = find_mat(&self.mat, next, MatId::N) {
+                next = i + 1;
+                if self.q[i] < 250 {
                     continue;
                 }
                 topo.cube(&self.cells, i, 1, &mut cube);
@@ -1798,8 +3233,10 @@ impl ChemWorld {
                 }
             }
             // Ca + C + 3 O -> CARB (C and O from the +-2 cube)
-            for i in 0..n {
-                if self.mat[i] != MatId::CA || self.q[i] < 300 {
+            let mut next = from(has_ca);
+            while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 topo.cube(&self.cells, i, 2, &mut cube);
@@ -1826,8 +3263,10 @@ impl ChemWorld {
                 }
             }
             // O + O -> O2
-            for i in 0..n {
-                if self.mat[i] != MatId::O || self.q[i] < 250 {
+            let mut next = from(has_o);
+            while let Some(i) = find_mat(&self.mat, next, MatId::O) {
+                next = i + 1;
+                if self.q[i] < 250 {
                     continue;
                 }
                 let Some(p) =
@@ -1843,8 +3282,10 @@ impl ChemWorld {
                 }
             }
             // Ca + O -> CAO
-            for i in 0..n {
-                if self.mat[i] != MatId::CA || self.q[i] < 300 {
+            let mut next = from(has_ca);
+            while let Some(i) = find_mat(&self.mat, next, MatId::CA) {
+                next = i + 1;
+                if self.q[i] < 300 {
                     continue;
                 }
                 let Some(oj) = self.first_nb6(topo, i, |j| self.mat[j] == MatId::O) else {
@@ -1864,10 +3305,19 @@ impl ChemWorld {
                 let (fired, rounds) = self.network_pass(topo, &net)?;
                 rep.net_fired = fired;
                 rep.net_rounds = rounds;
+                // §6aa: without a firing the network wrote neither a material nor heat, so
+                // the presence bits from before it are still true. Test-only full scans still
+                // re-check (and report every id present).
+                if fired != 0 || super::p6_rest::full_scans() {
+                    let [c, .., steam] = present(&self.mat, IDS);
+                    (has_c, has_steam) = (c, steam);
+                }
             }
             if self.params.net_burn && net.net_row().is_some() {
-                for i in 0..n {
-                    if self.mat[i] != MatId::C || self.q[i] < 250 {
+                let mut next = from(has_c);
+                while let Some(i) = find_mat(&self.mat, next, MatId::C) {
+                    next = i + 1;
+                    if self.q[i] < 250 {
                         continue;
                     }
                     topo.cube(&self.cells, i, 1, &mut cube);
@@ -1903,8 +3353,10 @@ impl ChemWorld {
         }
 
         if self.params.condense {
-            for i in 0..n {
-                if self.mat[i] != MatId::STEAM || self.q[i] >= 150 {
+            let mut next = from(has_steam);
+            while let Some(i) = find_mat(&self.mat, next, MatId::STEAM) {
+                next = i + 1;
+                if self.q[i] >= 150 {
                     continue;
                 }
                 let Some(j) =
@@ -1925,50 +3377,31 @@ impl ChemWorld {
         if self.params.gas_rise {
             // §5w: under Gravity::Core gas rises along the outward step,
             // outermost first (planet6's +y list otherwise)
-            let gc = self.grav_core(topo);
-            let len = if gc.is_some() {
-                topo.rsort.len()
+            // (the outward neighbours are precomputed in `Topology::shell_up`)
+            if self.grav_core(topo).is_some() {
+                self.gas_rise_outward(topo, rep);
+            } else if !super::p6_rest::full_scans() {
+                self.gas_rise_up(topo, rep);
             } else {
-                topo.rise.len()
-            };
-            for k in 0..len {
-                let (i, up) = match gc {
-                    Some(o) => {
-                        let i = topo.rsort[len - 1 - k] as usize;
-                        if !self.is_rising(self.mat[i]) {
-                            continue;
-                        }
-                        let p = self.cells[i];
-                        let st = super::p6_rest::outward_step((p.x - o.x, p.y - o.y, p.z - o.z));
-                        let Some(up) = (st != (0, 0, 0))
-                            .then(|| topo.offset(&self.cells, i, st))
-                            .flatten()
-                        else {
-                            continue;
-                        };
-                        (i, up)
+                for &(i, up) in &topo.rise {
+                    let (i, up) = (i as usize, up as usize);
+                    if !self.is_rising(self.mat[i]) {
+                        continue;
                     }
-                    None => {
-                        let (i, up) = topo.rise[k];
-                        (i as usize, up as usize)
+                    let above = self.mat[up];
+                    if above != MatId::AIR && above != MatId::WATER {
+                        continue;
                     }
-                };
-                if !self.is_rising(self.mat[i]) {
-                    continue;
-                }
-                let above = self.mat[up];
-                if above != MatId::AIR && above != MatId::WATER {
-                    continue;
-                }
-                // §5u: displaced WATER may not be pushed down into a radial-only shell cell
-                if above == MatId::WATER && self.shell_blocked(i) {
-                    continue;
-                }
-                if self.roll(topo, 0xb0b81e, i) < 500 {
-                    let below = self.mat[i];
-                    self.set_mat(up, below);
-                    self.set_mat(i, above);
-                    rep.rose += 1;
+                    // §5u: displaced WATER may not be pushed down into a radial-only shell cell
+                    if above == MatId::WATER && self.shell_blocked(i) {
+                        continue;
+                    }
+                    if self.roll(topo, 0xb0b81e, i) < 500 {
+                        let below = self.mat[i];
+                        self.set_mat(up, below);
+                        self.set_mat(i, above);
+                        rep.rose += 1;
+                    }
                 }
             }
         }

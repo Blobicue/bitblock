@@ -1,6 +1,6 @@
 # Using this repo as an index
 
-Bitblock is ~65,000 lines of Rust across 38 indexed modules, ~8,600 lines of protocol
+Bitblock is ~68,500 lines of Rust across 38 indexed modules, ~8,600 lines of protocol
 prose, a 1,112-family metric registry, 37 independent Python vector suites, and
 two Lean 4 proof capsules. `index/` turns that into something an agent can query
 instead of scan.
@@ -59,7 +59,7 @@ an hour here.
 python tools/bbgraph.py schema
 ```
 
-`schema` is the coverage report the tree cannot state about itself. 74 protocol objects, every one with an independent Python reconstruction. That
+`schema` is the coverage report the tree cannot state about itself. 75 protocol objects, every one with an independent Python reconstruction. That
 number is derived, not authored: a tool that declares the identical schema
 string has independently rebuilt that payload, so the uncovered set is a fact
 about the tree rather than a TODO list someone forgot to update.
@@ -73,7 +73,7 @@ decisive. Structural rank — how many modules transitively reach a module —
 orders results but never decides them, and applies only inside a subsystem the
 query already matched.
 
-That last rule is not decoration. `protocol` is reached by 34 of 38 modules;
+That last rule is not decoration. `protocol` is reached by 36 of 38 modules;
 with an unconditional load-bearing multiplier it won `ask "canonical framebuffer
 bytes"` outright, over `frame`. It is the same failure a download count produces
 in a curated list, and `bbselftest.json` guards it.
@@ -160,7 +160,7 @@ python tools/bbgraph.py selftest
 
 **Modules** are the 38 Rust files under `crates/core/src/`, `crates/research/src/` and
 `src/` (the crate-root `lib.rs` re-export files aside), each carrying its `//!` doc comment, its
-public items (`1,320/1,320` documented with `///`), its test count, its cfg gate, and the schemas it declares.
+public items (`1,333/1,333` documented with `///`), its test count, its cfg gate, and the schemas it declares.
 Dependencies come from `crate::` and `bitblock::` paths — the binary reaches the
 library through the latter, and matching only `crate::` once reported `main.rs` as a leaf.
 
@@ -261,7 +261,7 @@ suite that passes. `bbverify` now records a floor per tier and fails below it,
 and both it and CI use `--workspace`.
 
 **Every protocol object has an independent vector suite** (58 objects when this
-was closed, 74 now; `bbgraph.py schema` is the current count), closed by two
+was closed, 75 now; `bbgraph.py schema` is the current count), closed by two
 agents working disjoint halves of the tree. That number was wrong here before
 they ran: this page claimed every object was guarded while the index said 44 of
 58, and the agents flagged it rather than quietly matching the prose.

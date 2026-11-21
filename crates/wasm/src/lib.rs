@@ -6,6 +6,7 @@
 //! `file://` canvas demos.
 
 mod browser_storage;
+pub mod chem_link;
 mod gap;
 pub mod play;
 pub mod play_chem;
@@ -138,6 +139,12 @@ thread_local! {
         const { RefCell::new([0; bitblock_core::chem::NE]) };
     /// Why the last chem load failed ("" after a successful one).
     static PLAY_CHEM_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
+    // §6ah worker path: the main thread's outbox / inbox bytes, and the worker's engine.
+    static PLAY_CHEM_OUTBOX: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static PLAY_CHEM_INBOX: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static CHEM_HOST: RefCell<Option<play_chem::ChemPlay>> = const { RefCell::new(None) };
+    static CHEM_HOST_IN: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static CHEM_HOST_OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 struct LiveSession {
@@ -1683,6 +1690,17 @@ pub extern "C" fn bitblock_play_step(ticks: u32) -> u32 {
     with_play(|session| u32::from(session.step(ticks)))
 }
 
+/// §6s live loop: like `bitblock_play_step`, but stops before a second chem step in one call
+/// (see `PlaySession::step_paced`). Returns `painted | ticks_run << 1`; the client owes the
+/// ticks that did not run to its next frames (§6ab), dropping the backlog only past a bound.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_step_paced(ticks: u32) -> u32 {
+    with_play(|session| {
+        let (painted, ran) = session.step_paced(ticks);
+        u32::from(painted) | ran << 1
+    })
+}
+
 /// Resolution / layout control: game view `sim_width × sim_height`, plus the native 400-px
 /// sidebar when `sidebar != 0` (otherwise the game view is the whole output).
 #[unsafe(no_mangle)]
@@ -1941,7 +1959,174 @@ pub extern "C" fn bitblock_play_chem_dynamics_get() -> u32 {
     })
 }
 
+/// §6ah: switch the chem session to the worker path (`on != 0`): from then on its chem world
+/// is a display replica and every batch must be posted to a worker running
+/// `bitblock_chem_host_*`. Only before the first batch (call right after the load). Returns 1
+/// on success, 0 otherwise. Ticks, hashes and books are identical to the fallback path.
 #[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_remote(on: u32) -> u32 {
+    with_play(|session| u32::from(session.chem_set_remote(on != 0)))
+}
+
+/// §6ah: recover a failed worker locally, preserving published state, queued edits,
+/// in-flight batch, camera and history. Replays published batches from genesis. Returns 1
+/// if switched to local, or 0 if not remote. No ABI signature changes.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_recover() -> u32 {
+    with_play(|session| u32::from(session.chem_recover_local()))
+}
+
+/// §6ah worker-path live step: like `bitblock_play_step_paced`, but stops before a tick that
+/// waits for the worker and returns right after a tick that sent a batch. Returns
+/// `painted | sent << 1 | ticks_run << 2`.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_step_lagged(ticks: u32) -> u32 {
+    with_play(|session| {
+        let (painted, sent, ran) = session.step_lagged(ticks);
+        u32::from(painted) | u32::from(sent) << 1 | ran << 2
+    })
+}
+
+/// §6ah: 1 if the next tick must wait for the worker's result, else 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_blocked() -> u32 {
+    with_play(|session| u32::from(session.chem_blocked()))
+}
+
+/// §6ah: the engine's chem tick as of the last landing (what the screen shows), or 0
+/// outside chem mode. Sampled over time it gives chem ticks/s.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_tick() -> u32 {
+    with_play(|session| session.chem_published_tick().unwrap_or(0) as u32)
+}
+
+/// §6ah worker path: moves the pending batch into the outbox buffer and returns its length
+/// (0 if none). Read it at `bitblock_play_chem_outbox_ptr` and post it to the worker.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_outbox() -> u32 {
+    let bytes = with_play(|session| session.chem_take_outbox()).unwrap_or_default();
+    let len = bytes.len() as u32;
+    PLAY_CHEM_OUTBOX.with(|cell| *cell.borrow_mut() = bytes);
+    len
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_outbox_ptr() -> *const u8 {
+    ptr_of(&PLAY_CHEM_OUTBOX)
+}
+
+/// §6ah worker path: a `len`-byte buffer for the worker's result; write it there, then call
+/// `bitblock_play_chem_inbox_commit(len)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_inbox_ptr(len: u32) -> *mut u8 {
+    PLAY_CHEM_INBOX.with(|cell| {
+        let mut buf = cell.borrow_mut();
+        buf.clear();
+        buf.resize(len as usize, 0);
+        buf.as_mut_ptr()
+    })
+}
+
+/// §6ah worker path: delivers the inbox bytes as the result of the batch in flight. Returns 1,
+/// or 0 (ignored) if no batch is in flight, a result is already waiting, or `len` is wrong.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_play_chem_inbox_commit(len: u32) -> u32 {
+    let bytes = PLAY_CHEM_INBOX.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+    if bytes.len() != len as usize {
+        return 0;
+    }
+    with_play(|session| u32::from(session.chem_put_inbox(bytes)))
+}
+
+/// §6ah worker side: builds the engine for a `bitblock_play_load_chem(preset, seed, radius)`
+/// session (same genesis). Returns 1, or 0 (reason via `bitblock_play_chem_error`).
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_load(preset: u32, seed: u32, radius: u32) -> u32 {
+    install_host(
+        play_chem::ChemPlay::new(preset, seed, radius)
+            .ok_or_else(|| format!("unknown_chem_preset_{preset}")),
+    )
+}
+
+/// §6ah worker side: like `bitblock_play_load_chem_budget` (budget buffer lanes).
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_load_budget(seed: u32, radius: u32) -> u32 {
+    let lanes = PLAY_CHEM_BUDGET.with(|cell| *cell.borrow());
+    install_host(play_chem::ChemPlay::with_budget(lanes, seed, radius))
+}
+
+fn install_host(loaded: Result<play_chem::ChemPlay, String>) -> u32 {
+    match loaded {
+        Ok(chem) => {
+            PLAY_CHEM_ERROR.with(|e| e.borrow_mut().clear());
+            CHEM_HOST.with(|cell| *cell.borrow_mut() = Some(chem));
+            1
+        }
+        Err(err) => {
+            PLAY_CHEM_ERROR.with(|e| *e.borrow_mut() = err);
+            CHEM_HOST.with(|cell| *cell.borrow_mut() = None);
+            0
+        }
+    }
+}
+
+/// §6ah worker side: a `len`-byte buffer for one batch from the main thread.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_in_ptr(len: u32) -> *mut u8 {
+    CHEM_HOST_IN.with(|cell| {
+        let mut buf = cell.borrow_mut();
+        buf.clear();
+        buf.resize(len as usize, 0);
+        buf.as_mut_ptr()
+    })
+}
+
+/// §6ah worker side: runs the batch in the input buffer on the engine and encodes the result
+/// (read at `bitblock_chem_host_out_ptr`). Returns its length, or 0 for no engine / bad batch.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_process(len: u32) -> u32 {
+    let bytes = CHEM_HOST_IN.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+    let out = CHEM_HOST.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        let chem = slot.as_mut()?;
+        if bytes.len() != len as usize {
+            return None;
+        }
+        let batch = chem_link::decode_batch(&bytes)?;
+        let (report, refused) = chem.process(&batch);
+        Some(chem_link::encode_delta(chem, &report, refused))
+    });
+    let out = out.unwrap_or_default();
+    let n = out.len() as u32;
+    CHEM_HOST_OUT.with(|cell| *cell.borrow_mut() = out);
+    n
+}
+
+/// §6ah worker side: precomputes the engine's conservation figures for the next result
+/// (call while idle, right after posting a result). Returns 1, or 0 without an engine.
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_books() -> u32 {
+    CHEM_HOST.with(|cell| {
+        cell.borrow_mut().as_mut().map_or(0, |c| {
+            c.precompute_books();
+            1
+        })
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bitblock_chem_host_out_ptr() -> *const u8 {
+    ptr_of(&CHEM_HOST_OUT)
+}
+
+#[unsafe(no_mangle)]
+/// 17 (additive, same number, §6ah): worker path — main `bitblock_play_chem_remote`,
+/// `_step_lagged`, `_chem_blocked`, `_chem_tick`, `_chem_outbox` / `_outbox_ptr`,
+/// `_chem_inbox_ptr` / `_inbox_commit`; worker `bitblock_chem_host_load`, `_load_budget`,
+/// `_in_ptr`, `_process`, `_out_ptr`, `_books`. Chem now runs one tick behind (lagged schedule) on both
+/// paths; no existing export changed signature.
+/// 17 (additive, same number, §6s): `bitblock_play_step_paced(ticks)` (live step with at most
+/// one chem step per call; returns `painted | ticks_run << 1`).
 /// 17 (additive, same number, §5y): gas preset `bitblock_play_load_chem(4, ..)` (loads with
 /// energy sun8 + driven cycle + gas convection) and energy mode 2 (sun8) for
 /// `bitblock_play_chem_dynamics`; `_chem_dynamics_get` gains bit 3 for energy 2 only.
@@ -1974,6 +2159,79 @@ mod tests {
         PLAY_RESULT.with(|r| String::from_utf8(r.borrow()[..len as usize].to_vec()).unwrap())
     }
 
+    /// Runs `ticks` live ticks of a gas world through the exports, on the worker path (this
+    /// instance's `bitblock_chem_host_*` engine stands in for the worker) or the fallback.
+    /// Returns the play status after every tick plus the final chem tick.
+    fn lagged_export_run(remote: bool, ticks: u32) -> (Vec<String>, u32) {
+        assert!(bitblock_play_load_chem(4, 7, 10) > 0);
+        bitblock_play_set_layout(320, 180, 0);
+        if remote {
+            assert_eq!(bitblock_play_chem_remote(1), 1);
+            assert_eq!(bitblock_chem_host_load(4, 7, 10), 1);
+        }
+        let mut seen = Vec::new();
+        let mut done = 0;
+        while done < ticks {
+            let r = bitblock_play_step_lagged(1);
+            done += r >> 2;
+            if r & 2 != 0 {
+                assert!(remote);
+                let n = bitblock_play_chem_outbox();
+                assert!(n > 0);
+                let batch = unsafe {
+                    std::slice::from_raw_parts(bitblock_play_chem_outbox_ptr(), n as usize)
+                }
+                .to_vec();
+                let dst = bitblock_chem_host_in_ptr(n);
+                unsafe { std::ptr::copy_nonoverlapping(batch.as_ptr(), dst, batch.len()) };
+                let m = bitblock_chem_host_process(n);
+                assert!(m > 0);
+                assert_eq!(bitblock_chem_host_books(), 1);
+                let out =
+                    unsafe { std::slice::from_raw_parts(bitblock_chem_host_out_ptr(), m as usize) }
+                        .to_vec();
+                // Not deliverable twice, and only while a batch is in flight.
+                let dst = bitblock_play_chem_inbox_ptr(m);
+                unsafe { std::ptr::copy_nonoverlapping(out.as_ptr(), dst, out.len()) };
+                assert_eq!(bitblock_play_chem_inbox_commit(m), 1);
+                assert_eq!(bitblock_play_chem_inbox_commit(0), 0);
+                bitblock_play_step_lagged(0);
+            } else if r >> 2 == 0 {
+                panic!(
+                    "stalled at tick {done} (blocked={})",
+                    bitblock_play_chem_blocked()
+                );
+            }
+            if r >> 2 == 1 {
+                seen.push(play_text(bitblock_play_status(1)));
+                seen.push(chem_text(bitblock_play_chem_status()));
+            }
+        }
+        assert_eq!(
+            bitblock_play_chem_remote(0),
+            0,
+            "only before the first batch"
+        );
+        (seen, bitblock_play_chem_tick())
+    }
+
+    #[test]
+    fn worker_exports_match_the_fallback() {
+        let (local, lt) = lagged_export_run(false, 41);
+        let (remote, rt) = lagged_export_run(true, 41);
+        let (again, at) = lagged_export_run(false, 41);
+        assert_eq!(local.len(), 82);
+        assert_eq!(local, remote);
+        assert_eq!(local, again);
+        assert_eq!((lt, rt, at), (lt, lt, lt));
+        assert!(lt > 0);
+        let last = local.last().unwrap();
+        assert!(
+            last.contains(" books=ok ") && last.contains(" energy_drift=0 "),
+            "{last}"
+        );
+    }
+
     #[test]
     fn chem_exports_smoke() {
         assert_eq!(bitblock_wasm_abi(), 17);
@@ -1984,7 +2242,8 @@ mod tests {
         assert_eq!(bitblock_play_chem_auto(0), 1);
         assert_eq!(bitblock_play_chem_step(2), 1);
         bitblock_play_set_layout(320, 180, 0);
-        assert_eq!(bitblock_play_step(1), 1);
+        // §6ah: queued steps are sent on one tick and published on the next.
+        assert_eq!(bitblock_play_step(2), 1);
         let n = bitblock_play_chem_status();
         let st = PLAY_CHEM_RESULT
             .with(|r| String::from_utf8(r.borrow()[..n as usize].to_vec()).unwrap());
@@ -2025,7 +2284,8 @@ mod tests {
         assert_eq!(bitblock_play_chem_auto(0), 1);
         assert_eq!(bitblock_play_chem_step(6), 1);
         bitblock_play_set_layout(320, 180, 0);
-        assert_eq!(bitblock_play_step(1), 1);
+        // §6ah: queued steps are sent on one tick and published on the next.
+        assert_eq!(bitblock_play_step(2), 1);
         let st = chem_text(bitblock_play_chem_status());
         assert!(
             st.contains(" tick=6 ") && st.contains(" books=ok ") && st.contains(" energy_drift=0 "),
@@ -2126,16 +2386,16 @@ mod tests {
     }
 
     // Filled after first host run of play_input_tape_status().
-    const PLAY_TAPE_KNOWN: &str = "bitblock_browser_play ok tick=5 world=#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca frame=#bb.frame.sha256.vyn2woic4slbg5vo6xxqj4qbx3pg4fsueskewrrh57j7sayknpya pos=-162.524169187683,0.000000000000,-801.756897628926 yaw=0.200000000000 pitch=0.000000000000 dist=818.063706850332 last=key:F sidebar=0 captured=1 output=1201x801";
+    const PLAY_TAPE_KNOWN: &str = "bitblock_browser_play ok tick=5 world=#bb.world.sha256.lpqtwwq5lo3dbyid2hrdvmdr3r6wfy5t5xnhd3grwcis5bhu4nra frame=#bb.frame.sha256.vyn2woic4slbg5vo6xxqj4qbx3pg4fsueskewrrh57j7sayknpya pos=-162.524169187683,0.000000000000,-801.756897628926 yaw=0.200000000000 pitch=0.000000000000 dist=818.063706850332 last=key:F sidebar=0 captured=1 output=1201x801";
 
-    const DEMO_KNOWN: &str = "bitblock_browser_demo ok world=#bb.world.sha256.bnf5w54xbhb7qlshwchoac67vkzn5mt4vzrhvnoakys72slg43ua frame=#bb.frame.sha256.o7wdaz7rq6t65kl52qsep6gn4owffz2qjlgz7ujqfnwdh3npox4q tick_receipt=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=3 viewport=32x32";
+    const DEMO_KNOWN: &str = "bitblock_browser_demo ok world=#bb.world.sha256.xm3rmpec5pzo5h4dfxu2oa35lest5fizzdigrj3xlfbg3caarflq frame=#bb.frame.sha256.o7wdaz7rq6t65kl52qsep6gn4owffz2qjlgz7ujqfnwdh3npox4q tick_receipt=#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa on_bits=3 viewport=32x32";
 
-    const EDIT_KNOWN: &str = "bitblock_browser_edit ok world=#bb.world.sha256.xplotpuf27scr7i25aabwijert6g6444ntkh2qqvtjpu3qme7cka frame=#bb.frame.sha256.dmriyhj56rpkgozbvlh7ooiirbdvylkytklabgdsxmkky6soo2oa tick_receipt=#bb.receipt.sha256.ezntrdbxgwqvwwond4rm7oarrzqkktoowuky6uicisbk5l7tybia on_bits=4 toggle=2,0,0 viewport=32x32";
+    const EDIT_KNOWN: &str = "bitblock_browser_edit ok world=#bb.world.sha256.65vcqxuxnd4gzf3msg37cr5tuj6u2ytkugbjmnle3ywta5wssqeq frame=#bb.frame.sha256.dmriyhj56rpkgozbvlh7ooiirbdvylkytklabgdsxmkky6soo2oa tick_receipt=#bb.receipt.sha256.efbx3lzitz3hfpjp23urtnsqqqwmnfkjzsx7dtfisqcnh2n5mklq on_bits=4 toggle=2,0,0 viewport=32x32";
 
     const DEMO_FRAME: &str =
         "#bb.frame.sha256.o7wdaz7rq6t65kl52qsep6gn4owffz2qjlgz7ujqfnwdh3npox4q";
     const DEMO_WORLD: &str =
-        "#bb.world.sha256.bnf5w54xbhb7qlshwchoac67vkzn5mt4vzrhvnoakys72slg43ua";
+        "#bb.world.sha256.xm3rmpec5pzo5h4dfxu2oa35lest5fizzdigrj3xlfbg3caarflq";
     const LIVE_OFF_FRAME: &str =
         "#bb.frame.sha256.mzekzp6zf7zka64agpi2nvc33qm7y33zeqfuazejnshqldtl7zaq";
     const DOLLY_IN_FRAME: &str =
@@ -2240,7 +2500,7 @@ mod tests {
         );
         assert_eq!(
             status,
-            "bitblock_browser_gallery ok program=symbol size=81x81 applied=336 on_bits=337 non_background=671 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a yaw_deg=35 pitch_deg=-22"
+            "bitblock_browser_gallery ok program=symbol size=81x81 applied=336 on_bits=337 non_background=671 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a yaw_deg=35 pitch_deg=-22"
         );
     }
 
@@ -2262,7 +2522,7 @@ mod tests {
         assert_eq!(raster.non_background, 65_279);
         assert_eq!(
             status,
-            "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22"
+            "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22"
         );
     }
 
@@ -2274,28 +2534,28 @@ mod tests {
                 336,
                 337,
                 65_279u32,
-                "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=symbol size=801x801 applied=336 on_bits=337 non_background=65279 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.rzwdqno3pxbf6dlxmzp7zpbfk3uxbv3fdxboecanrxkmsq4hj23a yaw_deg=35 pitch_deg=-22",
             ),
             (
                 1,
                 552,
                 553,
                 58_291,
-                "bitblock_browser_gallery ok program=recognition size=801x801 applied=552 on_bits=553 non_background=58291 world=#bb.world.sha256.5ar4um5zfetdzaeb34e4c4m6a5oevi5u3fo4id36pm3oye6atvpq frame=#bb.frame.sha256.rweaqbffsx4w3hkqrfhpuslcm2qh4xwpte6gayumdwvd5ej4ggiq yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=recognition size=801x801 applied=552 on_bits=553 non_background=58291 world=#bb.world.sha256.7wmhw54fbbgtuuf3hrgx6hdfqzeppt4excfkbh5yjef6iuavw3ga frame=#bb.frame.sha256.rweaqbffsx4w3hkqrfhpuslcm2qh4xwpte6gayumdwvd5ej4ggiq yaw_deg=35 pitch_deg=-22",
             ),
             (
                 2,
                 662,
                 663,
                 97_621,
-                "bitblock_browser_gallery ok program=architecture size=801x801 applied=662 on_bits=663 non_background=97621 world=#bb.world.sha256.lqpba5lvzmm5bnj2jfoa7dgtdnm2adv5eborbtvaquic36mtno2q frame=#bb.frame.sha256.742hhk3ynavw4sbzockrnbskk2o3re3kfcf7pht3cbq6n4hku2na yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=architecture size=801x801 applied=662 on_bits=663 non_background=97621 world=#bb.world.sha256.pmbj7za55emc3mjtjvom5domewgjf2rr7qezwpxaxyoohzs5e6gq frame=#bb.frame.sha256.742hhk3ynavw4sbzockrnbskk2o3re3kfcf7pht3cbq6n4hku2na yaw_deg=35 pitch_deg=-22",
             ),
             (
                 3,
                 25_600,
                 25_601,
                 225_815,
-                "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=225815 world=#bb.world.sha256.w6wlo572rc3u5v4mvsopcl7gxvkfxl6ntni7rk6qgr2ja5bdblzq frame=#bb.frame.sha256.z42oiltqmx6ltwyx4d6fi4znenzd76yonyowzbwhdng75hv3gjla yaw_deg=35 pitch_deg=-22",
+                "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=225815 world=#bb.world.sha256.iy5q2bopf2llw4samvn5ifsbup3adpxu2lupt2vjp4qqqgx4s6iq frame=#bb.frame.sha256.z42oiltqmx6ltwyx4d6fi4znenzd76yonyowzbwhdng75hv3gjla yaw_deg=35 pitch_deg=-22",
             ),
         ];
         for (id, applied, on_bits, non_background, status) in expected {
@@ -2330,7 +2590,7 @@ mod tests {
     fn research_coordinate_episode_matches_host_fixture() {
         assert_eq!(
             research_episode_status(),
-            "bitblock_browser_research ok module=coordinate_episode episodes=3 encoded=371 policy=#bb.policy.sha256.qjswilslbl4opnwl7npgkycn3lapzdlovmqphgj3cvlwugkr7rbq tag=#bb.receipt.sha256.6feyyp2ttluxp572qxdyfdzmwkgp4i3ad72usqvm32p3lc6ozo5a"
+            "bitblock_browser_research ok module=coordinate_episode episodes=3 encoded=371 policy=#bb.policy.sha256.qjswilslbl4opnwl7npgkycn3lapzdlovmqphgj3cvlwugkr7rbq tag=#bb.receipt.sha256.os4co4gqd6jed4ttwmbkjozviqpb6ly2xtczuuizobzcc7fcsplq"
         );
     }
 
@@ -2389,7 +2649,7 @@ mod tests {
         assert!(composite.glyphs > 0, "sidebar raster drew no glyphs");
         assert_eq!(
             status,
-            "bitblock_browser_sidebar ok output=1201x801 simulation=801x801 sidebar=400 frame=#bb.frame.sha256.fscl5apfua6xbkp7776f2rqtka2nknilpxcfyoznzjcxhw675woq non_background=320401 rgba_bytes=3848004 game=#bb.frame.sha256.euedfghziucycgzshgwo2ewvvxpigjf6t5psktrjk7pk5pwom6va glyphs=1013 lit=8745"
+            "bitblock_browser_sidebar ok output=1201x801 simulation=801x801 sidebar=400 frame=#bb.frame.sha256.eqvpp636o2wtilipgbginnmnpa3zyohkoyh7eab65c27pk7a5zoq non_background=320401 rgba_bytes=3848004 game=#bb.frame.sha256.euedfghziucycgzshgwo2ewvvxpigjf6t5psktrjk7pk5pwom6va glyphs=1013 lit=8796"
         );
     }
 
@@ -2400,7 +2660,7 @@ mod tests {
         assert_eq!(rgba.len(), 81 * 81 * 4);
         assert_eq!(
             status,
-            "bitblock_browser_program ok world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq applied=336 on_bits=337 preview=81x81 non_background=671 frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a"
+            "bitblock_browser_program ok world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba applied=336 on_bits=337 preview=81x81 non_background=671 frame=#bb.frame.sha256.7lnvhqo446yig4z3psouwx7hexvmrxs35p34qzounpr7unns2t3a"
         );
     }
 
@@ -2427,7 +2687,7 @@ mod tests {
         assert!(status.contains("on_bits=2"));
         assert!(
             !status
-                .contains("#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq")
+                .contains("#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba")
         );
         assert_eq!(rgba.len(), 81 * 81 * 4);
         assert!(status.len() <= RESULT_CAP);
@@ -2449,7 +2709,7 @@ mod tests {
         );
         assert_eq!(
             status,
-            "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=230196 world=#bb.world.sha256.w6wlo572rc3u5v4mvsopcl7gxvkfxl6ntni7rk6qgr2ja5bdblzq frame=#bb.frame.sha256.w3rcr6bhynecdm3ocifx3hkcxfloijyj7ar4d4hp5hnprlwweiqa yaw_deg=0 pitch_deg=0"
+            "bitblock_browser_gallery ok program=recursion size=801x801 applied=25600 on_bits=25601 non_background=230196 world=#bb.world.sha256.iy5q2bopf2llw4samvn5ifsbup3adpxu2lupt2vjp4qqqgx4s6iq frame=#bb.frame.sha256.w3rcr6bhynecdm3ocifx3hkcxfloijyj7ar4d4hp5hnprlwweiqa yaw_deg=0 pitch_deg=0"
         );
     }
 
@@ -2474,11 +2734,11 @@ mod tests {
         );
         assert_eq!(
             hw,
-            "bitblock_browser_storage ok store=history op=write records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461"
+            "bitblock_browser_storage ok store=history op=write records=2 world=#bb.world.sha256.4qebqribdfmkf53kxbzjwfe3vrfhmyddlv2emjmbhexvwtxpt2gq head=#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa on_bits=2 bytes=461"
         );
         assert_eq!(
             hv,
-            "bitblock_browser_storage ok store=history op=verify scan=clean records=2 world=#bb.world.sha256.6a2uby2p3md7hhmmepbl67rnefxvteb3znxsxnvozxoy4lbztqxq head=#bb.receipt.sha256.hdnsryd4zq6gr5dkrtw2zjqvipqrkmjowtkzonmutapxiwln5xwq on_bits=2 bytes=461 valid_prefix=461"
+            "bitblock_browser_storage ok store=history op=verify scan=clean records=2 world=#bb.world.sha256.4qebqribdfmkf53kxbzjwfe3vrfhmyddlv2emjmbhexvwtxpt2gq head=#bb.receipt.sha256.5zbvdvpm3jczrti5nclnahhl5obwmg5zlbq3hsffz3xgddopmeoa on_bits=2 bytes=461 valid_prefix=461"
         );
         assert_eq!(
             dw,
@@ -2496,7 +2756,7 @@ mod tests {
         assert!(status.len() <= RESULT_CAP, "status len {}", status.len());
         assert_eq!(
             status,
-            "bitblock_browser_research ok module=optimization receipt=#bb.receipt.sha256.qyjgyjutxxfupm6rfp33zm6wrr2i5g5z4z7vhyqqweob6krqf7ra case=#bb.registry.sha256.6d5golms4a3vk7vqvbmvhjksrw4vaihnmnkzjg3er7fekeky67aa output=#bb.receipt.sha256.vbevj4vyjwjk3ume6vkxkigm7vioe6ox65c4ws6r6ly5jqwg73ga"
+            "bitblock_browser_research ok module=optimization receipt=#bb.receipt.sha256.5cobj7m7rn4g3oysvktolank4g3io3iucunk5743plnrbxak6vua case=#bb.registry.sha256.6d5golms4a3vk7vqvbmvhjksrw4vaihnmnkzjg3er7fekeky67aa output=#bb.receipt.sha256.62we6nvy5lmpwoxfyl2fgiw3nyrfvpa6u5obnptd7er5nksizqtq"
         );
     }
 

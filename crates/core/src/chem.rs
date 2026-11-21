@@ -460,6 +460,22 @@ impl fmt::Display for GenesisError {
 
 impl std::error::Error for GenesisError {}
 
+/// The book figures of one [`ChemWorld`] state ([`ChemWorld::book_totals`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BookTotals {
+    /// [`ChemWorld::material_count`].
+    pub material_count: usize,
+    /// [`ChemWorld::lane_totals`].
+    pub lanes: Lanes,
+    /// [`ChemWorld::lane_drift`].
+    pub lane_drift: Lanes,
+    /// [`ChemWorld::energy_total`].
+    pub energy: i64,
+    /// [`ChemWorld::energy_drift`].
+    pub energy_drift: i64,
+    hist: [u64; 256],
+}
+
 /// Why a books check failed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BooksError {
@@ -542,9 +558,18 @@ pub struct ChemWorld {
     table: Arc<MatTable>,
     net: Option<Arc<ChemNet>>,
     topo: Option<Arc<p6::Topology>>,
+    /// Reused per-cell buffers of the network law (no state between steps).
+    net_scratch: net::NetScratch,
+    /// Reused per-cell buffers of the heat law (no state between steps).
+    heat_scratch: p6::HeatScratch,
+    /// Reused buffers of the convection law (no state between steps).
+    convect_scratch: p6_rest::ConvectScratch,
     /// Per-tick surface-activity marks ([`WaterCycle::Driven`] only; not in
     /// any book or the fingerprint; cleared at the start of every tick).
     pub(crate) marks: Vec<u8>,
+    /// §6aa: false only while every entry of `marks` is known to be 0 (no [`ChemWorld::mark`]
+    /// with a non-zero mark since the last clear). Not in any book or the fingerprint.
+    pub(crate) marked: bool,
     /// Sky-shell headroom in cells added by [`ChemWorld::add_sky_shell`] (0 =
     /// none, the planet6 full-ball domain). Not in any book or the fingerprint.
     pub(crate) sky_height: u32,
@@ -613,7 +638,11 @@ impl ChemWorld {
             table: Arc::new(MatTable::base()),
             net: None,
             topo: None,
+            net_scratch: net::NetScratch::default(),
+            heat_scratch: p6::HeatScratch::default(),
+            convect_scratch: p6_rest::ConvectScratch::default(),
             marks: Vec::new(),
+            marked: false,
             sky_height: 0,
             core_pin: None,
             radial_shell: None,
@@ -636,6 +665,7 @@ impl ChemWorld {
         w.table = table;
         w.params = params;
         w.inv = inv;
+        w.world.defer_octree();
         for (k, &(c, m, q)) in cells.iter().enumerate() {
             if k > 0 && cells[k - 1].0 == c {
                 return Err(BooksError::DuplicateCell(c));
@@ -650,6 +680,7 @@ impl ChemWorld {
                 w.world.set_on(c);
             }
         }
+        w.world.flush_octree();
         w.pin_t0();
         w.check_books()?;
         Ok(w)
@@ -659,8 +690,30 @@ impl ChemWorld {
         &self.world
     }
 
-    pub(crate) fn index_of(&self, coord: Coord) -> Option<usize> {
-        self.cells.binary_search(&coord).ok()
+    /// The occupancy bit of the domain cell at `coord` holding `m`, when the material alone
+    /// decides it: on for every non-air material, off for air anywhere but the bedrock cell
+    /// (only the bedrock bit can stay on under air). Every material write goes through
+    /// `set_mat`, which keeps exactly this in step (and the books check the non-air half);
+    /// `None` means read the bit from [`Self::world`].
+    #[inline]
+    pub fn occupancy_of(m: MatId, coord: Coord) -> Option<bool> {
+        if m != MatId::AIR {
+            Some(true)
+        } else if is_bedrock(coord) {
+            None
+        } else {
+            Some(false)
+        }
+    }
+
+    /// The domain index of `coord` (its position in [`Self::cells`] / [`Self::mats`]), or
+    /// `None` outside the domain.
+    pub fn index_of(&self, coord: Coord) -> Option<usize> {
+        // The cached topology indexes exactly `cells` (every domain change drops it).
+        match &self.topo {
+            Some(t) => t.locate(coord),
+            None => self.cells.binary_search(&coord).ok(),
+        }
     }
 
     /// Material at a coordinate (`AIR` outside the domain or for air cells).
@@ -689,7 +742,50 @@ impl ChemWorld {
 
     /// Number of non-air cells.
     pub fn material_count(&self) -> usize {
-        self.mat.iter().filter(|m| **m != MatId::AIR).count()
+        self.mat.len() - self.mat_histogram()[usize::from(MatId::AIR.0)] as usize
+    }
+
+    /// Every book figure at once ([`Self::material_count`], [`Self::lane_totals`],
+    /// [`Self::lane_drift`], [`Self::energy_total`], [`Self::energy_drift`]) from one
+    /// material histogram and one heat sum: the same values as the separate calls.
+    pub fn book_totals(&self) -> BookTotals {
+        let hist = self.mat_histogram();
+        let lanes = self.lane_totals_from(&hist);
+        let energy = self.energy_total_from(&hist);
+        BookTotals {
+            material_count: self.mat.len() - hist[usize::from(MatId::AIR.0)] as usize,
+            lanes,
+            lane_drift: std::array::from_fn(|k| lanes[k] - self.t0[k]),
+            energy,
+            energy_drift: energy - self.t0_energy,
+            hist,
+        }
+    }
+
+    /// Every domain cell's material, in domain order (index `i` is `domain().nth(i)`).
+    pub fn mats(&self) -> &[MatId] {
+        &self.mat
+    }
+
+    /// Every domain cell's coordinate, in domain order.
+    pub fn cells(&self) -> &[Coord] {
+        &self.cells
+    }
+
+    /// Cells per material id (four interleaved counters, so repeated ids do not serialise).
+    fn mat_histogram(&self) -> [u64; 256] {
+        let mut part = [[0_u32; 256]; 4];
+        let mut quads = self.mat.chunks_exact(4);
+        for q in &mut quads {
+            part[0][usize::from(q[0].0)] += 1;
+            part[1][usize::from(q[1].0)] += 1;
+            part[2][usize::from(q[2].0)] += 1;
+            part[3][usize::from(q[3].0)] += 1;
+        }
+        for m in quads.remainder() {
+            part[0][usize::from(m.0)] += 1;
+        }
+        std::array::from_fn(|m| part.iter().map(|p| u64::from(p[m])).sum())
     }
 
     /// Number of domain cells (air included).
@@ -859,16 +955,23 @@ impl ChemWorld {
     /// planet6 `laneTotals`: bag + vapor pairs (4 H + 2 O each) + the
     /// composition of every material voxel.
     pub fn lane_totals(&self) -> Lanes {
+        self.lane_totals_from(&self.mat_histogram())
+    }
+
+    fn lane_totals_from(&self, hist: &[u64; 256]) -> Lanes {
         let mut lanes = self.inv;
         lanes[0] += self.vapor * 4;
         lanes[1] += self.vapor * 2;
-        for m in &self.mat {
-            if *m == MatId::AIR {
+        // Per material, count x composition: the same i64 terms as a per-cell sum, regrouped
+        // (integer addition is exact and order-free).
+        for (id, &count) in hist.iter().enumerate() {
+            let m = MatId(id as u8);
+            if count == 0 || m == MatId::AIR {
                 continue;
             }
-            if let Some(c) = self.table.comp(*m) {
+            if let Some(c) = self.table.comp(m) {
                 for k in 0..NE {
-                    lanes[k] += c[k];
+                    lanes[k] += c[k] * count as i64;
                 }
             }
         }
@@ -886,12 +989,18 @@ impl ChemWorld {
     /// heat its evaporation took from the ocean, and keeps its binding),
     /// minus the M1 inbound ledger `input_q` (0 when the energy input is off).
     pub fn energy_total(&self) -> i64 {
+        self.energy_total_from(&self.mat_histogram())
+    }
+
+    fn energy_total_from(&self, hist: &[u64; 256]) -> i64 {
         let mut e = self.space_q - self.input_q
             + self.vapor * i64::from(LATENT_PAIR - self.table.bind(MatId::WATER));
-        for (m, q) in self.mat.iter().zip(&self.q) {
-            e += i64::from(*q);
-            if *m != MatId::AIR {
-                e -= i64::from(self.table.bind(*m));
+        // The same i64 terms as a per-cell sum, regrouped: all heat, then BIND per material.
+        e += self.q.iter().map(|&q| i64::from(q)).sum::<i64>();
+        for (id, &count) in hist.iter().enumerate() {
+            let m = MatId(id as u8);
+            if count != 0 && m != MatId::AIR {
+                e -= i64::from(self.table.bind(m)) * count as i64;
             }
         }
         e
@@ -911,24 +1020,165 @@ impl ChemWorld {
 
     /// Verifies the structural invariants, zero lane drift and zero energy drift.
     pub fn check_books(&self) -> Result<(), BooksError> {
-        for (c, m) in self.cells.iter().zip(&self.mat) {
-            if self.table.comp(*m).is_none() {
-                return Err(BooksError::BadMaterial(*c, *m));
+        self.check_books_with(&self.book_totals())
+    }
+
+    /// [`Self::check_books`] given this world's current [`Self::book_totals`].
+    pub fn check_books_with(&self, totals: &BookTotals) -> Result<(), BooksError> {
+        // With no id lacking a table row in the histogram, no cell can fail the material
+        // test, so the cell walk checks only the occupancy bits (same first failure).
+        let all_valid = totals
+            .hist
+            .iter()
+            .enumerate()
+            .all(|(m, &n)| n == 0 || self.table.comp(MatId(m as u8)).is_some());
+        let mut probe = self.world.probe();
+        let runs = self
+            .topo
+            .as_ref()
+            .and_then(|t| t.zruns.as_ref())
+            .filter(|_| all_valid);
+        if let Some(rows) = runs {
+            // The z-runs tile the domain in index order (the topology is dropped whenever the
+            // cells change), so walking them visits the same cells in the same order without
+            // reading the 24-byte coordinates.
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            self.books_occupancy_transposed(&rows.runs)?;
+            #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+            for run in &rows.runs {
+                let mats = &self.mat[run.start..=run.start + (run.z1 - run.z0) as usize];
+                let mut off = 0usize;
+                while off < mats.len() {
+                    let z = run.z0 + off as i64;
+                    let c = Coord::new(run.x, run.y, z);
+                    let (chunk, index) = World::chunk_of(c);
+                    let bits = self.world.chunk_words(chunk).map(|(_, w)| w);
+                    let n = (16 - z.rem_euclid(16) as usize).min(mats.len() - off);
+                    for (k, m) in mats[off..off + n].iter().enumerate() {
+                        // z + 1 steps one 16x16 layer in the same chunk.
+                        let bit = index + k * 256;
+                        let on = bits.is_some_and(|w| w[bit / 64] >> (bit % 64) & 1 == 1);
+                        if *m != MatId::AIR && !on {
+                            return Err(BooksError::MaterialOnOffBit(Coord::new(
+                                run.x,
+                                run.y,
+                                z + k as i64,
+                            )));
+                        }
+                    }
+                    off += n;
+                }
             }
-            if *m != MatId::AIR && !self.world.is_on(*c) {
-                return Err(BooksError::MaterialOnOffBit(*c));
+        } else if all_valid {
+            for (c, m) in self.cells.iter().zip(&self.mat) {
+                if *m != MatId::AIR && !probe.is_on(*c) {
+                    return Err(BooksError::MaterialOnOffBit(*c));
+                }
+            }
+        } else {
+            for (c, m) in self.cells.iter().zip(&self.mat) {
+                if self.table.comp(*m).is_none() {
+                    return Err(BooksError::BadMaterial(*c, *m));
+                }
+                if *m != MatId::AIR && !probe.is_on(*c) {
+                    return Err(BooksError::MaterialOnOffBit(*c));
+                }
             }
         }
         if let Some(lane) = self.inv.iter().position(|&n| n < 0) {
             return Err(BooksError::NegativeInventory { lane });
         }
-        let d = self.lane_drift();
+        let d = totals.lane_drift;
         if d.iter().any(|&x| x != 0) {
             return Err(BooksError::Drift(d));
         }
-        let e = self.energy_drift();
+        let e = totals.energy_drift;
         if e != 0 {
             return Err(BooksError::EnergyDrift(e));
+        }
+        Ok(())
+    }
+
+    /// §6aj, wasm: the z-run occupancy walk of [`Self::check_books_with`], the same cells in
+    /// the same order with the same first failure. A cell's bit is read from a transposed
+    /// copy of its chunk instead (one 16-bit z column per `(x, y)`, built with simd128 the
+    /// first time a chunk is reached within the current 16-wide x slab, where the walk reads
+    /// each chunk 16 times), and each in-chunk segment of at most 16 cells compares its
+    /// non-air mask with its column's bits at once.
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    fn books_occupancy_transposed(&self, runs: &[p6::ZRun]) -> Result<(), BooksError> {
+        use core::arch::wasm32::{
+            i16x8_ne, u16x8, u16x8_splat, v128, v128_and, v128_or, v128_store,
+        };
+        let Some(first) = runs.first() else {
+            return Ok(());
+        };
+        let (mut y0, mut y1, mut z0, mut z1) = (first.y, first.y, first.z0, first.z1);
+        for r in runs {
+            (y0, y1, z0, z1) = (y0.min(r.y), y1.max(r.y), z0.min(r.z0), z1.max(r.z1));
+        }
+        let (cy0, cz0) = (y0.div_euclid(16), z0.div_euclid(16));
+        let ncz = (z1.div_euclid(16) - cz0 + 1) as usize;
+        let slots = (y1.div_euclid(16) - cy0 + 1) as usize * ncz;
+        // `cols[slot * 256 + x + 16 * y]`: bit `z` is the chunk's bit at local `(x, y, z)`.
+        let mut cols = vec![0u16; slots * 256];
+        let mut built = vec![false; slots];
+        let mut slab = None;
+        let lane = u16x8(1, 2, 4, 8, 16, 32, 64, 128);
+        for run in runs {
+            let cx = run.x.div_euclid(16);
+            if slab != Some(cx) {
+                built.fill(false);
+                slab = Some(cx);
+            }
+            let xy = run.x.rem_euclid(16) as usize + 16 * run.y.rem_euclid(16) as usize;
+            let row = (run.y.div_euclid(16) - cy0) as usize * ncz;
+            let mats = &self.mat[run.start..=run.start + (run.z1 - run.z0) as usize];
+            let mut off = 0usize;
+            while off < mats.len() {
+                let z = run.z0 + off as i64;
+                let slot = row + (z.div_euclid(16) - cz0) as usize;
+                let col = &mut cols[slot * 256..slot * 256 + 256];
+                if !built[slot] {
+                    built[slot] = true;
+                    let (chunk, _) = World::chunk_of(Coord::new(run.x, run.y, z));
+                    match self.world.chunk_words(chunk) {
+                        None => col.fill(0),
+                        Some((_, w)) => {
+                            // Eight `(x, y)` at a time: word `4 * z + g / 8` holds their bits
+                            // `8 * (g % 8)..`, one per lane, for layer `z`.
+                            for (g, out) in col.chunks_exact_mut(8).enumerate() {
+                                let mut acc = u16x8_splat(0);
+                                for (lz, layer) in w.chunks_exact(4).enumerate() {
+                                    let byte = (layer[g / 8] >> (8 * (g % 8))) as u16 & 0xff;
+                                    let on =
+                                        i16x8_ne(v128_and(u16x8_splat(byte), lane), u16x8_splat(0));
+                                    acc = v128_or(acc, v128_and(on, u16x8_splat(1 << lz)));
+                                }
+                                // SAFETY: `out` is 8 u16 (16 bytes) and `v128_store` has no
+                                // alignment requirement.
+                                unsafe { v128_store(out.as_mut_ptr().cast::<v128>(), acc) };
+                            }
+                        }
+                    }
+                }
+                let lz = z.rem_euclid(16) as usize;
+                let n = (16 - lz).min(mats.len() - off);
+                let mut solid = 0u32;
+                for (k, m) in mats[off..off + n].iter().enumerate() {
+                    solid |= u32::from(*m != MatId::AIR) << k;
+                }
+                let bad = solid & !(u32::from(col[xy]) >> lz);
+                if bad != 0 {
+                    let k = bad.trailing_zeros() as i64;
+                    return Err(BooksError::MaterialOnOffBit(Coord::new(
+                        run.x,
+                        run.y,
+                        z + k,
+                    )));
+                }
+                off += n;
+            }
         }
         Ok(())
     }
@@ -946,13 +1196,15 @@ impl ChemWorld {
             return;
         }
         self.mat[i] = m;
-        let c = self.cells[i];
+        // The coordinate is read only when occupancy changes (a material-to-material write,
+        // like a convection swap, touches no bit).
         if m == MatId::AIR {
+            let c = self.cells[i];
             if !is_bedrock(c) {
                 self.world.set_off(c);
             }
         } else if old == MatId::AIR {
-            self.world.set_on(c);
+            self.world.set_on(self.cells[i]);
         }
     }
 
@@ -1016,13 +1268,58 @@ impl ChemWorld {
         true
     }
 
+    /// §6ah display replica: inserts `coord` into the domain as an air, Q = 0 cell (book
+    /// neutral, like [`Self::place`]'s own insertion) and returns its index. `None` (no
+    /// change) when `coord` is already a domain cell or an occupied non-chem bit. A replica
+    /// replays the host's domain growth with this, in the host's insertion order, so both hold
+    /// the same cell list.
+    pub fn insert_air_cell(&mut self, coord: Coord) -> Option<usize> {
+        if self.index_of(coord).is_some() || (self.world.is_on(coord) && !is_bedrock(coord)) {
+            return None;
+        }
+        Some(self.insert_cell(coord))
+    }
+
+    /// §6ah display replica: overwrites every domain cell's material with `mats` (domain
+    /// order; its length must equal [`Self::domain_len`], else `false` and no change),
+    /// keeping the occupancy bits in step exactly as every material write does. Heat, the bag,
+    /// pools and the books are not touched, so a replica's books are not meaningful: it is a
+    /// display copy (cells, materials, occupancy, the cell lookup) of a world stepped
+    /// elsewhere, and it must never be stepped itself. Builds the cell lookup if it is not
+    /// cached, so [`Self::index_of`] stays one probe. Returns the number of cells changed.
+    pub fn replicate_mats(&mut self, mats: &[MatId]) -> Option<usize> {
+        if mats.len() != self.mat.len() {
+            return None;
+        }
+        if self.topo.is_none() {
+            self.topology();
+        }
+        let mut changed = 0;
+        self.world.defer_octree();
+        for (block, src) in mats.chunks(64).enumerate() {
+            let base = block * 64;
+            if self.mat[base..base + src.len()] == *src {
+                continue;
+            }
+            for (k, &m) in src.iter().enumerate() {
+                if self.mat[base + k] != m {
+                    self.set_mat(base + k, m);
+                    changed += 1;
+                }
+            }
+        }
+        self.world.flush_octree();
+        Some(changed)
+    }
+
     /// Adds an air, Q=0 cell to the domain and returns its index.
     fn insert_cell(&mut self, coord: Coord) -> usize {
         let i = self.cells.binary_search(&coord).unwrap_err();
         self.cells.insert(i, coord);
         self.mat.insert(i, MatId::AIR);
         self.q.insert(i, 0);
-        self.topo = None;
+        // §6t: the topology is kept, with the cell inserted (no full rebuild on the next step).
+        self.topology_after_insert(i);
         i
     }
 
@@ -1580,9 +1877,28 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
 
     // Candidate offsets ordered by a blurred radius (fixed-point radius plus a
     // seeded jitter), hash then offset breaking ties.
-    type Offset = (i64, i64, i64);
-    let mut cand: Vec<(u64, u64, i64, Offset)> = Vec::new();
-    let mut air: Vec<(i64, (i64, i64, i64))> = Vec::new();
+    //
+    // §6u: every ball cell (shell and hollow) gets its index in `(dx, dy, dz)` loop order,
+    // which is ascending `Coord` order. A candidate sorts as `(key, hash, d2 << 32 | index)`:
+    // the index is monotone in the offset, so this is the `(key, hash, d2, offset)` order
+    // (`d2 <= 3 * 103^2` and the index `< 207^3` both fit in 32 bits). The layers are then
+    // written into per-index arrays and the cells emitted in loop order, which is the
+    // coordinate sort of the same cells.
+    let column = |dx: i64, dy: i64| -> i64 {
+        let rest = r2 - dx * dx - dy * dy;
+        if rest < 0 {
+            return 0;
+        }
+        2 * rest.isqrt() + 1
+    };
+    let mut ball = 0usize;
+    for dx in -ri..=ri {
+        for dy in -ri..=ri {
+            ball += column(dx, dy) as usize;
+        }
+    }
+    let mut cand: Vec<(u64, u64, u64)> = Vec::with_capacity(ball);
+    let mut idx = 0u64;
     for dx in -ri..=ri {
         for dy in -ri..=ri {
             for dz in -ri..=ri {
@@ -1590,16 +1906,18 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
                 if d2 > r2 {
                     continue;
                 }
+                let at = idx;
+                idx += 1;
                 if h2.is_some_and(|h| d2 <= h) {
-                    air.push((d2, (dx, dy, dz)));
                     continue;
                 }
                 let h = cell_hash(cfg.seed, (dx, dy, dz));
                 let key = isqrt((d2 as u64) << 16) + h % BLUR_FX;
-                cand.push((key, h, d2, (dx, dy, dz)));
+                cand.push((key, h, (d2 as u64) << 32 | at));
             }
         }
     }
+    debug_assert_eq!(idx as usize, ball);
     cand.sort_unstable();
     let n = cand.len();
     // Shell thicknesses come from the budget: layer i owns the next counts[i]
@@ -1610,30 +1928,48 @@ pub fn genesis_p6(cfg: &GenesisConfig, params: &P6Params) -> Result<ChemWorld, G
         .iter()
         .zip(counts)
         .flat_map(|(&m, k)| std::iter::repeat_n(m, k));
-    let mut cells: Vec<(Coord, MatId, i32)> = Vec::with_capacity(n + air.len());
-    for &(_, _, d2, (dx, dy, dz)) in &cand {
-        let coord = Coord::new(c.x + dx, c.y + dy, c.z + dz);
+    let mut mats = vec![MatId::AIR; ball];
+    let mut heat = vec![0i32; ball];
+    for &(_, _, packed) in &cand {
+        let (d2, at) = ((packed >> 32) as i64, (packed & 0xffff_ffff) as usize);
         let m = fill.next().unwrap_or(MatId::AIR);
         if m != MatId::AIR {
             let mc = comp(m).expect("table rows");
             spend(&mut rem, &mc, 1);
         }
-        cells.push((coord, m, genesis_heat(m, d2, r, params)));
+        mats[at] = m;
+        heat[at] = genesis_heat(m, d2, r, params);
     }
     debug_assert!(fill.next().is_none());
     debug_assert_eq!(rem, bag);
-    for &(_, (dx, dy, dz)) in &air {
-        cells.push((Coord::new(c.x + dx, c.y + dy, c.z + dz), MatId::AIR, 0));
-    }
-    cells.sort_unstable_by_key(|e| e.0);
-    for (coord, m, q) in cells {
-        out.cells.push(coord);
-        out.mat.push(m);
-        out.q.push(q);
-        if m != MatId::AIR {
-            out.world.set_on(coord);
+    drop(cand);
+    out.world.defer_octree();
+    out.cells.reserve(ball);
+    out.mat.reserve(ball);
+    out.q.reserve(ball);
+    let mut at = 0usize;
+    for dx in -ri..=ri {
+        for dy in -ri..=ri {
+            let len = column(dx, dy);
+            if len == 0 {
+                continue;
+            }
+            let half = len / 2;
+            for dz in -half..=half {
+                let coord = Coord::new(c.x + dx, c.y + dy, c.z + dz);
+                let m = mats[at];
+                out.cells.push(coord);
+                out.mat.push(m);
+                out.q.push(heat[at]);
+                if m != MatId::AIR {
+                    out.world.set_on(coord);
+                }
+                at += 1;
+            }
         }
     }
+    debug_assert_eq!(at, ball);
+    out.world.flush_octree();
 
     // Whatever the shape could not hold settles into the bag.
     out.inv = rem;
@@ -1697,6 +2033,304 @@ mod tests {
     }
 
     const BUDGET: Lanes = [4000, 3000, 400, 120, 300, 350, 200, 60, 180, 150, 40, 30];
+
+    /// §6u: the indexed genesis lays out exactly the cells of the former construction (all
+    /// candidates sorted by `(key, hash, d2, offset)`, layers filled in that order, then every
+    /// cell sorted by coordinate), with the same materials, heat, occupancy and books, for a
+    /// solid ball, a hollow one, an off-origin centre and a budget the ball cannot hold.
+    #[test]
+    fn indexed_genesis_matches_the_sorted_construction() {
+        let reference = |cfg: &GenesisConfig, params: &P6Params| {
+            let r = cfg.shape.radius;
+            let ri = i64::from(r);
+            let c = cfg.shape.center;
+            let r2 = ri * ri;
+            let h2 = cfg.shape.hollow.map(|h| i64::from(h) * i64::from(h));
+            let mut rem = cfg.budget.lanes;
+            let mut cand = Vec::new();
+            let mut air = Vec::new();
+            for dx in -ri..=ri {
+                for dy in -ri..=ri {
+                    for dz in -ri..=ri {
+                        let d2 = dx * dx + dy * dy + dz * dz;
+                        if d2 > r2 {
+                            continue;
+                        }
+                        if h2.is_some_and(|h| d2 <= h) {
+                            air.push((dx, dy, dz));
+                            continue;
+                        }
+                        let h = cell_hash(cfg.seed, (dx, dy, dz));
+                        let key = isqrt((d2 as u64) << 16) + h % BLUR_FX;
+                        cand.push((key, h, d2, (dx, dy, dz)));
+                    }
+                }
+            }
+            cand.sort_unstable();
+            let (counts, _) = plan_layers(&rem, cand.len());
+            let mut fill = LAYERS
+                .iter()
+                .zip(counts)
+                .flat_map(|(&m, k)| std::iter::repeat_n(m, k));
+            let mut cells = Vec::new();
+            for &(_, _, d2, (dx, dy, dz)) in &cand {
+                let m = fill.next().unwrap_or(MatId::AIR);
+                if m != MatId::AIR {
+                    spend(&mut rem, &comp(m).unwrap(), 1);
+                }
+                let coord = Coord::new(c.x + dx, c.y + dy, c.z + dz);
+                cells.push((coord, m, genesis_heat(m, d2, r, params)));
+            }
+            for &(dx, dy, dz) in &air {
+                cells.push((Coord::new(c.x + dx, c.y + dy, c.z + dz), MatId::AIR, 0));
+            }
+            cells.sort_unstable_by_key(|e| e.0);
+            (cells, rem)
+        };
+        let params = P6Params::default();
+        let big: Lanes = BUDGET.map(|x| x * 40);
+        for (budget, seed, r, hollow, centre) in [
+            (BUDGET, 7, 9, None, Coord::new(0, 0, 0)),
+            (BUDGET, 3, 12, Some(4), Coord::new(5, -3, 11)),
+            (big, 11, 6, None, Coord::new(-2, 8, 1)),
+            (BUDGET, 1, 0, None, Coord::new(0, 0, 0)),
+            (BUDGET, 9, 15, Some(15), Coord::new(0, 0, 0)),
+        ] {
+            let mut cfg = cfg(budget, seed, r);
+            cfg.shape.hollow = hollow;
+            cfg.shape.center = centre;
+            let w = genesis_p6(&cfg, &params).unwrap();
+            let (cells, rem) = reference(&cfg, &params);
+            assert_eq!(w.cells.len(), cells.len());
+            for (j, &(coord, m, q)) in cells.iter().enumerate() {
+                assert_eq!((w.cells[j], w.mat[j], w.q[j]), (coord, m, q));
+                assert_eq!(w.world.is_on(coord), m != MatId::AIR || is_bedrock(coord));
+            }
+            assert_eq!(w.inv, rem);
+            assert_eq!(w.check_books(), Ok(()));
+        }
+    }
+
+    /// §6t: inserting one domain cell keeps the cached topology, updated in place, and the
+    /// result is exactly the topology a rebuild makes (every table, the core and the radial
+    /// frame), for unpinned and pinned cores, at cells inside and outside the old z-rows;
+    /// where the update cannot hold (outside the lookup box, a moving core) it is dropped.
+    #[test]
+    fn inserted_cell_keeps_the_rebuilt_topology() {
+        let base = genesis(&cfg(BUDGET, 7, 9)).unwrap();
+        let sky = genesis_sky(&cfg(BUDGET, 7, 9), &P6Params::default(), 2).unwrap();
+        let radial = genesis_sky_radial(&cfg(BUDGET, 7, 9), &P6Params::default(), 2).unwrap();
+        let (mut kept, mut dropped) = (0, 0);
+        for w0 in [base, sky, radial] {
+            let mut w0 = w0;
+            let _ = w0.topology();
+            let mut tried = 0;
+            for x in -12_i64..=12 {
+                for y in -12_i64..=12 {
+                    for z in -12_i64..=12 {
+                        let c = Coord::new(x, y, z);
+                        if (x + 2 * y + 3 * z).rem_euclid(5) != 0
+                            || w0.index_of(c).is_some()
+                            || w0.world.is_on(c)
+                        {
+                            continue;
+                        }
+                        let mut w = w0.clone();
+                        let _ = w.topology().cell_up(); // the radial frame's tables, carried over on insert
+                        // §6w: the wide-roll words too, when built (built here for every other
+                        // cell when the genesis topology has none yet).
+                        if x.rem_euclid(2) == 0 {
+                            let t0 = w.topology();
+                            let _ = t0.cell_roll_cells(0x5eed, &w.cells);
+                        }
+                        let i = w.insert_cell(c);
+                        tried += 1;
+                        let Some(t) = w.topo.clone() else {
+                            dropped += 1;
+                            continue;
+                        };
+                        kept += 1;
+                        let mut v = w.clone();
+                        v.topo = None;
+                        let full = v.topology();
+                        if let Some(key) = t.cell_roll_key() {
+                            let _ = full.cell_roll_cells(key, &v.cells);
+                        }
+                        assert_eq!(format!("{t:?}"), format!("{full:?}"), "insert {c:?} at {i}");
+                    }
+                }
+            }
+            assert!(tried > 200);
+        }
+        assert!(kept > 400, "kept {kept}");
+        assert!(dropped > 0, "dropped {dropped}");
+    }
+
+    /// §6ah: a display replica that replays the host's domain growth (`insert_air_cell`, in
+    /// the host's order) and copies its materials (`replicate_mats`) holds the host's cell
+    /// list, materials, occupancy bits and cell lookup after every step, dig and place,
+    /// without ever being stepped.
+    #[test]
+    fn replica_follows_host_cells_materials_and_occupancy() {
+        let mut host = genesis(&cfg(BUDGET, 7, 10)).unwrap();
+        let mut replica = host.clone();
+        assert_eq!(
+            replica.replicate_mats(&host.mat[1..]),
+            None,
+            "length mismatch refused"
+        );
+        let mut grown = 0;
+        for round in 0..12 {
+            host.step().unwrap();
+            let mut inserted = Vec::new();
+            // dig a surface cell and place its material just outside the domain
+            let cells = host.cells.clone();
+            if let Some((c, m)) = cells
+                .iter()
+                .find_map(|&c| host.clone().dig(c).map(|m| (c, m)))
+            {
+                assert_eq!(host.dig(c), Some(m));
+                let up = cells
+                    .iter()
+                    .map(|&c| Coord::new(c.x, c.y + 1 + round, c.z))
+                    .find(|&u| host.index_of(u).is_none() && !host.world.is_on(u))
+                    .unwrap();
+                let before = host.domain_len();
+                if host.place(up, m) && host.domain_len() == before + 1 {
+                    inserted.push(up);
+                }
+            }
+            for &c in &inserted {
+                let i = replica.insert_air_cell(c).expect("new cell");
+                assert_eq!(host.cells[i], c);
+                assert_eq!(replica.insert_air_cell(c), None, "already in the domain");
+                grown += 1;
+            }
+            replica.replicate_mats(&host.mat).expect("same length");
+            assert_eq!(replica.cells, host.cells);
+            assert_eq!(replica.mat, host.mat);
+            assert_eq!(
+                crate::history::world_tag(&replica.world),
+                crate::history::world_tag(&host.world)
+            );
+            for &c in host.cells.iter().step_by(17) {
+                assert_eq!(replica.index_of(c), host.index_of(c));
+            }
+            assert!(replica.topo.is_some(), "lookup stays one probe");
+        }
+        assert!(grown >= 6, "grown {grown}");
+        assert_eq!(replica.replicate_mats(&host.mat), Some(0));
+        assert!(host.check_books().is_ok());
+    }
+
+    /// §6t: a place that joins the domain leaves the world on exactly the path a rebuilt
+    /// topology takes: materials, heat, books and the occupancy world agree step for step.
+    #[test]
+    fn place_outside_the_domain_steps_as_with_a_rebuilt_topology() {
+        let mut energy = EnergyInput::OFF;
+        energy.sun = 8;
+        energy.day = 600;
+        energy.core = 40;
+        let params = P6Params {
+            seed: 7,
+            cycle: WaterCycle::Driven,
+            energy_in: energy,
+            ..P6Params::default()
+        };
+        let mut carried = 0;
+        for w0 in [
+            genesis(&cfg(BUDGET, 7, 10)).unwrap(),
+            genesis_p6(&cfg(BUDGET, 7, 10), &params).unwrap(),
+            genesis_sky_radial(&cfg(BUDGET, 7, 10), &params, 2).unwrap(),
+        ] {
+            let mut a = w0;
+            for _ in 0..3 {
+                a.step().unwrap();
+            }
+            // Dig a few surface cells for material, then place them just outside the domain.
+            let mut placed = 0;
+            let cells: Vec<Coord> = a.cells.clone();
+            let dug: Vec<Coord> = cells
+                .iter()
+                .filter_map(|&c| a.clone().dig(c).map(|_| c))
+                .take(6)
+                .collect();
+            let mut dug = dug.into_iter();
+            let spots: Vec<Coord> = cells
+                .iter()
+                .map(|&c| Coord::new(c.x, c.y + 1, c.z))
+                .filter(|&u| a.index_of(u).is_none() && !a.world.is_on(u))
+                .step_by(7)
+                .take(6)
+                .collect();
+            for up in spots {
+                let Some(c) = dug.next() else { break };
+                let m = a.dig(c).expect("diggable");
+                let before = a.domain_len();
+                if a.place(up, m) && a.domain_len() == before + 1 {
+                    placed += 1;
+                }
+            }
+            assert!(placed >= 3, "placed {placed}");
+            assert!(a.topo.is_some(), "the places keep the topology");
+            // §6w: under Driven the vapor regions are carried through each place, as built.
+            if let (Some(g), Some(t)) = (&a.vgeo, &a.topo)
+                && a.params.cycle == WaterCycle::Driven
+            {
+                assert!(g.for_topology(t), "the regions follow the places");
+                let full = vapor::VaporGeo::build(&a.cells, t, a.params.vapor_local);
+                assert_eq!(format!("{g:?}"), format!("{full:?}"));
+                carried += 1;
+            }
+            let mut b = a.clone();
+            b.topo = None;
+            for step in 0..12 {
+                a.step().unwrap();
+                b.step().unwrap();
+                assert!(
+                    a.mat == b.mat && a.q == b.q && a.cells == b.cells,
+                    "step {step}"
+                );
+                assert_eq!(a.book_totals(), b.book_totals(), "step {step}");
+                assert_eq!(
+                    crate::history::world_tag(&a.world),
+                    crate::history::world_tag(&b.world),
+                    "step {step}"
+                );
+            }
+            assert_eq!(a.check_books(), Ok(()));
+        }
+        assert!(carried >= 2, "carried {carried}");
+    }
+
+    /// The books' occupancy walk over z-runs and chunk words reports exactly what the walk
+    /// over the cell list reports, through chunk borders at negative coordinates too.
+    #[test]
+    fn books_occupancy_walk_by_runs_matches_cell_walk() {
+        let mut w = genesis(&cfg(BUDGET, 7, 20)).unwrap();
+        let _ = w.topology();
+        assert!(w.topo.as_ref().is_some_and(|t| t.zruns.is_some()));
+        let cell_walk = |w: &ChemWorld| {
+            let mut v = w.clone();
+            v.topo = None;
+            v.check_books()
+        };
+        assert_eq!(w.check_books(), Ok(()));
+        assert_eq!(cell_walk(&w), Ok(()));
+        let solid: Vec<usize> = (0..w.cells.len())
+            .filter(|&i| w.mat[i] != MatId::AIR && !is_bedrock(w.cells[i]))
+            .collect();
+        assert!(solid.len() > 100);
+        let mut cuts = 0;
+        for &i in solid.iter().rev().step_by(solid.len() / 37 + 1) {
+            w.world.set_off(w.cells[i]);
+            let got = w.check_books();
+            assert_eq!(got, Err(BooksError::MaterialOnOffBit(w.cells[i])));
+            assert_eq!(got, cell_walk(&w));
+            cuts += 1;
+        }
+        assert!(cuts > 30);
+    }
 
     #[test]
     fn genesis_totals_equal_budget_and_drift_is_zero() {

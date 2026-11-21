@@ -230,7 +230,8 @@ RETURN s.name, s.filePath, p.heuristicLabel
 
 1. **Soft DDA / `bcc-voxel-demo` / abi16: do not touch.** `bcc-voxel-demo` lives outside this repo
    (`/workspace/bcc-voxel-demo`). Inside Bitblock the CPU render path (`crates/core/src/render.rs`, play
-   `render_pending` / `render_game`) was left untouched in §5y. Changing it needs Owen's explicit OK.
+   `render_pending` / `render_game`) was first changed in §5z (exact enclosed-bit cull, under Owen's "continue"
+   on the render-scale wave). Any further change still needs Owen's explicit OK and must keep frame hashes exact.
 2. **Chem play is served at http://127.0.0.1:8765** (`python3 -m http.server 8765 -d crates/wasm/www`);
    play page `http://127.0.0.1:8765/play.html`. Build per §5y "Build" (wasm32, `+simd128`, copy wasm into
    `www/`, `python3 crates/wasm/build_pages.py`).

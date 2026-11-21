@@ -23,7 +23,8 @@ from typing import Iterable, Sequence
 
 TAG_DOMAIN = b"bitblock/content-tag/v1"
 HASH_SUITE = b"sha256"
-WORLD_SCHEMA = b"bitblock/world/sorted-i64-be/v1"
+WORLD_SCHEMA = b"bitblock/world/chunk-merkle-sha256/v2"
+WORLD_CHUNK_SCHEMA = b"bitblock/world/chunk-bits-i64-be/v2"
 GENESIS_SCHEMA = b"bitblock/history/genesis/v1"
 EVENT_SCHEMA = b"bitblock/history/event/v1"
 RECEIPT_SCHEMA = b"bitblock/history/receipt/v1"
@@ -115,13 +116,30 @@ def encode_edit(operation: str, coord: Coord) -> bytes:
     return bytes((operation_code(operation),)) + encode_coord(coord)
 
 
+def _chunk_merkle_payload(coords, encode_digest):
+    """v2 world fingerprint root payload: count of non-empty 16^3 chunks, then per chunk in
+    ascending (cx, cy, cz) order its i64-be coordinate and the SHA-256 leaf digest over the same
+    coordinate plus 64 u64-be occupancy words (bit index x + 16 (y + 16 z))."""
+    chunks = {}
+    for x, y, z in set(coords):
+        key = (x // 16, y // 16, z // 16)
+        index = x % 16 + 16 * (y % 16 + 16 * (z % 16))
+        words = chunks.setdefault(key, [0] * 64)
+        words[index // 64] |= 1 << (index % 64)
+    payload = struct.pack(">Q", len(chunks))
+    for key in sorted(chunks):
+        encoded_key = struct.pack(">qqq", *key)
+        leaf = encoded_key + b"".join(struct.pack(">Q", w) for w in chunks[key])
+        payload += encoded_key + encode_digest(leaf)
+    return payload
+
+
 def world_tag(coords: Iterable[Coord]) -> Tag:
-    sorted_coords = sorted(set(coords))
-    payload = (
-        struct.pack(">H", len(WORLD_SCHEMA))
-        + WORLD_SCHEMA
-        + struct.pack(">Q", len(sorted_coords))
-        + b"".join(encode_coord(coord) for coord in sorted_coords)
+    coords = list(coords)
+    for coord in coords:
+        encode_coord(coord)
+    payload = _chunk_merkle_payload(
+        coords, lambda leaf: tag("world", WORLD_CHUNK_SCHEMA, leaf).digest
     )
     return tag("world", WORLD_SCHEMA, payload)
 
@@ -340,20 +358,20 @@ def main() -> None:
     }
 
     expected_receipts = {
-        "cold-cycle": "#bb.receipt.sha256.psal6njm4ndyap7wclfv55gnlxwwou4eq2rvfotazrxzragceusa",
-        "same-tick-reuse": "#bb.receipt.sha256.fakwjpoid3eqaztgfahmlepmfawgi7yffed345eovjysn2izuf5a",
-        "warm-burn": "#bb.receipt.sha256.v4rixvqu53nkaraowd4z26s2r55fv4rnz6qnq2dbtjaccxiljffq",
-        "noop-head": "#bb.receipt.sha256.kdqtkvuuljhq4xjmkft44bk46rd4rqnty2h6sbozjwg2o4nnjgmq",
-        "toggle-pair": "#bb.receipt.sha256.li2iopqyi652bk4hdt75ad356z5iqryugxmxkefhfroxvhtpetja",
-        "bedrock": "#bb.receipt.sha256.amsihpcd2ydi5243jdzuoa2g3a5tbh726k5zru6dfmyargeul6ja",
-        "edge": "#bb.receipt.sha256.dzihycw2ucnfjaulmme6pqlgv3n4u65gn4bqi36xvzkmxymzn22q",
+        "cold-cycle": "#bb.receipt.sha256.d7qzlret5ep47ewjymdfylx3lelasfvp5s6tmt72qjjh34bqwmea",
+        "same-tick-reuse": "#bb.receipt.sha256.iozg4ylucv37oyjoceamtnvaqwdavpfk366dlo44kividto2q32a",
+        "warm-burn": "#bb.receipt.sha256.6bkjjhs2qprx3dfgkuamon5dei5v6gqcnqk6k7ugsjxnx4nc4l4a",
+        "noop-head": "#bb.receipt.sha256.rmfiy36x6e4kisgi5n6qemrpa3o6lpnbtrfqmmkohzlrixezmbaq",
+        "toggle-pair": "#bb.receipt.sha256.rong4dap7mwzs2zztqioqo56ix2rmnjheutosombipvzgnt7dgiq",
+        "bedrock": "#bb.receipt.sha256.exlpidihytljgbcr2vbgazsmifshk52eveiet5bfa32fzv6hfq6a",
+        "edge": "#bb.receipt.sha256.suix4q6f7pj7qakempurczmewpjzq6hruzblpcueyezmiqwephha",
     }
     expected_events = {
-        ("cold-cycle", 0): "#bb.event.sha256.znebuddob7z4u2vwyqe7bwhclvyeqtgya7252fm5qq7hewauh2kq",
-        ("cold-cycle", 4): "#bb.event.sha256.6kcbq6sgg7zr5nymes5da5ksm4kt2y6fpytmfwlbs3xmn4zdsx5q",
-        ("same-tick-reuse", 0): "#bb.event.sha256.h7rmaq3zvlig2btqavazt37nhrk7el2pwulowcvhzmzbm245i6ua",
-        ("same-tick-reuse", 2): "#bb.event.sha256.zr3ehfiz5xxheosxvxydb27m4vpfibfbpjkg7cicuob6tsf46cja",
-        ("warm-burn", 0): "#bb.event.sha256.gibrybl5w6zs3bq73t3e3qg6qjrhifcf2ce6xhnxyttsnukxvwma",
+        ("cold-cycle", 0): "#bb.event.sha256.7juld2z7wmvaol3xbf2kdlniwzy4tcbr7gfy5yojwaofqkmgws3a",
+        ("cold-cycle", 4): "#bb.event.sha256.qk4stjl5xesq72glgtz7thj4lk4s4zsbb6fp7oljjsp45xfylmtq",
+        ("same-tick-reuse", 0): "#bb.event.sha256.qhwms7spp3gkyjy5534zvkknwlwzbcwjoizszruhokslatavip5q",
+        ("same-tick-reuse", 2): "#bb.event.sha256.c2aidqhefgmovroufymmonnh2yzk77dgg7z55xiw4cag54euht2q",
+        ("warm-burn", 0): "#bb.event.sha256.j7h56ji37pgsj3s672a532cdm3eb3vu6zstx6pqehpwx36wbobwa",
     }
     expected_effects = {
         "empty": [],

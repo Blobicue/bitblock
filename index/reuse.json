@@ -8,9 +8,9 @@
     ]
    },
    {
-    "item": "BitTint",
+    "item": "BitProbe",
     "modules": [
-     "render"
+     "world"
     ]
    },
    {
@@ -566,6 +566,12 @@
     ]
    },
    {
+    "item": "prepare_delta_lists",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "profile_tag",
     "modules": [
      "physical_sensor"
@@ -590,7 +596,7 @@
     ]
    }
   ],
-  "pub_items": 845,
+  "pub_items": 863,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -614,7 +620,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 34647,
+   "code_lines": 36042,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -698,7 +704,7 @@
      "right": "frame_v2:79"
     },
     {
-     "left": "history:369",
+     "left": "history:370",
      "lines": 10,
      "right": "interaction:1328"
     },
@@ -795,7 +801,7 @@
    ]
   },
   "test": {
-   "code_lines": 22640,
+   "code_lines": 24161,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -844,7 +850,7 @@
      "right": "main:4186"
     },
     {
-     "left": "history:980",
+     "left": "history:1206",
      "lines": 12,
      "right": "history_store:1573"
     },

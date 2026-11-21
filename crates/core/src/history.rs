@@ -15,7 +15,8 @@ use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::BEDROCK_COORD;
 use crate::world::{Coord, World, is_bedrock};
 
-const WORLD_SCHEMA: &[u8] = b"bitblock/world/sorted-i64-be/v1";
+const WORLD_SCHEMA: &[u8] = b"bitblock/world/chunk-merkle-sha256/v2";
+const WORLD_CHUNK_SCHEMA: &[u8] = b"bitblock/world/chunk-bits-i64-be/v2";
 /// Canonical schema identifier for a coordinate-history genesis receipt.
 pub const GENESIS_SCHEMA: &[u8] = b"bitblock/history/genesis/v1";
 const EVENT_SCHEMA: &[u8] = b"bitblock/history/event/v1";
@@ -417,7 +418,13 @@ pub struct History {
     genesis_world: ContentTag,
     head: ContentTag,
     receipts: Vec<Receipt>,
-    active_mints: HashMap<Coord, ContentTag>,
+    // Every mutable genesis bit starts with the *same* mint tag. Keep that baseline as a
+    // sparse bitset, not one (Coord, ContentTag) hash-map entry per bit. The overlay records
+    // only changes from the baseline: Some(tag) for a later mint, None for a burned genesis
+    // bit. All active_mint results and receipt bytes remain unchanged.
+    genesis_mints: World,
+    active_mints: HashMap<Coord, Option<ContentTag>>,
+    circulating: usize,
 }
 
 impl History {
@@ -425,17 +432,17 @@ impl History {
     pub fn new(initial_world: &World) -> Self {
         let genesis_world = world_tag(initial_world);
         let genesis = genesis_tag(genesis_world);
-        let active_mints = initial_world
-            .iter_on()
-            .filter(|&coord| !is_bedrock(coord))
-            .map(|coord| (coord, genesis))
-            .collect();
+        let genesis_mints = initial_world.clone();
+        let circulating = initial_world.len().saturating_sub(1);
+        let active_mints = HashMap::new();
         Self {
             genesis,
             genesis_world,
             head: genesis,
             receipts: Vec::new(),
+            genesis_mints,
             active_mints,
+            circulating,
         }
     }
 
@@ -476,12 +483,16 @@ impl History {
 
     /// Looks up the active mint provenance tag for an occupied mutable coordinate.
     pub fn active_mint(&self, coord: Coord) -> Option<ContentTag> {
-        self.active_mints.get(&coord).copied()
+        match self.active_mints.get(&coord) {
+            Some(mint) => *mint,
+            None if !is_bedrock(coord) && self.genesis_mints.is_on(coord) => Some(self.genesis),
+            None => None,
+        }
     }
 
     /// Returns the count of currently occupied mutable coordinates with active mint provenance.
     pub fn circulating_supply(&self) -> usize {
-        self.active_mints.len()
+        self.circulating
     }
 
     /// Opens a staged coordinate-history transaction for `tick` parented at the current head.
@@ -558,17 +569,22 @@ impl History {
             );
         }
         for (coord, mint) in prepared.provenance_updates {
-            match mint {
-                Some(mint) => {
-                    self.active_mints.insert(coord, mint);
-                }
-                None => {
-                    self.active_mints.remove(&coord);
-                }
+            let was_active = self.active_mint(coord).is_some();
+            self.circulating =
+                self.circulating + usize::from(mint.is_some()) - usize::from(was_active);
+            let baseline = if !is_bedrock(coord) && self.genesis_mints.is_on(coord) {
+                Some(self.genesis)
+            } else {
+                None
+            };
+            if mint == baseline {
+                self.active_mints.remove(&coord);
+            } else {
+                self.active_mints.insert(coord, mint);
             }
         }
         assert_eq!(
-            self.active_mints.len(),
+            self.circulating,
             world.len().saturating_sub(1),
             "active mint provenance must equal mutable occupied supply"
         );
@@ -648,7 +664,7 @@ impl History {
         if rebuilt.head != self.head {
             return Err(HistoryError::HeadMismatch);
         }
-        if rebuilt.active_mints != self.active_mints {
+        if rebuilt.active_mints != self.active_mints || rebuilt.circulating != self.circulating {
             return Err(HistoryError::ProvenanceMismatch);
         }
         Ok(world)
@@ -801,47 +817,82 @@ impl fmt::Display for HistoryError {
 
 impl std::error::Error for HistoryError {}
 
-/// Computes the canonical `TagKind::World` content tag over all sorted occupied coordinates in `world`.
+/// Computes the v2 world fingerprint with cached SHA-256 chunk leaves and root.
+///
+/// Each leaf canonically hashes the chunk's signed coordinates (i64 big-endian) followed by
+/// its 64 occupancy words (u64 big-endian, index x + 16*(y + 16*z)). The root canonically
+/// hashes the u64 big-endian non-empty chunk count followed by sorted (coordinate, digest)
+/// pairs. Leaf and root schemas are distinct. This is a two-level Merkle commitment, not a
+/// linear XOR/sum accumulator: generic collision strength is SHA-256's ~128 bits, subject to
+/// SHA-256 collision resistance and the injective encodings. It is for deterministic tests and
+/// local replay, not an authenticated service or an upgrade of historical v1 receipts.
+///
+/// Unchanged world: O(1). After edits: O(changed chunks * 512 bytes + allocated chunks), with
+/// a sort of chunk keys at the root; no occupied-coordinate scan. Genesis computes all leaves
+/// once. No-op edits, clones, deferred octree upkeep and negative/extreme coordinates preserve
+/// exactly the same tag as a full recomputation from occupied coordinates.
 pub fn world_tag(world: &World) -> ContentTag {
-    let mut coords = Vec::with_capacity(world.len());
-    coords.extend(world.iter_on());
-    coords.sort_unstable();
-    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + coords.len() * 24;
-    hash_canonical(TagKind::World, WORLD_SCHEMA, payload_len as u64, |sink| {
-        let schema_len = u16::try_from(WORLD_SCHEMA.len()).expect("world schema exceeds u16");
-        sink(&schema_len.to_be_bytes());
-        sink(WORLD_SCHEMA);
-        sink(&(coords.len() as u64).to_be_bytes());
-        for coord in coords {
-            let mut encoded = [0_u8; 24];
-            encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
-            encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
-            encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
-            sink(&encoded);
-        }
-    })
-    .expect("canonical world length must match its encoder")
+    world.fingerprint(world_chunk_digest, world_root_tag)
 }
 
-#[cfg(test)]
-fn world_tag_before_preallocation(world: &World) -> ContentTag {
-    let mut coords: Vec<_> = world.iter_on().collect();
-    coords.sort_unstable();
-    let payload_len = 2 + WORLD_SCHEMA.len() + 8 + coords.len() * 24;
-    hash_canonical(TagKind::World, WORLD_SCHEMA, payload_len as u64, |sink| {
-        let schema_len = u16::try_from(WORLD_SCHEMA.len()).expect("world schema exceeds u16");
-        sink(&schema_len.to_be_bytes());
-        sink(WORLD_SCHEMA);
-        sink(&(coords.len() as u64).to_be_bytes());
-        for coord in coords {
-            let mut encoded = [0_u8; 24];
-            encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
-            encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
-            encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
-            sink(&encoded);
+fn encode_chunk_coord(coord: crate::world::ChunkCoord) -> [u8; 24] {
+    let mut encoded = [0; 24];
+    encoded[..8].copy_from_slice(&coord.x.to_be_bytes());
+    encoded[8..16].copy_from_slice(&coord.y.to_be_bytes());
+    encoded[16..].copy_from_slice(&coord.z.to_be_bytes());
+    encoded
+}
+
+fn world_chunk_digest(coord: crate::world::ChunkCoord, bits: &[u64; 64]) -> [u8; 32] {
+    hash_canonical(TagKind::World, WORLD_CHUNK_SCHEMA, 24 + 512, |sink| {
+        sink(&encode_chunk_coord(coord));
+        let mut bytes = [0_u8; 512];
+        for (word, encoded) in bits.iter().zip(bytes.chunks_exact_mut(8)) {
+            encoded.copy_from_slice(&word.to_be_bytes());
         }
+        sink(&bytes);
     })
-    .expect("canonical world length must match its encoder")
+    .expect("fixed world chunk length")
+    .digest()
+}
+
+fn world_root_tag(leaves: &[(crate::world::ChunkCoord, [u8; 32])]) -> ContentTag {
+    hash_canonical(
+        TagKind::World,
+        WORLD_SCHEMA,
+        8 + 56 * leaves.len() as u64,
+        |sink| {
+            sink(&(leaves.len() as u64).to_be_bytes());
+            for &(coord, digest) in leaves {
+                sink(&encode_chunk_coord(coord));
+                sink(&digest);
+            }
+        },
+    )
+    .expect("world root length matches encoder")
+}
+
+/// Independent full rebuild from occupied coordinates, never consulting chunk/root caches.
+#[cfg(test)]
+fn world_tag_full_recompute(world: &World) -> ContentTag {
+    use crate::world::ChunkCoord;
+    let mut chunks = std::collections::BTreeMap::<ChunkCoord, [u64; 64]>::new();
+    for coord in world.iter_on() {
+        let key = ChunkCoord {
+            x: coord.x.div_euclid(16),
+            y: coord.y.div_euclid(16),
+            z: coord.z.div_euclid(16),
+        };
+        let index = coord.x.rem_euclid(16) as usize
+            + 16 * (coord.y.rem_euclid(16) as usize + 16 * coord.z.rem_euclid(16) as usize);
+        chunks.entry(key).or_insert([0; 64])[index / 64] |= 1 << (index % 64);
+    }
+    world_root_tag(
+        &chunks
+            .into_iter()
+            .map(|(key, bits)| (key, world_chunk_digest(key, &bits)))
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn genesis_tag(genesis_world: ContentTag) -> ContentTag {
@@ -904,6 +955,81 @@ mod tests {
         ContentTag::parse_full(text).expect("known-answer tag must parse canonically")
     }
 
+    /// The genesis-baseline mint store answers exactly as the old one-entry-per-bit map would:
+    /// every genesis bit minted at genesis, then each committed Mint / Burn effect applied.
+    #[test]
+    fn genesis_baseline_mints_match_the_full_mint_map() {
+        let mut state = 0x6a09_e667_f3bc_c908_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let span = 3_i64;
+        let mut initial = World::new();
+        for x in -span..=span {
+            for y in -span..=span {
+                for z in -span..=span {
+                    if next() % 3 != 0 {
+                        initial.set_on(Coord::new(x, y, z));
+                    }
+                }
+            }
+        }
+        let mut world = initial.clone();
+        let mut history = History::new(&initial);
+        let mut full: HashMap<Coord, ContentTag> = initial
+            .iter_on()
+            .filter(|&c| !is_bedrock(c))
+            .map(|c| (c, history.genesis()))
+            .collect();
+        for tick in 0..300_u64 {
+            let mut transaction = history.begin_tick(tick);
+            for _ in 0..1 + next() % 12 {
+                let r = next();
+                let pick = |shift: u32| ((r >> shift) % (2 * span as u64 + 3)) as i64 - span - 1;
+                let op = [Operation::On, Operation::Off, Operation::Toggle][(r >> 60) as usize % 3];
+                transaction.apply_edit(
+                    &history,
+                    &mut world,
+                    Edit::new(op, Coord::new(pick(0), pick(16), pick(32))),
+                );
+            }
+            let Some(receipt) = history.commit_tick(transaction, &world) else {
+                continue;
+            };
+            for effect in receipt.effects() {
+                match *effect {
+                    TransitionEffect::Mint { coord, event } => {
+                        assert!(full.insert(coord, event).is_none());
+                    }
+                    TransitionEffect::Burn {
+                        coord,
+                        consumed_mint,
+                        ..
+                    } => assert_eq!(full.remove(&coord), Some(consumed_mint)),
+                    TransitionEffect::NoOp { .. } => {}
+                }
+            }
+            assert_eq!(history.circulating_supply(), full.len());
+            for x in -span - 1..=span + 1 {
+                for y in -span - 1..=span + 1 {
+                    for z in -span - 1..=span + 1 {
+                        let c = Coord::new(x, y, z);
+                        assert_eq!(
+                            history.active_mint(c),
+                            full.get(&c).copied(),
+                            "tick {tick} {c:?}"
+                        );
+                    }
+                }
+            }
+        }
+        let replayed = history.verify(&initial).expect("baseline history verifies");
+        assert_eq!(world_tag(&replayed), world_tag(&world));
+    }
+
     fn apply_one_receipt(initial: &World, tick: u64, edits: &[Edit]) -> (World, History) {
         let mut world = initial.clone();
         let mut history = History::new(initial);
@@ -929,6 +1055,60 @@ mod tests {
                 ..
             } => "already-off",
         }
+    }
+
+    #[test]
+    fn incremental_world_tag_matches_full_recompute_after_random_edits() {
+        let mut world = World::new();
+        let mut seed = 0x6e5e_ed12_89ab_cdef_u64;
+        for step in 0..2000 {
+            let mut next = || {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                seed
+            };
+            let coord = if step % 23 == 0 {
+                Coord::new(i64::MIN, 0, i64::MAX)
+            } else if step % 29 == 0 {
+                BEDROCK_COORD
+            } else {
+                Coord::new(
+                    (next() % 65) as i64 - 32,
+                    (next() % 65) as i64 - 32,
+                    (next() % 65) as i64 - 32,
+                )
+            };
+            // Prime root and chunk caches before each edit, including no-ops and removals.
+            let before = world_tag(&world);
+            if step % 7 == 0 {
+                world.defer_octree();
+            }
+            if step % 3 == 0 {
+                world.set_off(coord);
+            } else {
+                world.set_on(coord);
+            }
+            let after = world_tag(&world);
+            assert_eq!(after, world_tag_full_recompute(&world), "step {step}");
+            let mut clone = world.clone();
+            clone.set_off(coord);
+            assert_eq!(world_tag(&clone), world_tag_full_recompute(&clone));
+            assert_eq!(world_tag(&world), after);
+            if step % 7 == 0 {
+                world.flush_octree();
+            }
+            assert_eq!(world_tag(&world), after);
+            let _ = before;
+        }
+        // Removing the last bit of a non-bedrock chunk must remove its leaf.
+        let mut small = World::new();
+        let original = world_tag(&small);
+        let p = Coord::new(-33, 65, -100);
+        small.set_on(p);
+        assert_ne!(world_tag(&small), original);
+        small.set_off(p);
+        assert_eq!(world_tag(&small), original);
     }
 
     #[test]
@@ -966,9 +1146,55 @@ mod tests {
         assert!(reverse.set_off(P));
 
         for world in [&World::new(), &forward, &reverse] {
-            assert_eq!(world_tag(world), world_tag_before_preallocation(world));
+            assert_eq!(world_tag(world), world_tag_full_recompute(world));
         }
         assert_eq!(world_tag(&forward), world_tag(&reverse));
+    }
+
+    /// The ordered stream against the sorting oracle on dense random worlds that span many
+    /// chunks on both sides of zero (and a sparse scatter out to the ends of the `i64` range),
+    /// with bits switched off again so emptied words and chunks are walked too.
+    #[test]
+    fn ordered_world_tag_matches_the_sorting_oracle_on_random_worlds() {
+        let mut state = 0x0bad_5eed_1234_5678_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for case in 0..24 {
+            let mut world = World::new();
+            let extent = 4 + (next() % 30) as i64;
+            let centre = |n: u64| (n % 97) as i64 - 48;
+            let (cx, cy, cz) = (centre(next()), centre(next()), centre(next()));
+            for _ in 0..(extent * extent * 6) {
+                let mut axis = || cx + (next() % (2 * extent as u64 + 1)) as i64 - extent;
+                let coord = Coord::new(axis(), axis() - cx + cy, axis() - cx + cz);
+                world.set_on(coord);
+            }
+            if case % 3 == 0 {
+                for _ in 0..40 {
+                    world.set_on(Coord::new(next() as i64, next() as i64, next() as i64));
+                }
+                world.set_on(Coord::new(i64::MIN, i64::MAX, i64::MIN));
+                world.set_on(Coord::new(i64::MAX, i64::MIN, i64::MAX));
+            }
+            let on: Vec<Coord> = world.iter_on().collect();
+            for coord in on.iter().step_by(3) {
+                world.set_off(*coord);
+            }
+            let mut ordered = Vec::new();
+            world.for_each_on_ordered(|c| ordered.push(c));
+            let mut sorted: Vec<Coord> = world.iter_on().collect();
+            sorted.sort_unstable();
+            assert_eq!(ordered, sorted, "case {case} order");
+            assert_eq!(
+                world_tag(&world),
+                world_tag_full_recompute(&world),
+                "case {case} tag"
+            );
+        }
     }
 
     #[test]
@@ -1279,15 +1505,15 @@ mod tests {
         let cold = &cold_history.receipts()[0];
         assert_eq!(
             cold.tag(),
-            parse_tag("#bb.receipt.sha256.psal6njm4ndyap7wclfv55gnlxwwou4eq2rvfotazrxzragceusa")
+            parse_tag("#bb.receipt.sha256.d7qzlret5ep47ewjymdfylx3lelasfvp5s6tmt72qjjh34bqwmea")
         );
         assert_eq!(
             cold.effects()[0].event(),
-            parse_tag("#bb.event.sha256.znebuddob7z4u2vwyqe7bwhclvyeqtgya7252fm5qq7hewauh2kq")
+            parse_tag("#bb.event.sha256.7juld2z7wmvaol3xbf2kdlniwzy4tcbr7gfy5yojwaofqkmgws3a")
         );
         assert_eq!(
             cold.effects()[4].event(),
-            parse_tag("#bb.event.sha256.6kcbq6sgg7zr5nymes5da5ksm4kt2y6fpytmfwlbs3xmn4zdsx5q")
+            parse_tag("#bb.event.sha256.qk4stjl5xesq72glgtz7thj4lk4s4zsbb6fp7oljjsp45xfylmtq")
         );
         assert_eq!(
             cold.effects()
@@ -1318,15 +1544,15 @@ mod tests {
         let reuse = &reuse_history.receipts()[0];
         assert_eq!(
             reuse.tag(),
-            parse_tag("#bb.receipt.sha256.fakwjpoid3eqaztgfahmlepmfawgi7yffed345eovjysn2izuf5a")
+            parse_tag("#bb.receipt.sha256.iozg4ylucv37oyjoceamtnvaqwdavpfk366dlo44kividto2q32a")
         );
         assert_eq!(
             reuse.effects()[0].event(),
-            parse_tag("#bb.event.sha256.h7rmaq3zvlig2btqavazt37nhrk7el2pwulowcvhzmzbm245i6ua")
+            parse_tag("#bb.event.sha256.qhwms7spp3gkyjy5534zvkknwlwzbcwjoizszruhokslatavip5q")
         );
         assert_eq!(
             reuse.effects()[2].event(),
-            parse_tag("#bb.event.sha256.zr3ehfiz5xxheosxvxydb27m4vpfibfbpjkg7cicuob6tsf46cja")
+            parse_tag("#bb.event.sha256.c2aidqhefgmovroufymmonnh2yzk77dgg7z55xiw4cag54euht2q")
         );
         assert_eq!(
             reuse
@@ -1357,11 +1583,11 @@ mod tests {
         let warm = &warm_history.receipts()[0];
         assert_eq!(
             warm.tag(),
-            parse_tag("#bb.receipt.sha256.v4rixvqu53nkaraowd4z26s2r55fv4rnz6qnq2dbtjaccxiljffq")
+            parse_tag("#bb.receipt.sha256.6bkjjhs2qprx3dfgkuamon5dei5v6gqcnqk6k7ugsjxnx4nc4l4a")
         );
         assert_eq!(
             warm.effects()[0].event(),
-            parse_tag("#bb.event.sha256.gibrybl5w6zs3bq73t3e3qg6qjrhifcf2ce6xhnxyttsnukxvwma")
+            parse_tag("#bb.event.sha256.j7h56ji37pgsj3s672a532cdm3eb3vu6zstx6pqehpwx36wbobwa")
         );
         assert!(matches!(
             warm.effects()[0],
@@ -1379,7 +1605,7 @@ mod tests {
         let noop = &noop_history.receipts()[0];
         assert_eq!(
             noop.tag(),
-            parse_tag("#bb.receipt.sha256.kdqtkvuuljhq4xjmkft44bk46rd4rqnty2h6sbozjwg2o4nnjgmq")
+            parse_tag("#bb.receipt.sha256.rmfiy36x6e4kisgi5n6qemrpa3o6lpnbtrfqmmkohzlrixezmbaq")
         );
         assert_eq!(
             noop.effects()
@@ -1408,7 +1634,7 @@ mod tests {
         let toggle = &toggle_history.receipts()[0];
         assert_eq!(
             toggle.tag(),
-            parse_tag("#bb.receipt.sha256.li2iopqyi652bk4hdt75ad356z5iqryugxmxkefhfroxvhtpetja")
+            parse_tag("#bb.receipt.sha256.rong4dap7mwzs2zztqioqo56ix2rmnjheutosombipvzgnt7dgiq")
         );
         assert_eq!(
             toggle
@@ -1435,7 +1661,7 @@ mod tests {
         let bedrock = &bedrock_history.receipts()[0];
         assert_eq!(
             bedrock.tag(),
-            parse_tag("#bb.receipt.sha256.amsihpcd2ydi5243jdzuoa2g3a5tbh726k5zru6dfmyargeul6ja")
+            parse_tag("#bb.receipt.sha256.exlpidihytljgbcr2vbgazsmifshk52eveiet5bfa32fzv6hfq6a")
         );
         assert_eq!(
             bedrock
@@ -1460,7 +1686,7 @@ mod tests {
         let edge_receipt = &edge_history.receipts()[0];
         assert_eq!(
             edge_receipt.tag(),
-            parse_tag("#bb.receipt.sha256.dzihycw2ucnfjaulmme6pqlgv3n4u65gn4bqi36xvzkmxymzn22q")
+            parse_tag("#bb.receipt.sha256.suix4q6f7pj7qakempurczmewpjzq6hruzblpcueyezmiqwephha")
         );
         assert_eq!(effect_name(edge_receipt.effects()[0]), "mint");
         assert!(edge_world.is_on(edge));

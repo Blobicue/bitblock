@@ -631,6 +631,64 @@ impl ChemNet {
 const FRESH: i32 = -1;
 const UNCLAIMED: u32 = u32::MAX;
 
+/// Per-cell scratch of [`ChemWorld::network_pass`], kept across steps so a step does not
+/// allocate per domain cell.
+///
+/// Reuse is exact. Every buffer is either written before it is read in a step or reset by
+/// [`NetScratch::prepare`]:
+///
+/// - `prov` and `done` are read by pass A from round 1 on and written by pass C, so `prepare`
+///   clears them before the first pass C.
+/// - `nnbs`, `vis_id` and `cursor` are written by round 0's pass A for every cell before any
+///   read: directly for a cell that builds its cube, and for a cell that takes the exact skip
+///   by [`ChemWorld::network_pass`]'s fill after round 0 (only when that round posted an
+///   intent, since no later pass reads them otherwise). `fids[i]` is read only below `nnbs[i]`,
+///   after the same `start` wrote it.
+/// - `claim` is `UNCLAIMED` for every cell between rounds: pass C resets the slots that pass B
+///   claimed. `posted` (the round's intents in ascending cell order) is cleared every round.
+///
+/// Nothing is sized until a round needs it, so a step in which no cell builds its cube (no hot
+/// reactive cell, the play presets) touches no per-cell scratch at all.
+#[derive(Default)]
+pub(crate) struct NetScratch {
+    prov: Vec<u8>,
+    done: Vec<bool>,
+    cursor: Vec<i32>,
+    vis_id: Vec<MatId>,
+    fids: Vec<[MatId; 26]>,
+    nnbs: Vec<u8>,
+    posted: Vec<(u32, Intent)>,
+    claim: Vec<u32>,
+}
+
+impl NetScratch {
+    /// Sizes every buffer to `n` cells and clears the step state (`prov`, `done`).
+    fn prepare(&mut self, n: usize) {
+        self.prov.clear();
+        self.prov.resize(n, 0);
+        self.done.clear();
+        self.done.resize(n, false);
+        self.cursor.resize(n, FRESH);
+        self.vis_id.resize(n, MatId::AIR);
+        self.fids.resize(n, [MatId::AIR; 26]);
+        self.nnbs.resize(n, 0);
+        self.claim.resize(n, UNCLAIMED);
+    }
+}
+
+/// A clone starts with empty scratch: the buffers hold no state between steps.
+impl Clone for NetScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl fmt::Debug for NetScratch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NetScratch({} cells)", self.prov.len())
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Intent {
     row: u32,
@@ -648,35 +706,77 @@ impl ChemWorld {
         topo: &Topology,
         net: &ChemNet,
     ) -> Result<(u32, u32), StepError> {
+        let mut scratch = std::mem::take(&mut self.net_scratch);
+        let out = self.network_pass_in(topo, net, &mut scratch);
+        self.net_scratch = scratch;
+        out
+    }
+
+    fn network_pass_in(
+        &mut self,
+        topo: &Topology,
+        net: &ChemNet,
+        scratch: &mut NetScratch,
+    ) -> Result<(u32, u32), StepError> {
         let n = self.cells.len();
-        let mut prov = vec![0u8; n];
-        let mut done = vec![false; n];
-        let mut cursor = vec![FRESH; n];
-        let mut vis_id = vec![MatId::AIR; n];
-        let mut fids: Vec<[MatId; 26]> = vec![[MatId::AIR; 26]; n];
-        let mut nnbs = vec![0u8; n];
-        let mut intent: Vec<Option<Intent>> = vec![None; n];
-        let mut claim = vec![UNCLAIMED; n];
+        let mut sized = false;
         let mut cube = Vec::with_capacity(26);
+        const REACTIVE_IDS: usize = 8;
         let reactive: [bool; 256] = std::array::from_fn(|m| net.is_reactive(MatId(m as u8)));
         let tick = self.tick;
         let mut fired_total = 0u32;
         let mut rounds = 0u32;
+        // Round 0 visits every cell, and a cell that is cold or of a material no mounted row
+        // reacts in posts nothing and writes no scratch there. With no hot reactive cell the
+        // round posts no intent and the pass ends after it, so the block search below gives
+        // the same result without the per-cell walk.
+        let hot_in = |q: &[i32], m: &[MatId]| {
+            q.iter().zip(m).fold(false, |hit, (&q, &m)| {
+                hit | ((q >= 250) & reactive[m.0 as usize])
+            })
+        };
+        // §6aa: with at most `REACTIVE_IDS` reactive ids, a block's materials are first
+        // compared against them (padded with repeats of the first id) and only a block holding
+        // one reads its heat; a block with no reactive material holds no hot reactive cell, so
+        // the answer is the same. With no reactive id there is none at all.
+        let ids: Vec<MatId> = (0..=255u8)
+            .map(MatId)
+            .filter(|m| reactive[m.0 as usize])
+            .collect();
+        let hot_reactive = match ids.first() {
+            None => false,
+            Some(&first) if ids.len() <= REACTIVE_IDS => {
+                let mut k = [first; REACTIVE_IDS];
+                k[..ids.len()].copy_from_slice(&ids);
+                self.q.chunks(64).zip(self.mat.chunks(64)).any(|(q, m)| {
+                    m.iter().fold(false, |hit, &x| {
+                        hit | k.iter().fold(false, |h, &id| h | (x == id))
+                    }) && hot_in(q, m)
+                })
+            }
+            Some(_) => self
+                .q
+                .chunks(64)
+                .zip(self.mat.chunks(64))
+                .any(|(q, m)| hot_in(q, m)),
+        };
+        if !hot_reactive {
+            scratch.posted.clear();
+            return Ok((0, 1));
+        }
 
         for rnd in 0..FIRE_MAX_ROUNDS {
             rounds = rnd + 1;
             // pass A - INTENT
-            let mut any = false;
+            scratch.posted.clear();
             for i in 0..n {
-                claim[i] = UNCLAIMED;
-                intent[i] = None;
                 let mut start = rnd == 0;
                 if !start {
-                    let p = prov[i];
-                    if done[i] || p == 2 || p == 4 {
+                    let p = scratch.prov[i];
+                    if scratch.done[i] || p == 2 || p == 4 {
                         continue;
                     }
-                    if p == 3 && self.mat[i] != vis_id[i] {
+                    if p == 3 && self.mat[i] != scratch.vis_id[i] {
                         start = true;
                     }
                 }
@@ -691,14 +791,27 @@ impl ChemWorld {
                     // Its q only moves when it fires itself and its material
                     // only moves as a claimed slot (prov 3/4), which forces a
                     // fresh `start` later, so keeping just `vis_id` is
-                    // bit-identical to building the cube here.
-                    if start {
-                        nnbs[i] = 0;
-                        vis_id[i] = self.mat[i];
-                        cursor[i] = FRESH;
+                    // bit-identical to building the cube here. Round 0 leaves
+                    // that write to the fill below.
+                    if start && rnd > 0 {
+                        scratch.nnbs[i] = 0;
+                        scratch.vis_id[i] = self.mat[i];
+                        scratch.cursor[i] = FRESH;
                     }
                     continue;
                 }
+                if !sized {
+                    scratch.prepare(n);
+                    sized = true;
+                }
+                let NetScratch {
+                    cursor,
+                    vis_id,
+                    fids,
+                    nnbs,
+                    posted,
+                    ..
+                } = &mut *scratch;
                 topo.cube(&self.cells, i, 1, &mut cube);
                 if start {
                     // Distinct neighbour ids in first-seen cube order (a 256-bit seen set
@@ -719,9 +832,6 @@ impl ChemWorld {
                     cursor[i] = FRESH;
                 }
                 let raid = self.mat[i];
-                if qi < 250 {
-                    continue; // planet6 walks the rows but every row is skipped
-                }
                 let c1 = (cursor[i] + 1) as u32;
                 let mut b_idx = (c1 >> 6) as usize;
                 let mut r_idx = (c1 & 63) as usize;
@@ -754,13 +864,15 @@ impl ChemWorld {
                             let salt =
                                 0x9e3u32.wrapping_add(u32::from(row.p0.0).wrapping_mul(7919));
                             if self.roll_at(topo, salt, i, tick) < 60 {
-                                intent[i] = Some(Intent {
-                                    row: r as u32,
-                                    cursor: (b_idx * 64 + (r - r0)) as i32,
-                                    n: (sa + sb) as u8,
-                                    slots,
-                                });
-                                any = true;
+                                posted.push((
+                                    i as u32,
+                                    Intent {
+                                        row: r as u32,
+                                        cursor: (b_idx * 64 + (r - r0)) as i32,
+                                        n: (sa + sb) as u8,
+                                        slots,
+                                    },
+                                ));
                                 break 'walk; // first intent wins
                             }
                         }
@@ -770,22 +882,39 @@ impl ChemWorld {
                     r_idx = 0;
                 }
             }
-            if !any {
+            if scratch.posted.is_empty() {
                 break;
             }
-            // pass B - CLAIM
-            for (i, it) in intent.iter().enumerate() {
-                if let Some(it) = it {
-                    for &s in &it.slots[..it.n as usize] {
-                        let s = s as usize;
-                        claim[s] = claim[s].min(i as u32 + 1);
+            if rnd == 0 {
+                // The round-0 skip state of every cell that took the exact skip (unchanged
+                // q and material since pass A: nothing moves before pass C).
+                for i in 0..n {
+                    if self.q[i] < 250 || !reactive[self.mat[i].0 as usize] {
+                        scratch.nnbs[i] = 0;
+                        scratch.vis_id[i] = self.mat[i];
+                        scratch.cursor[i] = FRESH;
                     }
+                }
+            }
+            let NetScratch {
+                prov,
+                done,
+                cursor,
+                posted,
+                claim,
+                ..
+            } = &mut *scratch;
+            // pass B - CLAIM
+            for (i, it) in posted.iter() {
+                for &s in &it.slots[..it.n as usize] {
+                    let s = s as usize;
+                    claim[s] = claim[s].min(i + 1);
                 }
             }
             // pass C - COMMIT
             let mut fired = 0u32;
-            for i in 0..n {
-                let Some(it) = intent[i] else { continue };
+            for &(i, it) in posted.iter() {
+                let i = i as usize;
                 let k = it.n as usize;
                 if it.slots[..k]
                     .iter()
@@ -824,6 +953,12 @@ impl ChemWorld {
                     }
                 }
                 fired += 1;
+            }
+            // every claimed slot back to UNCLAIMED for the next round (and step)
+            for (_, it) in posted.iter() {
+                for &s in &it.slots[..it.n as usize] {
+                    claim[s as usize] = UNCLAIMED;
+                }
             }
             fired_total += fired;
             // pass D - DECIDE

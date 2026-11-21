@@ -4614,3 +4614,829 @@ fn convect_is_opt_in_and_conserves() {
     assert_eq!(on.energy_drift(), 0);
     assert_eq!(on.lane_drift(), [0; NE]);
 }
+
+/// §6a: `Topology::nb6` and `Topology::face` (box-index fast paths) and `Topology::shell_up` (precomputed outward
+/// neighbours) must answer exactly what the per-lookup `offset` path answers, on boxed,
+/// hashed and i64-edge domains.
+#[test]
+fn topology_fast_paths_match_offset_lookups() {
+    use super::p6::{NB6, Topology};
+    use super::p6_rest::outward_step;
+    let mut seed = 0x6a_70b0_u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let mut domains: Vec<Vec<Coord>> = Vec::new();
+    // a solid ball (boxed lookup)
+    let mut ball = Vec::new();
+    for x in -9..=9_i64 {
+        for y in -9..=9_i64 {
+            for z in -9..=9_i64 {
+                if x * x + y * y + z * z <= 81 {
+                    ball.push(Coord::new(x + 3, y - 40, z + 11));
+                }
+            }
+        }
+    }
+    domains.push(ball);
+    // a holey block (boxed, many missing neighbours)
+    let mut holey = Vec::new();
+    for x in 0..14_i64 {
+        for y in 0..9_i64 {
+            for z in 0..11_i64 {
+                if next() % 3 != 0 {
+                    holey.push(Coord::new(x - 7, y, z * 2 - 5));
+                }
+            }
+        }
+    }
+    domains.push(holey);
+    // scattered over a huge range (hashed lookup)
+    let mut sparse = Vec::new();
+    for _ in 0..600 {
+        let c = Coord::new(
+            (next() % 2001) as i64 - 1000,
+            (next() % 2001) as i64 * 1_000_003,
+            (next() % 7) as i64,
+        );
+        sparse.push(c);
+        sparse.push(Coord::new(c.x + 1, c.y, c.z));
+    }
+    domains.push(sparse);
+    // a small box against both i64 ends on every axis (boxed; checked_add overflow at MAX)
+    for edge in [i64::MAX - 4, i64::MIN] {
+        let mut b = Vec::new();
+        for x in 0..5 {
+            for y in 0..5 {
+                for z in 0..5 {
+                    if (x + y + z) % 4 != 1 {
+                        b.push(Coord::new(edge + x, edge + y, edge + z));
+                    }
+                }
+            }
+        }
+        domains.push(b);
+    }
+    for (d, cells) in domains.iter_mut().enumerate() {
+        cells.sort();
+        cells.dedup();
+        let mut topo = Topology::build(cells);
+        for i in 0..cells.len() {
+            let slow = NB6.map(|step| topo.offset(cells, i, step));
+            assert_eq!(topo.nb6(cells, i), slow, "domain {d} cell {i}");
+            for (k, want) in slow.iter().enumerate() {
+                assert_eq!(
+                    topo.face(cells, i, k),
+                    *want,
+                    "domain {d} cell {i} face {k}"
+                );
+            }
+            // `locate` answers exactly the sorted-list binary search, on and off the domain.
+            let c = cells[i];
+            for (dx, dy, dz) in [(0, 0, 0), (2, -1, 0), (-3, 0, 1), (0, 0, 7), (-1, 5, -2)] {
+                if let (Some(x), Some(y), Some(z)) = (
+                    c.x.checked_add(dx),
+                    c.y.checked_add(dy),
+                    c.z.checked_add(dz),
+                ) {
+                    let p = Coord::new(x, y, z);
+                    assert_eq!(
+                        topo.locate(p),
+                        cells.binary_search(&p).ok(),
+                        "domain {d} {p:?}"
+                    );
+                }
+            }
+        }
+        // z-runs: contiguous exactly when every (x, y) row is one contiguous z range, and
+        // (§6x, rows of several runs too) the same neighbours, in NB6 order, as `nb6`.
+        let contiguous = cells
+            .windows(2)
+            .all(|w| (w[0].x, w[0].y) != (w[1].x, w[1].y) || w[0].z.checked_add(1) == Some(w[1].z));
+        if d == 0 {
+            assert!(topo.zruns.is_some(), "the solid ball is one run per row");
+        }
+        // `None` (a row table too sparse to be worth it) keeps `nb6`.
+        if let Some(rows) = &topo.zruns {
+            assert_eq!(rows.contiguous(), contiguous, "domain {d}");
+            let mut seen = 0;
+            for run in &rows.runs {
+                let beside = rows.beside(run);
+                for z in run.z0..=run.z1 {
+                    let i = run.start + (z - run.z0) as usize;
+                    assert_eq!(cells[i], Coord::new(run.x, run.y, z), "domain {d}");
+                    let (js, n) = super::p6::ZRuns::neighbours(run, &beside, z, i);
+                    let want: Vec<usize> = topo.nb6(cells, i).into_iter().flatten().collect();
+                    assert_eq!(&js[..n], &want[..], "domain {d} cell {i}");
+                    seen += 1;
+                }
+            }
+            assert_eq!(seen, cells.len(), "domain {d}");
+        }
+        for p in [
+            Coord::new(i64::MIN, 0, 0),
+            Coord::new(i64::MAX, i64::MAX, i64::MAX),
+            Coord::new(0, i64::MIN, i64::MAX),
+        ] {
+            assert_eq!(
+                topo.locate(p),
+                cells.binary_search(&p).ok(),
+                "domain {d} {p:?}"
+            );
+        }
+        for core in [0, cells.len() / 2, cells.len() - 1] {
+            topo.core = Some(core as u32);
+            topo.radial_frame(cells);
+            let o = cells[core];
+            assert_eq!(topo.shell_up.len(), topo.rsort.len());
+            for (k, &i) in topo.rsort.iter().enumerate() {
+                let c = cells[i as usize];
+                let st = (
+                    c.x.wrapping_sub(o.x),
+                    c.y.wrapping_sub(o.y),
+                    c.z.wrapping_sub(o.z),
+                );
+                let st = outward_step(st);
+                let want = (st != (0, 0, 0))
+                    .then(|| topo.offset(cells, i as usize, st))
+                    .flatten();
+                let got = (topo.rsort_up(k) != u32::MAX).then_some(topo.rsort_up(k) as usize);
+                assert_eq!(got, want, "domain {d} core {core} rank {k}");
+            }
+            let pairs: Vec<_> = topo.rsort_outward_first().collect();
+            assert_eq!(pairs.len(), cells.len());
+            assert_eq!(pairs[0].0, *topo.rsort.last().unwrap() as usize);
+        }
+    }
+}
+
+#[test]
+fn keyed_wide_roll_matches_the_five_link_chain() {
+    use super::p6::{wide_roll, wide_roll_key, wide_roll_keyed};
+    // The original chain, written out: mix(s ^ K), then x, y, z and the time key.
+    fn reference(s: u32, c: Coord, t: u64) -> u32 {
+        fn mix(mut z: u64) -> u64 {
+            z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+        let mut h = mix(u64::from(s) ^ 0x5bd1_e995);
+        for v in [c.x as u64, c.y as u64, c.z as u64, t] {
+            h = mix(h ^ v);
+        }
+        (h >> 32) as u32
+    }
+    let mut seed = 0x77_1d_e5_u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    for _ in 0..20_000 {
+        let s = next() as u32;
+        let c = Coord::new(
+            next() as i64 >> (next() % 64),
+            next() as i64 % 300,
+            -(next() as i64 % 70),
+        );
+        let t = next() >> (next() % 64);
+        let want = reference(s, c, t);
+        assert_eq!(wide_roll(s, c, t), want);
+        assert_eq!(wide_roll_keyed(wide_roll_key(s), c, t), want);
+        let cell = super::p6::wide_roll_cell(wide_roll_key(s), c);
+        assert_eq!(super::p6::wide_roll_finish(cell, t), want);
+    }
+}
+
+#[test]
+fn cell_roll_table_matches_per_cell_rolls() {
+    use super::p6::{NO_SLOT, Topology, wide_roll, wide_roll_cell, wide_roll_key};
+    let mut cells = Vec::new();
+    for x in -6..=6_i64 {
+        for y in -6..=6_i64 {
+            for z in -6..=6_i64 {
+                if x * x + y * y + z * z <= 30 {
+                    cells.push(Coord::new(x, y, z));
+                }
+            }
+        }
+    }
+    cells.sort();
+    let mut topo = Topology::build(&cells);
+    topo.core = Some(cells.len() as u32 / 2);
+    topo.radial_frame(&cells);
+    let (s, other) = (0x51_7a17_u32, 0x0bad_u32);
+    let table = topo
+        .cell_roll_cells(wide_roll_key(s), &cells)
+        .expect("first key builds the table")
+        .to_vec();
+    assert_eq!(table.len(), cells.len());
+    for (i, &c) in cells.iter().enumerate() {
+        assert_eq!(table[i], wide_roll_cell(wide_roll_key(s), c));
+        for t in [0, 1, 77, u64::MAX] {
+            assert_eq!(super::p6::wide_roll_finish(table[i], t), wide_roll(s, c, t));
+        }
+    }
+    // another key never reads the cached table
+    assert!(topo.cell_roll_cells(wide_roll_key(other), &cells).is_none());
+    assert_eq!(
+        topo.cell_roll_cells(wide_roll_key(s), &cells).unwrap(),
+        &table[..]
+    );
+    // the rsort inverse and the domain-order outward neighbour agree with rsort/shell_up
+    let pos = topo.rsort_pos();
+    let up = topo.cell_up();
+    for (k, &i) in topo.rsort.iter().enumerate() {
+        assert_eq!(pos[i as usize] as usize, k);
+        let ku = topo.shell_up[k];
+        let want = if ku == NO_SLOT {
+            NO_SLOT
+        } else {
+            topo.rsort[ku as usize]
+        };
+        assert_eq!(up[i as usize], want);
+    }
+}
+
+#[test]
+fn constant_divisor_split_matches_the_plain_quotient() {
+    use super::p6::div_by_live;
+    let mut seed = 0x0d17_u64.wrapping_mul(0x9e37_79b9) | 1;
+    for live in 1..=6_usize {
+        for o in [0, 1, 5, 6, 7, 1 << 31, i64::MAX, i64::MIN + 1, -1, -6, -7] {
+            assert_eq!(div_by_live(o, live), o / live as i64, "{o} / {live}");
+        }
+        for _ in 0..10_000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let o = seed as i64 >> (seed % 40);
+            assert_eq!(div_by_live(o, live), o / live as i64, "{o} / {live}");
+        }
+    }
+}
+
+/// §6d: block searches visit exactly the same current materials as a cell-by-cell scan,
+/// including a visit that creates a matching material ahead of (or behind) its cursor.
+#[test]
+fn block_material_search_matches_current_slice() {
+    use super::p6::find_mat;
+    let mut seed = 7u32;
+    let mut mats: Vec<MatId> = (0..1027)
+        .map(|_| {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            MatId((seed >> 24) as u8)
+        })
+        .collect();
+    for m in [0, 1, 13, 127, 255] {
+        for from in 0..=mats.len() {
+            let want = mats[from..].iter().position(|x| x.0 == m).map(|k| from + k);
+            assert_eq!(find_mat(&mats, from, MatId(m)), want);
+        }
+    }
+    mats.fill(MatId::AIR);
+    mats[63] = MatId::SED;
+    let mut next = 0;
+    let mut got = Vec::new();
+    while let Some(i) = find_mat(&mats, next, MatId::SED) {
+        got.push(i);
+        mats[i] = MatId::AIR;
+        mats[0] = MatId::SED; // behind the cursor: not revisited
+        if i + 65 < mats.len() {
+            mats[i + 65] = MatId::SED;
+        }
+        next = i + 1;
+    }
+    let want: Vec<_> = (63..mats.len()).step_by(65).collect();
+    assert_eq!(got, want);
+}
+
+/// §6d: row-slice heat gathering is the same wrapping sum as the general per-cell scatter,
+/// even for negative / extreme heat and dq, across repeated steps (scratch reuse). §6x: also
+/// with rows of several runs (cells off the ends of rows, past a gap, as a domain-growing
+/// place leaves them).
+#[test]
+fn gathered_heat_matches_general_scatter() {
+    use super::p6::Topology;
+    let mut base = Vec::new();
+    let mut rng = 7u32;
+    for x in -3i64..=3 {
+        for y in -3i64..=3 {
+            for z in -3i64..=3 {
+                if x * x + y * y + z * z > 12 {
+                    continue;
+                }
+                rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
+                base.push((Coord::new(x, y, z), MatId::ROCK, rng as i32));
+            }
+        }
+    }
+    for gapped in [false, true] {
+        let mut cells = base.clone();
+        if gapped {
+            // Two runs in row (0, 0), three in row (1, 0) beside it, one past the rim of (0, 3).
+            for (k, c) in [
+                (0, 0, 5),
+                (0, 0, 6),
+                (1, 0, 5),
+                (1, 0, 7),
+                (0, 3, 2),
+                (0, 0, -6),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                cells.push((
+                    Coord::new(c.0, c.1, c.2),
+                    MatId::ROCK,
+                    1_000 + 77 * k as i32,
+                ));
+            }
+        }
+        for dq in [i32::MIN, -1, 0, 1, 300, 1_000, 2_000, 6_000, i32::MAX] {
+            let mut row = ChemWorld::from_cells(
+                cells.clone(),
+                [0; NE],
+                Arc::new(MatTable::base()),
+                P6Params {
+                    heat: true,
+                    dq,
+                    greenhouse: Greenhouse::Off,
+                    ..chem_only()
+                },
+            )
+            .unwrap();
+            let mut general = row.clone();
+            let mut t = Topology::build(&general.cells);
+            assert!(t.zruns.is_some());
+            t.zruns = None; // same topology, only the face lookups instead of row slices
+            general.topo = Some(Arc::new(t));
+            for _ in 0..4 {
+                let a = row.step().unwrap();
+                let b = general.step().unwrap();
+                assert_eq!(format!("{a:?}"), format!("{b:?}"), "dq={dq}");
+                assert_eq!(row.q, general.q, "dq={dq}");
+                assert_eq!(row.space_q(), general.space_q(), "dq={dq}");
+                assert_eq!(row.trapped_q(), general.trapped_q(), "dq={dq}");
+            }
+            assert!(general.topo.as_ref().unwrap().zruns.is_none());
+            let rows = row.topo.as_ref().unwrap().zruns.as_ref().unwrap();
+            assert_eq!(rows.contiguous(), !gapped);
+        }
+    }
+}
+
+/// `find_mat2` is the first index at or after `from` holding either id, as a slice scan.
+#[test]
+fn block_two_material_search_matches_current_slice() {
+    use super::p6::find_mat2;
+    let mut seed = 11u32;
+    let mats: Vec<MatId> = (0..1031)
+        .map(|_| {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            MatId((seed >> 27) as u8)
+        })
+        .collect();
+    for (a, b) in [(0, 1), (3, 3), (5, 31), (31, 200), (200, 201)] {
+        for from in 0..=mats.len() {
+            let want = mats[from..]
+                .iter()
+                .position(|x| x.0 == a || x.0 == b)
+                .map(|k| from + k);
+            assert_eq!(find_mat2(&mats, from, MatId(a), MatId(b)), want);
+        }
+    }
+}
+
+/// §6i: the AIR-driven sparse flow and dissolve scans and the row-wise erode visit the same
+/// cells in the same order as the whole-domain loops: on scrambled worlds (sparse AIR, and
+/// AIR past the sparse limit) every pass leaves identical materials, heat and report counts.
+#[test]
+fn sparse_air_and_row_scans_match_the_whole_domain_loops() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let pal = [
+        MatId::WATER,
+        MatId::ROCK,
+        MatId::MIN,
+        MatId::GYP,
+        MatId::SED,
+        MatId::ICE,
+    ];
+    for (air_pct, salt) in [(1u32, 3u32), (4, 5), (9, 7), (30, 9)] {
+        let mut base = genesis_sky_radial(&cfg, &sky_params(), 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        for i in 0..base.mat.len() {
+            let r = rnd();
+            let m = if r % 100 < air_pct {
+                MatId::AIR
+            } else {
+                pal[(r / 100) as usize % pal.len()]
+            };
+            base.set_mat(i, m);
+            base.q[i] = (rnd() % 400) as i32;
+        }
+        for tick in [5u64, 30, 100, 130, 245] {
+            let run = |full: bool| {
+                FULL_SCANS.with(|f| f.set(full));
+                let mut w = base.clone();
+                w.tick = tick;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                w.water_cycle_pass(&topo, &mut rep);
+                w.erode_pass(&topo, &mut rep);
+                w.dissolve_pass(&topo, &mut rep);
+                w.flow_pass(&topo, &mut rep);
+                FULL_SCANS.with(|f| f.set(false));
+                let counts = (
+                    rep.evaporated,
+                    rep.rained,
+                    rep.eroded,
+                    rep.dissolved,
+                    rep.flowed,
+                );
+                (w.mat.clone(), w.q.clone(), w.world.len(), counts)
+            };
+            let (fast, full) = (run(false), run(true));
+            assert!(full.3.4 > 0, "flow moved nothing at air {air_pct}%");
+            assert_eq!(fast, full, "air {air_pct}% tick {tick}");
+        }
+    }
+}
+
+/// `hit_mask` is the per-cell test packed into bits, for whole and short blocks.
+#[test]
+fn hit_mask_packs_the_cell_test() {
+    use super::p6::hit_mask;
+    let mut seed = 17u32;
+    let mut rnd = || {
+        seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+        seed >> 8
+    };
+    let mat: Vec<MatId> = (0..200).map(|_| MatId((rnd() % 6) as u8)).collect();
+    let q: Vec<i32> = (0..200).map(|_| (rnd() % 60) as i32 - 10).collect();
+    let hit = |m: MatId, x: i32| (m == MatId(2)) & (x > 20) | (m == MatId(4)) & (x < 0);
+    for (a, b) in [
+        (0, 64),
+        (64, 128),
+        (100, 164),
+        (136, 200),
+        (150, 200),
+        (5, 6),
+        (7, 7),
+    ] {
+        let want = (a..b).fold(0u64, |acc, k| acc | ((hit(mat[k], q[k]) as u64) << (k - a)));
+        assert_eq!(hit_mask(&mat[a..b], &q[a..b], hit), want, "{a}..{b}");
+    }
+}
+
+/// §6j: a gas planet with no AIR or WATER skips the outward rise (and lets convection gather
+/// its own parcels): every step matches the full scans, with and without AIR present.
+#[test]
+fn gas_rise_gate_matches_the_full_scan() {
+    use super::p6_rest::FULL_SCANS;
+    let n = 900i64; // ~r6 sphere
+    let (fe, h2s, nh3) = (n / 20, n / 25, n / 5);
+    let ch4 = n - fe - h2s - nh3;
+    let mut lanes = [0i64; NE];
+    lanes[6] = fe;
+    lanes[0] = h2s * 2 + nh3 * 3 + ch4 * 4;
+    lanes[4] = h2s;
+    lanes[3] = nh3;
+    lanes[2] = ch4;
+    let cfg = GenesisConfig {
+        budget: GenesisBudget::new(lanes),
+        seed: 3,
+        shape: GenesisShape {
+            center: Coord::new(0, 7, 0),
+            radius: 6,
+            hollow: None,
+        },
+        atom_cap: DEFAULT_ATOM_CAP,
+    };
+    // §6t: 0 / 1 AIR cells, then 1 and 60 AIR/WATER cells with the sparse scans forced on
+    for (air, fluids) in [(false, 0usize), (true, 1), (true, 60)] {
+        let mut base = genesis(&cfg).unwrap();
+        base.attach_net(trimmed());
+        let mut p = *base.params();
+        p.energy_in = EnergyInput {
+            sun: 8,
+            day: 600,
+            core: 40,
+            core_r: 0,
+        };
+        p.sun_sweep = SunSweep::FULL;
+        p.cycle = WaterCycle::Driven;
+        p.convect = true;
+        base.set_params(p);
+        let n = base.mat.len();
+        for k in 0..fluids {
+            let m = if k % 3 == 2 { MatId::WATER } else { MatId::AIR };
+            base.set_mat((n / 2 + k * 7919) % n, m);
+        }
+        let run = |full: bool| {
+            FULL_SCANS.with(|f| f.set(full));
+            super::p6_rest::ANY_SPARSE.with(|f| f.set(!full && fluids > 1));
+            let mut w = base.clone();
+            let mut out = Vec::new();
+            for _ in 0..30 {
+                let r = w.step().unwrap();
+                out.push((format!("{r:?}"), w.mat.clone(), w.q.clone()));
+            }
+            FULL_SCANS.with(|f| f.set(false));
+            super::p6_rest::ANY_SPARSE.with(|f| f.set(false));
+            out
+        };
+        let (fast, full) = (run(false), run(true));
+        if fluids > 1 {
+            assert!(
+                full.iter().any(|s| !s.0.contains("rose: 0,")),
+                "nothing rose"
+            );
+        }
+        assert!(
+            fast.iter().any(|s| !s.0.contains("convected: 0")),
+            "convection ran"
+        );
+        assert_eq!(fast, full, "air {air}");
+    }
+}
+
+/// §6o: the +y gas rise over the marked rise candidates and the skip of the N-family scan
+/// (fewer than three H cells) leave the same materials, heat and report as the whole-domain
+/// loops, on scrambled worlds with 0–4 H cells.
+#[test]
+fn sparse_rise_and_n_skip_match_the_full_scans() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let pal = [
+        MatId::AIR,
+        MatId::WATER,
+        MatId::STEAM,
+        MatId::O2,
+        MatId::CO2,
+        MatId::N,
+        MatId::ROCK,
+        MatId::NH3,
+    ];
+    for (h_cells, salt) in [(0usize, 3u32), (1, 5), (2, 7), (3, 9), (4, 11)] {
+        let mut params = relief_params(WaterCycle::Classic);
+        params.gas_rise = true;
+        params.elements = true;
+        params.combine = true;
+        let mut base = genesis_sky_radial(&cfg, &params, 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        let n = base.mat.len();
+        for i in 0..n {
+            let m = pal[rnd() as usize % pal.len()];
+            base.set_mat(i, m);
+            base.q[i] = (rnd() % 400) as i32;
+        }
+        for k in 0..h_cells {
+            base.set_mat((k * 7919 + salt as usize) % n, MatId::H);
+        }
+        for tick in [5u64, 30, 100, 131] {
+            let run = |full: bool| {
+                FULL_SCANS.with(|f| f.set(full));
+                let mut w = base.clone();
+                w.tick = tick;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                let ok = w.combine2_pass(&topo, &mut rep).is_ok();
+                FULL_SCANS.with(|f| f.set(false));
+                (ok, w.mat.clone(), w.q.clone(), rep)
+            };
+            let (fast, full) = (run(false), run(true));
+            assert!(full.3.rose > 0, "nothing rose with {h_cells} H");
+            assert_eq!(fast, full, "{h_cells} H tick {tick}");
+        }
+    }
+}
+
+/// §6t: collapse, uplift, plume and the outward gas rise over the cells next to the few AIR/WATER cells (a dug gas
+/// planet) leave the same materials and report as the whole-domain loops, on scrambled worlds
+/// with 1–40 fluid cells and a steep heat field, across many ticks.
+#[test]
+fn sparse_collapse_uplift_plume_rise_match_the_full_scans() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let solids = [MatId::ROCK, MatId::SED, MatId::MIN, MatId::GYP];
+    let (mut collapsed, mut uplifted, mut plumed) = (0u32, 0u32, 0u32);
+    for (fluids, salt) in [(1usize, 3u32), (3, 5), (12, 7), (40, 9)] {
+        let mut params = relief_params(WaterCycle::Driven);
+        params.settle = true;
+        params.energy_in = EnergyInput {
+            sun: 8,
+            day: 600,
+            core: 40,
+            core_r: 0,
+        };
+        let mut base = genesis_sky_radial(&cfg, &params, 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        let n = base.mat.len();
+        for i in 0..n {
+            let m = solids[rnd() as usize % solids.len()];
+            base.set_mat(i, m);
+            base.q[i] = (rnd() % 4000) as i32;
+        }
+        for _ in 0..fluids {
+            let m = if rnd() % 3 == 0 {
+                MatId::WATER
+            } else {
+                MatId::AIR
+            };
+            base.set_mat(rnd() as usize % n, m);
+        }
+        for tick in 0..120u64 {
+            let run = |full: bool| {
+                FULL_SCANS.with(|f| f.set(full));
+                let mut w = base.clone();
+                w.tick = tick * 7 + 1;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                w.collapse_pass(&topo, &mut rep);
+                w.uplift_pass(&topo, &mut rep);
+                w.plume_pass(&topo, &mut rep);
+                FULL_SCANS.with(|f| f.set(false));
+                (w.mat.clone(), rep)
+            };
+            let (fast, full) = (run(false), run(true));
+            assert_eq!(fast, full, "{fluids} fluids tick {tick}");
+            collapsed += full.1.collapsed;
+            uplifted += full.1.uplifted;
+            plumed += full.1.plumed;
+        }
+    }
+    // fluid-rich worlds where the laws fire often (sparse forced on): whole steps agree
+    use super::p6_rest::ANY_SPARSE;
+    for (name, base) in [
+        ("plume slab", plume_slab(WaterCycle::Driven, 40)),
+        ("deep plate", {
+            let mut w = relief_plate_deep(WaterCycle::Driven);
+            let mut p = *w.params();
+            p.energy_in.core = 40;
+            w.set_params(p);
+            w
+        }),
+    ] {
+        let run = |sparse: bool| {
+            FULL_SCANS.with(|f| f.set(!sparse));
+            ANY_SPARSE.with(|f| f.set(sparse));
+            let mut w = base.clone();
+            let mut out = Vec::new();
+            for _ in 0..600 {
+                let r = w.step().unwrap();
+                out.push((format!("{r:?}"), w.mat.clone()));
+            }
+            FULL_SCANS.with(|f| f.set(false));
+            ANY_SPARSE.with(|f| f.set(false));
+            out
+        };
+        let (fast, full) = (run(true), run(false));
+        let fired = |k: &str| {
+            full.iter()
+                .filter(|s| !s.0.contains(&format!("{k}: 0,")))
+                .count()
+        };
+        eprintln!(
+            "{name}: uplift ticks {} plume ticks {} collapse ticks {}",
+            fired("uplifted"),
+            fired("plumed"),
+            fired("collapsed")
+        );
+        assert_eq!(fast, full, "{name}");
+        uplifted += fired("uplifted") as u32;
+        plumed += fired("plumed") as u32;
+    }
+    // the outward (coreward) gas rise on a scrambled sky-shell ball, sparse forced on
+    let mut rose = 0u32;
+    let gases = [
+        MatId::STEAM,
+        MatId::CO2,
+        MatId::NH3,
+        MatId::ROCK,
+        MatId::SED,
+    ];
+    for (fluid_pct, salt) in [(1u32, 13u32), (10, 17), (40, 19)] {
+        let mut params = sky_params();
+        params.gravity = Gravity::Core;
+        params.gas_rise = true;
+        params.elements = true;
+        let mut base = genesis_sky_radial(&cfg, &params, 4).unwrap();
+        let mut seed = salt;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            seed >> 8
+        };
+        for i in 0..base.mat.len() {
+            let r = rnd();
+            let m = if r % 100 < fluid_pct {
+                if r % 2 == 0 { MatId::AIR } else { MatId::WATER }
+            } else {
+                gases[(r / 100) as usize % gases.len()]
+            };
+            base.set_mat(i, m);
+        }
+        for tick in [5u64, 30, 100, 131] {
+            let run = |sparse: bool| {
+                FULL_SCANS.with(|f| f.set(!sparse));
+                ANY_SPARSE.with(|f| f.set(sparse));
+                let mut w = base.clone();
+                w.tick = tick;
+                let topo = w.topology();
+                let mut rep = StepReport::default();
+                let ok = w.combine2_pass(&topo, &mut rep).is_ok();
+                FULL_SCANS.with(|f| f.set(false));
+                ANY_SPARSE.with(|f| f.set(false));
+                (ok, w.mat.clone(), w.q.clone(), rep)
+            };
+            let (fast, full) = (run(true), run(false));
+            rose += full.3.rose;
+            assert_eq!(fast, full, "{fluid_pct}% fluid tick {tick}");
+        }
+    }
+    eprintln!("collapsed {collapsed} uplifted {uplifted} plumed {plumed} rose {rose}");
+    assert!(
+        collapsed > 0 && uplifted > 0 && plumed > 0 && rose > 0,
+        "a law never fired"
+    );
+}
+
+/// §6ad: `Topology::up_runs` lists exactly the cells with an outward neighbour, each with
+/// `cell_up`'s neighbour, in domain order, and its runs are maximal.
+#[test]
+fn up_runs_expand_to_cell_up() {
+    let cfg = small_budget();
+    let worlds = [
+        genesis(&cfg).unwrap(),
+        genesis_sky(&cfg, &sky_params(), 3).unwrap(),
+        genesis_sky_radial(&cfg, &sky_params(), 4).unwrap(),
+        plume_slab(WaterCycle::Driven, 40),
+        relief_plate_deep(WaterCycle::Driven),
+    ];
+    for (n, w) in worlds.iter().enumerate() {
+        let mut t = super::p6::Topology::build(&w.cells);
+        t.radial_frame(&w.cells);
+        let up = t.cell_up().to_vec();
+        let mut expanded = vec![super::p6::NO_SLOT; up.len()];
+        let mut last_end = None;
+        for &[start, len, u] in t.up_runs() {
+            assert!(len > 0, "world {n}");
+            if let Some((end, end_up)) = last_end {
+                assert!(start >= end, "world {n}");
+                assert!(start > end || u != end_up, "world {n}: run not maximal");
+            }
+            for k in 0..len {
+                assert_ne!(u + k, super::p6::NO_SLOT, "world {n}");
+                expanded[(start + k) as usize] = u + k;
+            }
+            last_end = Some((start + len, u + len));
+        }
+        assert_eq!(expanded, up, "world {n}");
+        assert!(up.iter().any(|&u| u != super::p6::NO_SLOT), "world {n}");
+    }
+}
+
+/// §6t: the counting sorts of `Topology::build` / `radial_frame` (y lists, rsort) and the
+/// tables the radial frame fills as it builds (`cell_up`, `rsort_pos`) are exactly what the
+/// comparison sorts and the lazy builders give, on balls, sky shells and slabs.
+#[test]
+fn counting_sorted_topology_matches_the_comparison_sorts() {
+    use super::p6_rest::FULL_SCANS;
+    let cfg = small_budget();
+    let worlds = [
+        genesis(&cfg).unwrap(),
+        genesis_sky(&cfg, &sky_params(), 3).unwrap(),
+        genesis_sky_radial(&cfg, &sky_params(), 4).unwrap(),
+        plume_slab(WaterCycle::Driven, 40),
+        relief_plate_deep(WaterCycle::Driven),
+    ];
+    for (n, w) in worlds.iter().enumerate() {
+        let build = |full: bool| {
+            FULL_SCANS.with(|f| f.set(full));
+            let mut t = super::p6::Topology::build(&w.cells);
+            t.radial_frame(&w.cells);
+            FULL_SCANS.with(|f| f.set(false));
+            let _ = (t.cell_up(), t.rsort_pos());
+            format!("{t:?}")
+        };
+        assert_eq!(build(false), build(true), "world {n}");
+    }
+}

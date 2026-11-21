@@ -54,7 +54,7 @@ The present source has no authenticated trie:
   removed; bedrock keeps the origin chunk non-empty.
 - `Coord` derives signed lexicographic ordering over `(x, y, z)`. Coordinate splitting is
   Euclidean, so coordinate `-1` belongs to chunk `-1` at local coordinate `15`.
-- `src/history.rs::world_tag` scans all on coordinates, sorts them, and hashes their raw signed
+- (Superseded 2026-11-17, BITBLOCK_SCALE_EMERGENT §6e: `world_tag` is now the cached two-level chunk Merkle root `bitblock/world/chunk-merkle-sha256/v2`.) Formerly `src/history.rs::world_tag` scanned all on coordinates, sorted them, and hashed their raw signed
   big-endian `x`, `y`, and `z` bytes under `bitblock/world/sorted-i64-be/v1`. It is deterministic
   and insertion-order independent, but it is a full-set content identity, not a membership or
   non-membership proof structure.

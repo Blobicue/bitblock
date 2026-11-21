@@ -44,6 +44,12 @@
     // Ticks simulated per rAF are capped; beyond that the backlog is dropped (no spiral of death).
     const MAX_TICKS_PER_FRAME = 8;
     const MAX_FRAME_GAP_MS = 250;
+    // §6ab catch-up: ticks a paced step leaves unrun (it stops before a second chem step) stay
+    // owed and run on the next frames, still at most one chem step per frame, so the frames a
+    // host stall delayed are made up within a window or two. The debt is bounded: once it
+    // would pass MAX_BACKLOG_TICKS (two chem steps at the default cadence, ~133 ms) the whole
+    // backlog is dropped instead of chased. Every frame that runs a chem step still paints.
+    const MAX_BACKLOG_TICKS = 8;
     const STATUS_UI_MS = 100;   // ~10 Hz DOM status refresh while the loop runs
     const IDLE_HASH_MS = 250;   // hash the shown frame (frame=#bb.frame…) once idle this long
     const FPS_UI_MS = 500;
@@ -55,7 +61,7 @@
     let playLastPaintAt = 0;
     let playHeld = Object.create(null);
     // FPS / frame-ms readout (performance.now / rAF timestamps).
-    const playStats = { since: performance.now(), raf: 0, painted: 0, ticks: 0, stepMs: 0, stepMax: 0, paintMs: 0, paintMax: 0, rafGapMax: 0, renders0: 0 };
+    const playStats = { since: performance.now(), raf: 0, painted: 0, ticks: 0, dropped: 0, owed: 0, stepMs: 0, stepMax: 0, paintMs: 0, paintMax: 0, rafGapMax: 0, renders0: 0 };
 
     function f64bits(n) {
       const buf = new ArrayBuffer(8);
@@ -175,13 +181,170 @@
       // Canvas backing store is resized at the next paint (no blank flash in between).
     }
     // Live step: n sim ticks, then at most one frame; paint only if a frame was finalised.
+    // §6s: the paced step runs at most one chem step per frame and stops before the ticks past
+    // it, so one late frame never makes the next run two chem steps (and stay late). §6ab: the
+    // ticks it did not run are returned in playLeft for the loop's bounded catch-up.
+    // ---- §6ah chem worker: chem runs one tick behind in a Web Worker (inline Blob URL) ----
+    // Every chem session runs the lagged schedule: the batch (due steps + queued edits) sent on
+    // one chem tick is applied, and its result published, on the next. Here the worker runs the
+    // batch (its own instance of these same wasm bytes, `bitblock_chem_host_*`) while this
+    // thread keeps a display replica; without a worker (`?worker=0`, no Worker support, or any
+    // worker failure) this thread runs the batch itself at the landing tick. Same ticks, same
+    // hashes either way. A landing tick whose result has not arrived waits (the sim stalls,
+    // ticks are owed like a late frame); it never runs ahead or skips a chem step.
+    const CHEM_WORKER_SRC = [
+      "let ex = null, gen = 0, chain = Promise.resolve();",
+      "function handle(m) {",
+      "  if (m.type === 'init') return WebAssembly.compile(m.bytes).then(function (mod) { return WebAssembly.instantiate(mod); }).then(function (inst) {",
+      "    ex = inst.exports;",
+      "    if (ex.bitblock_wasm_abi() !== 17 || !ex.bitblock_chem_host_process) throw new Error('worker wasm lacks the chem host');",
+      "    postMessage({ type: 'ready' });",
+      "  });",
+      "  if (m.type === 'load') {",
+      "    gen = m.gen;",
+      "    let ok;",
+      "    if (m.lanes) {",
+      "      const v = new BigInt64Array(ex.memory.buffer, ex.bitblock_play_chem_budget_ptr(), m.lanes.length);",
+      "      for (let k = 0; k < m.lanes.length; k++) v[k] = m.lanes[k];",
+      "      ok = ex.bitblock_chem_host_load_budget(m.seed, m.radius);",
+      "    } else ok = ex.bitblock_chem_host_load(m.preset, m.seed, m.radius);",
+      "    if (!ok) throw new Error('worker chem load failed');",
+      "    return;",
+      "  }",
+      "  if (m.type === 'batch') {",
+      "    if (m.gen !== gen) return;",
+      "    const b = new Uint8Array(m.bytes);",
+      "    new Uint8Array(ex.memory.buffer, ex.bitblock_chem_host_in_ptr(b.length), b.length).set(b);",
+      "    const t0 = performance.now();",
+      "    const n = ex.bitblock_chem_host_process(b.length);",
+      "    if (!n) throw new Error('worker rejected a batch');",
+      "    const out = new Uint8Array(ex.memory.buffer, ex.bitblock_chem_host_out_ptr(), n).slice();",
+      "    postMessage({ type: 'result', gen: gen, bytes: out.buffer, ms: performance.now() - t0 }, [out.buffer]);",
+      "    ex.bitblock_chem_host_books(); // next report's conservation figures, while idle",
+      "  }",
+      "}",
+      "onmessage = function (e) {",
+      "  const m = e.data;",
+      "  chain = chain.then(function () { return handle(m); }).catch(function (err) {",
+      "    postMessage({ type: 'error', gen: m.gen, msg: String(err && err.message ? err.message : err) });",
+      "  });",
+      "};"
+    ].join("\n");
+    const PLAY_WORKER_OFF = /(^|[?&])worker=0(&|$)/.test(location.search.slice(1));
+    let playChemWorker = null;
+    let playChemWorkerState = PLAY_WORKER_OFF ? "off" : "starting"; // starting | ready | off | failed:<why>
+    let playChemGen = 0;          // bumps on every session change; stale results are dropped
+    let playChemRemote = false;   // the live chem session runs on the worker
+    const playChemStats = { tick0: 0, workerMs: 0, results: 0, waits: 0 };
+    function playChemWorkerFail(why) {
+      if (playChemWorkerState.indexOf("failed") === 0) return;
+      playChemWorkerState = "failed:" + why;
+      if (playChemWorker) { try { playChemWorker.terminate(); } catch (e) { /* already gone */ } }
+      playChemWorker = null;
+      playChemGen++;
+      if (playChemRemote) {
+        // Rebuild only the engine by replaying published batches. Pending/in-flight edits,
+        // the bag, camera and history stay intact; no reload and no lost or repeated edits.
+        instance.exports.bitblock_play_chem_recover();
+        playChemRemote = false;
+      }
+    }
+    function playChemWorkerStart() {
+      if (PLAY_WORKER_OFF || !instance.exports.bitblock_play_chem_remote) {
+        playChemWorkerState = "off";
+        return;
+      }
+      try {
+        const url = URL.createObjectURL(new Blob([CHEM_WORKER_SRC], { type: "text/javascript" }));
+        playChemWorker = new Worker(url);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        playChemWorker = null;
+        playChemWorkerState = "failed:" + String(err && err.message ? err.message : err);
+        return;
+      }
+      playChemWorker.onerror = function (e) { e.preventDefault(); playChemWorkerFail(e.message || "worker error"); };
+      playChemWorker.onmessageerror = function () { playChemWorkerFail("message error"); };
+      playChemWorker.onmessage = function (e) {
+        const m = e.data;
+        if (m.type === "ready") {
+          playChemWorkerState = "ready";
+          // Do not reset a live fallback session (it may already contain edits). The next
+          // explicitly loaded world uses the ready worker.
+        } else if (m.type === "error") {
+          playChemWorkerFail(m.msg);
+        } else if (m.type === "result" && m.gen === playChemGen && playChemRemote) {
+          const waiting = instance.exports.bitblock_play_chem_blocked() !== 0;
+          const b = new Uint8Array(m.bytes);
+          new Uint8Array(instance.exports.memory.buffer, instance.exports.bitblock_play_chem_inbox_ptr(b.length), b.length).set(b);
+          if (!instance.exports.bitblock_play_chem_inbox_commit(b.length)) { playChemWorkerFail("result not accepted"); return; }
+          playChemStats.workerMs += m.ms;
+          playChemStats.results++;
+          // The sim was stalled at this landing with a tick owed: land it now (and post the
+          // next batch) instead of at the next animation frame, so the worker idles less.
+          if (waiting && playRunning && playAccum >= TICK_MS) {
+            playAccum -= TICK_MS;
+            playStepAndPaint(1);
+          }
+        }
+      };
+      playChemWorker.postMessage({ type: "init", bytes: bytes.slice().buffer });
+    }
+    // After a chem load (before its first tick): hand the session to the worker if it is up.
+    function playChemAttach(chem, lanes) {
+      playChemGen++;
+      playChemRemote = false;
+      if (chem < 0 || !playChemWorker || playChemWorkerState !== "ready") return;
+      if (!instance.exports.bitblock_play_chem_remote(1)) return;
+      const msg = { type: "load", gen: playChemGen, preset: chem, seed: playChemSeedVal(), radius: playChemRadiusVal() };
+      if (lanes) msg.lanes = lanes;
+      playChemWorker.postMessage(msg);
+      playChemRemote = true;
+    }
+    function playChemPost() {
+      const n = instance.exports.bitblock_play_chem_outbox();
+      if (!n || !playChemWorker) return;
+      const buf = new Uint8Array(instance.exports.memory.buffer, instance.exports.bitblock_play_chem_outbox_ptr(), n).slice().buffer;
+      playChemWorker.postMessage({ type: "batch", gen: playChemGen, bytes: buf }, [buf]);
+    }
+    function playChemMode() {
+      return playChemRemote ? "worker" : "local" + (playChemWorkerState === "ready" ? "" : "(" + playChemWorkerState + ")");
+    }
+
+    // Live step: n sim ticks, then at most one frame; paint only if a frame was finalised.
+    // §6s: the paced step runs at most one chem step per frame and stops before the ticks past
+    // it, so one late frame never makes the next run two chem steps (and stay late). §6ab: the
+    // ticks it did not run are returned in playLeft for the loop's bounded catch-up. §6ah: on
+    // the worker path the step also returns right after a tick that sent a batch (posted at
+    // once, then the rest of the ticks run) and stops before a landing still waiting for its
+    // result.
+    let playLeft = 0;
     function playStepAndPaint(ticks) {
+      const playStepPaced = instance.exports.bitblock_play_step_paced;
       const t0 = performance.now();
-      const painted = instance.exports.bitblock_play_step(ticks) !== 0;
+      let painted = false, ran = ticks;
+      if (playChemRemote) {
+        ran = 0;
+        for (let pass = 0; pass < 4; pass++) {
+          const r = instance.exports.bitblock_play_step_lagged(ticks - ran) >>> 0;
+          painted = painted || (r & 1) !== 0;
+          ran += r >>> 2;
+          if ((r & 2) === 0) break;
+          playChemPost();
+        }
+        if (ran < ticks && instance.exports.bitblock_play_chem_blocked()) playChemStats.waits++;
+      } else if (playStepPaced) {
+        const r = playStepPaced(ticks) >>> 0;
+        painted = (r & 1) !== 0;
+        ran = r >>> 1;
+      } else {
+        painted = instance.exports.bitblock_play_step(ticks) !== 0;
+      }
       const dt = performance.now() - t0;
       playStats.stepMs += dt;
       if (dt > playStats.stepMax) playStats.stepMax = dt;
-      playStats.ticks += ticks;
+      playStats.ticks += ran;
+      playLeft = ticks - ran;
       if (painted) playPaint();
       return painted;
     }
@@ -196,16 +359,24 @@
       const stepAvg = playStats.raf ? playStats.stepMs / playStats.raf : 0;
       const paintAvg = playStats.painted ? playStats.paintMs / playStats.painted : 0;
       const busy = (playStats.stepMs + playStats.paintMs) / span * 100;
-      playFpsEl.textContent = "raf_fps="+rafFps.toFixed(1)+" presented_fps="+frameFps.toFixed(1)+" tick_rate="+(playStats.ticks*1000/span).toFixed(1)+"/s"
+      const chemTick = instance.exports.bitblock_play_chem_tick ? instance.exports.bitblock_play_chem_tick() >>> 0 : 0;
+      const chemRate = Math.max(0, chemTick - playChemStats.tick0) * 1000 / span;
+      const chemLine = playSelectedChem() >= 0
+        ? "\nchem=" + playChemMode() + " chem_ticks_per_s=" + chemRate.toFixed(1) + " chem_tick=" + chemTick
+          + " worker_ms_avg=" + (playChemStats.results ? playChemStats.workerMs / playChemStats.results : 0).toFixed(2) + " chem_waits=" + playChemStats.waits
+        : "";
+      playFpsEl.textContent = "raf_fps="+rafFps.toFixed(1)+" presented_fps="+frameFps.toFixed(1)+" tick_rate="+(playStats.ticks*1000/span).toFixed(1)+"/s dropped="+playStats.dropped+" carried="+playStats.owed
         + "\nstep_ms avg="+stepAvg.toFixed(2)+" max="+playStats.stepMax.toFixed(2)
         + "  paint_ms avg="+paintAvg.toFixed(2)+" max="+playStats.paintMax.toFixed(2)
         + "  ms_per_presented_frame(step+paint)="+(playStats.painted ? (playStats.stepMs + playStats.paintMs) / playStats.painted : 0).toFixed(2)
         + "  raf_gap_max="+playStats.rafGapMax.toFixed(1)+"ms  main_thread_busy="+busy.toFixed(0)+"%"
-        + "\noutput="+playCanvas.width+"x"+playCanvas.height+" (presented_fps counts only changed frames; idle view = 0 by design)";
+        + "\noutput="+playCanvas.width+"x"+playCanvas.height+" (presented_fps counts only changed frames; idle view = 0 by design)"
+        + chemLine;
       playFpsEl.className = rafFps >= 30 ? "ok" : "err";
-      playStats.since = now; playStats.raf = 0; playStats.painted = 0; playStats.ticks = 0;
+      playStats.since = now; playStats.raf = 0; playStats.painted = 0; playStats.ticks = 0; playStats.dropped = 0; playStats.owed = 0;
       playStats.stepMs = 0; playStats.stepMax = 0; playStats.paintMs = 0; playStats.paintMax = 0; playStats.rafGapMax = 0;
       playStats.renders0 = renders;
+      playChemStats.tick0 = chemTick; playChemStats.workerMs = 0; playChemStats.results = 0; playChemStats.waits = 0;
     }
 
     function playLoop(ts) {
@@ -218,11 +389,25 @@
       playAccum += gap;
       playStats.raf++;
       let ticks = Math.floor(playAccum / TICK_MS);
-      if (ticks > MAX_TICKS_PER_FRAME) { ticks = MAX_TICKS_PER_FRAME; playAccum = 0; }
+      if (ticks > MAX_TICKS_PER_FRAME) { playStats.dropped += ticks - MAX_TICKS_PER_FRAME; ticks = MAX_TICKS_PER_FRAME; playAccum = 0; }
       else playAccum -= ticks * TICK_MS;
-      if (ticks > 0) playStepAndPaint(ticks);
+      playLeft = 0;
+      const painted = ticks > 0 && playStepAndPaint(ticks);
+      // §6ab: owe the unrun ticks to the next frames, or drop the whole backlog past the bound.
+      if (playLeft > 0) {
+        if (playAccum + playLeft * TICK_MS <= MAX_BACKLOG_TICKS * TICK_MS) {
+          playAccum += playLeft * TICK_MS;
+          playStats.owed += playLeft;
+        } else {
+          playStats.dropped += playLeft + Math.floor(playAccum / TICK_MS);
+          playAccum -= Math.floor(playAccum / TICK_MS) * TICK_MS;
+        }
+      }
       const now = performance.now();
-      if (now - playStatusUiAt >= STATUS_UI_MS) {
+      // The status refresh sums the books over every chem cell (~5 ms at r78), so a frame that
+      // just stepped and painted leaves it to a later frame, at most one period late.
+      const sinceStatus = now - playStatusUiAt;
+      if (sinceStatus >= STATUS_UI_MS && (!painted || sinceStatus >= 2 * STATUS_UI_MS)) {
         // Hash only once the view has been still: hashing is a full-frame SHA-256 in wasm.
         playPulseStatus("live", now - playLastPaintAt >= IDLE_HASH_MS);
         playRefreshChem();
@@ -259,7 +444,12 @@
     }
     function playChemEveryTicks() { return playNum(playChemEvery, 4, 0, 600); }
     function playChemSeedVal() { return playNum(playChemSeed, 7, 0, 4294967295) >>> 0; }
-    function playChemRadiusVal() { return playNum(playChemRadius, 12, 2, 32); }
+    function playChemRadiusVal() {
+      const radius = playNum(playChemRadius, 12, 2, 100);
+      // Show the radius actually requested from wasm, not an out-of-range input.
+      if (playChemRadius) playChemRadius.value = String(radius);
+      return radius;
+    }
     // The wasm-side 12 x i64 budget buffer (view re-made each use: memory may have grown).
     function playChemBudgetView() {
       return new BigInt64Array(instance.exports.memory.buffer, instance.exports.bitblock_play_chem_budget_ptr(), CHEM_LANES.length);
@@ -387,13 +577,16 @@
       }
       if (chem === CHEM_CUSTOM) {
         len = playChemLoadCustom();
+        if (len) playChemAttach(chem, Array.from(playChemBudgetView()));
         if (len) instance.exports.bitblock_play_chem_auto(playChemEveryTicks());
       } else if (chem >= 0) {
         len = instance.exports.bitblock_play_load_chem(chem, playChemSeedVal(), playChemRadiusVal());
+        if (len) playChemAttach(chem, null);
         if (len) instance.exports.bitblock_play_chem_auto(playChemEveryTicks());
         playChemFillFromPreset(chem); // show / tweak this preset's lanes
       } else {
         len = instance.exports.bitblock_play_load_world(playSelectedWorld());
+        playChemAttach(-1, null);
       }
       if (chem === CHEM_GAS && playLastChem !== CHEM_GAS) {
         // the gas planet's baseline; later menu changes stick across reseeds
@@ -418,6 +611,7 @@
     }
 
     playChemFillFromPreset(0); // custom starts from the ash numbers until a preset is picked
+    playChemWorkerStart();
     playResetLive("reset");
     ensurePlayLoop();
 
@@ -436,6 +630,7 @@
     playGameOnly.addEventListener("change", onPlayLayoutChange);
     // Chem world options: seed / radius rebuild the chem world; cadence and manual step are live.
     function onPlayChemRebuild() {
+      playChemRadiusVal(); // also normalize when no chem world is selected
       if (playSelectedChem() < 0) return;
       playResetLive("chem");
       if (playCanvas.focus) playCanvas.focus({ preventScroll: true });

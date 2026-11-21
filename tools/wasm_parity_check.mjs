@@ -710,15 +710,17 @@ async function main() {
     pass(label);
   }
 
-  // 10. Chem simulation execution, conservation invariants & negative control
+  // 10. Chem simulation execution, conservation invariants, §6ah worker parity & negative control
   assertEq("chem invalid preset rejected", ex.bitblock_play_load_chem(99, 1, 8), 0);
   assertCond("chem invalid preset sets error", ex.bitblock_play_chem_error() > 0);
 
   const chemLoadLen = ex.bitblock_play_load_chem(0, 1, 8);
   assertCond("chem load non-empty", chemLoadLen > 0);
   assertEq("chem load error len === 0", ex.bitblock_play_chem_error(), 0);
+  assertEq("chem auto off accepted", ex.bitblock_play_chem_auto(0), 1);
   assertEq("chem queue accepted", ex.bitblock_play_chem_step(2), 1);
-  // `bitblock_play_chem_step(n)` queues steps that drain during `bitblock_play_tick()`.
+  // §6ah lagged chem schedule: queued steps are sent on tick 1 and published on tick 2.
+  ex.bitblock_play_tick();
   const chemPlayStatus = readUtf8(ex.bitblock_play_tick(), "bitblock_play_ptr");
   const chemStatus = readUtf8(ex.bitblock_play_chem_status(), "bitblock_play_chem_ptr");
   const chemTick = parseIntField(chemStatus, "tick");
@@ -744,6 +746,70 @@ async function main() {
     { expectedFrameTag: parseFrameTag(chemPlayStatus) }
   );
   pass("chem-step-invariants-and-negative");
+
+  // §6ah lagged worker protocol parity: remote worker path matches local fallback byte-for-byte.
+  if (typeof ex.bitblock_play_step_lagged === "function") {
+    function runLaggedChem(remote, ticks) {
+      assertCond("lagged chem load", ex.bitblock_play_load_chem(4, 7, 10) > 0);
+      ex.bitblock_play_set_layout(320, 180, 0);
+      if (remote) {
+        assertEq("lagged chem remote enable", ex.bitblock_play_chem_remote(1), 1);
+        assertEq("lagged chem host load", ex.bitblock_chem_host_load(4, 7, 10), 1);
+      }
+      const seen = [];
+      let done = 0;
+      while (done < ticks) {
+        const r = ex.bitblock_play_step_lagged(1) >>> 0;
+        const ran = r >>> 2;
+        done += ran;
+        if ((r & 2) !== 0) {
+          assertCond("lagged send only in remote mode", remote);
+          const n = ex.bitblock_play_chem_outbox();
+          assertCond("lagged outbox non-empty", n > 0);
+          const outboxPtr = ex.bitblock_play_chem_outbox_ptr();
+          const batch = new Uint8Array(ex.memory.buffer.slice(outboxPtr, outboxPtr + n));
+          const inPtr = ex.bitblock_chem_host_in_ptr(n);
+          new Uint8Array(ex.memory.buffer, inPtr, n).set(batch);
+          const m = ex.bitblock_chem_host_process(n);
+          assertCond("lagged host reply non-empty", m > 0);
+          assertEq("lagged host books=ok", ex.bitblock_chem_host_books(), 1);
+          const hostOutPtr = ex.bitblock_chem_host_out_ptr();
+          const reply = new Uint8Array(ex.memory.buffer.slice(hostOutPtr, hostOutPtr + m));
+          const inboxPtr = ex.bitblock_play_chem_inbox_ptr(m);
+          new Uint8Array(ex.memory.buffer, inboxPtr, m).set(reply);
+          assertEq("lagged inbox commit", ex.bitblock_play_chem_inbox_commit(m), 1);
+          assertEq("lagged double commit rejected", ex.bitblock_play_chem_inbox_commit(0), 0);
+          ex.bitblock_play_step_lagged(0);
+        } else if (ran === 0) {
+          throw new Error(`lagged chem stalled at tick ${done} (blocked=${ex.bitblock_play_chem_blocked()})`);
+        }
+        if (ran === 1) {
+          seen.push(readUtf8(ex.bitblock_play_status(1), "bitblock_play_ptr"));
+          seen.push(readUtf8(ex.bitblock_play_chem_status(), "bitblock_play_chem_ptr"));
+        }
+      }
+      assertEq("lagged remote toggle rejected after first batch", ex.bitblock_play_chem_remote(0), 0);
+      return { seen, chemTick: ex.bitblock_play_chem_tick() };
+    }
+
+    const localRun = runLaggedChem(false, 12);
+    const remoteRun = runLaggedChem(true, 12);
+    assertCond("lagged chem tick > 0", localRun.chemTick > 0);
+    assertEq("lagged chem tick matches remote", remoteRun.chemTick, localRun.chemTick);
+    assertEq("lagged trace len matches", remoteRun.seen.length, localRun.seen.length);
+    for (let i = 0; i < localRun.seen.length; i++) {
+      assertEq(`lagged worker vs fallback trace[${i}]`, remoteRun.seen[i], localRun.seen[i]);
+    }
+    const lastChem = remoteRun.seen[remoteRun.seen.length - 1];
+    assertCond("lagged chem books=ok", /(?:^|\s)books=ok(?:\s|$)/.test(lastChem), lastChem);
+    assertEq("lagged chem energy_drift === 0", parseIntField(lastChem, "energy_drift"), 0);
+    assertCond(
+      "lagged chem all 12 lane drifts === 0",
+      lastChem.includes(` drift=${ZERO_LANE_DRIFT} `),
+      lastChem
+    );
+    pass("chem-lagged-worker-parity");
+  }
 
   // 11. Optional embedded HTML artifact byte/SHA-256 identity + launcher non-embed check
   let embeddedNote = "";

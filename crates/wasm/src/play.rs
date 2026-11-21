@@ -175,7 +175,21 @@ pub struct PlaySession {
     cut_view: Option<(CutViewKey, World)>,
     /// Lit-face masks of the cut faces for `cut_view` (rebuilt with it; see `ChemPlay::cut_faces`).
     cut_faces: Vec<(Coord, u8)>,
+    /// §6f delta render: `Some(tag)` while every play-world and chem-tint change since the last
+    /// game render is a chem mirror or (§6s) a dig / place recorded in `delta_changed` and the
+    /// world now has `tag`.
+    delta_chain: Option<ContentTag>,
+    /// Bits whose chem material changed since the last game render, each flagged when its
+    /// occupancy may have changed too (see `Renderer::render_tinted_delta`).
+    delta_changed: Vec<(Coord, bool)>,
+    /// Allow delta renders (on by default; a switch so fixtures can compare with full renders).
+    delta_render: bool,
+    /// §6ah chem schedule (lagged engine; worker or fallback). Unused outside chem mode.
+    link: crate::chem_link::ChemLink,
 }
+
+/// Recorded changes past which the delta chain is dropped (the next render is a full one).
+const DELTA_CHANGED_MAX: usize = 1 << 20;
 
 type CutViewKey = (ContentTag, crate::play_chem::ChemCut, [i64; 3]);
 
@@ -214,7 +228,8 @@ impl PlaySession {
         let _ = program.apply(&mut world);
         let mut session = Self::new();
         session.history = History::new(&world);
-        session.last_world_tag = world_tag(&world);
+        // History::new already computed this genesis world's canonical tag.
+        session.last_world_tag = session.history.current_world();
         session.camera =
             crate::gallery_camera(&world, crate::GALLERY_YAW_DEG, crate::GALLERY_PITCH_DEG);
         session.world = world;
@@ -255,11 +270,18 @@ impl PlaySession {
         let world = chem.world.world().clone();
         let mut session = Self::new();
         session.history = History::new(&world);
-        session.last_world_tag = world_tag(&world);
+        // History::new already computed this genesis world's canonical tag.
+        session.last_world_tag = session.history.current_world();
         session.camera =
             crate::gallery_camera(&world, crate::GALLERY_YAW_DEG, crate::GALLERY_PITCH_DEG);
         session.world = world;
         session.last_action = format!("world:chem-{}", chem.preset_name());
+        session.link = crate::chem_link::ChemLink::new(&chem);
+        // §6ah: the play world is the genesis occupancy, so the mirror cache starts as the
+        // genesis materials and the first landing mirrors incrementally (no full scan and no
+        // full re-render for it).
+        let mut chem = chem;
+        chem.mirror_mats = chem.world.mats().to_vec();
         session.chem = Some(chem);
         session
     }
@@ -270,7 +292,10 @@ impl PlaySession {
 
     /// Detailed chem readout (lanes, drift, bag, vapor, tick), or `None` outside chem mode.
     pub fn chem_status(&self) -> Option<String> {
-        self.chem.as_ref().map(|c| c.status())
+        let dynamics = self.chem_dynamics()?;
+        self.chem
+            .as_ref()
+            .map(|c| c.status_with(&self.link.report, dynamics))
     }
 
     /// Auto-step cadence in sim ticks (0 pauses). Returns false outside chem mode.
@@ -306,15 +331,36 @@ impl PlaySession {
     /// Tick dynamics on the live chem world (`energy` one of `play_chem::CHEM_ENERGY_*`, `cycle`
     /// one of `play_chem::CHEM_CYCLE_*`). Returns false outside chem mode or for an unknown mode.
     /// Pixels change only through later chem steps.
+    /// §6ah: queued like an edit; the engine applies it before the steps of the next batch.
     pub fn chem_set_dynamics(&mut self, energy: u32, cycle: u32) -> bool {
-        self.chem
-            .as_mut()
-            .is_some_and(|c| c.set_dynamics(energy, cycle))
+        use crate::play_chem::{CHEM_CYCLE_NAMES, CHEM_ENERGY_NAMES};
+        if self.chem.is_none()
+            || energy as usize >= CHEM_ENERGY_NAMES.len()
+            || cycle as usize >= CHEM_CYCLE_NAMES.len()
+        {
+            return false;
+        }
+        self.link
+            .pending
+            .push(crate::chem_link::ChemOp::Dynamics(energy, cycle));
+        true
     }
 
-    /// `(energy, cycle)` modes of the chem world, or `None` outside chem mode.
+    /// `(energy, cycle)` modes of the chem world, or `None` outside chem mode. §6ah: the last
+    /// requested modes, including ones still queued for the engine.
     pub fn chem_dynamics(&self) -> Option<(u32, u32)> {
-        self.chem.as_ref().map(|c| (c.energy, c.cycle))
+        let c = self.chem.as_ref()?;
+        let queued = self
+            .link
+            .pending
+            .iter()
+            .rev()
+            .chain(self.link.in_flight.iter().flat_map(|b| b.ops.iter().rev()))
+            .find_map(|op| match op {
+                crate::chem_link::ChemOp::Dynamics(e, y) => Some((*e, *y)),
+                _ => None,
+            });
+        Some(queued.unwrap_or((c.energy, c.cycle)))
     }
 
     /// The active cross-section's cut (off outside chem mode).
@@ -358,7 +404,7 @@ impl PlaySession {
     pub fn new() -> Self {
         let world = World::new();
         let history = History::new(&world);
-        let last_world_tag = world_tag(&world);
+        let last_world_tag = history.current_world();
         Self {
             world,
             history,
@@ -387,7 +433,25 @@ impl PlaySession {
             chem: None,
             cut_view: None,
             cut_faces: Vec::new(),
+            delta_chain: None,
+            delta_changed: Vec::new(),
+            delta_render: true,
+            link: crate::chem_link::ChemLink::default(),
         }
+    }
+
+    /// Turns delta game renders on or off (on by default). Frames are identical either way.
+    pub fn set_delta_render(&mut self, on: bool) {
+        self.delta_render = on;
+        self.delta_chain = None;
+    }
+
+    /// Game frames drawn as deltas and delta index compactions so far (diagnostics only).
+    pub fn delta_counts(&self) -> (u64, u64) {
+        (
+            self.renderer.delta_frames(),
+            self.renderer.delta_compactions(),
+        )
     }
 
     /// Output buffer width/height (game + sidebar, or game only).
@@ -461,7 +525,8 @@ impl PlaySession {
         let chem = self
             .chem
             .as_ref()
-            .map(|c| c.status_fields())
+            .zip(self.chem_dynamics())
+            .map(|(c, d)| c.status_fields_with(&self.link.report, d))
             .unwrap_or_default();
         format!(
             "bitblock_browser_play ok tick={} world={} frame={} pos={:.12},{:.12},{:.12} yaw={:.12} pitch={:.12} dist={:.12} last={} sidebar={} captured={} output={}x{}{}",
@@ -676,6 +741,9 @@ impl PlaySession {
     /// One native-faithful fixed tick: simulate, then render + compose with the audited policy
     /// (palette audit, eager frame tags). The tape and host known answers run through here.
     pub fn fixed_tick(&mut self) -> bool {
+        if self.chem_blocked() {
+            return false;
+        }
         let source_tick = self.tick;
         self.sim_tick();
         self.render_pending(source_tick, RenderPolicy::Audited)
@@ -686,12 +754,147 @@ impl PlaySession {
     /// `ticks` calls to `fixed_tick`; only intermediate frames nobody would see are skipped.
     pub fn step(&mut self, ticks: u32) -> bool {
         for _ in 0..ticks {
+            if self.chem_blocked() {
+                break;
+            }
             self.sim_tick();
         }
         if self.tick == 0 {
             return false;
         }
         self.render_pending(self.tick - 1, RenderPolicy::Live)
+    }
+
+    /// §6s browser live step that never catches up with a second chem step: runs up to `ticks`
+    /// fixed simulation ticks but stops before a tick on which a chem step is due once one has
+    /// run in this call, then finalises at most ONE frame (live policy) like [`Self::step`].
+    /// Returns whether a frame was finalised and how many ticks ran; the caller owes the rest to
+    /// later calls (§6ab, bounded) or drops them. It never runs two chem steps in one frame,
+    /// which after one late frame kept every later frame late. The ticks that run are exactly
+    /// the next ones `fixed_tick` would run, so world / history / books evolve as with that
+    /// many `fixed_tick` calls; only which ticks get presented differs.
+    pub fn step_paced(&mut self, ticks: u32) -> (bool, u32) {
+        let (painted, _, ran) = self.step_lagged_inner(ticks, false);
+        (painted, ran)
+    }
+
+    /// §6ah worker-path live step: [`Self::step_paced`] that also stops before a tick that
+    /// must wait for the worker's result, and returns right after a tick that sent a batch
+    /// (without rendering) so the client can post it to the worker at once. Returns
+    /// `(painted, sent, ran)`; after a send the client calls again for the rest of its ticks
+    /// (zero ticks just finalises the pending frame).
+    pub fn step_lagged(&mut self, ticks: u32) -> (bool, bool, u32) {
+        self.step_lagged_inner(ticks, true)
+    }
+
+    fn step_lagged_inner(&mut self, ticks: u32, stop_on_send: bool) -> (bool, bool, u32) {
+        let mut ran = 0;
+        let mut chem_ran = false;
+        while ran < ticks {
+            if self.chem_blocked() {
+                break;
+            }
+            // §6ah: the expensive chem tick on this thread is a landing (the fallback runs the
+            // batch there; the worker path mirrors its result).
+            let heavy = self
+                .chem
+                .as_ref()
+                .is_some_and(|c| self.link.lands_on(c, self.tick) || c.due_on(self.tick));
+            if heavy && chem_ran {
+                break;
+            }
+            chem_ran |= heavy;
+            let sent = self.link.sent;
+            self.sim_tick();
+            ran += 1;
+            if stop_on_send && self.link.remote && self.link.sent != sent {
+                return (false, true, ran);
+            }
+        }
+        if self.tick == 0 {
+            return (false, false, ran);
+        }
+        (
+            self.render_pending(self.tick - 1, RenderPolicy::Live),
+            false,
+            ran,
+        )
+    }
+
+    /// §6ah worker path: the next tick must wait for the worker's result.
+    pub fn chem_blocked(&self) -> bool {
+        self.chem
+            .as_ref()
+            .is_some_and(|c| self.link.blocked(c, self.tick))
+    }
+
+    /// §6ah: switch this chem session to the worker path (its chem world becomes a display
+    /// replica of the worker's). Only before the first batch; false otherwise or outside chem.
+    pub fn chem_set_remote(&mut self, remote: bool) -> bool {
+        if self.chem.is_none() || self.link.sent > 0 {
+            return false;
+        }
+        self.link.remote = remote;
+        true
+    }
+
+    /// Recover a failed worker without resetting the play session or losing edits. Rebuild
+    /// the engine from genesis and replay only the already-published batches. The in-flight
+    /// batch and pending ops keep their original landing/order on the local lagged schedule.
+    /// Replay does not touch the play world, camera, inputs, bag or history.
+    pub fn chem_recover_local(&mut self) -> bool {
+        if !self.link.remote {
+            return false;
+        }
+        let Some(c) = self.chem.as_mut() else {
+            return false;
+        };
+        let mut engine = if c.preset == crate::play_chem::CHEM_PRESET_CUSTOM {
+            crate::play_chem::ChemPlay::with_budget(c.budget, c.seed, c.radius).ok()
+        } else {
+            crate::play_chem::ChemPlay::new(c.preset, c.seed, c.radius)
+        }
+        .expect("same genesis already loaded successfully");
+        for batch in &self.link.published_batches {
+            engine.process(batch);
+        }
+        assert_eq!(engine.world.cells(), c.world.cells(), "recovery domain");
+        assert_eq!(engine.world.mats(), c.world.mats(), "recovery materials");
+        // Only replace the replica's engine data. Its mirror cache/render state, requested
+        // cadence, manual queue and cut settings still describe the published play world.
+        c.world = engine.world;
+        c.place_mat = engine.place_mat;
+        c.last = engine.last;
+        c.steps_run = engine.steps_run;
+        c.energy = engine.energy;
+        c.cycle = engine.cycle;
+        c.error = engine.error;
+        c.books_ahead = None;
+        self.link.remote = false;
+        self.link.inbox = None;
+        self.link.outbox = None;
+        self.link.published_batches.clear();
+        true
+    }
+
+    /// §6ah worker path: the encoded batch of the last send tick, if not taken yet.
+    pub fn chem_take_outbox(&mut self) -> Option<Vec<u8>> {
+        self.link.outbox.take()
+    }
+
+    /// §6ah worker path: delivers the worker's encoded result for the batch in flight. False
+    /// (ignored) if no batch is in flight or a result is already waiting.
+    pub fn chem_put_inbox(&mut self, bytes: Vec<u8>) -> bool {
+        if !self.link.remote || self.link.in_flight.is_none() || self.link.inbox.is_some() {
+            return false;
+        }
+        self.link.inbox = Some(bytes);
+        true
+    }
+
+    /// §6ah: the engine's chem tick as of the last landing (what the play world shows).
+    pub fn chem_published_tick(&self) -> Option<u64> {
+        self.chem.as_ref().map(|_| self.link.report.tick)
     }
 
     fn sim_tick(&mut self) {
@@ -754,106 +957,11 @@ impl PlaySession {
         let _consumed = std::mem::take(&mut self.inputs.actions);
         let pending_edits = std::mem::take(&mut self.inputs.edits);
         let mut transaction = self.history.begin_tick(self.tick);
-        for pending in pending_edits {
-            match pending {
-                PendingEdit::Aim(AimEdit::Delete) => {
-                    // With a cross-section on, the aim ray sees what the player sees (the cut
-                    // faces); every bit of that view is also on in the play world.
-                    let cut = self.refresh_cut_view();
-                    let aim_world = match (&self.cut_view, cut) {
-                        (Some((_, view)), true) => view,
-                        _ => &self.world,
-                    };
-                    let Some(edit) = resolve_aim_edit(aim_world, &self.camera, AimEdit::Delete)
-                    else {
-                        continue;
-                    };
-                    debug_assert!(!edit_would_enclose_observer(
-                        &self.world,
-                        &self.camera,
-                        edit
-                    ));
-                    if let Some(chem) = self.chem.as_mut()
-                        && !chem.dig(edit.coord)
-                    {
-                        self.needs_sidebar_render = true;
-                        continue;
-                    }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
-                    self.cut_view = None;
-                }
-                PendingEdit::Aim(AimEdit::Place) => {
-                    let cut = self.refresh_cut_view();
-                    let aim_world = match (&self.cut_view, cut) {
-                        (Some((_, view)), true) => view,
-                        _ => &self.world,
-                    };
-                    let Some(edit) = resolve_aim_edit(aim_world, &self.camera, AimEdit::Place)
-                    else {
-                        continue;
-                    };
-                    if edit_would_enclose_observer(&self.world, &self.camera, edit) {
-                        continue;
-                    }
-                    if let Some(chem) = self.chem.as_mut() {
-                        // Never place into the hidden side of a cut (it would be invisible) or
-                        // onto a bit the cut only hides.
-                        if cut
-                            && (self.world.is_on(edit.coord)
-                                || chem
-                                    .cut_hides(edit.coord, chem.cut_signs(self.camera.position())))
-                        {
-                            chem.last = "place_refused:cut".to_owned();
-                            self.needs_sidebar_render = true;
-                            continue;
-                        }
-                        if !chem.place(edit.coord) {
-                            self.needs_sidebar_render = true;
-                            continue;
-                        }
-                    }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
-                    self.cut_view = None;
-                }
-                PendingEdit::Exact(edit) => {
-                    if edit_would_enclose_observer(&self.world, &self.camera, edit) {
-                        continue;
-                    }
-                    if let Some(chem) = self.chem.as_mut() {
-                        let on = self.world.is_on(edit.coord);
-                        let ok = match edit.operation {
-                            Operation::Off => on && chem.dig(edit.coord),
-                            Operation::On => !on && chem.place(edit.coord),
-                            Operation::Toggle => {
-                                if on {
-                                    chem.dig(edit.coord)
-                                } else {
-                                    chem.place(edit.coord)
-                                }
-                            }
-                        };
-                        if !ok {
-                            continue;
-                        }
-                    }
-                    self.needs_render |=
-                        transaction.apply_edit(&self.history, &mut self.world, edit);
-                    self.cut_view = None;
-                }
-            }
-        }
-
-        // Chem tick: due steps run here, then the chem occupancy diff (over the chem domain)
-        // lands in this tick's transaction, so the play world mirrors the chem world bit for bit.
-        if let Some(chem) = self.chem.as_mut() {
-            let due = chem.take_due(self.tick);
-            if due > 0 {
-                chem.run(due);
-                self.needs_render |=
-                    mirror_chem(chem, &self.history, &mut self.world, &mut transaction);
-            }
+        if self.chem.is_some() {
+            self.queue_chem_edits(pending_edits);
+            self.chem_tick(&mut transaction);
+        } else {
+            self.apply_edits(pending_edits, &mut transaction);
         }
 
         let post_world = match self.history.commit_tick(transaction, &self.world) {
@@ -862,6 +970,159 @@ impl PlaySession {
         };
         self.last_world_tag = post_world;
         self.tick = self.tick.checked_add(1).expect("tick counter overflow");
+    }
+
+    /// Applies a non-chem tick's edits to the play world (chem worlds queue them instead).
+    fn apply_edits(&mut self, pending_edits: Vec<PendingEdit>, transaction: &mut TickTransaction) {
+        debug_assert!(self.chem.is_none());
+        for pending in pending_edits {
+            let edit = match pending {
+                PendingEdit::Aim(aim) => {
+                    self.refresh_cut_view();
+                    let Some(edit) = resolve_aim_edit(&self.world, &self.camera, aim) else {
+                        continue;
+                    };
+                    match aim {
+                        AimEdit::Delete => debug_assert!(!edit_would_enclose_observer(
+                            &self.world,
+                            &self.camera,
+                            edit
+                        )),
+                        AimEdit::Place => {
+                            if edit_would_enclose_observer(&self.world, &self.camera, edit) {
+                                continue;
+                            }
+                        }
+                    }
+                    edit
+                }
+                PendingEdit::Exact(edit) => {
+                    if edit_would_enclose_observer(&self.world, &self.camera, edit) {
+                        continue;
+                    }
+                    edit
+                }
+            };
+            let applied = transaction.apply_edit(&self.history, &mut self.world, edit);
+            self.needs_render |= applied;
+            self.cut_view = None;
+        }
+    }
+
+    /// §6ah: resolves a chem tick's edits against the play world as last published (aim ray,
+    /// with a cross-section on through the view the player sees; enclose-observer check; cut
+    /// refusal) and queues them, in order, for the chem engine's next batch. The play world is
+    /// not edited here: an applied edit reaches it through the mirror of its batch.
+    fn queue_chem_edits(&mut self, pending_edits: Vec<PendingEdit>) {
+        use crate::chem_link::ChemOp;
+        for pending in pending_edits {
+            let op = match pending {
+                PendingEdit::Aim(aim) => {
+                    let cut = self.refresh_cut_view();
+                    let aim_world = match (&self.cut_view, cut) {
+                        (Some((_, view)), true) => view,
+                        _ => &self.world,
+                    };
+                    let Some(edit) = resolve_aim_edit(aim_world, &self.camera, aim) else {
+                        continue;
+                    };
+                    match aim {
+                        AimEdit::Delete => ChemOp::Dig(edit.coord),
+                        AimEdit::Place => {
+                            if edit_would_enclose_observer(&self.world, &self.camera, edit) {
+                                continue;
+                            }
+                            let chem = self.chem.as_ref().expect("chem session");
+                            // Never place into the hidden side of a cut (it would be invisible)
+                            // or onto a bit the cut only hides.
+                            if cut
+                                && (self.world.is_on(edit.coord)
+                                    || chem.cut_hides(
+                                        edit.coord,
+                                        chem.cut_signs(self.camera.position()),
+                                    ))
+                            {
+                                ChemOp::Refuse("place_refused:cut".to_owned())
+                            } else {
+                                ChemOp::Place(edit.coord)
+                            }
+                        }
+                    }
+                }
+                PendingEdit::Exact(edit) => {
+                    if edit_would_enclose_observer(&self.world, &self.camera, edit) {
+                        continue;
+                    }
+                    ChemOp::Exact(edit.operation, edit.coord)
+                }
+            };
+            self.link.pending.push(op);
+        }
+    }
+
+    /// §6ah chem schedule for this tick: land the batch in flight if it is due (fallback:
+    /// run it now; worker path: apply the worker's result to the replica), mirror the chem
+    /// world into this tick's transaction, then send the next batch if one is due.
+    fn chem_tick(&mut self, transaction: &mut TickTransaction) {
+        let tick = self.tick;
+        let Some(chem) = self.chem.as_mut() else {
+            return;
+        };
+        if self.link.lands_on(chem, tick) {
+            let batch = self.link.in_flight.take().expect("a batch in flight");
+            let refused = if self.link.remote {
+                let bytes = self.link.inbox.take().expect("a blocked tick never runs");
+                let delta =
+                    crate::chem_link::decode_delta(&bytes).expect("well-formed chem result");
+                assert!(
+                    chem.replicate(&delta, &batch),
+                    "chem result fits the replica"
+                );
+                self.link.report = delta.report;
+                self.link.published_batches.push(batch.clone());
+                delta.refused
+            } else {
+                let (report, refused) = chem.process(&batch);
+                self.link.report = report;
+                refused
+            };
+            self.link.landed += 1;
+            if refused > 0 {
+                self.needs_sidebar_render = true;
+            }
+            // The chem occupancy diff (over the chem domain) lands in this tick's transaction,
+            // so the play world mirrors the published chem world bit for bit.
+            let pre = self.delta_chain.map(|_| world_tag(&self.world));
+            let (repaint, full) = mirror_chem(
+                chem,
+                &self.history,
+                &mut self.world,
+                transaction,
+                &mut self.delta_changed,
+            );
+            self.needs_render |= repaint;
+            self.delta_chain = match self.delta_chain {
+                Some(chain)
+                    if !full
+                        && pre == Some(chain)
+                        && self.delta_changed.len() <= DELTA_CHANGED_MAX =>
+                {
+                    Some(world_tag(&self.world))
+                }
+                _ => None,
+            };
+        }
+        if self.link.sends_on(chem, tick) {
+            let batch = crate::chem_link::ChemBatch {
+                steps: chem.take_due(tick),
+                ops: std::mem::take(&mut self.link.pending),
+            };
+            if self.link.remote {
+                self.link.outbox = Some(crate::chem_link::encode_batch(&batch));
+            }
+            self.link.in_flight = Some(batch);
+            self.link.sent += 1;
+        }
     }
 
     /// Mirrors the render + compose tail of native `fixed_tick` for `source_tick`.
@@ -951,13 +1212,36 @@ impl PlaySession {
                         };
                         self.renderer.render_tinted(view, &self.camera, Some(&lit));
                     }
-                    _ => self
-                        .renderer
-                        .render_tinted(&self.world, &self.camera, Some(&tint)),
+                    _ => {
+                        if self.delta_render
+                            && chem.colors.never_black()
+                            && self.delta_chain == Some(world_tag(&self.world))
+                        {
+                            self.renderer.render_tinted_delta(
+                                &self.world,
+                                &self.camera,
+                                Some(&tint),
+                                &self.delta_changed,
+                            );
+                        } else {
+                            self.renderer
+                                .render_tinted(&self.world, &self.camera, Some(&tint));
+                        }
+                        if self.delta_render && chem.colors.never_black() {
+                            self.renderer.prepare_delta_lists();
+                        }
+                    }
                 }
             }
             None => self.renderer.render(&self.world, &self.camera),
         }
+        // The next delta starts from this frame (only the plain tinted chem view chains).
+        self.delta_changed.clear();
+        self.delta_chain = self
+            .chem
+            .as_ref()
+            .filter(|c| !c.cut.active())
+            .map(|_| world_tag(&self.world));
         self.renderer.draw_crosshair(overlay);
     }
 
@@ -1348,7 +1632,14 @@ impl PlaySession {
             1 => {
                 let chem = self.chem.as_mut().expect("chem session");
                 let mut tx = self.history.begin_tick(self.tick);
-                let r = mirror_chem(chem, &self.history, &mut self.world, &mut tx);
+                self.delta_chain = None;
+                let (r, _) = mirror_chem(
+                    chem,
+                    &self.history,
+                    &mut self.world,
+                    &mut tx,
+                    &mut self.delta_changed,
+                );
                 if let Some(receipt) = self.history.commit_tick(tx, &self.world) {
                     self.last_world_tag = receipt.post_world();
                 }
@@ -1356,10 +1647,12 @@ impl PlaySession {
                 u64::from(r)
             }
             3 => {
+                self.delta_chain = None;
                 self.renderer.render(&self.world, &self.camera);
                 self.renderer.world_pixel_count()
             }
             4 => {
+                self.delta_chain = None;
                 let c = |_: Coord| Some(0x808080u32);
                 self.renderer
                     .render_tinted(&self.world, &self.camera, Some(&c));
@@ -1435,45 +1728,174 @@ impl PlaySession {
     }
 }
 
-/// Applies the chem occupancy diff (over the chem domain) to the play world as history edits
-/// and refreshes the material hash. Returns whether the game view must repaint.
+/// Applies the chem occupancy diff (over the chem domain) to the play world as history edits.
+/// Returns whether the game view must repaint, and whether
+/// this was a full scan (the cache was empty or resized: `changed` is then not a full record).
+/// Every bit whose material changed is appended to `changed`, flagged when its occupancy did.
+/// §6u: the material ids of up to 8 cells as one little-endian word (missing bytes 0).
+/// §6w: a full group of 8 is converted as one array, so it compiles to a single word load.
+#[inline]
+fn pack8(m: &[bitblock_core::chem::MatId]) -> u64 {
+    if let Ok(m) = <&[bitblock_core::chem::MatId; 8]>::try_from(m) {
+        return u64::from_le_bytes(m.map(|x| x.0));
+    }
+    let mut b = [0u8; 8];
+    for (d, s) in b.iter_mut().zip(m) {
+        *d = s.0;
+    }
+    u64::from_le_bytes(b)
+}
+
+/// §6u: bit `k` set iff byte `k` of `x` is non-zero.
+#[inline]
+fn nonzero_bytes(x: u64) -> u64 {
+    const LO7: u64 = 0x7f7f_7f7f_7f7f_7f7f;
+    let hi = (((x & LO7) + LO7) | x) & !LO7; // 0x80 in each non-zero byte
+    ((hi >> 7).wrapping_mul(0x0102_0408_1020_4080)) >> 56
+}
+
+/// §6ae: the domain's cells as z-runs `(first index, first cell)` (see
+/// [`crate::play_chem::ChemPlay::mirror_rows`]).
+fn domain_rows(cells: &[Coord]) -> Vec<(usize, Coord)> {
+    let mut rows = Vec::new();
+    for (i, &c) in cells.iter().enumerate() {
+        let continues = i > 0 && {
+            let p = cells[i - 1];
+            p.x == c.x && p.y == c.y && p.z.checked_add(1) == Some(c.z)
+        };
+        if !continues {
+            rows.push((i, c));
+        }
+    }
+    rows
+}
+
+/// §6ae: the cell at domain index `i` from [`domain_rows`], for ascending `i` (the row cursor
+/// `r` only moves forward).
+#[inline]
+fn row_cell(rows: &[(usize, Coord)], r: &mut usize, i: usize) -> Coord {
+    while *r + 1 < rows.len() && rows[*r + 1].0 <= i {
+        *r += 1;
+    }
+    let (start, c) = rows[*r];
+    Coord::new(c.x, c.y, c.z + (i - start) as i64)
+}
+
 fn mirror_chem(
     chem: &mut crate::play_chem::ChemPlay,
     history: &History,
     world: &mut World,
     transaction: &mut TickTransaction,
-) -> bool {
+    changed_bits: &mut Vec<(Coord, bool)>,
+) -> (bool, bool) {
     let mut changed = 0u32;
-    // FNV-1a over the domain's material ids: a material-only change (rock ->
-    // sediment, water -> ice) keeps occupancy but must still repaint the chem tint.
-    let mut mat_hash = 0xcbf2_9ce4_8422_2325_u64;
+    // §6s: cells whose material id differs from the mirror cache (all of them on a full scan).
+    // A material-only change (rock -> sediment, water -> ice) keeps occupancy but must still
+    // repaint the chem tint; comparing the ids exactly replaces the former FNV-1a hash of the
+    // whole domain (which repainted on the same changes, up to hash collisions).
+    let mut mats_changed = 0u64;
     // §5y: probe occupancy only where the material id changed since the last mirror (same
     // edits as the full scan; the full scan runs when the cache is empty / resized).
     let mut seen = std::mem::take(&mut chem.mirror_mats);
     let full = seen.len() != chem.world.domain_len();
+    // Octree upkeep of the play world runs once per changed chunk at the end (exact, see
+    // `World::defer_octree`); `apply_edit` reads only bits.
+    world.defer_octree();
     if full {
         seen.clear();
         seen.resize(chem.world.domain_len(), bitblock_core::chem::MatId::AIR);
     }
-    for (i, (coord, mat, _)) in chem.world.domain().enumerate() {
-        mat_hash = (mat_hash ^ u64::from(mat.0)).wrapping_mul(0x0100_0000_01b3);
-        if !full && seen[i] == mat {
-            continue;
+    // Coordinates and occupancy are read only for cells whose material changed, both worlds
+    // through chunk-caching probes. The scan runs in blocks of 64 cells: a mask of the changed
+    // cells first (no branch per cell), then the changed cells in order.
+    // The edits are applied after the scan, in the same order: each domain cell is visited
+    // once and an edit flips only its own bit, so every occupancy read before them sees what
+    // it would see between them.
+    let mats = chem.world.mats();
+    let cells = chem.world.cells();
+    // §6ae: changed cells are named from the domain's z-runs (a few entries per row) instead
+    // of the cell list (24 bytes per cell, most of them read on a busy tick).
+    let mut rows = std::mem::take(&mut chem.mirror_rows);
+    if rows.0 != cells.len() || rows.1.is_empty() {
+        rows = (cells.len(), domain_rows(cells));
+    }
+    let mut row = 0usize;
+    let mut want_probe = chem.world.world().probe();
+    let mut have_probe = world.probe();
+    let mut edits = std::mem::take(&mut chem.mirror_edits);
+    edits.clear();
+    for (block, (mats, seen)) in mats.chunks(64).zip(seen.chunks_mut(64)).enumerate() {
+        // §6ae: an unchanged block (most blocks on a quiet tick) is skipped whole.
+        if !full {
+            let mut diff = 0u64;
+            for (m8, s8) in mats.chunks(8).zip(seen.chunks(8)) {
+                diff |= pack8(m8) ^ pack8(s8);
+            }
+            if diff == 0 {
+                continue;
+            }
         }
-        seen[i] = mat;
-        let want = chem.world.world().is_on(coord);
-        if want != world.is_on(coord) {
-            let op = if want { Operation::On } else { Operation::Off };
-            if transaction.apply_edit(history, world, Edit::new(op, coord)) {
-                changed += 1;
+        let mut mask = 0u64;
+        // §6u: changed cells where neither the old nor the new material is AIR (a gas or rock
+        // swap). The play world holds each domain cell's bit as the chem occupancy of its
+        // mirrored material (a full scan sets every bit, each later mirror applies every
+        // toggle, and dig / place apply their edit with the cache update, and nothing else
+        // edits the play world), so such a cell is on in both worlds: no probe, no toggle.
+        let mut solid = 0u64;
+        if full {
+            mask = if mats.len() == 64 {
+                !0
+            } else {
+                (1u64 << mats.len()) - 1
+            };
+        } else {
+            for (k, (m8, s8)) in mats.chunks(8).zip(seen.chunks(8)).enumerate() {
+                let (a, b) = (pack8(m8), pack8(s8));
+                mask |= nonzero_bytes(a ^ b) << (8 * k);
+                solid |= (nonzero_bytes(a) & nonzero_bytes(b)) << (8 * k);
+            }
+        }
+        mats_changed += u64::from(mask.count_ones());
+        seen.copy_from_slice(mats);
+        while mask != 0 {
+            let j = mask.trailing_zeros() as usize;
+            let i = block * 64 + j;
+            mask &= mask - 1;
+            let coord = row_cell(&rows.1, &mut row, i);
+            debug_assert_eq!(coord, cells[i]);
+            if solid >> j & 1 == 1 {
+                debug_assert!(want_probe.is_on(coord) && have_probe.is_on(coord));
+                changed_bits.push((coord, false));
+                continue;
+            }
+            // The chem world's bit follows from the material except at the bedrock cell.
+            let want = bitblock_core::chem::ChemWorld::occupancy_of(mats[i - block * 64], coord)
+                .unwrap_or_else(|| want_probe.is_on(coord));
+            debug_assert_eq!(want, want_probe.is_on(coord));
+            let have = have_probe.is_on(coord);
+            let toggled = want != have;
+            if !full {
+                changed_bits.push((coord, toggled));
+            }
+            if toggled {
+                edits.push((coord, want));
             }
         }
     }
+    for &(coord, want) in &edits {
+        let op = if want { Operation::On } else { Operation::Off };
+        if transaction.apply_edit(history, world, Edit::new(op, coord)) {
+            changed += 1;
+        }
+    }
+    chem.mirror_edits = edits;
+    chem.mirror_rows = rows;
+    world.flush_octree();
     chem.mirror_mats = seen;
     chem.last_step_changed = changed;
-    let recolored = mat_hash != chem.material_hash;
-    chem.material_hash = mat_hash;
-    changed > 0 || recolored
+    chem.material_changes += mats_changed;
+    let recolored = full || mats_changed > 0;
+    (changed > 0 || recolored, full)
 }
 
 /// Host known-answer: fold [`PLAY_INPUT_TAPE`] through a fresh session.
@@ -1763,7 +2185,7 @@ mod tests {
         let tape = play_input_tape_status();
         assert!(
             tape.contains(
-                "tick=5 world=#bb.world.sha256.ziy2sdalw4i2k5uszp32ldvf57moe44kv2q2fcs6dkxwavoertca"
+                "tick=5 world=#bb.world.sha256.lpqtwwq5lo3dbyid2hrdvmdr3r6wfy5t5xnhd3grwcis5bhu4nra"
             ),
             "{tape}"
         );
@@ -1784,9 +2206,9 @@ mod tests {
 mod start_world_tests {
     use super::*;
 
-    const ARCH_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.lqpba5lvzmm5bnj2jfoa7dgtdnm2adv5eborbtvaquic36mtno2q frame=#bb.frame.sha256.5l3xbpo3zj2x65tqjinaliydy7qchd2kw6gsy3yi4gm6awvjrraa pos=-5.838272203333,19.213048230119,-25.261618887543 yaw=0.610865238198 pitch=-0.383972435439 dist=32.602331204992 last=world:architecture sidebar=1 captured=0 output=2000x900";
+    const ARCH_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.pmbj7za55emc3mjtjvom5domewgjf2rr7qezwpxaxyoohzs5e6gq frame=#bb.frame.sha256.nx4b62u5ozefqrb5m5snhkhcvdtcwsljdgsvzhez5fppgv27unaa pos=-5.838272203333,19.213048230119,-25.261618887543 yaw=0.610865238198 pitch=-0.383972435439 dist=32.602331204992 last=world:architecture sidebar=1 captured=0 output=2000x900";
     const ARCH_HIGH_GAME_NON_BACKGROUND: u32 = 123_265;
-    const SYMBOL_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.x4emw7263xn5ajefvyissdm6tlv3lrd4miqr47rxsl7fj77h54eq frame=#bb.frame.sha256.araktfzrajbhvmmwo7zgywisgcrbmaewtdxhdl3ebrbaw5syncka pos=-5.208389634264,21.791351208024,-30.502793385755 yaw=0.610865238198 pitch=-0.383972435439 dist=40.819759920901 last=world:symbol sidebar=1 captured=0 output=2000x900";
+    const SYMBOL_HIGH_KNOWN: &str = "bitblock_browser_play ok tick=1 world=#bb.world.sha256.y6n5uuhnnaj25bfdepwlxziifs7einl4bexr5fcqskyvzenf3xba frame=#bb.frame.sha256.djgq2svfynmviug6ngvgsxcga7nhpjlj5qxkeu3wf5isqz5hg4yq pos=-5.208389634264,21.791351208024,-30.502793385755 yaw=0.610865238198 pitch=-0.383972435439 dist=40.819759920901 last=world:symbol sidebar=1 captured=0 output=2000x900";
     const SYMBOL_HIGH_GAME_NON_BACKGROUND: u32 = 82_409;
 
     fn client_startup(world_id: u32) -> PlaySession {
@@ -1878,11 +2300,250 @@ mod chem_play_tests {
     use crate::play_chem::*;
     use bitblock_core::chem::MatId;
 
+    /// §6f: delta game renders change nothing. Chem sessions with and without them, driven
+    /// through chem steps, looks, wheel, dig / place clicks and a cross-section on and off,
+    /// produce the same output buffer and status (world, frame and history tags) every step,
+    /// in the sidebar and the game-only layouts.
+    #[test]
+    fn delta_render_frames_equal_full_render_frames() {
+        for (preset, radius, sidebar) in [
+            (2_u32, 14_u32, true),
+            (4, 14, true),
+            (0, 12, false),
+            (2, 16, false),
+        ] {
+            let mut runs: Vec<PlaySession> = [true, false]
+                .into_iter()
+                .map(|delta| {
+                    let mut s = PlaySession::with_chem(preset, 7, radius).expect("chem genesis");
+                    s.set_layout(320, 180, sidebar);
+                    s.set_delta_render(delta);
+                    s.set_capture(true);
+                    s
+                })
+                .collect();
+            for k in 1..=48_u32 {
+                for s in &mut runs {
+                    if k % 11 == 0 {
+                        s.look(23.0, -7.0);
+                    }
+                    if k % 17 == 0 {
+                        s.wheel(1.0);
+                    }
+                    if k == 9 || k == 30 {
+                        s.pointer_button(0, true);
+                        s.pointer_button(0, false);
+                    }
+                    if k == 21 {
+                        s.pointer_button(2, true);
+                        s.pointer_button(2, false);
+                    }
+                    if k == 24 {
+                        s.chem_set_cut(1, 0);
+                    }
+                    if k == 28 {
+                        s.chem_set_cut(0, 0);
+                    }
+                    s.step(4);
+                }
+                let at = format!("preset {preset} r{radius} sidebar {sidebar} step {k}");
+                assert!(runs[0].rgba() == runs[1].rgba(), "{at} output");
+                assert_eq!(
+                    runs[0].status_with(true),
+                    runs[1].status_with(true),
+                    "{at} status"
+                );
+            }
+            let used = runs[0].renderer.delta_frames();
+            assert!(used >= 12, "preset {preset}: only {used} delta frames");
+            assert_eq!(runs[1].renderer.delta_frames(), 0);
+        }
+    }
+
+    /// §6s: dig / place frames go through the delta path (no full re-render) and equal the
+    /// full-render frames, on ticks with and without a chem step; a still-camera full render
+    /// builds the delta tile lists before the first delta frame, a moving one leaves them to it.
+    /// §6t: a place outside the chem domain (which grows it) is a delta frame too.
+    /// §6u: after every mirror the play world holds each chem domain cell's bit as the chem
+    /// occupancy of the cell's material (what lets the mirror skip the probes of a solid-to-solid
+    /// change), through convection, digs, places that grow the domain, and camera moves.
+    #[test]
+    fn swar_mask_matches_bytewise_compare() {
+        use bitblock_core::chem::MatId;
+        let mut r = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            r
+        };
+        for len in [1usize, 5, 8, 13, 63, 64] {
+            for _ in 0..2000 {
+                let pick = |x: u64| {
+                    MatId(match x % 4 {
+                        0 => 0,
+                        1 => 0x80,
+                        2 => 1,
+                        _ => (x >> 8) as u8,
+                    })
+                };
+                let a: Vec<MatId> = (0..len).map(|_| pick(next())).collect();
+                let b: Vec<MatId> = (0..len)
+                    .map(|_| if next() % 3 == 0 { a[0] } else { pick(next()) })
+                    .collect();
+                let (mut m0, mut s0, mut m1, mut s1) = (0u64, 0u64, 0u64, 0u64);
+                for j in 0..len {
+                    m0 |= u64::from(a[j] != b[j]) << j;
+                    s0 |= u64::from(a[j] != MatId::AIR && b[j] != MatId::AIR) << j;
+                }
+                for (k, (x, y)) in a.chunks(8).zip(b.chunks(8)).enumerate() {
+                    let (p, q) = (super::pack8(x), super::pack8(y));
+                    m1 |= super::nonzero_bytes(p ^ q) << (8 * k);
+                    s1 |= (super::nonzero_bytes(p) & super::nonzero_bytes(q)) << (8 * k);
+                }
+                assert_eq!((m0, s0), (m1, s1));
+            }
+        }
+    }
+
+    #[test]
+    fn play_world_mirrors_chem_occupancy_through_edits() {
+        for (preset, radius) in [(4_u32, 14_u32), (2, 14), (0, 12)] {
+            let mut s = PlaySession::with_chem(preset, 7, radius).expect("chem genesis");
+            s.set_layout(320, 180, true);
+            s.set_capture(true);
+            let mut swaps = 0u64;
+            for k in 1..=36_u32 {
+                if k % 3 != 0 {
+                    let button = if k % 4 == 1 { 2 } else { 0 };
+                    s.pointer_button(button, true);
+                    s.pointer_button(button, false);
+                }
+                if k == 20 {
+                    s.look(25.0, -4.0);
+                }
+                s.step(4);
+                let chem = s.chem.as_ref().unwrap();
+                swaps = chem.material_changes;
+                for (&c, &m) in chem.world.cells().iter().zip(chem.world.mats()) {
+                    let want = bitblock_core::chem::ChemWorld::occupancy_of(m, c)
+                        .unwrap_or_else(|| chem.world.world().is_on(c));
+                    assert_eq!(s.world.is_on(c), want, "preset {preset} step {k} at {c:?}");
+                }
+            }
+            assert!(swaps > 0, "preset {preset}: no material changed");
+        }
+    }
+
+    #[test]
+    fn edit_frames_are_deltas_equal_to_full_frames() {
+        let mut growths = 0;
+        for (preset, radius) in [(2_u32, 14_u32), (0, 12), (4, 14)] {
+            let mut runs: Vec<PlaySession> = [true, false]
+                .into_iter()
+                .map(|delta| {
+                    let mut s = PlaySession::with_chem(preset, 7, radius).expect("chem genesis");
+                    s.set_layout(320, 180, true);
+                    s.set_delta_render(delta);
+                    s.set_capture(true);
+                    s
+                })
+                .collect();
+            for s in &mut runs {
+                assert!(s.step(1));
+            }
+            assert!(
+                runs[0].renderer.delta_lists_built(),
+                "the first (still) full frame builds the tile lists"
+            );
+            let (mut edit_frames, mut edit_deltas) = (0, 0);
+            for k in 1..=40_u32 {
+                let edit = k % 3 != 0;
+                let deltas = runs[0].renderer.delta_frames();
+                let renders = runs[0].renders();
+                let tag = runs[0].last_world_tag;
+                let domain = runs[0].chem.as_ref().unwrap().world.domain_len();
+                for s in &mut runs {
+                    if edit {
+                        let button = if k % 5 == 1 { 2 } else { 0 };
+                        s.pointer_button(button, true);
+                        s.pointer_button(button, false);
+                    }
+                    if k == 26 {
+                        s.look(31.0, -5.0);
+                    }
+                    s.step(if k % 4 == 0 { 4 } else { 1 });
+                }
+                let at = format!("preset {preset} r{radius} step {k}");
+                assert!(runs[0].rgba() == runs[1].rgba(), "{at} output");
+                assert_eq!(runs[0].status_with(true), runs[1].status_with(true), "{at}");
+                if k == 26 {
+                    assert!(
+                        !runs[0].renderer.delta_lists_built(),
+                        "{at}: a moved camera leaves the tile lists to the first delta frame"
+                    );
+                }
+                let chem = runs[0].chem.as_ref().unwrap();
+                growths += usize::from(chem.world.domain_len() != domain);
+                if k != 26 && edit && runs[0].last_world_tag != tag && k != 27 {
+                    edit_frames += 1;
+                    assert!(runs[0].renders() > renders, "{at}: an edit repaints");
+                    if runs[0].renderer.delta_frames() > deltas {
+                        edit_deltas += 1;
+                    }
+                }
+                assert_mirrors_chem(&runs[0]);
+            }
+            assert!(
+                edit_frames >= 6,
+                "preset {preset}: only {edit_frames} edit frames"
+            );
+            assert_eq!(
+                edit_deltas, edit_frames,
+                "preset {preset}: every edit frame is a delta"
+            );
+            assert_eq!(runs[1].renderer.delta_frames(), 0);
+        }
+        assert!(growths >= 2, "only {growths} places grew the chem domain");
+    }
+
+    /// Digs on ticks without a chem step, then chem steps that refill the dug cells (ocean
+    /// water flows back): the play world keeps mirroring the chem occupancy after every step.
+    #[test]
+    fn digs_refilled_before_the_next_mirror_stay_mirrored() {
+        let mut s = PlaySession::with_chem(CHEM_PRESET_OCEAN, 7, 14).expect("chem genesis");
+        s.set_layout(320, 180, true);
+        s.set_capture(true);
+        assert!(s.step(1));
+        let mut digs = 0;
+        for k in 1..=24_u32 {
+            s.pointer_button(0, true);
+            s.pointer_button(0, false);
+            // §6ah: one click per batch window (a second click inside one window aims at the
+            // cell the first dug, as the play world shows it until the dig is published).
+            s.step(if k % 3 == 0 { 8 } else { 4 });
+            digs += u32::from(s.chem.as_ref().unwrap().last.starts_with("dig:"));
+            assert_mirrors_chem(&s);
+        }
+        // §6ah: the crosshair cell freezes to ice after the first dig (heat-gated from then
+        // on); every later click is answered with a refusal, and the mirror holds throughout.
+        assert!(digs >= 1, "only {digs} digs");
+        assert!(s.chem.as_ref().unwrap().last.starts_with("dig_"));
+    }
+
     fn chem_startup(preset: u32) -> PlaySession {
         let mut s = PlaySession::with_chem(preset, 7, CHEM_RADIUS_DEFAULT).expect("chem genesis");
         s.set_layout(1600, 900, true);
         assert!(s.step(1), "startup step finalises a frame");
         s
+    }
+
+    /// §6ah: pauses auto-step and lands the batch in flight (the startup tick sent one), so
+    /// the chem world holds still from here on.
+    fn pause_chem(s: &mut PlaySession) {
+        s.chem_set_auto(0);
+        s.step(1);
+        assert!(s.link.in_flight.is_none());
     }
 
     fn assert_mirrors_chem(s: &PlaySession) {
@@ -1925,6 +2586,48 @@ mod chem_play_tests {
     }
 
     #[test]
+    fn step_paced_runs_at_most_one_chem_step_and_the_same_ticks() {
+        // Gas at its default cadence (one chem step every 4 ticks): paced steps of up to 9
+        // ticks run one chem step each and drop the rest; the ticks that do run leave world,
+        // history, books and game pixels exactly where as many `fixed_tick`s would.
+        // The audited session renders every frame in full, so each paced frame (a delta drawn
+        // after skipped frames and dropped ticks) is checked against a full render of the
+        // same world: the paced view converges to it on every frame it presents.
+        let mut paced = PlaySession::with_chem(CHEM_PRESET_GAS, 7, CHEM_RADIUS_DEFAULT).unwrap();
+        let mut audited = PlaySession::with_chem(CHEM_PRESET_GAS, 7, CHEM_RADIUS_DEFAULT).unwrap();
+        audited.set_delta_render(false);
+        for s in [&mut paced, &mut audited] {
+            s.set_layout(320, 180, true);
+        }
+        let mut dropped = 0;
+        for (k, ticks) in [1_u32, 9, 4, 5, 8, 2, 9, 6, 9, 3].into_iter().enumerate() {
+            let before = paced.chem.as_ref().unwrap().steps_run;
+            let (painted, ran) = paced.step_paced(ticks);
+            assert!(ran >= 1 && ran <= ticks, "k={k}");
+            dropped += ticks - ran;
+            let steps = paced.chem.as_ref().unwrap().steps_run - before;
+            assert!(steps <= 1, "k={k}: {steps} chem steps in one paced step");
+            for _ in 0..ran {
+                audited.fixed_tick();
+            }
+            assert_eq!(paced.tick, audited.tick, "k={k}");
+            assert_eq!(paced.last_world_tag, audited.last_world_tag, "k={k}");
+            assert_eq!(paced.chem_status(), audited.chem_status(), "k={k}");
+            if painted {
+                assert_eq!(paced.renderer.pixels(), audited.renderer.pixels(), "k={k}");
+            }
+            assert_mirrors_chem(&paced);
+        }
+        assert!(dropped > 0, "the 9-tick steps must drop a second chem step");
+        assert!(paced.renderer.delta_frames() > 0, "paced frames are deltas");
+        // Without chem a paced step is a plain step.
+        let mut plain = PlaySession::new();
+        let mut live = PlaySession::new();
+        assert_eq!(plain.step_paced(7), (live.step(7), 7));
+        assert_eq!(plain.status(), live.status());
+    }
+
+    #[test]
     fn chem_auto_steps_advance_tick_and_keep_books() {
         let mut s = chem_startup(CHEM_PRESET_ASH);
         let t0 = s.chem.as_ref().unwrap().world.tick();
@@ -1941,25 +2644,30 @@ mod chem_play_tests {
         );
         assert!(chem.error.is_none());
         assert_mirrors_chem(&s);
-        // Pause + manual step.
+        // Pause + manual step. §6ah: the step in flight still lands (on the next tick), then
+        // the world holds; queued steps are sent on one tick and published on the next.
         s.chem_set_auto(0);
         let t1 = s.chem.as_ref().unwrap().world.tick();
         s.step(10);
-        assert_eq!(s.chem.as_ref().unwrap().world.tick(), t1);
+        assert_eq!(s.chem.as_ref().unwrap().world.tick(), t1 + 1);
         s.chem_queue(3);
-        s.step(1);
-        assert_eq!(s.chem.as_ref().unwrap().world.tick(), t1 + 3);
+        s.step(2);
+        assert_eq!(s.chem.as_ref().unwrap().world.tick(), t1 + 4);
+        assert_eq!(s.chem_published_tick(), Some(t1 + 4));
         assert_mirrors_chem(&s);
     }
 
     #[test]
     fn dig_and_place_go_through_chem() {
         let mut s = chem_startup(CHEM_PRESET_ROCKY);
-        s.chem_set_auto(0);
+        pause_chem(&mut s);
         let n0 = s.world.iter_on().count();
         let bag0 = s.chem.as_ref().unwrap().world.inventory();
         s.set_capture(true);
         s.pointer_button(0, true); // LMB = aimed dig
+        // §6ah: queued and sent on the next tick, published (and mirrored) the tick after.
+        s.step(1);
+        assert_eq!(s.world.iter_on().count(), n0, "not published yet");
         s.step(1);
         let chem = s.chem.as_ref().unwrap();
         assert!(chem.last.starts_with("dig:"), "last={}", chem.last);
@@ -1968,7 +2676,7 @@ mod chem_play_tests {
         assert!(s.status().contains(" chem_last=dig:"));
         assert_mirrors_chem(&s);
         s.pointer_button(2, true); // RMB = aimed place, paid from the bag
-        s.step(1);
+        s.step(2);
         let chem = s.chem.as_ref().unwrap();
         assert!(chem.last.starts_with("place:"), "last={}", chem.last);
         assert_eq!(s.world.iter_on().count(), n0);
@@ -1998,7 +2706,7 @@ mod chem_play_tests {
         use bitblock_core::render::lit_face_color;
         for preset in [CHEM_PRESET_ROCKY, CHEM_PRESET_OCEAN] {
             let mut s = chem_startup(preset);
-            s.chem_set_auto(0);
+            pause_chem(&mut s);
             let off_pixels = s.renderer.pixels().to_vec();
             let lit_of: std::collections::BTreeMap<u32, u32> = {
                 let c = s.chem.as_ref().unwrap();
@@ -2084,7 +2792,7 @@ mod chem_play_tests {
     fn cross_section_reveals_core_bands_on_rocky_and_ocean() {
         for preset in [CHEM_PRESET_ROCKY, CHEM_PRESET_OCEAN] {
             let mut s = chem_startup(preset);
-            s.chem_set_auto(0);
+            pause_chem(&mut s);
             let (center, core_rgb) = {
                 let c = s.chem.as_ref().unwrap();
                 let m = c.world.material(c.center());
@@ -2139,14 +2847,14 @@ mod chem_play_tests {
     #[test]
     fn cross_section_dig_and_place_keep_books_and_chem_ticks() {
         let mut s = chem_startup(CHEM_PRESET_ROCKY);
-        s.chem_set_auto(0);
+        pause_chem(&mut s);
         assert!(s.chem_set_cut(CHEM_CUT_WEDGE, 0));
         assert!(s.step(1));
         let n0 = s.world.iter_on().count();
         let bag0 = s.chem.as_ref().unwrap().world.inventory();
         s.set_capture(true);
         s.pointer_button(0, true); // dig the cut face under the crosshair
-        s.step(1);
+        s.step(2); // §6ah: sent on the next tick, published the tick after
         let (dug, last) = {
             let c = s.chem.as_ref().unwrap();
             (c.last.clone(), c.last.starts_with("dig:"))
@@ -2156,7 +2864,7 @@ mod chem_play_tests {
         assert_mirrors_chem(&s);
         // The dug cell is a visible (not hidden) cell on the cut face.
         s.pointer_button(2, true);
-        s.step(1);
+        s.step(2);
         let c = s.chem.as_ref().unwrap();
         assert!(
             c.last.starts_with("place:") || c.last == "place_refused:cut",
@@ -2196,6 +2904,36 @@ mod chem_play_tests {
         assert!(!s.chem_set_cut(CHEM_CUT_WEDGE, 0));
         assert!(!s.chem_cut().active());
         assert!(s.cut_view.is_none());
+    }
+
+    /// §6ae: the mirror names changed cells from the domain's z-runs; they give every domain
+    /// cell's coordinate, before and after a place grows the domain, and the cached runs follow
+    /// the domain.
+    #[test]
+    fn mirror_rows_name_every_domain_cell() {
+        fn check(s: &PlaySession) {
+            let chem = s.chem.as_ref().unwrap();
+            let cells = chem.world.cells();
+            let rows = domain_rows(cells);
+            let mut r = 0;
+            for (i, &c) in cells.iter().enumerate() {
+                assert_eq!(row_cell(&rows, &mut r, i), c, "cell {i}");
+            }
+            assert_eq!(chem.mirror_rows.0, cells.len());
+            assert_eq!(chem.mirror_rows.1, rows);
+        }
+        let mut s = chem_startup(CHEM_PRESET_ASH);
+        s.step(8);
+        check(&s);
+        let before = s.chem.as_ref().unwrap().world.domain_len();
+        let far = bitblock_core::world::Coord::new(0, 200, 0);
+        s.inputs
+            .edits
+            .push(PendingEdit::Exact(Edit::new(Operation::On, far)));
+        s.step(8);
+        assert_eq!(s.chem.as_ref().unwrap().world.domain_len(), before + 1);
+        check(&s);
+        assert_mirrors_chem(&s);
     }
 
     #[test]
@@ -2289,7 +3027,8 @@ mod chem_play_tests {
     fn chem_status_reports_lanes_drift_and_bag() {
         let s = chem_startup(CHEM_PRESET_OCEAN);
         let text = s.chem_status().unwrap();
-        assert!(text.starts_with("bitblock_play_chem ok preset=ocean seed=7 radius=12 tick=1 "));
+        // §6ah: the startup tick sent the first step; it is published four ticks later.
+        assert!(text.starts_with("bitblock_play_chem ok preset=ocean seed=7 radius=12 tick=0 "));
         assert!(text.contains(" books=ok "));
         assert!(text.contains(" drift=H:0,O:0,C:0,N:0,S:0,Ca:0,Fe:0,Ni:0,Si:0,Mg:0,Na:0,K:0 "));
         assert!(PlaySession::new().chem_status().is_none());
@@ -2345,11 +3084,11 @@ mod chem_play_tests {
         let mut repaint_without_occupancy = 0;
         for _ in 0..40 {
             let renders = s.renders();
-            let before = s.chem.as_ref().unwrap().material_hash;
+            let before = s.chem.as_ref().unwrap().material_changes;
             s.chem_queue(1);
             s.step(1);
             let chem = s.chem.as_ref().unwrap();
-            if chem.material_hash != before {
+            if chem.material_changes != before {
                 assert!(s.renders() > renders, "material change must repaint");
                 if chem.last_step_changed == 0 {
                     repaint_without_occupancy += 1;
@@ -2360,6 +3099,293 @@ mod chem_play_tests {
             repaint_without_occupancy > 0,
             "rocky recolours in place (rock -> sediment)"
         );
+        assert_mirrors_chem(&s);
+    }
+
+    /// §6ah worker path in-process: the batch bytes go to a second chem world (the engine a
+    /// worker would own) and its result bytes come back.
+    fn shuttle(s: &mut PlaySession, host: &mut ChemPlay) -> bool {
+        let Some(bytes) = s.chem_take_outbox() else {
+            return false;
+        };
+        let batch = crate::chem_link::decode_batch(&bytes).expect("batch decodes");
+        let (report, refused) = host.process(&batch);
+        let delta = crate::chem_link::encode_delta(host, &report, refused);
+        assert!(s.chem_put_inbox(delta));
+        // The worker precomputes the next report's books while idle (on alternate batches
+        // here): the reports must not depend on it.
+        if s.link.sent.is_multiple_of(2) {
+            host.precompute_books();
+        }
+        true
+    }
+
+    /// The worker path's replica shows what the fallback's engine (the published state)
+    /// holds: cells, materials, occupancy; and the worker's engine keeps its books closed.
+    fn assert_replica(remote: &PlaySession, local: &PlaySession, host: &ChemPlay) {
+        let shown = remote.chem.as_ref().unwrap();
+        let engine = local.chem.as_ref().unwrap();
+        assert_eq!(shown.world.cells(), engine.world.cells());
+        assert_eq!(shown.world.mats(), engine.world.mats());
+        assert_eq!(
+            world_tag(shown.world.world()),
+            world_tag(engine.world.world())
+        );
+        assert_eq!(world_tag(&remote.world), world_tag(shown.world.world()));
+        assert_eq!(host.world.check_books(), Ok(()));
+        assert_eq!(host.world.energy_drift(), 0);
+    }
+
+    /// The scripted inputs of tick `k` (looks, wheel, dig / place clicks, dynamics, pause /
+    /// manual steps / resume, a cross-section on and off, exact edits).
+    fn script(s: &mut PlaySession, k: u32) {
+        if k % 7 == 3 {
+            s.pointer_button(0, true);
+            s.pointer_button(0, false);
+        }
+        if k % 11 == 5 {
+            s.pointer_button(2, true);
+            s.pointer_button(2, false);
+        }
+        if k.is_multiple_of(13) {
+            s.look(17.0, -3.0);
+        }
+        if k == 20 {
+            s.wheel(2.0);
+        }
+        if k == 30 {
+            assert!(s.chem_set_dynamics(1, 1));
+        }
+        if k == 41 {
+            s.chem_set_auto(0);
+        }
+        if k == 47 {
+            s.chem_queue(3);
+        }
+        if k == 52 {
+            s.chem_set_auto(3);
+        }
+        if k == 60 {
+            assert!(s.chem_set_cut(CHEM_CUT_X, 0));
+        }
+        if k == 70 {
+            assert!(s.chem_set_cut(CHEM_CUT_OFF, 0));
+        }
+        if k % 17 == 9 {
+            let c = s.chem.as_ref().unwrap();
+            let cell = c.world.cells()[c.world.domain_len() / 2 + k as usize];
+            for op in [Operation::Toggle, Operation::Off, Operation::On] {
+                s.inputs.edits.push(PendingEdit::Exact(Edit::new(op, cell)));
+            }
+        }
+    }
+
+    /// §6ah: the worker path (results through bytes from a second chem world, in-process
+    /// here) and the single-thread fallback publish the same chem states on the same ticks:
+    /// play world, history, frames (output buffer), status and chem readouts are equal after
+    /// every tick, with edits, dynamics, pause / manual steps, a cut and camera moves; and
+    /// the replica equals the engine's cells, materials and occupancy.
+    #[test]
+    fn lagged_worker_path_equals_fallback() {
+        let mut refused = 0;
+        for (preset, radius) in [(2_u32, 10_u32), (4, 10), (1, 8)] {
+            let mk = || {
+                let mut s = PlaySession::with_chem(preset, 7, radius).unwrap();
+                s.set_layout(320, 180, true);
+                s.set_capture(true);
+                s
+            };
+            let (mut local, mut remote) = (mk(), mk());
+            assert!(remote.chem_set_remote(true));
+            let mut host = ChemPlay::new(preset, 7, radius).unwrap();
+            for k in 1..=90_u32 {
+                script(&mut local, k);
+                script(&mut remote, k);
+                let a = local.step(1);
+                assert!(!remote.chem_blocked(), "k={k}");
+                let b = remote.step(1);
+                assert_eq!(a, b, "preset {preset} k={k} painted");
+                shuttle(&mut remote, &mut host);
+                let at = format!("preset {preset} k={k}");
+                assert_eq!(local.status_with(true), remote.status_with(true), "{at}");
+                assert_eq!(local.chem_status(), remote.chem_status(), "{at}");
+                assert!(local.rgba() == remote.rgba(), "{at} rgba");
+                assert_mirrors_chem(&local);
+                assert_replica(&remote, &local, &host);
+                refused += u32::from(local.link.report.last.contains("refused"));
+            }
+            assert!(
+                local.link.landed > 20,
+                "preset {preset}: {} landings",
+                local.link.landed
+            );
+            assert_eq!(local.link.landed, remote.link.landed);
+        }
+        assert!(refused > 0, "the script exercises refusals");
+    }
+
+    /// §6ah: a late worker result holds the session at the landing tick (ticks before it
+    /// run; the landing waits) and changes nothing once delivered: the session then equals
+    /// one that got every result at once, tick for tick.
+    #[test]
+    fn worker_failure_replays_only_published_batches_without_losing_edits() {
+        for failure_tick in [0, 1, 4, 11, 36, 69] {
+            let mk = || {
+                let mut s = PlaySession::with_chem(2, 7, 10).unwrap();
+                s.set_layout(320, 180, true);
+                s.set_capture(true);
+                s
+            };
+            let (mut local, mut remote) = (mk(), mk());
+            assert!(remote.chem_set_remote(true));
+            let mut host = ChemPlay::new(2, 7, 10).unwrap();
+            for k in 0..90 {
+                script(&mut local, k);
+                script(&mut remote, k);
+                if k == failure_tick {
+                    assert!(remote.chem_recover_local());
+                    assert!(!remote.chem_recover_local());
+                }
+                local.step(1);
+                remote.step(1);
+                shuttle(&mut remote, &mut host);
+                assert_eq!(local.status(), remote.status(), "fail={failure_tick} k={k}");
+                assert_eq!(local.chem_status(), remote.chem_status());
+                assert_eq!(local.rgba(), remote.rgba());
+            }
+            assert_eq!(local.link.landed, remote.link.landed);
+            assert_mirrors_chem(&remote);
+            assert_eq!(remote.chem.as_ref().unwrap().world.check_books(), Ok(()));
+            assert_eq!(remote.chem.as_ref().unwrap().world.energy_drift(), 0);
+        }
+    }
+
+    #[test]
+    fn late_worker_results_stall_at_the_landing_tick_only() {
+        let mk = || {
+            let mut s = PlaySession::with_chem(CHEM_PRESET_GAS, 7, 10).unwrap();
+            s.set_layout(320, 180, true);
+            assert!(s.chem_set_remote(true));
+            s
+        };
+        let (mut prompt, mut late) = (mk(), mk());
+        let mut hp = ChemPlay::new(CHEM_PRESET_GAS, 7, 10).unwrap();
+        let mut hl = ChemPlay::new(CHEM_PRESET_GAS, 7, 10).unwrap();
+        let mut held: Option<Vec<u8>> = None;
+        for k in 0..60_u32 {
+            prompt.step(1);
+            shuttle(&mut prompt, &mut hp);
+            // the late session runs paced steps of 3 ticks and gets each result 2 calls late
+            let (_, sent, ran) = late.step_lagged(3);
+            assert!(ran <= 3);
+            if sent {
+                let bytes = late.chem_take_outbox().unwrap();
+                assert!(held.is_none());
+                held = Some(bytes);
+            }
+            if k % 3 == 2
+                && let Some(bytes) = held.take()
+            {
+                let batch = crate::chem_link::decode_batch(&bytes).unwrap();
+                let (r, n) = hl.process(&batch);
+                assert!(late.chem_put_inbox(crate::chem_link::encode_delta(&hl, &r, n)));
+            }
+            if late.chem_blocked() {
+                assert!(late.link.inbox.is_none());
+            }
+        }
+        // catch the prompt one up to the late one's tick (or the reverse) and compare
+        while prompt.tick < late.tick {
+            prompt.step(1);
+            shuttle(&mut prompt, &mut hp);
+        }
+        while late.tick < prompt.tick {
+            if let Some(bytes) = held.take() {
+                let batch = crate::chem_link::decode_batch(&bytes).unwrap();
+                let (r, n) = hl.process(&batch);
+                assert!(late.chem_put_inbox(crate::chem_link::encode_delta(&hl, &r, n)));
+            }
+            late.step(1);
+            if let Some(b) = late.chem_take_outbox() {
+                held = Some(b);
+            }
+        }
+        assert!(late.tick > 40);
+        assert_eq!(prompt.last_world_tag, late.last_world_tag);
+        assert_eq!(prompt.chem_status(), late.chem_status());
+        assert_eq!(hp.world.mats(), hl.world.mats());
+    }
+
+    /// §6ah: two fresh fallback sessions under the same script are identical tick for tick.
+    #[test]
+    fn lagged_schedule_is_reproducible() {
+        let mk = || {
+            let mut s = PlaySession::with_chem(CHEM_PRESET_OCEAN, 7, 10).unwrap();
+            s.set_layout(320, 180, true);
+            s.set_capture(true);
+            s
+        };
+        let (mut a, mut b) = (mk(), mk());
+        for k in 1..=60 {
+            script(&mut a, k);
+            script(&mut b, k);
+            a.step(1);
+            b.step(1);
+            assert_eq!(a.status_with(true), b.status_with(true), "k={k}");
+            assert_eq!(a.chem_status(), b.chem_status(), "k={k}");
+        }
+    }
+
+    /// §6ah: every queued edit is applied or refused exactly once, by the engine, against the
+    /// chem state at application: a second dig of a cell dug earlier in the same batch is
+    /// refused, a place pays from the bag once, and books stay closed.
+    #[test]
+    fn queued_edits_apply_or_refuse_once_in_order() {
+        let mut s = chem_startup(CHEM_PRESET_ROCKY);
+        pause_chem(&mut s);
+        let (cell, bag0, n0) = {
+            let c = s.chem.as_ref().unwrap();
+            let cell = c
+                .world
+                .cells()
+                .iter()
+                .copied()
+                .find(|&x| {
+                    let mut probe = c.world.clone();
+                    probe.dig(x).is_some()
+                })
+                .expect("a diggable cell");
+            (cell, c.world.inventory(), s.world.iter_on().count())
+        };
+        for op in [Operation::Off, Operation::Off, Operation::On, Operation::On] {
+            s.inputs.edits.push(PendingEdit::Exact(Edit::new(op, cell)));
+        }
+        s.step(1);
+        assert_eq!(s.world.iter_on().count(), n0, "queued, not yet published");
+        assert_eq!(s.link.in_flight.as_ref().map(|b| b.ops.len()), Some(4));
+        s.step(1);
+        let c = s.chem.as_ref().unwrap();
+        // off (dig) ok; off again: the bit is already off, nothing to do; on (place) ok, paid
+        // from the bag; on again: the bit is on, nothing to do. One cell, net unchanged.
+        assert_eq!(s.world.iter_on().count(), n0);
+        assert!(c.world.material(cell) != MatId::AIR);
+        assert!(c.last.starts_with("place:"), "last={}", c.last);
+        assert_eq!(c.world.inventory(), bag0, "the dig paid the place");
+        assert_mirrors_chem(&s);
+        // Two aimed digs in one window target the same (still shown) cell: one applies.
+        s.set_capture(true);
+        s.pointer_button(0, true);
+        s.pointer_button(0, false);
+        s.pointer_button(0, true);
+        s.pointer_button(0, false);
+        s.step(1);
+        let ops = s.link.in_flight.as_ref().unwrap().ops.clone();
+        assert_eq!(ops.len(), 2);
+        assert_eq!(ops[0], ops[1]);
+        s.step(1);
+        let c = s.chem.as_ref().unwrap();
+        assert!(c.last.starts_with("dig_refused"), "second dig: {}", c.last);
+        assert_eq!(s.world.iter_on().count(), n0 - 1);
         assert_mirrors_chem(&s);
     }
 

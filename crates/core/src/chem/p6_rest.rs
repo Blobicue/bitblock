@@ -20,10 +20,300 @@
 //! is y ascending, then x, then z over the whole domain (on planet6's grid
 //! that is exactly its `for y, for x, for z` with the MASK test).
 
-use super::p6::{NB6, StepReport, Topology, WaterCycle, wide_roll};
+use super::p6::{
+    NB6, NO_SLOT, RollKey, StepReport, Topology, WaterCycle, find_mat, find_mat2, hit_mask,
+    wide_roll, wide_roll_finish,
+};
 use super::vapor::{EvapTop, RainFall};
+
+#[cfg(test)]
+thread_local! {
+    /// Test switch: the sparse and row-wise scans fall back to their plain whole-domain
+    /// loops, so a test can compare the two on one world.
+    pub(crate) static FULL_SCANS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Test switch (§6t): the AIR/WATER-sparse scans run on any world, however many fluid
+    /// cells it holds, so a test can compare them with the full loops on fluid-rich worlds.
+    pub(crate) static ANY_SPARSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The most fluid cells a sparse scan takes (`limit`, or no bound under the test switch).
+#[inline]
+fn sparse_limit(limit: usize) -> usize {
+    #[cfg(test)]
+    if ANY_SPARSE.with(|f| f.get()) {
+        return usize::MAX;
+    }
+    limit
+}
+
+#[inline]
+pub(crate) fn full_scans() -> bool {
+    #[cfg(test)]
+    {
+        FULL_SCANS.with(|f| f.get())
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
 use super::{ChemWorld, MatId, NE};
 use crate::world::Coord;
+
+/// §6t: the indices of the cells holding `a` or `b`, in index order, or `None` when there are
+/// more than `limit` of them (a scan over so many is no cheaper than the dense loop).
+fn sparse_cells(mat: &[MatId], a: MatId, b: MatId, limit: usize) -> Option<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut next = 0;
+    while let Some(i) = find_mat2(mat, next, a, b) {
+        if out.len() >= limit {
+            return None;
+        }
+        out.push(i);
+        next = i + 1;
+    }
+    Some(out)
+}
+
+/// §6t: the visit order of a column-top scan (uplift, plume) whose candidate `t` must have a
+/// fluid (AIR/WATER) cell straight above it at its visit. Dense visits every cell in index
+/// order; sparse visits, in the same order, the cells below a fluid cell at the start plus the
+/// cells below any cell a firing turned fluid, so every cell the dense loop would get past
+/// its fluid test is visited, in the same order and seeing the same state.
+enum TopScan {
+    Dense(usize, usize),
+    Sparse(
+        std::collections::BinaryHeap<std::cmp::Reverse<usize>>,
+        Option<usize>,
+    ),
+}
+
+impl TopScan {
+    fn new(w: &ChemWorld, topo: &Topology) -> Self {
+        let n = w.cells.len();
+        if full_scans() {
+            return TopScan::Dense(0, n);
+        }
+        match sparse_cells(&w.mat, MatId::AIR, MatId::WATER, sparse_limit(n / 16)) {
+            Some(fl) => TopScan::Sparse(
+                fl.into_iter()
+                    .filter_map(|a| topo.offset(&w.cells, a, (0, -1, 0)))
+                    .map(std::cmp::Reverse)
+                    .collect(),
+                None,
+            ),
+            None => TopScan::Dense(0, n),
+        }
+    }
+
+    fn next(&mut self) -> Option<usize> {
+        match self {
+            TopScan::Dense(i, n) => {
+                let t = *i;
+                (t < *n).then(|| {
+                    *i += 1;
+                    t
+                })
+            }
+            TopScan::Sparse(heap, last) => {
+                while let Some(std::cmp::Reverse(t)) = heap.pop() {
+                    if last.is_none_or(|l| t > l) {
+                        *last = Some(t);
+                        return Some(t);
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    /// After a firing at `t` rewrote `path`: the cells below a path cell that is fluid now
+    /// become candidates (those past `t`; the dense loop has already passed the rest).
+    fn fired(&mut self, w: &ChemWorld, topo: &Topology, path: &[usize], t: usize) {
+        if let TopScan::Sparse(heap, _) = self {
+            for &p in path {
+                if w.fluid(w.mat[p])
+                    && let Some(b) = topo.offset(&w.cells, p, (0, -1, 0))
+                    && b > t
+                {
+                    heap.push(std::cmp::Reverse(b));
+                }
+            }
+        }
+    }
+}
+
+/// Reused buffers of the outward gas rise and [`ChemWorld::convect_pass`] (the rise's
+/// materials gathered into rsort order and its swaps, the convection density, candidate,
+/// move and swap bits), kept across steps so a step does not allocate per domain cell. Each pass
+/// clears or rewrites every buffer it reads before reading it.
+/// §6aj, wasm: the density tests of [`ChemWorld::convect_pass`] in two steps, each cell's
+/// result as a byte (a loop short enough to keep its values in registers, where the bit
+/// gathering one spilled them), then 16 bytes at a time to bits. The same tests on the same
+/// values: each cell's test reads only its own pair, so its byte is what its bit was.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn convect_tests_bytes(
+    up_runs: &[[u32; 3]],
+    (mat, q): (&[MatId], &[i32]),
+    (below_mass, above_mass, rising): (&[i64; 256], &[i64; 256], &[bool; 256]),
+    bytes: &mut Vec<u8>,
+    pass: &mut [u64],
+) {
+    use core::arch::wasm32::{i8x16_bitmask, v128_load};
+    bytes.clear();
+    bytes.resize(pass.len() * 64, 0);
+    for &[start, len, up] in up_runs {
+        let (a, m, u) = (start as usize, len as usize, up as usize);
+        let below = mat[a..a + m].iter().zip(&q[a..a + m]);
+        let above = mat[u..u + m].iter().zip(&q[u..u + m]);
+        for (o, ((&mi, &qi), (&mu, &qu))) in bytes[a..a + m].iter_mut().zip(below.zip(above)) {
+            let mb = below_mass[mi.0 as usize];
+            let ma = above_mass[mu.0 as usize];
+            let tb = i64::from(qi) + CONVECT_T0;
+            let ta = i64::from(qu) + CONVECT_T0;
+            let ok = rising[mi.0 as usize]
+                & rising[mu.0 as usize]
+                & (tb > 0)
+                & (ta > 0)
+                & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
+            // 0xff for a pass: the bitmask below reads each byte's top bit.
+            *o = 0u8.wrapping_sub(u8::from(ok));
+        }
+    }
+    for (word, b) in pass.iter_mut().zip(bytes.chunks_exact(64)) {
+        let mut bits = 0u64;
+        for k in 0..4 {
+            // SAFETY: `b` is 64 bytes, so its bytes `16 * k..16 * k + 16` are in bounds, and
+            // `v128_load` has no alignment requirement.
+            let v = unsafe { v128_load(b.as_ptr().add(16 * k).cast()) };
+            bits |= u64::from(i8x16_bitmask(v)) << (16 * k);
+        }
+        *word = bits;
+    }
+}
+
+/// §6aj, wasm: the candidate bits of [`ChemWorld::gas_rise_up`], the same bits: 16
+/// materials at a time are looked up in the rising set with two nibble shuffles (bit `h` of
+/// `by_lo[h / 8][lo]` is `rising[16 * h + lo]`), and only the rising ones are read further.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn rise_candidates(mat: &[MatId], rising: &[bool; 256], rise_pos: &[u32], cand: &mut [u64]) {
+    use core::arch::wasm32::{
+        i8x16_bitmask, i8x16_swizzle, u8x16, u8x16_lt, u8x16_ne, u8x16_shr, u8x16_splat, v128,
+        v128_and, v128_bitselect, v128_load,
+    };
+    let mut by_lo = [[0u8; 16]; 2];
+    for (m, &r) in rising.iter().enumerate() {
+        if r {
+            by_lo[m / 128][m % 16] |= 1 << ((m / 16) % 8);
+        }
+    }
+    // SAFETY: each table is 16 bytes and `v128_load` has no alignment requirement.
+    let (ta, tb) = unsafe {
+        (
+            v128_load(by_lo[0].as_ptr().cast::<v128>()),
+            v128_load(by_lo[1].as_ptr().cast::<v128>()),
+        )
+    };
+    let hbit = u8x16(1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128);
+    let (lo_mask, eight, zero) = (u8x16_splat(15), u8x16_splat(8), u8x16_splat(0));
+    let mut mark = |i: usize| {
+        let k = rise_pos[i];
+        if k != NO_SLOT {
+            cand[k as usize / 64] |= 1 << (k % 64);
+        }
+    };
+    let n = mat.len();
+    let mut i = 0;
+    while i + 16 <= n {
+        let m: &[MatId; 16] = mat[i..i + 16].try_into().expect("16 materials");
+        let v = u8x16(
+            m[0].0, m[1].0, m[2].0, m[3].0, m[4].0, m[5].0, m[6].0, m[7].0, m[8].0, m[9].0,
+            m[10].0, m[11].0, m[12].0, m[13].0, m[14].0, m[15].0,
+        );
+        let (lo, hi) = (v128_and(v, lo_mask), u8x16_shr(v, 4));
+        let row = v128_bitselect(
+            i8x16_swizzle(ta, lo),
+            i8x16_swizzle(tb, lo),
+            u8x16_lt(hi, eight),
+        );
+        let hit = u8x16_ne(v128_and(row, i8x16_swizzle(hbit, hi)), zero);
+        let mut bits = i8x16_bitmask(hit);
+        while bits != 0 {
+            mark(i + bits.trailing_zeros() as usize);
+            bits &= bits - 1;
+        }
+        i += 16;
+    }
+    for (j, m) in mat.iter().enumerate().skip(i) {
+        if rising[m.0 as usize] {
+            mark(j);
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct ConvectScratch {
+    smat: Vec<MatId>,
+    swaps: Vec<(u32, u32)>,
+    /// One bit per rsort position: its pair passes the density test (and, on the driven
+    /// path, the roll); see [`ChemWorld::convect_pass`].
+    cand: Vec<u64>,
+    /// One bit per domain cell: its pair passes the density test (see
+    /// [`ChemWorld::convect_pass`]).
+    pass: Vec<u64>,
+    /// §6aj, wasm: one byte per domain cell, the density test's result (see
+    /// [`convect_tests_bytes`]).
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    pass_bytes: Vec<u8>,
+    /// One bit per domain cell: it and its outward neighbour swap this tick.
+    swapped: Vec<u64>,
+    /// One bit per `ysort` position still to visit in the sparse flow scan (see
+    /// [`ChemWorld::flow_pass`]).
+    flow_queue: Vec<u64>,
+    /// One bit per `Topology::rise` pair: its lower cell is rising (see
+    /// [`ChemWorld::gas_rise_up`]).
+    rise_cand: Vec<u64>,
+    /// The cells a flow pass wrote, see [`FlowLog`].
+    flow_log: FlowLog,
+    /// One bit per rsort position: the parcel there moved this tick.
+    moved: Vec<u64>,
+}
+
+/// §6ac: the cells one [`ChemWorld::flow_pass`] wrote, each with whether it was AIR when the
+/// pass first wrote it (`seen` holds one bit per domain cell and is all zero between passes).
+/// The pass writes materials only; its occupancy edits are applied once at the end, for the
+/// cells whose AIR-ness the pass changed. A sloshing cell that is emptied and refilled in the
+/// same pass (most of them) then costs no world edit.
+#[derive(Default)]
+pub(crate) struct FlowLog {
+    seen: Vec<u64>,
+    cells: Vec<(u32, bool)>,
+}
+
+impl FlowLog {
+    /// Records `i` (AIR or not before its first write in this pass).
+    #[inline]
+    fn touch(&mut self, i: usize, was_air: bool) {
+        let (w, b) = (i / 64, 1u64 << (i % 64));
+        if self.seen[w] & b == 0 {
+            self.seen[w] |= b;
+            self.cells.push((i as u32, was_air));
+        }
+    }
+}
+
+/// A clone starts with empty scratch: the buffers hold no state between steps.
+impl Clone for ConvectScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for ConvectScratch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ConvectScratch({} parcels)", self.smat.len())
+    }
+}
 
 /// Heat a vapor pair carries aloft, released on rain (planet6 `LATENT_PAIR`).
 pub const LATENT_PAIR: i32 = 30;
@@ -184,6 +474,8 @@ const SALT_FLOW: u32 = 0xf10_c0de;
 
 /// Fixed sideways order of `stepFlow`: `(dx, dz)`.
 const FLOW_SIDE: [(i64, i64); 4] = [(0, -1), (-1, 0), (0, 1), (1, 0)];
+/// [`FLOW_SIDE`] as [`NB6`] indices.
+const FLOW_SIDE_NB6: [usize; 4] = [4, 0, 5, 1];
 
 /// §5y gas convection temperature offset: `T = Q + CONVECT_T0` in the
 /// ideal-gas density test (Q is 0-based heat, so T must stay positive).
@@ -209,9 +501,9 @@ impl ChemWorld {
         if !self.params.convect {
             return;
         }
-        let Some(o) = self.grav_core(topo) else {
+        if self.grav_core(topo).is_none() {
             return;
-        };
+        }
         let mut mass = [0i64; 256];
         for (m, slot) in mass.iter_mut().enumerate() {
             let id = MatId(m as u8);
@@ -221,46 +513,351 @@ impl ChemWorld {
                 *slot = (0..NE).map(|k| c[k] * LANE_MASS[k]).sum();
             }
         }
-        let len = topo.rsort.len();
-        let mut moved = vec![false; self.cells.len()];
-        for k in 0..len {
-            let i = topo.rsort[len - 1 - k] as usize;
-            let mb = mass[self.mat[i].0 as usize];
-            if mb == 0 || moved[i] {
-                continue;
+        let below_mass = mass.map(|m| m.wrapping_mul(1000 + CONVECT_MARGIN_PERMILLE));
+        let above_mass = mass.map(|m| m.wrapping_mul(1000));
+        // Outermost first over rsort. A parcel moves at most once per tick, so every density
+        // test reads the values the domain holds when the pass starts (the outward gas rise
+        // has already written its trades back), and so does any test the scan reaches before
+        // either parcel moved. The tests therefore run first, once per domain cell in domain
+        // order against its outward neighbour (`Topology::cell_up`, a few rows or planes away,
+        // so the reads stay near each other), 64 cells to a word, and the passing pairs are
+        // then rolled (§6ad: the tests read runs of cells, see below). The scan then visits, in
+        // the original order, only the rsort positions whose bit is set, and skips a pair one
+        // of whose parcels already moved (the test could have read nothing else that differs).
+        // The roll is a pure function of the cell and tick, so rolling only those pairs is the
+        // same as rolling every pair that reaches it. The swaps are applied after the scan,
+        // the same `set_mat` / heat-swap calls as swapping in place (see below).
+        // The density test is `mb * ta * 1010 < ma * tb * 1000` in wrapping i64; wrapping
+        // multiplication is associative and commutative, so scaling each mass once per
+        // material first gives the same products.
+        let n = topo.rsort.len();
+        let mut sc = std::mem::take(&mut self.convect_scratch);
+        let cell_up = topo.cell_up();
+        let words = n.div_ceil(64);
+        let convect_key = self.roll_key(SALT_CONVECT);
+        // Driven rolls: the salt-and-cell links of each roll are static, kept by the topology
+        // in domain order, so the pairs that pass the density test are rolled right here and
+        // the survivors marked by rsort position (`Topology::rsort_pos`). A roll is a pure
+        // function of the cell and tick, so rolling every passing pair is the same as rolling
+        // each pair the scan reaches. On the lattice path the scan rolls instead.
+        let roll_cells = match convect_key {
+            RollKey::Wide(key) => topo.cell_roll_cells(key, &self.cells),
+            RollKey::Lattice(_) => None,
+        };
+        let rsort_pos = topo.rsort_pos();
+        let tick = self.tick;
+        let (cand, moved, swapped) = (&mut sc.cand, &mut sc.moved, &mut sc.swapped);
+        cand.clear();
+        cand.resize(words, 0);
+        let rising: [bool; 256] = std::array::from_fn(|m| mass[m] != 0);
+        let (mat, q) = (&self.mat[..n], &self.q[..n]);
+        let cell_up = &cell_up[..n];
+        // §6ad: the tests run over the runs of cells whose outward neighbours are consecutive
+        // too (`Topology::up_runs`, ~30 cells each), so both parcels are read as slices; a
+        // cell with no outward neighbour passes nothing.
+        let pass = &mut sc.pass;
+        pass.clear();
+        pass.resize(words, 0);
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        convect_tests_bytes(
+            topo.up_runs(),
+            (mat, q),
+            (&below_mass, &above_mass, &rising),
+            &mut sc.pass_bytes,
+            pass,
+        );
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+        for &[start, len, up] in topo.up_runs() {
+            let (start, len, up) = (start as usize, len as usize, up as usize);
+            // Split the run at word boundaries so each word's bits gather in a register.
+            let mut a = start;
+            while a < start + len {
+                let b = ((a / 64 + 1) * 64).min(start + len);
+                let u = up + (a - start);
+                let below = mat[a..b].iter().zip(&q[a..b]);
+                let above = mat[u..u + (b - a)].iter().zip(&q[u..u + (b - a)]);
+                let mut bits = 0u64;
+                for (j, ((&mi, &qi), (&mu, &qu))) in (a % 64..).zip(below.zip(above)) {
+                    let mb = below_mass[mi.0 as usize];
+                    let ma = above_mass[mu.0 as usize];
+                    let tb = i64::from(qi) + CONVECT_T0;
+                    let ta = i64::from(qu) + CONVECT_T0;
+                    let ok = rising[mi.0 as usize]
+                        & rising[mu.0 as usize]
+                        & (tb > 0)
+                        & (ta > 0)
+                        & (mb.wrapping_mul(ta) < ma.wrapping_mul(tb));
+                    bits |= u64::from(ok) << j;
+                }
+                pass[a / 64] |= bits;
+                a = b;
             }
-            let p = self.cells[i];
-            let st = outward_step((p.x - o.x, p.y - o.y, p.z - o.z));
-            if st == (0, 0, 0) {
-                continue;
-            }
-            let Some(up) = topo.offset(&self.cells, i, st) else {
-                continue;
-            };
-            let ma = mass[self.mat[up].0 as usize];
-            if ma == 0 || moved[up] {
-                continue;
-            }
-            let tb = i64::from(self.q[i]) + CONVECT_T0;
-            let ta = i64::from(self.q[up]) + CONVECT_T0;
-            if tb <= 0 || ta <= 0 {
-                continue;
-            }
-            // lower parcel lighter: rho_b = M_b / T_b < rho_a = M_a / T_a
-            if mb * ta * (1000 + CONVECT_MARGIN_PERMILLE) >= ma * tb * 1000 {
-                continue;
-            }
-            if self.roll(topo, SALT_CONVECT, i) >= CONVECT_ODDS {
-                continue;
-            }
-            let (m_b, m_a) = (self.mat[i], self.mat[up]);
-            self.set_mat(i, m_a);
-            self.set_mat(up, m_b);
-            self.q.swap(i, up);
-            moved[i] = true;
-            moved[up] = true;
-            rep.convected += 1;
         }
+        for (w, &word) in pass.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let i = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let rolled = roll_cells
+                    .is_none_or(|cells| wide_roll_finish(cells[i], tick) % 1000 < CONVECT_ODDS);
+                let k = rsort_pos[i] as usize;
+                cand[k / 64] |= u64::from(rolled) << (k % 64);
+            }
+        }
+        // The scan, outermost first: candidates in descending rsort position. A swapped pair
+        // is marked by its lower parcel's cell.
+        moved.clear();
+        moved.resize(words, 0);
+        swapped.clear();
+        swapped.resize(words, 0);
+        let is_moved = |moved: &[u64], k: usize| moved[k / 64] >> (k % 64) & 1 == 1;
+        let mut swaps = 0u32;
+        for w in (0..words).rev() {
+            let mut bits = cand[w];
+            while bits != 0 {
+                let top = 63 - bits.leading_zeros() as usize;
+                bits &= !(1u64 << top);
+                let k = w * 64 + top;
+                let ku = topo.shell_up[k] as usize;
+                if is_moved(moved, k) || is_moved(moved, ku) {
+                    continue;
+                }
+                let i = topo.rsort[k] as usize;
+                if roll_cells.is_none() && self.roll_keyed(topo, convect_key, i) >= CONVECT_ODDS {
+                    continue;
+                }
+                moved[k / 64] |= 1 << (k % 64);
+                moved[ku / 64] |= 1 << (ku % 64);
+                swapped[i / 64] |= 1 << (i % 64);
+                swaps += 1;
+            }
+        }
+        // The swaps are disjoint pairs (each parcel moves at most once), so applying them in
+        // domain order of the lower cell leaves the same materials, heat and occupancy bits
+        // as applying them in scan order: each `set_mat` reads only its own cell's old value.
+        for (w, &word) in sc.swapped.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let i = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let up = cell_up[i] as usize;
+                // Both parcels are rising gas (non-zero mass), never AIR, so the two
+                // `set_mat` calls would only write the materials (no occupancy bit changes).
+                debug_assert!(self.mat[i] != MatId::AIR && self.mat[up] != MatId::AIR);
+                self.mat.swap(i, up);
+                self.q.swap(i, up);
+            }
+        }
+        rep.convected += swaps;
+        self.convect_scratch = sc;
+    }
+
+    /// Gathers the domain's materials into rsort order.
+    fn gather_parcels(&self, topo: &Topology, sc: &mut ConvectScratch) {
+        sc.smat.clear();
+        sc.smat
+            .extend(topo.rsort.iter().map(|&i| self.mat[i as usize]));
+    }
+
+    /// planet6's gas rise under Gravity::Core: outermost first over rsort, a rising cell
+    /// trades places with the AIR or WATER one outward step above it.
+    ///
+    /// The scan reads the materials gathered into rsort order (its outward neighbour is an
+    /// rsort position, [`Topology::shell_up`]) and makes each trade there as well, so every
+    /// test sees the materials an in-place scan would see; the trades are then replayed in
+    /// scan order, the same `set_mat` calls with the same values.
+    pub(crate) fn gas_rise_outward(&mut self, topo: &Topology, rep: &mut StepReport) {
+        let mut sc = std::mem::take(&mut self.convect_scratch);
+        // A rising cell trades only with AIR or WATER and a trade keeps both counts, so with
+        // neither in the domain the scan trades nothing: skip it and its gather (this tick's
+        // convection then gathers the same values itself).
+        if !full_scans() && find_mat2(&self.mat, 0, MatId::AIR, MatId::WATER).is_none() {
+            sc.swaps.clear();
+            self.convect_scratch = sc;
+            return;
+        }
+        sc.swaps.clear();
+        let rising: [bool; 256] = std::array::from_fn(|m| self.is_rising(MatId(m as u8)));
+        let key = self.roll_key(0xb0b81e);
+        if !full_scans()
+            && let Some(fluid) = sparse_cells(
+                &self.mat,
+                MatId::AIR,
+                MatId::WATER,
+                sparse_limit(topo.rsort.len() / 64),
+            )
+        {
+            self.convect_scratch = sc;
+            self.gas_rise_outward_sparse(topo, &fluid, &rising, key, rep);
+            return;
+        }
+        self.gather_parcels(topo, &mut sc);
+        for k in (0..topo.rsort.len()).rev() {
+            let below = sc.smat[k];
+            if !rising[below.0 as usize] {
+                continue;
+            }
+            let ku = topo.shell_up[k];
+            if ku == NO_SLOT {
+                continue;
+            }
+            let ku = ku as usize;
+            let above = sc.smat[ku];
+            if above != MatId::AIR && above != MatId::WATER {
+                continue;
+            }
+            let i = topo.rsort[k] as usize;
+            // §5u: displaced WATER may not be pushed down into a radial-only shell cell
+            if above == MatId::WATER && self.shell_blocked(i) {
+                continue;
+            }
+            if self.roll_keyed(topo, key, i) < 500 {
+                sc.smat[ku] = below;
+                sc.smat[k] = above;
+                sc.swaps.push((i as u32, topo.rsort[ku]));
+            }
+        }
+        for &(i, up) in &sc.swaps {
+            let (i, up) = (i as usize, up as usize);
+            let (below, above) = (self.mat[i], self.mat[up]);
+            self.set_mat(up, below);
+            self.set_mat(i, above);
+            rep.rose += 1;
+        }
+        self.convect_scratch = sc;
+    }
+
+    /// §6t: [`Self::gas_rise_outward`] on a domain with few AIR/WATER cells (a dug gas planet).
+    /// A pair trades only when its outward cell holds AIR or WATER at the visit, and the only
+    /// write that makes a cell AIR/WATER is a trade's lower cell. So the scan visits, outermost
+    /// first, just the rsort positions whose outward cell is AIR/WATER at the start, plus the
+    /// cells just inside a trade's lower cell (those still ahead of the scan), with the same
+    /// tests on the live materials. Each trade is applied as it is made, which is the same
+    /// sequence of `set_mat` calls the gathered scan replays.
+    fn gas_rise_outward_sparse(
+        &mut self,
+        topo: &Topology,
+        fluid: &[usize],
+        rising: &[bool; 256],
+        key: RollKey,
+        rep: &mut StepReport,
+    ) {
+        let cell_up = topo.cell_up();
+        let rsort_pos = topo.rsort_pos();
+        let mut heap = std::collections::BinaryHeap::new();
+        let inside = |heap: &mut std::collections::BinaryHeap<u32>,
+                      cells: &[Coord],
+                      u: usize,
+                      below: u32| {
+            for k in 0..26usize {
+                let k = if k >= 13 { k + 1 } else { k };
+                let d = (
+                    (k / 9) as i64 - 1,
+                    ((k / 3) % 3) as i64 - 1,
+                    (k % 3) as i64 - 1,
+                );
+                if let Some(c) = topo.offset(cells, u, d)
+                    && cell_up[c] as usize == u
+                    && rsort_pos[c] < below
+                {
+                    heap.push(rsort_pos[c]);
+                }
+            }
+        };
+        for &u in fluid {
+            inside(&mut heap, &self.cells, u, u32::MAX);
+        }
+        let mut last = u32::MAX;
+        while let Some(k) = heap.pop() {
+            if k >= last {
+                continue;
+            }
+            last = k;
+            let i = topo.rsort[k as usize] as usize;
+            let below = self.mat[i];
+            if !rising[below.0 as usize] {
+                continue;
+            }
+            let ku = topo.shell_up[k as usize];
+            if ku == NO_SLOT {
+                continue;
+            }
+            let up = topo.rsort[ku as usize] as usize;
+            let above = self.mat[up];
+            if above != MatId::AIR && above != MatId::WATER {
+                continue;
+            }
+            if above == MatId::WATER && self.shell_blocked(i) {
+                continue;
+            }
+            if self.roll_keyed(topo, key, i) < 500 {
+                self.set_mat(up, below);
+                self.set_mat(i, above);
+                rep.rose += 1;
+                inside(&mut heap, &self.cells, i, k);
+            }
+        }
+    }
+
+    /// planet6's +y gas rise (`Topology::rise` order: y descending, then x, z): a rising cell
+    /// trades places with the AIR or WATER cell above it.
+    ///
+    /// The whole-list scan visits every pair. Only a pair whose lower cell is rising can
+    /// trade, and that cell still holds its tick-start material when its pair is visited: a
+    /// trade writes only its own two cells, the cell above sits one row higher (its own pair
+    /// came earlier) and each cell is the lower cell of at most one pair. So the pairs whose
+    /// lower cell is rising at the start are found first, in domain order (`rise_pos`), and
+    /// visited in list order with the same tests on the live materials and the same
+    /// `set_mat` calls in the same order. With no AIR or WATER in the domain nothing can trade
+    /// (a trade keeps both counts), so the scan is skipped.
+    pub(crate) fn gas_rise_up(&mut self, topo: &Topology, rep: &mut StepReport) {
+        if find_mat2(&self.mat, 0, MatId::AIR, MatId::WATER).is_none() {
+            return;
+        }
+        let rising: [bool; 256] = std::array::from_fn(|m| self.is_rising(MatId(m as u8)));
+        let rise_pos = topo.rise_pos();
+        let mut sc = std::mem::take(&mut self.convect_scratch);
+        let cand = &mut sc.rise_cand;
+        cand.clear();
+        cand.resize(topo.rise.len().div_ceil(64), 0);
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        rise_candidates(&self.mat, &rising, rise_pos, cand);
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+        for (i, m) in self.mat.iter().enumerate() {
+            if rising[m.0 as usize] {
+                let k = rise_pos[i];
+                if k != NO_SLOT {
+                    cand[k as usize / 64] |= 1 << (k % 64);
+                }
+            }
+        }
+        for (w, &word) in sc.rise_cand.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let k = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                let (i, up) = topo.rise[k];
+                let (i, up) = (i as usize, up as usize);
+                if !rising[self.mat[i].0 as usize] {
+                    continue;
+                }
+                let above = self.mat[up];
+                if above != MatId::AIR && above != MatId::WATER {
+                    continue;
+                }
+                // §5u: displaced WATER may not be pushed down into a radial-only shell cell
+                if above == MatId::WATER && self.shell_blocked(i) {
+                    continue;
+                }
+                if self.roll(topo, 0xb0b81e, i) < 500 {
+                    let below = self.mat[i];
+                    self.set_mat(up, below);
+                    self.set_mat(i, above);
+                    rep.rose += 1;
+                }
+            }
+        }
+        self.convect_scratch = sc;
     }
 
     /// §5w coreward frame for this tick: the core cell's coordinate when
@@ -343,8 +940,13 @@ impl ChemWorld {
     pub(crate) fn reset_marks(&mut self) {
         if self.params.cycle == WaterCycle::Driven {
             let n = self.cells.len();
-            self.marks.clear();
-            self.marks.resize(n, 0);
+            // §6aa: with no mark written since the last clear the buffer already holds `n`
+            // zeros when its length is `n`.
+            if self.marked || self.marks.len() != n {
+                self.marks.clear();
+                self.marks.resize(n, 0);
+            }
+            self.marked = false;
         }
     }
 
@@ -352,6 +954,7 @@ impl ChemWorld {
     pub(crate) fn mark(&mut self, i: usize, m: u8) {
         if let Some(x) = self.marks.get_mut(i) {
             *x |= m;
+            self.marked |= m != 0;
         }
     }
 
@@ -430,8 +1033,10 @@ impl ChemWorld {
         // §5v diagnostic (outside every book): evaporation / rain split by
         // the core's world y (lower = y < core y)
         let core_y = topo.core.map(|c| self.cells[c as usize].y);
-        for i in 0..n {
-            if self.mat[i] != MatId::WATER || self.q[i] <= EVAP_Q {
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat[..n], next, MatId::WATER) {
+            next = i + 1;
+            if self.q[i] <= EVAP_Q {
                 continue;
             }
             if !self.evap_open(topo, frame, i) {
@@ -702,11 +1307,14 @@ impl ChemWorld {
         if !self.params.erode {
             return;
         }
-        for i in 0..self.cells.len() {
-            let m = self.mat[i];
-            if m != MatId::ROCK && m != MatId::MIN {
-                continue;
-            }
+        // §6aa: a cell erodes only beside a mark; with none this tick (every mark 0) the
+        // scan fires nothing.
+        if !self.marked && !full_scans() {
+            return;
+        }
+        let mut next = 0;
+        while let Some(i) = find_mat2(&self.mat, next, MatId::ROCK, MatId::MIN) {
+            next = i + 1;
             let nm = self.nb_marks(topo, i);
             if nm == 0 {
                 continue;
@@ -731,12 +1339,10 @@ impl ChemWorld {
         if !self.params.dissolve {
             return;
         }
-        let n = self.cells.len();
         let mut intents: Vec<(usize, usize)> = Vec::new();
-        for i in 0..n {
-            if self.mat[i] != MatId::GYP {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::GYP) {
+            next = i + 1;
             let mut wet = 0u8;
             let mut air = None;
             for j in topo.nb6(&self.cells, i).into_iter().flatten() {
@@ -781,10 +1387,9 @@ impl ChemWorld {
         if !self.params.settle {
             return;
         }
-        for i in 0..self.cells.len() {
-            if self.mat[i] != MatId::SED {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::SED) {
+            next = i + 1;
             let yi = self.cells[i].y;
             // §5w: "its own level or below" in r2 (one-unit tangent slack)
             let core = self.coreward() && !topo.r2.is_empty();
@@ -840,6 +1445,11 @@ impl ChemWorld {
         let track_mask = self.params.sun_sweep.track_mask();
         let seed = self.params.seed;
         let tick = self.tick;
+        // Only ROCK / MIN cells weather; with none in the domain nothing below can fire
+        // (the sky test has no side effects).
+        let Some(first) = find_mat2(&self.mat, 0, MatId::ROCK, MatId::MIN) else {
+            return;
+        };
         // With a sky shell the sun-track proxy sees through open air: a face on
         // a sky-open AIR cell (an all-AIR column up to space) counts as lit,
         // like a face on space. No shell: planet6 space faces only.
@@ -854,11 +1464,9 @@ impl ChemWorld {
         } else {
             Vec::new()
         };
-        for i in 0..self.cells.len() {
-            let m = self.mat[i];
-            if m != MatId::ROCK && m != MatId::MIN {
-                continue;
-            }
+        let mut next = first;
+        while let Some(i) = find_mat2(&self.mat, next, MatId::ROCK, MatId::MIN) {
+            next = i + 1;
             let mut open = false;
             let mut lit = 0u32;
             for (k, j) in topo.nb6(&self.cells, i).into_iter().enumerate() {
@@ -903,10 +1511,9 @@ impl ChemWorld {
         let tick = self.tick;
         // §5w: "below" and "level" toward the core under Gravity::Core
         let gc = self.grav_core(topo);
-        for i in 0..self.cells.len() {
-            if self.mat[i] != MatId::SED {
-                continue;
-            }
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::SED) {
+            next = i + 1;
             let below = match gc {
                 Some(o) => {
                     let (set, k) = Self::inward_support(o, self.cells[i]);
@@ -1010,11 +1617,19 @@ impl ChemWorld {
         if !self.params.settle || self.params.energy_in.core <= 0 {
             return;
         }
+        // A candidate needs a surface fluid slot in the domain, and this pass only
+        // permutes the existing materials: with no AIR or WATER no candidate can fire.
+        if find_mat(&self.mat, 0, MatId::AIR).is_none()
+            && find_mat(&self.mat, 0, MatId::WATER).is_none()
+        {
+            return;
+        }
         let seed = self.params.seed;
         let tick = self.tick;
         let mut fired = 0u32;
         let mut path: Vec<usize> = Vec::new();
-        for t in 0..self.cells.len() {
+        let mut scan = TopScan::new(self, topo);
+        while let Some(t) = scan.next() {
             if fired >= UPLIFT_MAX_PER_TICK {
                 break;
             }
@@ -1126,6 +1741,7 @@ impl ChemWorld {
             }
             fired += 1;
             rep.uplifted += 1;
+            scan.fired(self, topo, &path, t);
         }
     }
 
@@ -1164,6 +1780,13 @@ impl ChemWorld {
         if !self.params.settle || self.params.energy_in.core <= 0 {
             return;
         }
+        // A candidate needs a surface fluid slot in the domain, and this pass only
+        // permutes the existing materials: with no AIR or WATER no candidate can fire.
+        if find_mat(&self.mat, 0, MatId::AIR).is_none()
+            && find_mat(&self.mat, 0, MatId::WATER).is_none()
+        {
+            return;
+        }
         let seed = self.params.seed;
         let tick = self.tick;
         let mut fired = 0u32;
@@ -1171,7 +1794,8 @@ impl ChemWorld {
         let span = (PLUME_REACH_MAX - PLUME_REACH_MIN + 1) as u32;
         let mut path: Vec<usize> = Vec::new();
         let mut chan: Vec<usize> = Vec::new();
-        for t in 0..self.cells.len() {
+        let mut scan = TopScan::new(self, topo);
+        while let Some(t) = scan.next() {
             if fired >= PLUME_MAX_PER_TICK {
                 break;
             }
@@ -1311,6 +1935,7 @@ impl ChemWorld {
             }
             fired += 1;
             rep.plumed += 1;
+            scan.fired(self, topo, &path, t);
         }
     }
 
@@ -1451,11 +2076,13 @@ impl ChemWorld {
         let seed = self.params.seed;
         let tick = self.tick;
         let mut fired = 0u32;
-        for i in 0..self.cells.len() {
+        let mut next = 0;
+        while let Some(i) = find_mat(&self.mat, next, MatId::WATER) {
+            next = i + 1;
             if fired >= DEGAS_MAX_PER_TICK {
                 break;
             }
-            if self.mat[i] != MatId::WATER || self.q[i] <= DEGAS_Q {
+            if self.q[i] <= DEGAS_Q {
                 continue;
             }
             let odds = ((self.q[i] - DEGAS_Q) as u32)
@@ -1545,6 +2172,11 @@ impl ChemWorld {
         if !self.params.settle {
             return;
         }
+        // Collapse only swaps a solid with an AIR in the domain; with no AIR it cannot
+        // change anything (the roll is cell-keyed, with no mutable RNG state).
+        if find_mat(&self.mat, 0, MatId::AIR).is_none() {
+            return;
+        }
         let Some(o) = topo.core else { return };
         let o = self.cells[o as usize];
         let coreward = self.coreward();
@@ -1552,7 +2184,40 @@ impl ChemWorld {
         let tick = self.tick;
         let n = self.cells.len();
         let mut moved = vec![false; n];
-        for c in 0..n {
+        // §6t: a cell falls only into its inward target, and that target must be AIR and not
+        // yet moved at the visit, i.e. AIR at the start of the pass (every cell a fall writes
+        // is marked moved). So with few AIR cells only the cells whose inward step lands on one
+        // can fall: visit just those, in index order, with the same body.
+        let sparse = if full_scans() {
+            None
+        } else {
+            sparse_cells(&self.mat, MatId::AIR, MatId::AIR, sparse_limit(n / 128)).map(|air| {
+                let mut cand = Vec::new();
+                for u in air {
+                    for k in 0..26usize {
+                        let k = if k >= 13 { k + 1 } else { k };
+                        let d = (
+                            (k / 9) as i64 - 1,
+                            ((k / 3) % 3) as i64 - 1,
+                            (k % 3) as i64 - 1,
+                        );
+                        if let Some(c) = topo.offset(&self.cells, u, (-d.0, -d.1, -d.2))
+                            && Self::inward_support(o, self.cells[c]).0[0] == d
+                        {
+                            cand.push(c);
+                        }
+                    }
+                }
+                cand.sort_unstable();
+                cand.dedup();
+                cand
+            })
+        };
+        let order: Box<dyn Iterator<Item = usize>> = match sparse {
+            Some(cand) => Box::new(cand.into_iter()),
+            None => Box::new(0..n),
+        };
+        for c in order {
             if moved[c] || !self.rock_like(self.mat[c]) {
                 continue;
             }
@@ -1610,22 +2275,47 @@ impl ChemWorld {
         }
         let n = self.cells.len();
         let tkey = self.tick >> 3;
-        for i in 0..n {
-            if self.mat[i] != MatId::WATER {
+        // Only WATER with Q > 200 can evaporate and a visit writes only its own cell, so a
+        // block's candidates are known before its first visit (the surface test and the roll
+        // are pure reads of other cells' materials and of the cell's key).
+        // The row passes read each row as one run.
+        let rows = topo.zruns.as_ref().filter(|zr| zr.contiguous());
+        if let Some(zr) = rows
+            && !full_scans()
+        {
+            self.evaporate_rows(topo, zr, tkey, rep);
+        }
+        let mut base = if rows.is_some() && !full_scans() {
+            n
+        } else {
+            0
+        };
+        while base < n {
+            let end = (base + 64).min(n);
+            if find_mat(&self.mat[base..end], 0, MatId::WATER).is_none() {
+                base = end;
                 continue;
             }
-            if let Some(up) = topo.offset(&self.cells, i, (0, 1, 0))
-                && self.mat[up] == MatId::WATER
-            {
-                continue; // buried: not surface
+            let mut bits = hit_mask(&self.mat[base..end], &self.q[base..end], |m, q| {
+                (m == MatId::WATER) & (q > 200)
+            });
+            while bits != 0 {
+                let i = base + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                if let Some(up) = topo.face(&self.cells, i, 3)
+                    && self.mat[up] == MatId::WATER
+                {
+                    continue; // buried: not surface
+                }
+                if self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
+                    self.set_mat(i, MatId::AIR);
+                    self.vapor += 1;
+                    self.evaporated += 1;
+                    self.q[i] = (self.q[i] - LATENT_PAIR).max(0);
+                    rep.evaporated += 1;
+                }
             }
-            if self.q[i] > 200 && self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
-                self.set_mat(i, MatId::AIR);
-                self.vapor += 1;
-                self.evaporated += 1;
-                self.q[i] = (self.q[i] - LATENT_PAIR).max(0);
-                rep.evaporated += 1;
-            }
+            base = end;
         }
         let phase = self.tick % SEASON;
         let raining = self.vapor > 0 && (RAIN_START..RAIN_END).contains(&phase);
@@ -1635,14 +2325,20 @@ impl ChemWorld {
         let mut drops = self.vapor.min(DROPS);
         // each drop rescans from the first cell (planet6's restart loop)
         while drops > 0 {
-            let hit = (0..n).find(|&i| {
-                self.mat[i] == MatId::AIR
-                    && topo
-                        .nb6(&self.cells, i)
-                        .into_iter()
-                        .flatten()
-                        .any(|j| self.mat[j] == MatId::WATER)
-            });
+            let mut hit = None;
+            let mut next = 0;
+            while let Some(i) = find_mat(&self.mat, next, MatId::AIR) {
+                next = i + 1;
+                if topo
+                    .nb6(&self.cells, i)
+                    .into_iter()
+                    .flatten()
+                    .any(|j| self.mat[j] == MatId::WATER)
+                {
+                    hit = Some(i);
+                    break;
+                }
+            }
             let Some(i) = hit else {
                 break; // no waterline: vapor waits (humid sky)
             };
@@ -1655,9 +2351,152 @@ impl ChemWorld {
         }
     }
 
+    /// The evaporation scan of [`Self::water_cycle_pass`] over z-runs, the same visits in index
+    /// order. A row's surface WATER (WATER whose cell above, in the next row up, is not
+    /// WATER) is found from the two row slices before the row's first visit: a visit writes
+    /// only its own cell, which is neither another cell of the row nor a cell above one, so
+    /// no visit changes another's surface test. Only surface WATER reads its heat and rolls.
+    fn evaporate_rows(
+        &mut self,
+        topo: &Topology,
+        zr: &super::p6::ZRuns,
+        tkey: u64,
+        rep: &mut StepReport,
+    ) {
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+        let mut surf: Vec<bool> = Vec::new();
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        let mut above: Vec<u8> = Vec::new();
+        for run in &zr.runs {
+            let (s, len) = (run.start, (run.z1 - run.z0 + 1) as usize);
+            let row = &self.mat[s..s + len];
+            if !row.iter().fold(false, |h, &m| h | (m == MatId::WATER)) {
+                continue;
+            }
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            self.evaporate_row_simd(topo, zr, run, tkey, &mut above, rep);
+            #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+            {
+                surf.clear();
+                surf.extend(row.iter().map(|&m| m == MatId::WATER));
+                if let Some(a) = zr.row(Some(run.x), run.y.checked_add(1)) {
+                    let (lo, hi) = (run.z0.max(a.z0), run.z1.min(a.z1));
+                    if lo <= hi {
+                        let m = (hi - lo + 1) as usize;
+                        let off = (lo - run.z0) as usize;
+                        let at = a.start + (lo - a.z0) as usize;
+                        for (f, &u) in surf[off..off + m].iter_mut().zip(&self.mat[at..at + m]) {
+                            *f &= u != MatId::WATER; // buried: not surface
+                        }
+                    }
+                }
+                for (k, &f) in surf.iter().enumerate() {
+                    let i = s + k;
+                    if !f || self.q[i] <= 200 {
+                        continue;
+                    }
+                    if self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
+                        self.set_mat(i, MatId::AIR);
+                        self.vapor += 1;
+                        self.evaporated += 1;
+                        self.q[i] = (self.q[i] - LATENT_PAIR).max(0);
+                        rep.evaporated += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// §6ak, wasm: one row of [`Self::evaporate_rows`], the same visits in the same order.
+    /// The row above is copied into `above` (lanes it does not cover hold a non-WATER
+    /// byte), then 16 cells at a time take `WATER & !above WATER & Q > 200` as one mask
+    /// and visit its bits in order. A visit writes only its own cell, never another cell's
+    /// material, heat or the row above, so each test reads what the row-wide one read.
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    fn evaporate_row_simd(
+        &mut self,
+        topo: &Topology,
+        zr: &super::p6::ZRuns,
+        run: &super::p6::ZRun,
+        tkey: u64,
+        above: &mut Vec<u8>,
+        rep: &mut StepReport,
+    ) {
+        use core::arch::wasm32::{
+            i8x16_bitmask, i8x16_narrow_i16x8, i16x8_narrow_i32x4, i32x4_gt, i32x4_splat, u8x16,
+            u8x16_eq, u8x16_splat, v128, v128_and, v128_andnot, v128_load,
+        };
+        let (s, len) = (run.start, (run.z1 - run.z0 + 1) as usize);
+        let water = MatId::WATER.0;
+        above.clear();
+        above.resize(len, !water);
+        if let Some(a) = zr.row(Some(run.x), run.y.checked_add(1)) {
+            let (lo, hi) = (run.z0.max(a.z0), run.z1.min(a.z1));
+            if lo <= hi {
+                let m = (hi - lo + 1) as usize;
+                let off = (lo - run.z0) as usize;
+                let at = a.start + (lo - a.z0) as usize;
+                for (d, u) in above[off..off + m].iter_mut().zip(&self.mat[at..at + m]) {
+                    *d = u.0;
+                }
+            }
+        }
+        let (wv, hot) = (u8x16_splat(water), i32x4_splat(200));
+        let mut k0 = 0;
+        while k0 < len {
+            let mut bits: u32 = if k0 + 16 <= len {
+                let m: &[MatId; 16] = self.mat[s + k0..s + k0 + 16].try_into().expect("16");
+                let row = u8x16(
+                    m[0].0, m[1].0, m[2].0, m[3].0, m[4].0, m[5].0, m[6].0, m[7].0, m[8].0, m[9].0,
+                    m[10].0, m[11].0, m[12].0, m[13].0, m[14].0, m[15].0,
+                );
+                let q = &self.q[s + k0..s + k0 + 16];
+                // SAFETY: `above` has `len >= k0 + 16` bytes and `q` is 16 i32 (64 bytes),
+                // so every load is in bounds; `v128_load` has no alignment requirement.
+                let (up, g) = unsafe {
+                    let qp = q.as_ptr().cast::<v128>();
+                    let g = [0, 1, 2, 3].map(|j| i32x4_gt(v128_load(qp.add(j)), hot));
+                    (v128_load(above.as_ptr().add(k0).cast::<v128>()), g)
+                };
+                let gt = i8x16_narrow_i16x8(
+                    i16x8_narrow_i32x4(g[0], g[1]),
+                    i16x8_narrow_i32x4(g[2], g[3]),
+                );
+                let cand = v128_and(v128_andnot(u8x16_eq(row, wv), u8x16_eq(up, wv)), gt);
+                u32::from(i8x16_bitmask(cand))
+            } else {
+                let mut b = 0u32;
+                for (k, &up) in above.iter().enumerate().skip(k0) {
+                    let i = s + k;
+                    let f = (self.mat[i] == MatId::WATER) & (up != water) & (self.q[i] > 200);
+                    b |= u32::from(f) << (k - k0);
+                }
+                b
+            };
+            while bits != 0 {
+                let i = s + k0 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                if self.roll_at(topo, SALT_EVAP, i, tkey) < 8 {
+                    self.set_mat(i, MatId::AIR);
+                    self.vapor += 1;
+                    self.evaporated += 1;
+                    self.q[i] = (self.q[i] - LATENT_PAIR).max(0);
+                    rep.evaporated += 1;
+                }
+            }
+            k0 += 16;
+        }
+    }
+
     /// planet6 `stepErode`: in storms, exposed ROCK/MINERAL weathers to SED.
     pub(crate) fn erode_pass(&mut self, topo: &Topology, rep: &mut StepReport) {
         if !self.params.erode || !self.storm() {
+            return;
+        }
+        if let Some(zr) = topo.zruns.as_ref().filter(|zr| zr.contiguous())
+            && !full_scans()
+        {
+            self.erode_runs(topo, zr, rep);
             return;
         }
         for i in 0..self.cells.len() {
@@ -1676,6 +2515,69 @@ impl ChemWorld {
         }
     }
 
+    /// [`Self::erode_pass`] over z-runs, same cells in the same order. A cell's exposure (a face
+    /// out of the domain, or on AIR/WATER) is taken for a whole row from contiguous slices of
+    /// its own and the four neighbouring rows; the pass only turns ROCK/MINERAL into SED, so
+    /// no visit changes whether any cell is AIR/WATER and the row's exposure taken before
+    /// its first visit is what each visit would see.
+    fn erode_runs(&mut self, topo: &Topology, zr: &super::p6::ZRuns, rep: &mut StepReport) {
+        let fluid = |m: MatId| (m == MatId::AIR) | (m == MatId::WATER);
+        let mut exposed: Vec<bool> = Vec::new();
+        for run in &zr.runs {
+            let (s, len) = (run.start, (run.z1 - run.z0 + 1) as usize);
+            if !self.mat[s..s + len]
+                .iter()
+                .fold(false, |h, &m| h | (m == MatId::ROCK) | (m == MatId::MIN))
+            {
+                continue;
+            }
+            exposed.clear();
+            exposed.resize(len, false);
+            // z faces: the run's ends face out of the domain
+            exposed[0] = true;
+            exposed[len - 1] = true;
+            if len > 1 {
+                let row = &self.mat[s..s + len];
+                for k in 1..len {
+                    exposed[k] |= fluid(row[k - 1]);
+                    exposed[k - 1] |= fluid(row[k]);
+                }
+            }
+            for b in zr.beside(run) {
+                let Some(&b) = b.first() else {
+                    exposed.fill(true);
+                    break;
+                };
+                // cells beyond the neighbouring row face out of the domain
+                let lo = b.z0.max(run.z0);
+                let hi = b.z1.min(run.z1);
+                if lo > hi {
+                    exposed.fill(true);
+                    break;
+                }
+                exposed[..(lo - run.z0) as usize].fill(true);
+                exposed[(hi - run.z0 + 1) as usize..].fill(true);
+                let n = (hi - lo + 1) as usize;
+                let at = b.start + (lo - b.z0) as usize;
+                let off = (lo - run.z0) as usize;
+                for (e, &m) in exposed[off..off + n].iter_mut().zip(&self.mat[at..at + n]) {
+                    *e |= fluid(m);
+                }
+            }
+            for (k, &e) in exposed.iter().enumerate() {
+                let i = s + k;
+                let m = self.mat[i];
+                if m != MatId::ROCK && m != MatId::MIN {
+                    continue;
+                }
+                if e && self.roll(topo, 0, i) < 10 {
+                    self.set_mat(i, MatId::SED);
+                    rep.eroded += 1;
+                }
+            }
+        }
+    }
+
     /// planet6 `stepDissolve` (LAW v5.1, one claim round): in storms, wet
     /// GYPSUM with an AIR pocket collapses to SED and fills the pocket with
     /// its crystallisation water. Intents read the snapshot; the lowest
@@ -1684,13 +2586,42 @@ impl ChemWorld {
         if !self.params.dissolve || !self.storm() {
             return;
         }
-        let n = self.cells.len();
         // pass A - intent (pure snapshot reads)
         let mut intents: Vec<(usize, usize)> = Vec::new();
-        for i in 0..n {
-            if self.mat[i] != MatId::GYP {
-                continue;
-            }
+        // Only GYPSUM with an AIR face neighbour can intend, so with sparse AIR the scan
+        // visits just the GYPSUM faces of the AIR cells, in ascending index (pass A reads the
+        // snapshot, so which cells it visits cannot change what one visit sees).
+        let near: Option<Vec<u32>> = self.sparse_air().map(|air| {
+            let mut v: Vec<u32> = air
+                .iter()
+                .flat_map(|&a| topo.nb6(&self.cells, a as usize))
+                .flatten()
+                .filter(|&j| self.mat[j] == MatId::GYP)
+                .map(|j| j as u32)
+                .collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        });
+        let mut next = 0;
+        let mut k = 0;
+        loop {
+            let i = match &near {
+                Some(v) => match v.get(k) {
+                    Some(&i) => {
+                        k += 1;
+                        i as usize
+                    }
+                    None => break,
+                },
+                None => match find_mat(&self.mat, next, MatId::GYP) {
+                    Some(i) => {
+                        next = i + 1;
+                        i
+                    }
+                    None => break,
+                },
+            };
             let mut wet = false;
             let mut air = None;
             for j in topo.nb6(&self.cells, i).into_iter().flatten() {
@@ -1736,20 +2667,55 @@ impl ChemWorld {
             self.settle_core(topo, rep, o);
             return;
         }
-        for &i in &topo.ysort {
-            let i = i as usize;
-            if self.mat[i] != MatId::SED {
-                continue;
+        if full_scans() {
+            for &i in &topo.ysort {
+                self.settle_cell(topo, i as usize, rep);
             }
-            let Some(j) = topo.offset(&self.cells, i, (0, -1, 0)) else {
-                continue;
-            };
-            let below = self.mat[j];
-            if (below == MatId::AIR || below == MatId::WATER) && !self.shell_blocked(j) {
-                self.set_mat(j, MatId::SED);
-                self.set_mat(i, below);
-                rep.settled += 1;
+            return;
+        }
+        // §6ac: only a cell that is SED when visited can sink, and those are exactly the SED
+        // cells at the start, in `ysort` order. A sink writes SED only into the cell below
+        // (lower `y`, so earlier in the (y, x, z) order: already visited) and the visited cell
+        // itself, and the cell below was AIR or WATER, so no start SED cell changes before its
+        // visit and no other cell becomes SED before its own. With no SED nothing sinks.
+        let Some(first) = find_mat(&self.mat, 0, MatId::SED) else {
+            return;
+        };
+        let ypos = topo.ysort_pos();
+        let mut todo = std::mem::take(&mut self.convect_scratch.flow_queue);
+        todo.clear();
+        todo.resize(topo.ysort.len().div_ceil(64), 0);
+        let mut next = first;
+        while let Some(i) = find_mat(&self.mat, next, MatId::SED) {
+            next = i + 1;
+            let p = ypos[i] as usize;
+            todo[p / 64] |= 1 << (p % 64);
+        }
+        for (w, &word) in todo.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let p = w * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                self.settle_cell(topo, topo.ysort[p] as usize, rep);
             }
+        }
+        self.convect_scratch.flow_queue = todo;
+    }
+
+    /// One `stepSettle` visit of cell `i`: SED sinks into the AIR or WATER cell below.
+    #[inline]
+    fn settle_cell(&mut self, topo: &Topology, i: usize, rep: &mut StepReport) {
+        if self.mat[i] != MatId::SED {
+            return;
+        }
+        let Some(j) = topo.face(&self.cells, i, 2) else {
+            return;
+        };
+        let below = self.mat[j];
+        if (below == MatId::AIR || below == MatId::WATER) && !self.shell_blocked(j) {
+            self.set_mat(j, MatId::SED);
+            self.set_mat(i, below);
+            rep.settled += 1;
         }
     }
 
@@ -1763,27 +2729,140 @@ impl ChemWorld {
             self.flow_core(topo, rep, o);
             return;
         }
-        for &i in &topo.ysort {
-            let i = i as usize;
-            if self.mat[i] != MatId::WATER {
-                continue;
+        let mut log = std::mem::take(&mut self.convect_scratch.flow_log);
+        log.seen.resize(self.mat.len().div_ceil(64), 0);
+        let Some(air) = self.sparse_air() else {
+            for &i in &topo.ysort {
+                self.flow_cell(topo, i as usize, rep, &mut log);
             }
-            let down = topo
-                .offset(&self.cells, i, (0, -1, 0))
-                .filter(|&b| self.mat[b] == MatId::AIR && !self.shell_blocked(b));
-            let target = down.or_else(|| {
-                FLOW_SIDE.iter().find_map(|&(dx, dz)| {
-                    topo.offset(&self.cells, i, (dx, 0, dz))
-                        .filter(|&s| self.mat[s] == MatId::AIR && !self.shell_blocked(s))
-                })
-            });
-            if let Some(t) = target {
-                self.set_mat(t, MatId::WATER);
-                self.set_mat(i, MatId::AIR);
-                rep.flowed += 1;
-                self.mark(t, if down.is_some() { MARK_FALL } else { MARK_SIDE });
+            self.flow_commit(log);
+            return;
+        };
+        // A WATER cell moves only into an AIR face neighbour, so with sparse AIR the scan
+        // visits, in `ysort` order, just the WATER faces of the AIR cells plus the faces of
+        // each AIR cell a move leaves behind (a move's target is one of those). Every other
+        // cell of the full scan is a no-op visit: not WATER, or no AIR face when visited.
+        // The positions to visit are kept as one bit per `ysort` position and swept in
+        // ascending order: a move queues only positions after the current one, so the sweep
+        // meets each queued position once, in order (the same visits as a sorted queue).
+        let ypos = topo.ysort_pos();
+        let mut queue = std::mem::take(&mut self.convect_scratch.flow_queue);
+        queue.clear();
+        queue.resize(topo.ysort.len().div_ceil(64), 0);
+        for &a in &air {
+            for j in topo.nb6(&self.cells, a as usize).into_iter().flatten() {
+                if self.mat[j] == MatId::WATER {
+                    let p = ypos[j] as usize;
+                    queue[p / 64] |= 1 << (p % 64);
+                }
             }
         }
+        let mut w = 0;
+        while w < queue.len() {
+            let bits = queue[w];
+            if bits == 0 {
+                w += 1;
+                continue;
+            }
+            let b = bits.trailing_zeros() as usize;
+            queue[w] = bits & (bits - 1);
+            let next = w * 64 + b;
+            let i = topo.ysort[next] as usize;
+            if self.flow_cell(topo, i, rep, &mut log) {
+                for j in topo.nb6(&self.cells, i).into_iter().flatten() {
+                    let p = ypos[j] as usize;
+                    if p > next {
+                        queue[p / 64] |= 1 << (p % 64);
+                    }
+                }
+            }
+        }
+        self.convect_scratch.flow_queue = queue;
+        self.flow_commit(log);
+    }
+
+    /// §6ac: applies a flow pass's occupancy edits ([`FlowLog`]): `set_on` for each logged
+    /// cell the pass turned from AIR to WATER, then `set_off` for each it turned from WATER to
+    /// AIR (bedrock stays on, as in `set_mat`). The world's bits, counts, chunk bounds and `len`
+    /// end as the per-move `set_mat` edits leave them (a bit's final value is its cell's final
+    /// AIR-ness either way), and the deferred octree and world bounds are rebuilt from the
+    /// final bits at the flush. The ons go first, so a chunk is dropped only when the pass
+    /// leaves it empty.
+    fn flow_commit(&mut self, mut log: FlowLog) {
+        for &(i, was_air) in &log.cells {
+            let i = i as usize;
+            if was_air && self.mat[i] != MatId::AIR {
+                self.world.set_on(self.cells[i]);
+            }
+        }
+        for &(i, was_air) in &log.cells {
+            let i = i as usize;
+            if !was_air && self.mat[i] == MatId::AIR {
+                let c = self.cells[i];
+                if !crate::world::is_bedrock(c) {
+                    self.world.set_off(c);
+                }
+            }
+        }
+        for &(i, _) in &log.cells {
+            log.seen[i as usize / 64] = 0;
+        }
+        log.cells.clear();
+        self.convect_scratch.flow_log = log;
+    }
+
+    /// The AIR cells in index order when they are few enough (at most 1/8 of the domain)
+    /// for the AIR-driven sparse scans, else `None`.
+    pub(crate) fn sparse_air(&self) -> Option<Vec<u32>> {
+        if full_scans() {
+            return None;
+        }
+        let lim = self.mat.len() / 8;
+        let mut air = Vec::new();
+        let mut next = 0;
+        while let Some(a) = find_mat(&self.mat, next, MatId::AIR) {
+            if air.len() == lim {
+                return None;
+            }
+            air.push(a as u32);
+            next = a + 1;
+        }
+        Some(air)
+    }
+
+    /// One `stepFlow` visit of cell `i`; `true` when its WATER moved (`i` is now AIR). The
+    /// move writes the two materials only and logs both cells for [`Self::flow_commit`].
+    #[inline]
+    fn flow_cell(
+        &mut self,
+        topo: &Topology,
+        i: usize,
+        rep: &mut StepReport,
+        log: &mut FlowLog,
+    ) -> bool {
+        if self.mat[i] != MatId::WATER {
+            return false;
+        }
+        // the face neighbours from one box probe: down is NB6[2], the sides in
+        // FLOW_SIDE order (-z, -x, +z, +x) are NB6[4], NB6[0], NB6[5], NB6[1]
+        let nb = topo.nb6(&self.cells, i);
+        let down = nb[2].filter(|&b| self.mat[b] == MatId::AIR && !self.shell_blocked(b));
+        let target = down.or_else(|| {
+            FLOW_SIDE_NB6.iter().find_map(|&k| {
+                nb[k].filter(|&s| self.mat[s] == MatId::AIR && !self.shell_blocked(s))
+            })
+        });
+        let Some(t) = target else {
+            return false;
+        };
+        // t is AIR and i is WATER here
+        log.touch(t, true);
+        log.touch(i, false);
+        self.mat[t] = MatId::WATER;
+        self.mat[i] = MatId::AIR;
+        rep.flowed += 1;
+        self.mark(t, if down.is_some() { MARK_FALL } else { MARK_SIDE });
+        true
     }
 
     /// §5w coreward settle: inner cells first, a SED grain sinks one cell
@@ -1792,6 +2871,10 @@ impl ChemWorld {
     /// diagonal staircase is held by any solid tread); the displaced fluid
     /// moves out. A pure swap.
     fn settle_core(&mut self, topo: &Topology, rep: &mut StepReport, o: Coord) {
+        // Only SED cells sink and the pass makes no SED from other cells.
+        if find_mat(&self.mat, 0, MatId::SED).is_none() {
+            return;
+        }
         for &i in &topo.rsort {
             let i = i as usize;
             if self.mat[i] != MatId::SED {
@@ -1833,6 +2916,10 @@ impl ChemWorld {
     /// neighbour no more than one `r2` unit above it ([`Self::side_target`]).
     /// A pure swap; marks as `stepFlow` (fall / side).
     fn flow_core(&mut self, topo: &Topology, rep: &mut StepReport, o: Coord) {
+        // Only WATER cells move and the pass makes no new WATER from other cells.
+        if find_mat(&self.mat, 0, MatId::WATER).is_none() {
+            return;
+        }
         let n = self.cells.len();
         let seed = self.params.seed;
         let tick = self.tick;

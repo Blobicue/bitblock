@@ -330,7 +330,7 @@ before relying on any tag:
 
 | kind | viewport-dependent | why |
 | --- | --- | --- |
-| `#bb.world` | no, for one occupied set | `world_tag` hashes the sorted occupied coordinates and nothing else; local observer policy can still supply a different admitted set -- see below |
+| `#bb.world` | no, for one occupied set | `world_tag` (v2, `bitblock/world/chunk-merkle-sha256/v2`) hashes the sorted non-empty 16³ chunks of the occupied set, each as its coordinate plus a SHA-256 leaf over its 4096 occupancy bits, and nothing else; local observer policy can still supply a different admitted set -- see below |
 | history `#bb.receipt` | no, for one parent, local tick, and ordered exact-edit sequence | commits the transition, not the observer; local observer policy can still supply a different sequence |
 | `#bb.tick-outcome` | yes | dimensions, `post_camera` and frame commitments are all hashed |
 | `#bb.frame-input` | yes | `FrameInput::capture` takes the renderer width and height |

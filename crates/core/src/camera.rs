@@ -222,6 +222,11 @@ impl CameraProjection {
         self.position
     }
 
+    /// Focal length in physical pixels: screen offset per unit of `camera-space / depth`.
+    pub(crate) fn focal_length(self) -> f64 {
+        self.focal_length
+    }
+
     /// The depth [`Self::project`] would report for `point`, without the screen coordinates.
     ///
     /// It evaluates the same expression on the same operands, so it agrees bit for bit with
@@ -230,6 +235,22 @@ impl CameraProjection {
     pub(crate) fn view_depth(self, point: Vec3) -> f64 {
         let relative = point - self.position;
         relative.dot(self.basis.forward)
+    }
+
+    /// Whether `other` has the same bits in every field (so projects every point identically).
+    pub(crate) fn bit_identical(&self, other: &Self) -> bool {
+        let v = |a: Vec3, b: Vec3| {
+            a.x.to_bits() == b.x.to_bits()
+                && a.y.to_bits() == b.y.to_bits()
+                && a.z.to_bits() == b.z.to_bits()
+        };
+        v(self.position, other.position)
+            && v(self.basis.forward, other.basis.forward)
+            && v(self.basis.right, other.basis.right)
+            && v(self.basis.up, other.basis.up)
+            && self.focal_length.to_bits() == other.focal_length.to_bits()
+            && self.half_width.to_bits() == other.half_width.to_bits()
+            && self.half_height.to_bits() == other.half_height.to_bits()
     }
 
     pub(crate) fn project(self, point: Vec3) -> Option<ProjectedPoint> {
@@ -273,16 +294,7 @@ impl CameraProjection {
             return false;
         }
 
-        let corners = [
-            Vec3::new(min.x, min.y, min.z),
-            Vec3::new(min.x, min.y, max.z),
-            Vec3::new(min.x, max.y, min.z),
-            Vec3::new(min.x, max.y, max.z),
-            Vec3::new(max.x, min.y, min.z),
-            Vec3::new(max.x, min.y, max.z),
-            Vec3::new(max.x, max.y, min.z),
-            Vec3::new(max.x, max.y, max.z),
-        ];
+        let corners = bounds_corners(min, max);
 
         let mut all_behind = true;
         let mut all_left = true;
@@ -780,7 +792,8 @@ fn bounds_are_valid(min: Vec3, max: Vec3) -> bool {
     min.is_finite() && max.is_finite() && min.x <= max.x && min.y <= max.y && min.z <= max.z
 }
 
-fn bounds_corners(min: Vec3, max: Vec3) -> [Vec3; 8] {
+/// The eight corners of the axis-aligned box `[min, max]`.
+pub(crate) fn bounds_corners(min: Vec3, max: Vec3) -> [Vec3; 8] {
     [
         Vec3::new(min.x, min.y, min.z),
         Vec3::new(max.x, min.y, min.z),

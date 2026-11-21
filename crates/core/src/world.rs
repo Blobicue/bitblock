@@ -1,6 +1,54 @@
 //! Sparse 16x16x16 chunked voxel world, immutable origin bedrock, exposed-face masks, and 8-level sparse octree pyramid.
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::OnceLock;
+
+use crate::protocol::ContentTag;
+
+/// Fast deterministic hasher for the chunk and octant maps (Fx-style multiply-rotate over the
+/// coordinate words). Their keys are small integer coordinates, not attacker-chosen strings, and
+/// nothing observable depends on map iteration order: ordered iteration sorts, bounds are
+/// min/max folds, and with SipHash's per-process random keys the order already varied per run.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct CoordHasher(u64);
+
+impl CoordHasher {
+    #[inline]
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl Hasher for CoordHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0_u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.add(u64::from_le_bytes(word));
+        }
+    }
+    #[inline]
+    fn write_u8(&mut self, v: u8) {
+        self.add(u64::from(v));
+    }
+    #[inline]
+    fn write_u64(&mut self, v: u64) {
+        self.add(v);
+    }
+    #[inline]
+    fn write_i64(&mut self, v: i64) {
+        self.add(v as u64);
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        // The table indexes buckets by the low bits; fold the well-mixed high bits down.
+        self.0.rotate_left(26)
+    }
+}
+
+pub(crate) type CoordMap<K, V> = HashMap<K, V, BuildHasherDefault<CoordHasher>>;
 
 /// Number of coordinates along each axis of one sparse chunk.
 pub const CHUNK_SIDE: i64 = 16;
@@ -97,6 +145,9 @@ struct Chunk {
     bits: [u64; CHUNK_WORDS],
     count: u16,
     bounds: Bounds,
+    /// Leaf digest of this chunk for the incremental world fingerprint, computed on first use
+    /// and dropped by any bit change (see [`World::fingerprint`]).
+    digest: OnceLock<[u8; 32]>,
 }
 
 impl Chunk {
@@ -108,6 +159,7 @@ impl Chunk {
                 min: BEDROCK_COORD,
                 max: BEDROCK_COORD,
             },
+            digest: OnceLock::new(),
         }
     }
 
@@ -124,6 +176,7 @@ impl Chunk {
 
         let was_empty = self.count == 0;
         self.bits[word] |= mask;
+        self.digest = OnceLock::new();
         self.count += 1;
         if was_empty {
             self.bounds = Bounds {
@@ -149,38 +202,62 @@ impl Chunk {
         }
 
         self.bits[word] &= !mask;
+        self.digest = OnceLock::new();
         self.count -= 1;
         if self.count > 0 && bounds_touch(self.bounds, coord) {
-            let mut coords = World::iter_chunk_coords(chunk_coord, &self.bits);
-            if let Some(first) = coords.next() {
-                let mut bounds = Bounds {
-                    min: first,
-                    max: first,
-                };
-                for remaining in coords {
-                    bounds = merge_bounds(
-                        bounds,
-                        Bounds {
-                            min: remaining,
-                            max: remaining,
-                        },
-                    );
-                }
-                self.bounds = bounds;
-            }
+            self.bounds = tight_bounds(chunk_coord, &self.bits);
         }
         true
+    }
+}
+
+/// The tight inclusive bounds of a non-empty chunk bitset, read off whole words instead of
+/// visiting every on bit. Index `x + 16 (y + 16 z)` puts word `w` at `z = w / 4` holding the
+/// four 16-bit `x` rows `y = 4 (w % 4) + 0..4`, so `z` comes from the first and last non-zero
+/// word, `y` from the lowest and highest non-zero row of each word, and `x` from the union of
+/// all rows.
+fn tight_bounds(chunk: ChunkCoord, bits: &[u64; CHUNK_WORDS]) -> Bounds {
+    let first = bits.iter().position(|&w| w != 0).expect("non-empty chunk");
+    let last = bits.iter().rposition(|&w| w != 0).expect("non-empty chunk");
+    let (mut y_lo, mut y_hi, mut rows) = (usize::MAX, 0, 0_u64);
+    for (w, &word) in bits.iter().enumerate().take(last + 1).skip(first) {
+        if word == 0 {
+            continue;
+        }
+        let base = 4 * (w % 4);
+        y_lo = y_lo.min(base + word.trailing_zeros() as usize / 16);
+        y_hi = y_hi.max(base + (63 - word.leading_zeros() as usize) / 16);
+        rows |= word | word >> 16 | word >> 32 | word >> 48;
+    }
+    let rows = rows & 0xffff;
+    let side = CHUNK_SIDE as usize;
+    let at = |x: usize, y: usize, z: usize| join_coord(chunk, x + side * (y + side * z));
+    Bounds {
+        min: at(rows.trailing_zeros() as usize, y_lo, first / 4),
+        max: at(15 - (rows.leading_zeros() as usize - 48), y_hi, last / 4),
     }
 }
 
 /// A sparse bit world. Coordinates not present in an allocated chunk are off.
 #[derive(Clone, Debug)]
 pub struct World {
-    chunks: HashMap<ChunkCoord, Chunk>,
-    octree: [HashMap<OctantCoord, OctantSummary>; OCTREE_MAX_DEPTH as usize],
+    chunks: CoordMap<ChunkCoord, Chunk>,
+    octree: [CoordMap<OctantCoord, OctantSummary>; OCTREE_MAX_DEPTH as usize],
     revision_counter: u64,
     len: usize,
     bounds: Option<Bounds>,
+    /// Octree upkeep deferred by [`World::defer_octree`]: each changed chunk with the revision
+    /// of its latest edit, plus whether the world bounds must be recomputed at the flush.
+    deferred: Option<DeferredOctree>,
+    /// The world fingerprint of the current bits, computed on first use and dropped by any
+    /// change (see [`World::fingerprint`]).
+    fingerprint: OnceLock<ContentTag>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct DeferredOctree {
+    chunks: Vec<(ChunkCoord, u64)>,
+    bounds_stale: bool,
 }
 
 impl Default for World {
@@ -193,11 +270,13 @@ impl World {
     /// Creates a world containing exactly the permanent bedrock bit.
     pub fn new() -> Self {
         let mut world = Self {
-            chunks: HashMap::new(),
-            octree: std::array::from_fn(|_| HashMap::new()),
+            chunks: CoordMap::default(),
+            octree: std::array::from_fn(|_| CoordMap::default()),
             revision_counter: 0,
             len: 0,
             bounds: None,
+            deferred: None,
+            fingerprint: OnceLock::new(),
         };
         let inserted = world.set_on(BEDROCK_COORD);
         debug_assert!(inserted);
@@ -222,6 +301,16 @@ impl World {
         self.chunks
             .get(&chunk_coord)
             .is_some_and(|chunk| chunk.is_on(local_index))
+    }
+
+    /// A reader for [`Self::is_on`] that keeps the chunks it looked up recently, for scans
+    /// whose coordinates mostly share a chunk or return to a few nearby ones.
+    pub fn probe(&self) -> BitProbe<'_> {
+        BitProbe {
+            world: self,
+            last: None,
+            recent: [None; PROBE_WAYS],
+        }
     }
 
     /// Returns the 6-bit exposed-face mask for `coord` (`0` if `coord` is off).
@@ -327,6 +416,29 @@ impl World {
         mask
     }
 
+    /// The two-level fingerprint of the occupied bits: `root` over every non-empty chunk in
+    /// ascending [`ChunkCoord`] order with its `leaf` digest. Leaf digests are kept per chunk and
+    /// the root per world, each dropped when a bit under it changes, so after an edit only the
+    /// changed chunks are rehashed and the root rereads one digest per chunk. `leaf` and `root`
+    /// must be pure functions of their arguments (the canonical encoders in `history`), so a
+    /// cached value is the value a fresh computation would produce.
+    pub(crate) fn fingerprint(
+        &self,
+        leaf: impl Fn(ChunkCoord, &[u64; CHUNK_WORDS]) -> [u8; 32],
+        root: impl FnOnce(&[(ChunkCoord, [u8; 32])]) -> ContentTag,
+    ) -> ContentTag {
+        *self.fingerprint.get_or_init(|| {
+            let mut leaves: Vec<(ChunkCoord, [u8; 32])> = self
+                .chunks
+                .iter()
+                .filter(|(_, chunk)| chunk.count > 0)
+                .map(|(&key, chunk)| (key, *chunk.digest.get_or_init(|| leaf(key, &chunk.bits))))
+                .collect();
+            leaves.sort_unstable_by_key(|&(key, _)| key);
+            root(&leaves)
+        })
+    }
+
     /// Turns a coordinate on. Returns true only when the world changed.
     pub fn set_on(&mut self, coord: Coord) -> bool {
         let (chunk_coord, local_index) = split_coord(coord);
@@ -338,9 +450,10 @@ impl World {
 
         if changed {
             self.revision_counter += 1;
+            self.fingerprint = OnceLock::new();
             self.len += 1;
             self.extend_bounds(coord);
-            self.update_octree_ancestors(chunk_coord);
+            self.octree_changed(chunk_coord);
         }
         changed
     }
@@ -364,12 +477,20 @@ impl World {
         let touched_bounds = changed && self.coord_touches_bounds(coord);
         if changed {
             self.revision_counter += 1;
+            self.fingerprint = OnceLock::new();
             self.len -= 1;
         }
         if chunk_is_empty {
             self.chunks.remove(&chunk_coord);
         }
         if changed {
+            if let Some(deferred) = &mut self.deferred {
+                // The world bounds are rebuilt from the octree roots, which are stale until the
+                // flush; recompute them there (they are a function of the final bits alone).
+                deferred.bounds_stale |= touched_bounds;
+                self.octree_changed(chunk_coord);
+                return changed;
+            }
             self.update_octree_ancestors(chunk_coord);
             self.bounds = if self.len == 0 {
                 None
@@ -423,6 +544,10 @@ impl World {
 
     /// Exact inclusive bounds of the on coordinates.
     pub fn bounds(&self) -> Option<Bounds> {
+        assert!(
+            !self.deferred.as_ref().is_some_and(|d| d.bounds_stale),
+            "World::bounds read while deferred octree upkeep has stale bounds; flush_octree first"
+        );
         self.bounds
     }
 
@@ -431,6 +556,12 @@ impl World {
         self.chunks
             .get(&chunk)
             .map(|allocated| (allocated.count, &allocated.bits))
+    }
+
+    /// The chunk holding `coord` and the coordinate's bit index in that chunk's 64-word bitset
+    /// (word `index / 64`, bit `index % 64`), the layout of [`Self::iter_chunks`].
+    pub fn chunk_of(coord: Coord) -> (ChunkCoord, usize) {
+        split_coord(coord)
     }
 
     /// Returns the tight inclusive coordinate bounds of all on bits in an allocated chunk.
@@ -445,6 +576,80 @@ impl World {
         self.chunks
             .iter()
             .map(|(chunk_coord, chunk)| (*chunk_coord, chunk.count, chunk.bounds, &chunk.bits))
+    }
+
+    /// The on bits of an allocated chunk that are *not* deeply enclosed, as a 64-word bitset in
+    /// the same layout as [`Self::iter_chunks`]. A bit is deeply enclosed when all 27 cells of
+    /// the 3 x 3 x 3 block centred on it are on (in this chunk or any of the 26 around it), so
+    /// every point of its surface, edges and corners included, lies at least one unit inside
+    /// that block. Cells past either end of the `i64` range do not exist and count as off. An
+    /// unallocated chunk yields all zeros.
+    ///
+    /// A separable 3 x 3 x 3 erosion over a padded 18 x 18 grid of 18-bit x rows: the cost is
+    /// a few hundred word operations and at most 27 chunk lookups per chunk, not per bit.
+    pub fn chunk_open_words(&self, chunk: ChunkCoord) -> [u64; CHUNK_WORDS] {
+        let mut open = [0_u64; CHUNK_WORDS];
+        let Some(here) = self.chunks.get(&chunk) else {
+            return open;
+        };
+        const SIDE: usize = CHUNK_SIDE as usize;
+        const PAD: usize = SIDE + 2;
+        // around[dx][dy][dz]: the chunk at offset (dx - 1, dy - 1, dz - 1).
+        let mut around: [[[Option<&[u64; CHUNK_WORDS]>; 3]; 3]; 3] = [[[None; 3]; 3]; 3];
+        for (dx, plane) in around.iter_mut().enumerate() {
+            for (dy, line) in plane.iter_mut().enumerate() {
+                for (dz, slot) in line.iter_mut().enumerate() {
+                    let offset = |base: i64, d: usize| base.checked_add(d as i64 - 1);
+                    *slot = match (
+                        offset(chunk.x, dx),
+                        offset(chunk.y, dy),
+                        offset(chunk.z, dz),
+                    ) {
+                        (Some(x), Some(y), Some(z)) => {
+                            self.chunks.get(&ChunkCoord::new(x, y, z)).map(|c| &c.bits)
+                        }
+                        _ => None,
+                    };
+                }
+            }
+        }
+        // Index = x + 16 (y + 16 z); word = y / 4 + 4 z; the row of x bits sits at 16 (y % 4).
+        let row = |words: Option<&[u64; CHUNK_WORDS]>, y: usize, z: usize| -> u32 {
+            words.map_or(0, |w| {
+                ((w[y / 4 + 4 * z] >> (16 * (y % 4))) & 0xffff) as u32
+            })
+        };
+        // Padded coordinate p in 0..18 is local p - 1: which chunk (0, 1, 2) and local index.
+        let split = |p: usize| match p {
+            0 => (0, SIDE - 1),
+            p if p <= SIDE => (1, p - 1),
+            _ => (2, 0),
+        };
+        // eroded_x[y][z]: bit 1 + x set when x - 1, x and x + 1 are all on in that row.
+        let mut eroded_x = [[0_u32; PAD]; PAD];
+        for (py, plane) in eroded_x.iter_mut().enumerate() {
+            let (cy, ly) = split(py);
+            for (pz, out) in plane.iter_mut().enumerate() {
+                let (cz, lz) = split(pz);
+                let centre = row(around[1][cy][cz], ly, lz);
+                let left = row(around[0][cy][cz], ly, lz) >> (SIDE - 1) & 1;
+                let right = row(around[2][cy][cz], ly, lz) & 1;
+                let bits = left | centre << 1 | right << (SIDE + 1);
+                *out = bits & (bits >> 1) & (bits << 1);
+            }
+        }
+        for y in 0..SIDE {
+            for z in 0..SIDE {
+                let column =
+                    |py: usize| eroded_x[py][z] & eroded_x[py][z + 1] & eroded_x[py][z + 2];
+                let enclosed = (column(y) & column(y + 1) & column(y + 2)) >> 1 & 0xffff;
+                let word = y / 4 + 4 * z;
+                let shift = 16 * (y % 4);
+                let on = (here.bits[word] >> shift) & 0xffff;
+                open[word] |= (on & !u64::from(enclosed)) << shift;
+            }
+        }
+        open
     }
 
     /// Iterates over every on coordinate encoded in a chunk's 64-word bitset.
@@ -472,6 +677,7 @@ impl World {
 
     /// Returns the summary for an active octant at depth `1..=OCTREE_MAX_DEPTH`.
     pub fn octant_summary(&self, coord: OctantCoord) -> Option<OctantSummary> {
+        self.assert_octree_current();
         if coord.depth == 0 || coord.depth > OCTREE_MAX_DEPTH {
             return None;
         }
@@ -480,72 +686,155 @@ impl World {
 
     /// Iterates over all active macro-octant roots at `OCTREE_MAX_DEPTH`.
     pub fn root_octants(&self) -> impl Iterator<Item = (OctantCoord, OctantSummary)> + '_ {
+        self.assert_octree_current();
         self.octree[(OCTREE_MAX_DEPTH - 1) as usize]
             .iter()
             .map(|(coord, summary)| (*coord, *summary))
     }
 
+    /// Starts deferring octree upkeep. Until [`Self::flush_octree`], every bit, count, chunk
+    /// bound and `len` stays current (so `is_on`, chunk reads and ordered iteration are exact),
+    /// but the octree pyramid and, after a boundary deletion, the world bounds are rebuilt only
+    /// at the flush; reading either before then panics. Nested calls are a no-op.
+    ///
+    /// The flush leaves the world exactly as the same edits applied one by one would: every
+    /// octant summary and the world bounds are functions of the final bits alone, and the
+    /// revision an eager update stamps on an octant is that of the last edit beneath it, which
+    /// is the largest pending revision beneath it.
+    pub fn defer_octree(&mut self) {
+        if self.deferred.is_none() {
+            self.deferred = Some(DeferredOctree::default());
+        }
+    }
+
+    /// Applies the octree upkeep deferred since [`Self::defer_octree`] (see there) and resumes
+    /// eager upkeep. Each changed chunk and each of its ancestors is recomputed once.
+    pub fn flush_octree(&mut self) {
+        let Some(DeferredOctree {
+            chunks: mut level,
+            bounds_stale,
+        }) = self.deferred.take()
+        else {
+            return;
+        };
+        for depth in 1..=OCTREE_MAX_DEPTH {
+            // `level` holds depth - 1 coordinates (chunks at depth 1); map them to parents.
+            for entry in &mut level {
+                entry.0 = ChunkCoord::new(
+                    entry.0.x.div_euclid(2),
+                    entry.0.y.div_euclid(2),
+                    entry.0.z.div_euclid(2),
+                );
+            }
+            level.sort_unstable();
+            level.dedup_by(|later, kept| {
+                if later.0 == kept.0 {
+                    kept.1 = kept.1.max(later.1);
+                    true
+                } else {
+                    false
+                }
+            });
+            for &(parent, revision) in &level {
+                self.update_octant(depth, parent, revision);
+            }
+        }
+        if bounds_stale {
+            self.bounds = if self.len == 0 {
+                None
+            } else {
+                self.recompute_bounds()
+            };
+        }
+    }
+
+    fn assert_octree_current(&self) {
+        assert!(
+            self.deferred.is_none(),
+            "World octree read while its upkeep is deferred; flush_octree first"
+        );
+    }
+
+    fn octree_changed(&mut self, chunk_coord: ChunkCoord) {
+        let revision = self.revision_counter;
+        match &mut self.deferred {
+            Some(deferred) => match deferred.chunks.last_mut() {
+                Some(last) if last.0 == chunk_coord => last.1 = revision,
+                _ => deferred.chunks.push((chunk_coord, revision)),
+            },
+            None => self.update_octree_ancestors(chunk_coord),
+        }
+    }
+
     fn update_octree_ancestors(&mut self, chunk_coord: ChunkCoord) {
         for depth in 1..=OCTREE_MAX_DEPTH {
             let divisor = 1_i64 << depth;
-            let px = chunk_coord.x.div_euclid(divisor);
-            let py = chunk_coord.y.div_euclid(divisor);
-            let pz = chunk_coord.z.div_euclid(divisor);
-            let parent = OctantCoord {
-                depth,
-                x: px,
-                y: py,
-                z: pz,
+            let parent = ChunkCoord::new(
+                chunk_coord.x.div_euclid(divisor),
+                chunk_coord.y.div_euclid(divisor),
+                chunk_coord.z.div_euclid(divisor),
+            );
+            self.update_octant(depth, parent, self.revision_counter);
+        }
+    }
+
+    /// Recomputes the depth-`depth` octant at `at` from its eight children, stamping `revision`.
+    fn update_octant(&mut self, depth: u8, at: ChunkCoord, revision: u64) {
+        let (px, py, pz) = (at.x, at.y, at.z);
+        let parent = OctantCoord {
+            depth,
+            x: px,
+            y: py,
+            z: pz,
+        };
+
+        let mut occupied_bits = 0_usize;
+        let mut child_mask = 0_u8;
+        let mut combined_bounds: Option<Bounds> = None;
+
+        for child_idx in 0..8_u8 {
+            let cx = px * 2 + i64::from((child_idx >> 2) & 1);
+            let cy = py * 2 + i64::from((child_idx >> 1) & 1);
+            let cz = pz * 2 + i64::from(child_idx & 1);
+
+            let child_info = if depth == 1 {
+                self.chunks
+                    .get(&ChunkCoord::new(cx, cy, cz))
+                    .map(|chunk| (usize::from(chunk.count), chunk.bounds))
+            } else {
+                let child_coord = OctantCoord {
+                    depth: depth - 1,
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                };
+                self.octree[(depth - 2) as usize]
+                    .get(&child_coord)
+                    .map(|summary| (summary.occupied_bits, summary.bounds))
             };
 
-            let mut occupied_bits = 0_usize;
-            let mut child_mask = 0_u8;
-            let mut combined_bounds: Option<Bounds> = None;
-
-            for child_idx in 0..8_u8 {
-                let cx = px * 2 + i64::from((child_idx >> 2) & 1);
-                let cy = py * 2 + i64::from((child_idx >> 1) & 1);
-                let cz = pz * 2 + i64::from(child_idx & 1);
-
-                let child_info = if depth == 1 {
-                    self.chunks
-                        .get(&ChunkCoord::new(cx, cy, cz))
-                        .map(|chunk| (usize::from(chunk.count), chunk.bounds))
-                } else {
-                    let child_coord = OctantCoord {
-                        depth: depth - 1,
-                        x: cx,
-                        y: cy,
-                        z: cz,
-                    };
-                    self.octree[(depth - 2) as usize]
-                        .get(&child_coord)
-                        .map(|summary| (summary.occupied_bits, summary.bounds))
-                };
-
-                if let Some((child_bits, child_bounds)) = child_info {
-                    occupied_bits += child_bits;
-                    child_mask |= 1_u8 << child_idx;
-                    combined_bounds = Some(match combined_bounds {
-                        Some(existing) => merge_bounds(existing, child_bounds),
-                        None => child_bounds,
-                    });
-                }
+            if let Some((child_bits, child_bounds)) = child_info {
+                occupied_bits += child_bits;
+                child_mask |= 1_u8 << child_idx;
+                combined_bounds = Some(match combined_bounds {
+                    Some(existing) => merge_bounds(existing, child_bounds),
+                    None => child_bounds,
+                });
             }
+        }
 
-            if let Some(bounds) = combined_bounds {
-                self.octree[(depth - 1) as usize].insert(
-                    parent,
-                    OctantSummary {
-                        occupied_bits,
-                        child_mask,
-                        bounds,
-                        revision: self.revision_counter,
-                    },
-                );
-            } else {
-                self.octree[(depth - 1) as usize].remove(&parent);
-            }
+        if let Some(bounds) = combined_bounds {
+            self.octree[(depth - 1) as usize].insert(
+                parent,
+                OctantSummary {
+                    occupied_bits,
+                    child_mask,
+                    bounds,
+                    revision,
+                },
+            );
+        } else {
+            self.octree[(depth - 1) as usize].remove(&parent);
         }
     }
 
@@ -592,6 +881,37 @@ impl World {
             .iter()
             .flat_map(|(chunk_coord, chunk)| Self::iter_chunk_coords(*chunk_coord, &chunk.bits))
     }
+
+    /// Calls `f` with every on coordinate in ascending [`Coord`] order (`x`, then `y`, then
+    /// `z`, signed), without collecting or sorting the coordinates: chunks are sorted once
+    /// (`ChunkCoord` orders the same way, and `div_euclid` / `rem_euclid` keep chunk then local
+    /// order equal to global order), then walked slab by slab in `x`, row by row in `y`.
+    pub fn for_each_on_ordered(&self, mut f: impl FnMut(Coord)) {
+        let mut chunks: Vec<(ChunkCoord, &Chunk)> = self
+            .chunks
+            .iter()
+            .filter(|(_, chunk)| chunk.count > 0)
+            .map(|(coord, chunk)| (*coord, chunk))
+            .collect();
+        chunks.sort_unstable_by_key(|&(coord, _)| coord);
+        let side = CHUNK_SIDE as usize;
+        for slab in chunks.chunk_by(|a, b| a.0.x == b.0.x) {
+            for lx in 0..side {
+                for row in slab.chunk_by(|a, b| a.0.y == b.0.y) {
+                    for ly in 0..side {
+                        let shift = lx + side * (ly % 4);
+                        for &(coord, chunk) in row {
+                            for lz in 0..side {
+                                if (chunk.bits[ly / 4 + 4 * lz] >> shift) & 1 != 0 {
+                                    f(join_coord(coord, lx + side * (ly + side * lz)));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn merge_bounds(a: Bounds, b: Bounds) -> Bounds {
@@ -626,6 +946,50 @@ fn word_and_mask(index: usize) -> (usize, u64) {
     )
 }
 
+/// Ways of [`BitProbe`]'s recent-chunk cache: 4 x 4 chunks across and 16 along `z`, so a
+/// row of cells walked `z` fastest (the chem domain's order) meets each of its chunks in its
+/// own way, and the next row finds them again.
+const PROBE_WAYS: usize = 256;
+
+type ProbeSlot<'a> = Option<(ChunkCoord, Option<&'a [u64; CHUNK_WORDS]>)>;
+
+/// [`World::is_on`] with recent chunk lookups kept (see [`World::probe`]): the last chunk,
+/// then a cache direct-mapped by the chunk's low coordinate bits. Both only remember what
+/// the chunk map answered, and the world cannot change while the probe borrows it.
+pub struct BitProbe<'a> {
+    world: &'a World,
+    last: ProbeSlot<'a>,
+    recent: [ProbeSlot<'a>; PROBE_WAYS],
+}
+
+impl BitProbe<'_> {
+    /// Exactly [`World::is_on`].
+    pub fn is_on(&mut self, coord: Coord) -> bool {
+        let (chunk_coord, local_index) = split_coord(coord);
+        let bits = match self.last {
+            Some((c, bits)) if c == chunk_coord => bits,
+            _ => {
+                let way = (chunk_coord.x & 3 | (chunk_coord.y & 3) << 2 | (chunk_coord.z & 15) << 4)
+                    as usize;
+                let bits = match self.recent[way] {
+                    Some((c, bits)) if c == chunk_coord => bits,
+                    _ => {
+                        let bits = self.world.chunks.get(&chunk_coord).map(|chunk| &chunk.bits);
+                        self.recent[way] = Some((chunk_coord, bits));
+                        bits
+                    }
+                };
+                self.last = Some((chunk_coord, bits));
+                bits
+            }
+        };
+        bits.is_some_and(|b| {
+            let (word, mask) = word_and_mask(local_index);
+            b[word] & mask != 0
+        })
+    }
+}
+
 fn split_coord(coord: Coord) -> (ChunkCoord, usize) {
     let chunk = ChunkCoord::new(
         coord.x.div_euclid(CHUNK_SIDE),
@@ -656,6 +1020,105 @@ fn join_coord(chunk: ChunkCoord, index: usize) -> Coord {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    /// `chunk_open_words` against the definition (some cell of the 3 x 3 x 3 block around an
+    /// on bit is off), bit for bit, over random worlds that straddle chunk faces, edges and
+    /// corners on both sides of zero, and at the ends of the `i64` range.
+    #[test]
+    fn chunk_open_words_match_the_neighbourhood_definition() {
+        let mut state = 0x5eed_0fc4_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let check = |world: &World| {
+            let mut enclosed = 0;
+            for (chunk, _, _, words) in world.iter_chunks() {
+                let exposed = world.chunk_open_words(chunk);
+                for (word, (&all, &kept)) in words.iter().zip(&exposed).enumerate() {
+                    assert_eq!(kept & !all, 0, "{chunk:?} word {word} exposes an off bit");
+                }
+                let mut only_kept = Vec::new();
+                for coord in World::iter_chunk_coords(chunk, words) {
+                    let open = (-1..=1).any(|dx| {
+                        (-1..=1).any(|dy| {
+                            (-1..=1).any(|dz| {
+                                let shifted = (
+                                    coord.x.checked_add(dx),
+                                    coord.y.checked_add(dy),
+                                    coord.z.checked_add(dz),
+                                );
+                                match shifted {
+                                    (Some(x), Some(y), Some(z)) => {
+                                        !world.is_on(Coord::new(x, y, z))
+                                    }
+                                    _ => true,
+                                }
+                            })
+                        })
+                    });
+                    let (_, index) = split_coord(coord);
+                    let (word, mask) = word_and_mask(index);
+                    assert_eq!(exposed[word] & mask != 0, open, "{coord:?}");
+                    if open {
+                        only_kept.push(coord);
+                    } else {
+                        enclosed += 1;
+                    }
+                }
+                let listed: Vec<Coord> = World::iter_chunk_coords(chunk, &exposed).collect();
+                assert_eq!(listed, only_kept, "{chunk:?}");
+            }
+            enclosed
+        };
+        let mut enclosed = 0;
+        for case in 0..40 {
+            let mut world = World::new();
+            let base = Coord::new(
+                (next() % 3) as i64 * 16 - 24,
+                (next() % 3) as i64 * 16 - 8,
+                (next() % 3) as i64 * 16 - 40,
+            );
+            let density = 80 + next() % 21;
+            for x in -6..6 {
+                for y in -6..6 {
+                    for z in -6..6 {
+                        if next() % 100 < density {
+                            world.set_on(Coord::new(base.x + x, base.y + y, base.z + z));
+                        }
+                    }
+                }
+            }
+            if case % 2 == 0 {
+                assert!(world.chunk_open_words(ChunkCoord::new(99, 99, 99)) == [0; CHUNK_WORDS]);
+            }
+            enclosed += check(&world);
+        }
+        assert!(enclosed > 5_000, "only {enclosed} enclosed bits");
+        // The ends of the coordinate range: a full 3x3x3 block at each extreme corner.
+        for corner in [i64::MAX, i64::MIN] {
+            let mut world = World::new();
+            let step = if corner == i64::MAX { -1 } else { 1 };
+            for dx in 0..3 {
+                for dy in 0..3 {
+                    for dz in 0..3 {
+                        world.set_on(Coord::new(
+                            corner + step * dx,
+                            corner + step * dy,
+                            corner + step * dz,
+                        ));
+                    }
+                }
+            }
+            assert_eq!(
+                check(&world),
+                1,
+                "only the middle bit is enclosed at {corner}"
+            );
+        }
+    }
 
     fn assert_internal_invariants(world: &World) {
         assert!(world.is_on(BEDROCK_COORD));
@@ -1176,5 +1639,148 @@ mod tests {
         assert!(world.set_off(sibling_chunk_point));
         assert!(world.set_off(negative_macro_point));
         assert_bedrock_only(&world);
+    }
+
+    /// Every observable part of a world, in a canonical order: chunks (count, bounds, bits),
+    /// every octant summary with its revision, bounds, len and the revision counter.
+    #[allow(clippy::type_complexity)]
+    fn snapshot(
+        world: &World,
+    ) -> (
+        Vec<(ChunkCoord, u16, Bounds, [u64; CHUNK_WORDS])>,
+        Vec<Vec<(OctantCoord, OctantSummary)>>,
+        Option<Bounds>,
+        usize,
+        u64,
+    ) {
+        let mut chunks: Vec<_> = world
+            .chunks
+            .iter()
+            .map(|(c, k)| (*c, k.count, k.bounds, k.bits))
+            .collect();
+        chunks.sort_unstable_by_key(|e| e.0);
+        let octree = world
+            .octree
+            .iter()
+            .map(|level| {
+                let mut v: Vec<_> = level.iter().map(|(c, s)| (*c, *s)).collect();
+                v.sort_unstable_by_key(|e| e.0);
+                v
+            })
+            .collect();
+        (
+            chunks,
+            octree,
+            world.bounds(),
+            world.len(),
+            world.revision_counter,
+        )
+    }
+
+    #[test]
+    fn deferred_octree_flush_matches_eager_upkeep_exactly() {
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let far = i64::MAX - 40;
+        for round in 0..48_u64 {
+            let mut eager = World::new();
+            let mut deferred = World::new();
+            let mut touched = Vec::new();
+            // Small rounds stay inside a few chunks (heavy boundary deletion, chunks emptying
+            // and refilling); later rounds spread over macro-octants and the i64 extremes.
+            let span = [6_i64, 20, 70, 300][(round % 4) as usize];
+            for batch in 0..6 {
+                deferred.defer_octree();
+                if batch % 2 == 1 {
+                    deferred.defer_octree(); // nesting is a no-op
+                }
+                for _ in 0..(next() % 400) {
+                    let r = next();
+                    let pick = |shift: u32| ((r >> shift) % (2 * span as u64 + 1)) as i64 - span;
+                    let mut c = Coord::new(pick(0), pick(16), pick(32));
+                    if round % 8 == 7 && r % 5 == 0 {
+                        c = Coord::new(far + c.x.abs() % 40, -far - c.y.abs() % 40, c.z);
+                    }
+                    let op = r >> 60;
+                    touched.push(c);
+                    let (a, b) = match op {
+                        0..=6 => (eager.set_on(c), deferred.set_on(c)),
+                        7..=13 => (eager.set_off(c), deferred.set_off(c)),
+                        _ => (eager.toggle(c), deferred.toggle(c)),
+                    };
+                    assert_eq!(a, b);
+                    assert_eq!(eager.is_on(c), deferred.is_on(c));
+                    assert_eq!(eager.len(), deferred.len());
+                }
+                if batch % 3 == 2 {
+                    // Clear most of what was ever touched: extreme planes empty, so the
+                    // world bounds must shrink at the flush.
+                    for &c in &touched {
+                        if next() % 10 != 0 {
+                            assert_eq!(eager.set_off(c), deferred.set_off(c));
+                        }
+                    }
+                }
+                deferred.flush_octree();
+                deferred.flush_octree(); // a second flush is a no-op
+                assert_eq!(
+                    snapshot(&eager),
+                    snapshot(&deferred),
+                    "round {round} batch {batch}"
+                );
+                assert_internal_invariants(&deferred);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "deferred")]
+    fn deferred_octree_reads_fail_closed() {
+        let mut world = World::new();
+        world.defer_octree();
+        world.set_on(Coord::new(3, 4, 5));
+        let _ = world.root_octants().count();
+    }
+
+    #[test]
+    fn word_level_chunk_bounds_match_bit_iteration() {
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for round in 0..4000 {
+            let chunk = ChunkCoord::new(
+                (next() % 7) as i64 - 3,
+                if round % 2 == 0 {
+                    i64::MAX / CHUNK_SIDE
+                } else {
+                    -1
+                },
+                i64::MIN / CHUNK_SIDE,
+            );
+            let mut bits = [0_u64; CHUNK_WORDS];
+            for _ in 0..1 + next() % [1, 3, 40, 900][round % 4] {
+                let index = (next() % (CHUNK_WORDS as u64 * 64)) as usize;
+                bits[index / 64] |= 1 << (index % 64);
+            }
+            let mut coords = World::iter_chunk_coords(chunk, &bits);
+            let first = coords.next().unwrap();
+            let expected = coords.fold(
+                Bounds {
+                    min: first,
+                    max: first,
+                },
+                |b, c| merge_bounds(b, Bounds { min: c, max: c }),
+            );
+            assert_eq!(tight_bounds(chunk, &bits), expected, "round {round}");
+        }
     }
 }

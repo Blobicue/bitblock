@@ -7,7 +7,7 @@ For the next agent, start with [`docs/HANDOFF.md`](docs/HANDOFF.md). The broader
 [`docs/CAPABILITY_TREE.md`](docs/CAPABILITY_TREE.md). Read [`docs/SEMANTICS.md`](docs/SEMANTICS.md)
 and [`docs/TRANSCRIPT_AUDIT.md`](docs/TRANSCRIPT_AUDIT.md) before changing the simulation boundary.
 
-Rather than reading 65,000 lines of Rust across 38 modules, query the generated index or compile the standalone interactive HTML observatory:
+Rather than reading 68,500 lines of Rust across 38 modules, query the generated index or compile the standalone interactive HTML observatory:
 
 ```powershell
 python tools/bbgraph.py ask "canonical framebuffer bytes"
@@ -25,9 +25,9 @@ python tools/bbgraph.py html
 Stdlib Python only, no network and no build. Every line of output cites a path, so
 any claim it makes can be checked against the source that produced it. It reports
 what the tree cannot state about itself: which modules are load-bearing (`protocol`
-is reached by 34 of 38; `world` by 27), whether every protocol object has an independent
-Python vector reconstruction (74 of 74 schemas covered, 0 uncovered), and public symbol
-documentation coverage (1,320 of 1,320 public symbols documented with `///`). All three
+is reached by 36 of 38; `world` by 27), whether every protocol object has an independent
+Python vector reconstruction (75 of 75 schemas covered, 0 uncovered), and public symbol
+documentation coverage (1,333 of 1,333 public symbols documented with `///`). All three
 are derived rather than authored. Running `python tools/bbgraph.py html` compiles a
 zero-server, self-contained interactive browser dashboard at `target/bitblock_graph.html`
 with a live BM25 query trace, 10-stratum DAG map, 4-tier blast-radius simulator, symbol
