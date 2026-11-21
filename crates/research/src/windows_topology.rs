@@ -18,12 +18,13 @@ use crate::output_topology::{
 };
 use windows_sys::Win32::Devices::Display::{
     DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
-    DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
-    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_MODE_INFO_TYPE_DESKTOP_IMAGE,
-    DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE, DISPLAYCONFIG_MODE_INFO_TYPE_TARGET,
-    DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_SOURCE_DEVICE_NAME, DISPLAYCONFIG_TARGET_DEVICE_NAME,
-    DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QDC_ONLY_ACTIVE_PATHS,
-    QDC_VIRTUAL_MODE_AWARE, QDC_VIRTUAL_REFRESH_RATE_AWARE, QueryDisplayConfig,
+    DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_MODE_INFO,
+    DISPLAYCONFIG_MODE_INFO_TYPE_DESKTOP_IMAGE, DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE,
+    DISPLAYCONFIG_MODE_INFO_TYPE_TARGET, DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_SOURCE_DEVICE_NAME,
+    DISPLAYCONFIG_TARGET_DEVICE_NAME, DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
+    QDC_ONLY_ACTIVE_PATHS, QDC_VIRTUAL_MODE_AWARE, QDC_VIRTUAL_REFRESH_RATE_AWARE,
+    QueryDisplayConfig,
 };
 use windows_sys::Win32::Foundation::{
     ERROR_INSUFFICIENT_BUFFER, ERROR_INVALID_PARAMETER, ERROR_SUCCESS, GetLastError, HWND, LUID,
@@ -306,8 +307,13 @@ impl DisplayTopologyApi for WinApi {
         packet.header.size = size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32;
         packet.header.adapterId = key.adapter.into_luid();
         packet.header.id = key.id;
-        // SAFETY: header describes the complete writable packet following it.
-        let result = unsafe { DisplayConfigGetDeviceInfo(&mut packet.header) };
+        // SAFETY: pointer carries provenance for the entire writable packet whose leading
+        // `header` field declares its exact byte size.
+        let result = unsafe {
+            DisplayConfigGetDeviceInfo(
+                ptr::addr_of_mut!(packet).cast::<DISPLAYCONFIG_DEVICE_INFO_HEADER>(),
+            )
+        };
         if result == ERROR_SUCCESS as i32 {
             Ok(packet.viewGdiDeviceName)
         } else {
@@ -321,8 +327,13 @@ impl DisplayTopologyApi for WinApi {
         packet.header.size = size_of::<DISPLAYCONFIG_TARGET_DEVICE_NAME>() as u32;
         packet.header.adapterId = key.adapter.into_luid();
         packet.header.id = key.id;
-        // SAFETY: header describes the complete writable packet following it.
-        let result = unsafe { DisplayConfigGetDeviceInfo(&mut packet.header) };
+        // SAFETY: pointer carries provenance for the entire writable packet whose leading
+        // `header` field declares its exact byte size.
+        let result = unsafe {
+            DisplayConfigGetDeviceInfo(
+                ptr::addr_of_mut!(packet).cast::<DISPLAYCONFIG_DEVICE_INFO_HEADER>(),
+            )
+        };
         if result == ERROR_SUCCESS as i32 {
             Ok(packet)
         } else {
@@ -336,8 +347,13 @@ impl DisplayTopologyApi for WinApi {
         packet.header.size = size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32;
         packet.header.adapterId = key.adapter.into_luid();
         packet.header.id = key.id;
-        // SAFETY: header describes the complete writable packet following it.
-        let result = unsafe { DisplayConfigGetDeviceInfo(&mut packet.header) };
+        // SAFETY: pointer carries provenance for the entire writable packet whose leading
+        // `header` field declares its exact byte size.
+        let result = unsafe {
+            DisplayConfigGetDeviceInfo(
+                ptr::addr_of_mut!(packet).cast::<DISPLAYCONFIG_DEVICE_INFO_HEADER>(),
+            )
+        };
         if result == ERROR_SUCCESS as i32 {
             // SAFETY: the successful documented request initializes this raw 32-bit union lane.
             let flags_raw = unsafe { packet.Anonymous.value };

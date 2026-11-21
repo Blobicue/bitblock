@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 use std::fmt;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use bitblock_core::protocol::{ContentTag, TagKind, hash_canonical};
 use bitblock_core::world::{Coord, World};
@@ -569,8 +569,8 @@ pub enum SmtNode {
     PresentLeaf,
     Branch {
         depth: usize,
-        left: Box<SmtNode>,
-        right: Box<SmtNode>,
+        left: Arc<SmtNode>,
+        right: Arc<SmtNode>,
         hash: [u8; 32],
     },
 }
@@ -601,7 +601,7 @@ impl SmtNode {
     }
 }
 
-fn make_smt_branch(depth: usize, left: SmtNode, right: SmtNode) -> SmtNode {
+fn make_smt_branch(depth: usize, left: Arc<SmtNode>, right: Arc<SmtNode>) -> SmtNode {
     if left.is_empty() && right.is_empty() {
         return SmtNode::Empty { depth };
     }
@@ -611,8 +611,8 @@ fn make_smt_branch(depth: usize, left: SmtNode, right: SmtNode) -> SmtNode {
     let hash = node_hash(SMT_BRANCH_TYPE, depth as u8, &payload);
     SmtNode::Branch {
         depth,
-        left: Box::new(left),
-        right: Box::new(right),
+        left,
+        right,
         hash,
     }
 }
@@ -629,7 +629,8 @@ fn insert_smt_node(node: &SmtNode, key: &CoordinateKeyV1, depth: usize) -> (SmtN
     match node {
         SmtNode::Empty { .. } => {
             let (child, _) = insert_smt_node(&SmtNode::Empty { depth: depth + 1 }, key, depth + 1);
-            let empty_sib = SmtNode::Empty { depth: depth + 1 };
+            let empty_sib = Arc::new(SmtNode::Empty { depth: depth + 1 });
+            let child = Arc::new(child);
             let branch = if bit == 0 {
                 make_smt_branch(depth, child, empty_sib)
             } else {
@@ -643,13 +644,19 @@ fn insert_smt_node(node: &SmtNode, key: &CoordinateKeyV1, depth: usize) -> (SmtN
                 if !inserted {
                     return (node.clone(), false);
                 }
-                (make_smt_branch(depth, new_left, (**right).clone()), true)
+                (
+                    make_smt_branch(depth, Arc::new(new_left), Arc::clone(right)),
+                    true,
+                )
             } else {
                 let (new_right, inserted) = insert_smt_node(right, key, depth + 1);
                 if !inserted {
                     return (node.clone(), false);
                 }
-                (make_smt_branch(depth, (**left).clone(), new_right), true)
+                (
+                    make_smt_branch(depth, Arc::clone(left), Arc::new(new_right)),
+                    true,
+                )
             }
         }
         SmtNode::PresentLeaf => unreachable!("PresentLeaf only occurs at depth 192"),
@@ -673,13 +680,19 @@ fn delete_smt_node(node: &SmtNode, key: &CoordinateKeyV1, depth: usize) -> (SmtN
                 if !deleted {
                     return (node.clone(), false);
                 }
-                (make_smt_branch(depth, new_left, (**right).clone()), true)
+                (
+                    make_smt_branch(depth, Arc::new(new_left), Arc::clone(right)),
+                    true,
+                )
             } else {
                 let (new_right, deleted) = delete_smt_node(right, key, depth + 1);
                 if !deleted {
                     return (node.clone(), false);
                 }
-                (make_smt_branch(depth, (**left).clone(), new_right), true)
+                (
+                    make_smt_branch(depth, Arc::clone(left), Arc::new(new_right)),
+                    true,
+                )
             }
         }
         SmtNode::PresentLeaf => unreachable!("PresentLeaf only occurs at depth 192"),
@@ -697,8 +710,8 @@ fn build_smt_node_subtree(keys: &[CoordinateKeyV1], depth: usize) -> SmtNode {
     let split = keys.partition_point(|k| k.bit_at(depth) == 0);
     let (left_keys, right_keys) = keys.split_at(split);
 
-    let left_node = build_smt_node_subtree(left_keys, depth + 1);
-    let right_node = build_smt_node_subtree(right_keys, depth + 1);
+    let left_node = Arc::new(build_smt_node_subtree(left_keys, depth + 1));
+    let right_node = Arc::new(build_smt_node_subtree(right_keys, depth + 1));
     make_smt_branch(depth, left_node, right_node)
 }
 
@@ -813,7 +826,11 @@ impl SparseMerkleTree {
     }
 
     /// Constructs an SMT from pre-sorted unique CoordinateKeyV1 values via cold full rebuild.
-    pub fn from_sorted_keys(keys: Vec<CoordinateKeyV1>) -> Self {
+    pub fn from_sorted_keys(mut keys: Vec<CoordinateKeyV1>) -> Self {
+        if !keys.windows(2).all(|window| window[0] < window[1]) {
+            keys.sort_unstable();
+            keys.dedup();
+        }
         if keys.is_empty() {
             return Self {
                 root_node: SmtNode::Empty { depth: 0 },
@@ -1027,69 +1044,102 @@ const MPT_LEAF_TYPE: u8 = 1;
 const MPT_EXTENSION_TYPE: u8 = 2;
 const MPT_BRANCH_TYPE: u8 = 3;
 
-/// Node in the 192-bit binary `MerklePatriciaTrie` (`Empty`, `Leaf`, `Extension`, or `Branch`).
+static MPT_EMPTY_HASH: OnceLock<[u8; 32]> = OnceLock::new();
+
+fn mpt_empty_hash() -> [u8; 32] {
+    *MPT_EMPTY_HASH.get_or_init(|| node_hash(MPT_EMPTY_TYPE, 0, &[]))
+}
+
+fn make_patricia_leaf(depth: usize, key: CoordinateKeyV1) -> PatriciaNode {
+    let suffix_len = KEY_BITS - depth;
+    let mut payload = Vec::with_capacity(2 + suffix_len.div_ceil(8) + 1);
+    payload.extend_from_slice(&(suffix_len as u16).to_be_bytes());
+    let mut current_byte = 0u8;
+    let mut bit_in_byte = 0;
+    for d in depth..KEY_BITS {
+        current_byte |= key.bit_at(d) << (7 - bit_in_byte);
+        bit_in_byte += 1;
+        if bit_in_byte == 8 {
+            payload.push(current_byte);
+            current_byte = 0;
+            bit_in_byte = 0;
+        }
+    }
+    if bit_in_byte > 0 {
+        payload.push(current_byte);
+    }
+    payload.extend_from_slice(PRESENT_VALUE_ON);
+    let hash = node_hash(MPT_LEAF_TYPE, depth as u8, &payload);
+    PatriciaNode::Leaf { depth, key, hash }
+}
+
+fn make_patricia_extension(
+    depth: usize,
+    shared_bits: Vec<u8>,
+    child: Arc<PatriciaNode>,
+) -> PatriciaNode {
+    let mut payload = Vec::with_capacity(2 + shared_bits.len().div_ceil(8) + 32);
+    payload.extend_from_slice(&(shared_bits.len() as u16).to_be_bytes());
+    payload.extend_from_slice(&pack_bits_msb(&shared_bits));
+    let child_hash = child.hash();
+    payload.extend_from_slice(&child_hash);
+    let hash = node_hash(MPT_EXTENSION_TYPE, depth as u8, &payload);
+    PatriciaNode::Extension {
+        depth,
+        shared_bits,
+        child,
+        hash,
+    }
+}
+
+fn make_patricia_branch(
+    depth: usize,
+    left: Arc<PatriciaNode>,
+    right: Arc<PatriciaNode>,
+) -> PatriciaNode {
+    let mut payload = [0u8; 64];
+    payload[0..32].copy_from_slice(&left.hash());
+    payload[32..64].copy_from_slice(&right.hash());
+    let hash = node_hash(MPT_BRANCH_TYPE, depth as u8, &payload);
+    PatriciaNode::Branch {
+        depth,
+        left,
+        right,
+        hash,
+    }
+}
+
+/// Node in the 192-bit binary `MerklePatriciaTrie` (`Empty`, `Leaf`, `Extension`, or `Branch`)
+/// with cached digests and `Arc` subtrees for true O(depth) path-copy updates.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatriciaNode {
     Empty,
     Leaf {
         depth: usize,
         key: CoordinateKeyV1,
+        hash: [u8; 32],
     },
     Extension {
         depth: usize,
         shared_bits: Vec<u8>, // 0 or 1 per bit
-        child: Box<PatriciaNode>,
+        child: Arc<PatriciaNode>,
+        hash: [u8; 32],
     },
     Branch {
         depth: usize,
-        left: Box<PatriciaNode>,
-        right: Box<PatriciaNode>,
+        left: Arc<PatriciaNode>,
+        right: Arc<PatriciaNode>,
+        hash: [u8; 32],
     },
 }
 
 impl PatriciaNode {
-    /// Computes the canonical 32-byte `node_hash` digest for this `PatriciaNode`.
+    /// Returns the cached canonical 32-byte `node_hash` digest for this `PatriciaNode`.
     pub fn hash(&self) -> [u8; 32] {
         match self {
-            Self::Empty => node_hash(MPT_EMPTY_TYPE, 0, &[]),
-            Self::Leaf { depth, key } => {
-                let suffix_len = KEY_BITS - depth;
-                let mut payload = Vec::with_capacity(2 + suffix_len.div_ceil(8) + 1);
-                payload.extend_from_slice(&(suffix_len as u16).to_be_bytes());
-                let mut current_byte = 0u8;
-                let mut bit_in_byte = 0;
-                for d in *depth..KEY_BITS {
-                    current_byte |= key.bit_at(d) << (7 - bit_in_byte);
-                    bit_in_byte += 1;
-                    if bit_in_byte == 8 {
-                        payload.push(current_byte);
-                        current_byte = 0;
-                        bit_in_byte = 0;
-                    }
-                }
-                if bit_in_byte > 0 {
-                    payload.push(current_byte);
-                }
-                payload.extend_from_slice(PRESENT_VALUE_ON);
-                node_hash(MPT_LEAF_TYPE, *depth as u8, &payload)
-            }
-            Self::Extension {
-                depth,
-                shared_bits,
-                child,
-            } => {
-                let mut payload = Vec::with_capacity(2 + shared_bits.len().div_ceil(8) + 32);
-                payload.extend_from_slice(&(shared_bits.len() as u16).to_be_bytes());
-                payload.extend_from_slice(&pack_bits_msb(shared_bits));
-                let child_hash = child.hash();
-                payload.extend_from_slice(&child_hash);
-                node_hash(MPT_EXTENSION_TYPE, *depth as u8, &payload)
-            }
-            Self::Branch { depth, left, right } => {
-                let mut payload = [0u8; 64];
-                payload[0..32].copy_from_slice(&left.hash());
-                payload[32..64].copy_from_slice(&right.hash());
-                node_hash(MPT_BRANCH_TYPE, *depth as u8, &payload)
+            Self::Empty => mpt_empty_hash(),
+            Self::Leaf { hash, .. } | Self::Extension { hash, .. } | Self::Branch { hash, .. } => {
+                *hash
             }
         }
     }
@@ -1120,10 +1170,11 @@ fn insert_patricia_node(
     depth: usize,
 ) -> (PatriciaNode, bool, usize) {
     match node {
-        PatriciaNode::Empty => (PatriciaNode::Leaf { depth: 0, key }, true, 1),
+        PatriciaNode::Empty => (make_patricia_leaf(0, key), true, 1),
         PatriciaNode::Leaf {
             depth: d,
             key: existing_key,
+            ..
         } => {
             debug_assert_eq!(*d, depth);
             if *existing_key == key {
@@ -1131,24 +1182,14 @@ fn insert_patricia_node(
             }
             let common = existing_key.common_prefix_len(&key, *d);
             let split_depth = *d + common;
-            let existing_leaf = PatriciaNode::Leaf {
-                depth: split_depth + 1,
-                key: *existing_key,
-            };
-            let new_leaf = PatriciaNode::Leaf {
-                depth: split_depth + 1,
-                key,
-            };
+            let existing_leaf = Arc::new(make_patricia_leaf(split_depth + 1, *existing_key));
+            let new_leaf = Arc::new(make_patricia_leaf(split_depth + 1, key));
             let (left, right) = if existing_key.bit_at(split_depth) == 0 {
-                (Box::new(existing_leaf), Box::new(new_leaf))
+                (existing_leaf, new_leaf)
             } else {
-                (Box::new(new_leaf), Box::new(existing_leaf))
+                (new_leaf, existing_leaf)
             };
-            let branch = PatriciaNode::Branch {
-                depth: split_depth,
-                left,
-                right,
-            };
+            let branch = make_patricia_branch(split_depth, left, right);
             if common == 0 {
                 // 2 new leaves + 1 branch = 3 node hashes
                 (branch, true, 3)
@@ -1158,11 +1199,7 @@ fn insert_patricia_node(
                     shared_bits.push(key.bit_at(bit_d));
                 }
                 (
-                    PatriciaNode::Extension {
-                        depth: *d,
-                        shared_bits,
-                        child: Box::new(branch),
-                    },
+                    make_patricia_extension(*d, shared_bits, Arc::new(branch)),
                     true,
                     4,
                 )
@@ -1172,6 +1209,7 @@ fn insert_patricia_node(
             depth: d,
             shared_bits,
             child,
+            ..
         } => {
             debug_assert_eq!(*d, depth);
             let mut matched = 0;
@@ -1185,11 +1223,7 @@ fn insert_patricia_node(
                     return (node.clone(), false, 0);
                 }
                 return (
-                    PatriciaNode::Extension {
-                        depth: *d,
-                        shared_bits: shared_bits.clone(),
-                        child: Box::new(new_child),
-                    },
+                    make_patricia_extension(*d, shared_bits.clone(), Arc::new(new_child)),
                     true,
                     child_hashes + 1,
                 );
@@ -1199,40 +1233,29 @@ fn insert_patricia_node(
             let split_depth = *d + matched;
             let rem_len = shared_bits.len() - matched - 1;
             let (existing_sub, extra_hash) = if rem_len == 0 {
-                ((**child).clone(), 0)
+                (Arc::clone(child), 0)
             } else {
                 (
-                    PatriciaNode::Extension {
-                        depth: split_depth + 1,
-                        shared_bits: shared_bits[matched + 1..].to_vec(),
-                        child: child.clone(),
-                    },
+                    Arc::new(make_patricia_extension(
+                        split_depth + 1,
+                        shared_bits[matched + 1..].to_vec(),
+                        Arc::clone(child),
+                    )),
                     1,
                 )
             };
-            let new_leaf = PatriciaNode::Leaf {
-                depth: split_depth + 1,
-                key,
-            };
+            let new_leaf = Arc::new(make_patricia_leaf(split_depth + 1, key));
             let (left, right) = if shared_bits[matched] == 0 {
-                (Box::new(existing_sub), Box::new(new_leaf))
+                (existing_sub, new_leaf)
             } else {
-                (Box::new(new_leaf), Box::new(existing_sub))
+                (new_leaf, existing_sub)
             };
-            let branch = PatriciaNode::Branch {
-                depth: split_depth,
-                left,
-                right,
-            };
+            let branch = make_patricia_branch(split_depth, left, right);
             if matched == 0 {
                 (branch, true, 2 + extra_hash)
             } else {
                 (
-                    PatriciaNode::Extension {
-                        depth: *d,
-                        shared_bits: shared_bits[..matched].to_vec(),
-                        child: Box::new(branch),
-                    },
+                    make_patricia_extension(*d, shared_bits[..matched].to_vec(), Arc::new(branch)),
                     true,
                     3 + extra_hash,
                 )
@@ -1242,6 +1265,7 @@ fn insert_patricia_node(
             depth: d,
             left,
             right,
+            ..
         } => {
             debug_assert_eq!(*d, depth);
             if key.bit_at(*d) == 0 {
@@ -1250,11 +1274,7 @@ fn insert_patricia_node(
                     return (node.clone(), false, 0);
                 }
                 (
-                    PatriciaNode::Branch {
-                        depth: *d,
-                        left: Box::new(new_left),
-                        right: right.clone(),
-                    },
+                    make_patricia_branch(*d, Arc::new(new_left), Arc::clone(right)),
                     true,
                     h + 1,
                 )
@@ -1264,11 +1284,7 @@ fn insert_patricia_node(
                     return (node.clone(), false, 0);
                 }
                 (
-                    PatriciaNode::Branch {
-                        depth: *d,
-                        left: left.clone(),
-                        right: Box::new(new_right),
-                    },
+                    make_patricia_branch(*d, Arc::clone(left), Arc::new(new_right)),
                     true,
                     h + 1,
                 )
@@ -1279,26 +1295,22 @@ fn insert_patricia_node(
 
 /// Normalizes the surviving child of a deleted `PatriciaNode::Branch` at depth `d`
 /// by prepending the survivor's direction bit (`0` or `1`).
-fn prepend_bit_to_patricia_survivor(survivor: PatriciaNode, d: usize, bit: u8) -> PatriciaNode {
-    match survivor {
-        PatriciaNode::Leaf { key, .. } => PatriciaNode::Leaf { depth: d, key },
+fn prepend_bit_to_patricia_survivor(
+    survivor: &Arc<PatriciaNode>,
+    d: usize,
+    bit: u8,
+) -> PatriciaNode {
+    match survivor.as_ref() {
+        PatriciaNode::Leaf { key, .. } => make_patricia_leaf(d, *key),
         PatriciaNode::Extension {
             shared_bits, child, ..
         } => {
             let mut new_bits = Vec::with_capacity(1 + shared_bits.len());
             new_bits.push(bit);
-            new_bits.extend_from_slice(&shared_bits);
-            PatriciaNode::Extension {
-                depth: d,
-                shared_bits: new_bits,
-                child,
-            }
+            new_bits.extend_from_slice(shared_bits);
+            make_patricia_extension(d, new_bits, Arc::clone(child))
         }
-        branch @ PatriciaNode::Branch { .. } => PatriciaNode::Extension {
-            depth: d,
-            shared_bits: vec![bit],
-            child: Box::new(branch),
-        },
+        PatriciaNode::Branch { .. } => make_patricia_extension(d, vec![bit], Arc::clone(survivor)),
         PatriciaNode::Empty => unreachable!("branch survivor is never empty"),
     }
 }
@@ -1314,6 +1326,7 @@ fn delete_patricia_node(
         PatriciaNode::Leaf {
             depth: d,
             key: existing_key,
+            ..
         } => {
             debug_assert_eq!(*d, depth);
             if existing_key == key {
@@ -1326,6 +1339,7 @@ fn delete_patricia_node(
             depth: d,
             left,
             right,
+            ..
         } => {
             debug_assert_eq!(*d, depth);
             if key.bit_at(*d) == 0 {
@@ -1334,17 +1348,10 @@ fn delete_patricia_node(
                     return (node.clone(), false);
                 }
                 if matches!(new_left, PatriciaNode::Empty) {
-                    return (
-                        prepend_bit_to_patricia_survivor((**right).clone(), *d, 1),
-                        true,
-                    );
+                    return (prepend_bit_to_patricia_survivor(right, *d, 1), true);
                 }
                 (
-                    PatriciaNode::Branch {
-                        depth: *d,
-                        left: Box::new(new_left),
-                        right: right.clone(),
-                    },
+                    make_patricia_branch(*d, Arc::new(new_left), Arc::clone(right)),
                     true,
                 )
             } else {
@@ -1353,17 +1360,10 @@ fn delete_patricia_node(
                     return (node.clone(), false);
                 }
                 if matches!(new_right, PatriciaNode::Empty) {
-                    return (
-                        prepend_bit_to_patricia_survivor((**left).clone(), *d, 0),
-                        true,
-                    );
+                    return (prepend_bit_to_patricia_survivor(left, *d, 0), true);
                 }
                 (
-                    PatriciaNode::Branch {
-                        depth: *d,
-                        left: left.clone(),
-                        right: Box::new(new_right),
-                    },
+                    make_patricia_branch(*d, Arc::clone(left), Arc::new(new_right)),
                     true,
                 )
             }
@@ -1372,6 +1372,7 @@ fn delete_patricia_node(
             depth: d,
             shared_bits,
             child,
+            ..
         } => {
             debug_assert_eq!(*d, depth);
             for (i, &b) in shared_bits.iter().enumerate() {
@@ -1384,9 +1385,7 @@ fn delete_patricia_node(
                 return (node.clone(), false);
             }
             match new_child {
-                PatriciaNode::Leaf { key: sk, .. } => {
-                    (PatriciaNode::Leaf { depth: *d, key: sk }, true)
-                }
+                PatriciaNode::Leaf { key: sk, .. } => (make_patricia_leaf(*d, sk), true),
                 PatriciaNode::Extension {
                     shared_bits: child_bits,
                     child: grandchild,
@@ -1395,21 +1394,10 @@ fn delete_patricia_node(
                     let mut merged = Vec::with_capacity(shared_bits.len() + child_bits.len());
                     merged.extend_from_slice(shared_bits);
                     merged.extend_from_slice(&child_bits);
-                    (
-                        PatriciaNode::Extension {
-                            depth: *d,
-                            shared_bits: merged,
-                            child: grandchild,
-                        },
-                        true,
-                    )
+                    (make_patricia_extension(*d, merged, grandchild), true)
                 }
                 other_branch => (
-                    PatriciaNode::Extension {
-                        depth: *d,
-                        shared_bits: shared_bits.clone(),
-                        child: Box::new(other_branch),
-                    },
+                    make_patricia_extension(*d, shared_bits.clone(), Arc::new(other_branch)),
                     true,
                 ),
             }
@@ -1688,7 +1676,11 @@ impl MerklePatriciaTrie {
     }
 
     /// Builds a canonical `MerklePatriciaTrie` from pre-sorted unique `CoordinateKeyV1` keys.
-    pub fn from_sorted_keys(keys: Vec<CoordinateKeyV1>) -> Self {
+    pub fn from_sorted_keys(mut keys: Vec<CoordinateKeyV1>) -> Self {
+        if !keys.windows(2).all(|window| window[0] < window[1]) {
+            keys.sort_unstable();
+            keys.dedup();
+        }
         if keys.is_empty() {
             return Self {
                 root_node: PatriciaNode::Empty,
@@ -1791,7 +1783,7 @@ impl MerklePatriciaTrie {
                         terminal: PatriciaTerminal::EmptyRoot,
                     };
                 }
-                PatriciaNode::Leaf { depth, key: lk } => {
+                PatriciaNode::Leaf { depth, key: lk, .. } => {
                     return PatriciaPointProof {
                         steps,
                         terminal: PatriciaTerminal::Leaf {
@@ -1804,6 +1796,7 @@ impl MerklePatriciaTrie {
                     depth,
                     shared_bits,
                     child,
+                    ..
                 } => {
                     let mut matches = true;
                     for (i, &b) in shared_bits.iter().enumerate() {
@@ -1828,7 +1821,9 @@ impl MerklePatriciaTrie {
                     });
                     current = child;
                 }
-                PatriciaNode::Branch { depth, left, right } => {
+                PatriciaNode::Branch {
+                    depth, left, right, ..
+                } => {
                     let dir = key.bit_at(*depth);
                     if dir == 0 {
                         steps.push(PatriciaProofStep::Branch {
@@ -1913,7 +1908,9 @@ impl MerklePatriciaTrie {
                     child_hash,
                 } => {
                     if shared_bits.is_empty()
-                        || *depth + shared_bits.len() >= KEY_BITS
+                        || depth
+                            .checked_add(shared_bits.len())
+                            .is_none_or(|end| end >= KEY_BITS)
                         || *child_hash == empty_node_hash
                     {
                         return None;
@@ -1948,7 +1945,11 @@ impl MerklePatriciaTrie {
                     if prev_was_extension {
                         return None;
                     }
-                    if shared_bits.is_empty() || *depth + shared_bits.len() != current_depth {
+                    if shared_bits.is_empty()
+                        || depth
+                            .checked_add(shared_bits.len())
+                            .is_none_or(|end| end != current_depth)
+                    {
                         return None;
                     }
                     // Soundness check: `key` must match every bit of a traversed Extension
@@ -1970,7 +1971,9 @@ impl MerklePatriciaTrie {
                     direction,
                     sibling_hash,
                 } => {
-                    if *depth + 1 != current_depth
+                    if depth
+                        .checked_add(1)
+                        .is_none_or(|next| next != current_depth)
                         || *direction > 1
                         || *sibling_hash == empty_node_hash
                     {
@@ -2069,10 +2072,7 @@ fn build_patricia_subtree(keys: &[CoordinateKeyV1], depth: usize) -> PatriciaNod
         return PatriciaNode::Empty;
     }
     if keys.len() == 1 {
-        return PatriciaNode::Leaf {
-            depth,
-            key: keys[0],
-        };
+        return make_patricia_leaf(depth, keys[0]);
     }
 
     // Find longest common prefix among all keys starting from `depth`
@@ -2085,22 +2085,14 @@ fn build_patricia_subtree(keys: &[CoordinateKeyV1], depth: usize) -> PatriciaNod
         for d in depth..depth + common {
             shared_bits.push(first.bit_at(d));
         }
-        let child = build_patricia_subtree(keys, depth + common);
-        PatriciaNode::Extension {
-            depth,
-            shared_bits,
-            child: Box::new(child),
-        }
+        let child = Arc::new(build_patricia_subtree(keys, depth + common));
+        make_patricia_extension(depth, shared_bits, child)
     } else {
         // Branch at depth
         let split = keys.partition_point(|k| k.bit_at(depth) == 0);
-        let left = build_patricia_subtree(&keys[..split], depth + 1);
-        let right = build_patricia_subtree(&keys[split..], depth + 1);
-        PatriciaNode::Branch {
-            depth,
-            left: Box::new(left),
-            right: Box::new(right),
-        }
+        let left = Arc::new(build_patricia_subtree(&keys[..split], depth + 1));
+        let right = Arc::new(build_patricia_subtree(&keys[split..], depth + 1));
+        make_patricia_branch(depth, left, right)
     }
 }
 
@@ -2133,7 +2125,7 @@ pub struct CommitAssayReport {
 impl CommitAssayReport {
     /// Encodes the deterministic assay fields (excluding wall-clock `micros`) into canonical bytes.
     pub fn to_canonical_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(64 + 12 * 4);
+        let mut out = Vec::with_capacity(64 + 13 * 4);
         out.extend_from_slice(&self.patricia_root);
         out.extend_from_slice(&self.smt_root);
         for val in [
@@ -2190,16 +2182,16 @@ pub fn run_commit_assay(world: &World) -> CommitAssayReport {
     #[cfg(target_arch = "wasm32")]
     let smt_rebuild_micros = 0u128;
 
-    // Pick first occupied coordinate for membership proof
-    let first_coord = world.iter_on().next().unwrap_or(Coord::new(0, 0, 0));
-    let member_key = CoordinateKeyV1::from_coord(first_coord);
+    // Pick first occupied coordinate for membership proof (or origin if world is empty)
+    let first_occupied = world.iter_on().next();
+    let member_key = CoordinateKeyV1::from_coord(first_occupied.unwrap_or(Coord::new(0, 0, 0)));
 
     let patricia_proof = patricia.prove(&member_key);
     let smt_proof = smt.prove(&member_key);
 
     assert_eq!(
         MerklePatriciaTrie::verify_proof(patricia.root(), &member_key, &patricia_proof),
-        Some(true)
+        Some(first_occupied.is_some())
     );
     assert!(SparseMerkleTree::verify_proof(
         smt.root(),
@@ -2208,7 +2200,10 @@ pub fn run_commit_assay(world: &World) -> CommitAssayReport {
     ));
 
     // Absent coordinate for non-membership proof
-    let non_member_coord = Coord::new(999_999, -888_888, 777_777);
+    let mut non_member_coord = Coord::new(999_999, -888_888, 777_777);
+    while world.is_on(non_member_coord) {
+        non_member_coord.x = non_member_coord.x.wrapping_add(1);
+    }
     let non_member_key = CoordinateKeyV1::from_coord(non_member_coord);
 
     let patricia_absent = patricia.prove(&non_member_key);
@@ -2843,6 +2838,39 @@ mod tests {
         assert_eq!(
             err_empty_trail,
             MortonGapStreamError::TrailingBytes { remaining: 1 }
+        );
+    }
+
+    #[test]
+    fn from_sorted_keys_dedups_and_assay_handles_occupied_probe_and_overflow_depth() {
+        let a = CoordinateKeyV1::from_coord(Coord::new(5, 0, 0));
+        let b = CoordinateKeyV1::from_coord(Coord::new(-3, 2, 1));
+        let mpt_clean = MerklePatriciaTrie::from_sorted_keys(vec![b, a]);
+        let mpt_dirty = MerklePatriciaTrie::from_sorted_keys(vec![a, b, a, b]);
+        assert_eq!(mpt_dirty.root(), mpt_clean.root());
+
+        let smt_clean = SparseMerkleTree::from_sorted_keys(vec![b, a]);
+        let smt_dirty = SparseMerkleTree::from_sorted_keys(vec![a, b, a, b]);
+        assert_eq!(smt_dirty.root(), smt_clean.root());
+
+        // Occupying the default probe coordinate must not panic in run_commit_assay.
+        let mut world = World::new();
+        world.set_on(Coord::new(999_999, -888_888, 777_777));
+        let report = run_commit_assay(&world);
+        assert_eq!(report.key_count, 2);
+
+        // Overflowing depth in a Rust-constructed proof must return None, not panic or wrap.
+        let overflow_proof = PatriciaPointProof {
+            steps: Vec::new(),
+            terminal: PatriciaTerminal::DivergentExtension {
+                depth: usize::MAX,
+                shared_bits: vec![0],
+                child_hash: [1u8; 32],
+            },
+        };
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof(mpt_clean.root(), &a, &overflow_proof),
+            None
         );
     }
 }

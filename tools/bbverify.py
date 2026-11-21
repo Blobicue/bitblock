@@ -80,6 +80,7 @@ CACHE = ROOT / "target" / ".bbverify-cache.json"
 # its own seconds the concurrent group was one opaque number that had simply
 # grown.
 SKIP_BARE = {
+    "check_planning_docs.py",
     "metric_registry.py", "mirror_timeline1.py", "simulate_sequence.py",
     "bbindex.py", "bbgraph.py", "bbverify.py", "bbmutate.py", "bbtime.py",
 }
@@ -97,10 +98,13 @@ def vector_suites() -> list[Path]:
 
 # What each kind of check reads. A check is skipped only when every path here is
 # byte-identical to the last run that passed it.
-RUST_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tests/**/*.rs",
-               "examples/**/*.rs", "Cargo.toml", "crates/*/Cargo.toml",
+RUST_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "crates/core/src/chem/fixtures/*.txt",
+               "docs/gallery/*.bb", "docs/metrics/registry.tsv", "examples/*.tape",
+               "tests/**/*.rs", "examples/**/*.rs", "Cargo.toml", "crates/*/Cargo.toml",
                "Cargo.lock", "rust-toolchain.toml")
 VECTOR_INPUTS = ("tools/*.py", "docs/*.md")
+PLANNING_INPUTS = ("tools/check_planning_docs.py", "docs/**/*.md",
+                   "docs/design-source-receipt-v1.json", "README.md", ".gitattributes")
 REGISTRY_INPUTS = ("tools/metric_registry.py", "docs/metrics/*", "docs/*.md",
                    "README.md", "METRICS.md")
 INDEX_INPUTS = ("src/**/*.rs", "crates/*/src/**/*.rs", "tools/*.py", "tools/*.json", "docs/**/*.md",
@@ -140,13 +144,17 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # 418 -> 420 / 429 -> 431: two LEDGER-1 occupancy episode ledger tests in coordinate_episode.rs.
 # 420 -> 437 / 431 -> 448: seventeen tests across world.rs, camera.rs, render.rs,
 # commit_r1.rs, octree_commit.rs, scale_assay.rs, and optimization.rs.
+# 437 -> 646 / 448 -> 657: chem (planet6) and bitblock-wasm suites merged via PR #2.
+# 646 -> 654 / 657 -> 665: eight audit regression tests across tick.rs, camera.rs,
+# render.rs, display.rs, presentation.rs, coordinate_episode.rs, commit_r1.rs,
+# and octree_commit.rs.
 WINDOWS_ONLY_TESTS = {
-    "quick": 29,  # 437 on Windows - 408 on Linux
-    "full": 38,   # 448 on Windows - 410 on Linux
+    "quick": 29,  # 654 on Windows - 625 on Linux
+    "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 437, "full": 448}.items()
+    for t, count in {"quick": 654, "full": 665}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
@@ -287,6 +295,9 @@ EXTRA_CHECKS = {
                        "they catch the two sides disagreeing"
                        % (len(vector_suites()),
                           sum(p.name.endswith("_vectors.py") for p in vector_suites()))),
+    "planning docs": (PLANNING_INPUTS,
+                      lambda: run([sys.executable, "-B", "tools/check_planning_docs.py", "--self-test"]),
+                      "powered planning-document and frozen-audit negative controls"),
     "metric registry": (REGISTRY_INPUTS,
                         lambda: run([sys.executable, "-B", "tools/metric_registry.py", "audit"]),
                         "1,112 aliases must still resolve to their definition tags"),

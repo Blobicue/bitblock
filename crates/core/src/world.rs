@@ -403,6 +403,11 @@ impl World {
         self.len
     }
 
+    /// Returns the monotonic mutation revision counter incremented on every world state change.
+    pub const fn revision(&self) -> u64 {
+        self.revision_counter
+    }
+
     /// Number of lazily allocated 16 x 16 x 16 chunks currently carrying on bits.
     pub fn allocated_chunk_count(&self) -> usize {
         self.chunks.len()
