@@ -88,3 +88,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "vm_d1_visual_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "bounds_1_stress_probe"
+required-features = ["protocol-research"]
