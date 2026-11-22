@@ -154,13 +154,17 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # 719 -> 725 / 732 -> 739: three TRANSITION-SPEC-D1 unit tests in transition_spec.rs,
 # three REFINE-1@world correspondence integration tests in tests/world_refinement_correspondence.rs,
 # and one protocol-research integration test in tests/transition_spec_d1.rs.
+# 725 -> 728 / 739 -> 747: three COMMIT-1 unit tests in commit_state.rs (including 19 golden
+# Python cross-parity assertions) and five protocol-research integration tests in
+# tests/commit_1_authenticated_state.rs (depth-192/256 boundaries, adversarial proof controls,
+# logical pruning, GC write-barrier race, and 5-crash-point filesystem recovery gauntlet).
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 725, "full": 739}.items()
+    for t, count in {"quick": 728, "full": 747}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
