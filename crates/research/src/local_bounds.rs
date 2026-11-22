@@ -115,6 +115,50 @@ impl LocalStorageProfile {
         .expect("canonical local bounds profile tag must compute")
     }
 
+    /// Checks whether a single canonical record byte length fits within `max_record_bytes`.
+    pub fn check_record_bytes(&self, record_bytes: u64) -> Result<(), BoundsError> {
+        if record_bytes > self.max_record_bytes {
+            return Err(BoundsError::RecordBytesExceeded {
+                requested: record_bytes,
+                limit: self.max_record_bytes,
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks whether a commit batch record count fits within `max_records_per_commit`.
+    pub fn check_records_per_commit(&self, record_count: u64) -> Result<(), BoundsError> {
+        if record_count > self.max_records_per_commit {
+            return Err(BoundsError::RecordsPerCommitExceeded {
+                requested: record_count,
+                limit: self.max_records_per_commit,
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks whether a retained local history record count fits within `max_retained_history_records`.
+    pub fn check_retained_history(&self, retained_records: u64) -> Result<(), BoundsError> {
+        if retained_records > self.max_retained_history_records {
+            return Err(BoundsError::RetainedHistoryExceeded {
+                requested: retained_records,
+                limit: self.max_retained_history_records,
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks whether a backup or restore transfer fits within `max_backup_restore_bytes`.
+    pub fn check_backup_restore(&self, total_bytes: u64) -> Result<(), BoundsError> {
+        if total_bytes > self.max_backup_restore_bytes {
+            return Err(BoundsError::BackupRestoreExceeded {
+                requested: total_bytes,
+                limit: self.max_backup_restore_bytes,
+            });
+        }
+        Ok(())
+    }
+
     /// Checked preallocation arithmetic for staged writes.
     ///
     /// Returns the required bytes on success, or fails closed if multiplication overflows
@@ -257,9 +301,13 @@ impl BoundedRecoveryScanner {
 pub enum BoundsError {
     InvalidPayloadLength { expected: usize, actual: usize },
     AllocationOverflow,
+    RecordBytesExceeded { requested: u64, limit: u64 },
+    RecordsPerCommitExceeded { requested: u64, limit: u64 },
     StagedWriteExceeded { requested: u64, limit: u64 },
+    RetainedHistoryExceeded { requested: u64, limit: u64 },
     RestartScanBytesExceeded { scanned: u64, limit: u64 },
     RestartScanRecordsExceeded { scanned: u64, limit: u64 },
+    BackupRestoreExceeded { requested: u64, limit: u64 },
     PruningBatchExceeded { requested: u64, limit: u64 },
     LimitConversionOverflow,
     StorageLimitsInvalid(crate::storage::StorageError),
@@ -277,10 +325,28 @@ impl fmt::Display for BoundsError {
             Self::AllocationOverflow => {
                 write!(f, "arithmetic overflow during allocation check")
             }
+            Self::RecordBytesExceeded { requested, limit } => {
+                write!(
+                    f,
+                    "canonical record of {requested} bytes exceeds limit of {limit}"
+                )
+            }
+            Self::RecordsPerCommitExceeded { requested, limit } => {
+                write!(
+                    f,
+                    "commit batch of {requested} records exceeds limit of {limit}"
+                )
+            }
             Self::StagedWriteExceeded { requested, limit } => {
                 write!(
                     f,
                     "staged write allocation of {requested} bytes exceeds limit of {limit}"
+                )
+            }
+            Self::RetainedHistoryExceeded { requested, limit } => {
+                write!(
+                    f,
+                    "retained history of {requested} records exceeds limit of {limit}"
                 )
             }
             Self::RestartScanBytesExceeded { scanned, limit } => {
@@ -293,6 +359,12 @@ impl fmt::Display for BoundsError {
                 write!(
                     f,
                     "restart scan reached {scanned} records, exceeding limit of {limit}"
+                )
+            }
+            Self::BackupRestoreExceeded { requested, limit } => {
+                write!(
+                    f,
+                    "backup/restore transfer of {requested} bytes exceeds limit of {limit}"
                 )
             }
             Self::PruningBatchExceeded { requested, limit } => {
@@ -407,5 +479,137 @@ mod tests {
             .check_prune_batch(DEFAULT_MAX_PRUNING_BATCH_RECORDS + 1)
             .unwrap_err();
         assert!(matches!(err, BoundsError::PruningBatchExceeded { .. }));
+    }
+
+    #[test]
+    fn worst_shaped_local_records_and_recovery_envelope_fit_default_profile() {
+        let profile = LocalStorageProfile::DEFAULT;
+        // COST-1 worst-shaped TickOutcome v3 canonical payload: 469 + 65,536 * 26 = 1,704,405 bytes.
+        let worst_tick_outcome_v3_bytes = 469_u64 + 65_536_u64 * 26_u64;
+        assert_eq!(worst_tick_outcome_v3_bytes, 1_704_405);
+        // Envelope header + tags + schema + footer overhead stays well under 1 KiB.
+        let worst_wrapped_record_bytes = worst_tick_outcome_v3_bytes + 512;
+        assert!(
+            profile
+                .check_record_bytes(worst_wrapped_record_bytes)
+                .is_ok()
+        );
+
+        let limits = profile.to_storage_limits().unwrap();
+        assert!(worst_tick_outcome_v3_bytes as usize <= limits.max_payload_bytes());
+        assert!(worst_wrapped_record_bytes as usize <= limits.max_record_bytes());
+
+        // Worst-shaped HistoryReplayLimits::DEFAULT fits within LocalStorageProfile::DEFAULT.
+        let replay = HistoryReplayLimits::DEFAULT;
+        assert!(
+            profile
+                .check_retained_history(replay.max_receipts() as u64)
+                .is_ok()
+        );
+        assert!(
+            profile
+                .check_records_per_commit(replay.max_edits_per_receipt() as u64)
+                .is_ok()
+        );
+        assert!(
+            profile
+                .check_backup_restore(DEFAULT_MAX_STAGED_WRITE_BYTES)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn all_seven_bounds_reject_one_over_before_allocation() {
+        use crate::storage::{StorageError, StorageRecord};
+
+        let profile = LocalStorageProfile::DEFAULT;
+
+        assert!(profile.check_record_bytes(DEFAULT_MAX_RECORD_BYTES).is_ok());
+        assert!(matches!(
+            profile.check_record_bytes(DEFAULT_MAX_RECORD_BYTES + 1),
+            Err(BoundsError::RecordBytesExceeded { .. })
+        ));
+
+        assert!(
+            profile
+                .check_records_per_commit(DEFAULT_MAX_RECORDS_PER_COMMIT)
+                .is_ok()
+        );
+        assert!(matches!(
+            profile.check_records_per_commit(DEFAULT_MAX_RECORDS_PER_COMMIT + 1),
+            Err(BoundsError::RecordsPerCommitExceeded { .. })
+        ));
+
+        assert!(
+            profile
+                .check_staged_allocation(1, DEFAULT_MAX_STAGED_WRITE_BYTES)
+                .is_ok()
+        );
+        assert!(matches!(
+            profile.check_staged_allocation(1, DEFAULT_MAX_STAGED_WRITE_BYTES + 1),
+            Err(BoundsError::StagedWriteExceeded { .. })
+        ));
+
+        assert!(
+            profile
+                .check_retained_history(DEFAULT_MAX_RETAINED_HISTORY_RECORDS)
+                .is_ok()
+        );
+        assert!(matches!(
+            profile.check_retained_history(DEFAULT_MAX_RETAINED_HISTORY_RECORDS + 1),
+            Err(BoundsError::RetainedHistoryExceeded { .. })
+        ));
+
+        assert!(
+            profile
+                .check_restart_scan(
+                    DEFAULT_MAX_RESTART_SCAN_BYTES,
+                    DEFAULT_MAX_RETAINED_HISTORY_RECORDS
+                )
+                .is_ok()
+        );
+        assert!(matches!(
+            profile.check_restart_scan(DEFAULT_MAX_RESTART_SCAN_BYTES + 1, 0),
+            Err(BoundsError::RestartScanBytesExceeded { .. })
+        ));
+
+        assert!(
+            profile
+                .check_backup_restore(DEFAULT_MAX_BACKUP_RESTORE_BYTES)
+                .is_ok()
+        );
+        assert!(matches!(
+            profile.check_backup_restore(DEFAULT_MAX_BACKUP_RESTORE_BYTES + 1),
+            Err(BoundsError::BackupRestoreExceeded { .. })
+        ));
+
+        assert!(
+            profile
+                .check_prune_batch(DEFAULT_MAX_PRUNING_BATCH_RECORDS)
+                .is_ok()
+        );
+        assert!(matches!(
+            profile.check_prune_batch(DEFAULT_MAX_PRUNING_BATCH_RECORDS + 1),
+            Err(BoundsError::PruningBatchExceeded { .. })
+        ));
+
+        // Tight custom profile rejects an over-limit StorageRecord header before payload decode.
+        let tight = LocalStorageProfile {
+            max_record_bytes: 256,
+            ..LocalStorageProfile::DEFAULT
+        };
+        let limits = tight.to_storage_limits().unwrap();
+        let record = StorageRecord::new(
+            None,
+            TagKind::Policy,
+            LOCAL_BOUNDS_PROFILE_SCHEMA,
+            &[0u8; 300],
+        )
+        .unwrap();
+        let encoded = record.encode();
+        assert!(matches!(
+            StorageRecord::decode_with_limits(&encoded, None, limits),
+            Err(StorageError::RecordTooLarge { .. })
+        ));
     }
 }

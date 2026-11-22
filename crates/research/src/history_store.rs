@@ -16,8 +16,9 @@ use crate::history::{
     RECEIPT_SCHEMA, Receipt, canonical_receipt_payload_len,
 };
 use crate::journal::{
-    AnchorPolicy, AppendSyncReceipt, CreateReceipt, Journal, JournalError, OpenJournal,
-    RecoveryJournal, RecoveryReport, ScanReport, TailDiscardReceipt,
+    AnchorPolicy, AppendSyncReceipt, BackupReceipt, CreateReceipt, Journal, JournalError,
+    OpenJournal, PrunePolicy, PruneReceipt, RecoveryJournal, RecoveryReport, RestoreReceipt,
+    ScanReport, TailDiscardReceipt,
 };
 use crate::program::Edit;
 use crate::protocol::{ContentTag, TagKind};
@@ -1321,6 +1322,82 @@ impl HistoryJournal {
         self.carrier.is_poisoned() || self.semantic_poisoned
     }
 
+    /// Writes, synchronizes, and verifies a full journal backup bounded by `profile`.
+    pub fn backup_to_with_profile<P: AsRef<Path>>(
+        &mut self,
+        dest: P,
+        profile: &crate::local_bounds::LocalStorageProfile,
+    ) -> Result<BackupReceipt, HistoryStoreError> {
+        if self.carrier.is_poisoned() || self.semantic_poisoned {
+            return Err(HistoryStoreError::Poisoned);
+        }
+        profile.check_backup_restore(self.carrier.valid_bytes())?;
+        self.carrier
+            .backup_to(dest, profile.max_backup_restore_bytes)
+            .map_err(Into::into)
+    }
+
+    /// Verifies and restores a backup carrier under `profile`, then replays its semantic history.
+    pub fn restore_from_with_profile<P: AsRef<Path>, Q: AsRef<Path>>(
+        backup_path: P,
+        dest_path: Q,
+        profile: &crate::local_bounds::LocalStorageProfile,
+        anchor: AnchorPolicy,
+        initial_world: &World,
+    ) -> Result<(Self, RestoreReceipt), HistoryStoreError> {
+        let storage_limits = profile.to_storage_limits()?;
+        let replay_limits = profile.to_history_replay_limits()?;
+        let (carrier, receipt) = Journal::restore_from(
+            backup_path,
+            dest_path,
+            storage_limits,
+            profile.max_backup_restore_bytes,
+            anchor,
+        )?;
+        let state =
+            replay_history_records_with_limits(initial_world, carrier.records(), replay_limits)?;
+        Ok((
+            Self {
+                carrier,
+                state,
+                limits: storage_limits,
+                replay_limits,
+                semantic_poisoned: false,
+            },
+            receipt,
+        ))
+    }
+
+    /// Exports a bounded pruned continuation segment bounded by `profile` without dropping pins.
+    pub fn prune_prefix_with_profile<P: AsRef<Path>>(
+        &mut self,
+        dest: P,
+        prune_count: usize,
+        pinned_ancestor: Option<ContentTag>,
+        profile: &crate::local_bounds::LocalStorageProfile,
+    ) -> Result<PruneReceipt, HistoryStoreError> {
+        if self.carrier.is_poisoned() || self.semantic_poisoned {
+            return Err(HistoryStoreError::Poisoned);
+        }
+        let prune_u64 = u64::try_from(prune_count).map_err(|_| {
+            HistoryStoreError::LocalBounds(crate::local_bounds::BoundsError::AllocationOverflow)
+        })?;
+        profile.check_prune_batch(prune_u64)?;
+        let max_prune_records =
+            usize::try_from(profile.max_pruning_batch_records).unwrap_or(usize::MAX);
+        self.carrier
+            .export_pruned_continuation(
+                dest,
+                prune_count,
+                PrunePolicy {
+                    max_prune_records,
+                    pinned_ancestor,
+                },
+                profile.max_backup_restore_bytes,
+            )
+            .map_err(Into::into)
+    }
+
     /// Applies edits to a private candidate world, persists their receipt, then publishes state.
     pub fn append_tick(
         &mut self,
@@ -2617,6 +2694,93 @@ mod tests {
                 HistoryStoreError::Semantic(HistorySemanticError::ReceiptPostWorldMismatch { .. })
             ));
             assert_eq!(std::fs::read(&path.0).unwrap(), physical);
+        }
+
+        #[test]
+        fn profile_backup_restore_and_bounded_pruning_enforce_limits_and_pins() {
+            let live_path = TempHistoryPath::new("profile-live");
+            let backup_path = TempHistoryPath::new("profile-backup");
+            let restored_path = TempHistoryPath::new("profile-restored");
+            let pruned_path = TempHistoryPath::new("profile-pruned");
+            let initial = World::new();
+            let profile = crate::local_bounds::LocalStorageProfile::DEFAULT;
+
+            let (mut journal, _) =
+                HistoryJournal::create_new_with_profile(&live_path.0, &profile, &initial).unwrap();
+            let first = journal
+                .append_tick(2, &[Edit::new(Operation::On, P)])
+                .unwrap()
+                .unwrap();
+            let second = journal
+                .append_tick(5, &[Edit::new(Operation::On, Q)])
+                .unwrap()
+                .unwrap();
+
+            // Tight backup profile rejects before creating backup file.
+            let tight_backup = crate::local_bounds::LocalStorageProfile {
+                max_backup_restore_bytes: journal.carrier_valid_bytes() - 1,
+                ..profile
+            };
+            assert!(matches!(
+                journal.backup_to_with_profile(&backup_path.0, &tight_backup),
+                Err(HistoryStoreError::LocalBounds(
+                    crate::local_bounds::BoundsError::BackupRestoreExceeded { .. }
+                ))
+            ));
+            assert!(!backup_path.0.exists());
+
+            // Valid backup + restore reproduces exact world, history, and live append capability.
+            let backup = journal
+                .backup_to_with_profile(&backup_path.0, &profile)
+                .unwrap();
+            assert_eq!(backup.head, Some(second.carrier_append.record_tag));
+
+            let (mut restored, restore_receipt) = HistoryJournal::restore_from_with_profile(
+                &backup_path.0,
+                &restored_path.0,
+                &profile,
+                AnchorPolicy::RequireAncestor(first.carrier_append.record_tag),
+                &initial,
+            )
+            .unwrap();
+            assert_eq!(restore_receipt.head, Some(second.carrier_append.record_tag));
+            assert!(restored.world().is_on(P));
+            assert!(restored.world().is_on(Q));
+            assert_eq!(restored.history().head(), second.receipt);
+
+            // Profile prune batch limit rejects one-over before touching disk.
+            let tight_prune = crate::local_bounds::LocalStorageProfile {
+                max_pruning_batch_records: 1,
+                ..profile
+            };
+            assert!(matches!(
+                restored.prune_prefix_with_profile(
+                    &pruned_path.0,
+                    2,
+                    Some(second.carrier_append.record_tag),
+                    &tight_prune,
+                ),
+                Err(HistoryStoreError::LocalBounds(
+                    crate::local_bounds::BoundsError::PruningBatchExceeded { .. }
+                ))
+            ));
+            assert!(!pruned_path.0.exists());
+
+            // Valid bounded prune keeps pinned first receipt and current head intact.
+            let prune_receipt = restored
+                .prune_prefix_with_profile(
+                    &pruned_path.0,
+                    1,
+                    Some(first.carrier_append.record_tag),
+                    &profile,
+                )
+                .unwrap();
+            assert_eq!(prune_receipt.pruned_record_count, 1);
+            assert_eq!(prune_receipt.retained_record_count, 2);
+            assert_eq!(
+                prune_receipt.retained_head,
+                Some(second.carrier_append.record_tag)
+            );
         }
     }
 }

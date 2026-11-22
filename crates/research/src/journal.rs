@@ -169,6 +169,47 @@ pub struct TailDiscardReceipt {
     pub sync_evidence: SyncEvidence,
 }
 
+/// Receipt emitted after writing, synchronizing, and re-verifying a full journal backup.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackupReceipt {
+    pub head: Option<ContentTag>,
+    pub record_count: usize,
+    pub backed_up_bytes: u64,
+    pub sync_evidence: SyncEvidence,
+    pub verified_bytes_evidence: AppendedBytesEvidence,
+}
+
+/// Receipt emitted after verifying a backup carrier and restoring it to a new journal file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RestoreReceipt {
+    pub head: Option<ContentTag>,
+    pub record_count: usize,
+    pub restored_bytes: u64,
+    pub required_ancestor_seen: bool,
+    pub sync_evidence: SyncEvidence,
+    pub verified_bytes_evidence: AppendedBytesEvidence,
+}
+
+/// Bounded pruning policy controlling prefix compaction without deleting a pinned ancestor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PrunePolicy {
+    pub max_prune_records: usize,
+    pub pinned_ancestor: Option<ContentTag>,
+}
+
+/// Receipt emitted after exporting a verified, bounded pruned continuation segment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PruneReceipt {
+    pub pruned_record_count: usize,
+    pub pruned_bytes: u64,
+    pub retained_record_count: usize,
+    pub retained_bytes: u64,
+    pub base_parent: Option<ContentTag>,
+    pub retained_head: Option<ContentTag>,
+    pub sync_evidence: SyncEvidence,
+    pub verified_bytes_evidence: AppendedBytesEvidence,
+}
+
 /// Operational stage of `Journal::append_synced` where an uncertain I/O failure occurred.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppendPhase {
@@ -201,9 +242,12 @@ pub enum TailDiscardPhase {
 pub enum JournalIoPhase {
     CreateNew,
     OpenExisting,
+    OpenBackup,
     Metadata,
     Read,
     Seek,
+    WriteBackup,
+    SyncBackup,
     SyncNewFile,
 }
 
@@ -220,6 +264,25 @@ pub enum JournalError {
     FileTooLarge {
         actual: u64,
         max: u64,
+    },
+    BackupExceedsBudget {
+        actual: u64,
+        limit: u64,
+    },
+    BackupNotClean(Box<RecoveryReport>),
+    BackupVerificationFailed,
+    RestoreVerificationFailed,
+    PruneBatchLimitExceeded {
+        requested: usize,
+        limit: usize,
+    },
+    PruneCountExceedsAvailable {
+        requested: usize,
+        available: usize,
+    },
+    PruneWouldDropHead,
+    PruneWouldDropPinnedAncestor {
+        pinned: ContentTag,
     },
     AllocationFailed {
         requested: usize,
@@ -365,6 +428,208 @@ impl Journal {
             object_schema,
             payload,
         )
+    }
+
+    /// Writes, synchronizes, and re-verifies a bounded canonical backup at a new exclusive path.
+    pub fn backup_to<P: AsRef<Path>>(
+        &mut self,
+        dest: P,
+        max_backup_bytes: u64,
+    ) -> Result<BackupReceipt, JournalError> {
+        if self.poisoned {
+            return Err(JournalError::Poisoned);
+        }
+        if self.valid_bytes > max_backup_bytes {
+            return Err(JournalError::BackupExceedsBudget {
+                actual: self.valid_bytes,
+                limit: max_backup_bytes,
+            });
+        }
+        let observed = file_len(&self.file)?;
+        if observed != self.valid_bytes {
+            self.poisoned = true;
+            return Err(JournalError::FileLengthChanged {
+                expected: self.valid_bytes,
+                actual: observed,
+            });
+        }
+        let bytes = read_bounded_file(&mut self.file, self.chain.limits())?;
+        let inspected = inspect(&bytes, self.chain.limits(), AnchorPolicy::UnanchoredLocal)?;
+        let ByteScan::Clean(clean) = inspected.scan else {
+            return Err(JournalError::BackupVerificationFailed);
+        };
+        if clean.valid_prefix_bytes != self.valid_bytes || inspected.chain != self.chain {
+            return Err(JournalError::BackupVerificationFailed);
+        }
+
+        let mut dest_file = open_exclusive(dest.as_ref(), true)?;
+        validate_regular_file(&dest_file)?;
+        write_sync_and_verify_file(&mut dest_file, &bytes)?;
+        Ok(BackupReceipt {
+            head: self.chain.head(),
+            record_count: self.chain.records().len(),
+            backed_up_bytes: self.valid_bytes,
+            sync_evidence: SyncEvidence::OsSyncAllReturnedOk,
+            verified_bytes_evidence: AppendedBytesEvidence::OsVisibleBytesRereadEqual,
+        })
+    }
+
+    /// Verifies a supplied backup file fail-closed and restores it to a new exclusive journal path.
+    pub fn restore_from<P: AsRef<Path>, Q: AsRef<Path>>(
+        backup_path: P,
+        dest_path: Q,
+        limits: StorageLimits,
+        max_restore_bytes: u64,
+        anchor: AnchorPolicy,
+    ) -> Result<(Self, RestoreReceipt), JournalError> {
+        anchor.validate()?;
+        let mut backup_file = open_readonly_regular(backup_path.as_ref())?;
+        validate_regular_file(&backup_file)?;
+        let measured = file_len(&backup_file)?;
+        if measured > max_restore_bytes {
+            return Err(JournalError::BackupExceedsBudget {
+                actual: measured,
+                limit: max_restore_bytes,
+            });
+        }
+        let bytes = read_bounded_file(&mut backup_file, limits)?;
+        let inspected = inspect(&bytes, limits, anchor)?;
+        let report = match inspected.scan {
+            ByteScan::Clean(report) => {
+                require_anchor_if_clean(anchor, &report)?;
+                report
+            }
+            ByteScan::NeedsRecovery(recovery) => {
+                return Err(JournalError::BackupNotClean(Box::new(recovery)));
+            }
+        };
+
+        let mut dest_file = open_exclusive(dest_path.as_ref(), true)?;
+        validate_regular_file(&dest_file)?;
+        write_sync_and_verify_file(&mut dest_file, &bytes)?;
+        let restored = read_bounded_file(&mut dest_file, limits)?;
+        if restored != bytes {
+            return Err(JournalError::RestoreVerificationFailed);
+        }
+
+        let valid_bytes = report.valid_prefix_bytes;
+        let receipt = RestoreReceipt {
+            head: report.valid_head,
+            record_count: report.valid_record_count,
+            restored_bytes: valid_bytes,
+            required_ancestor_seen: report.required_ancestor_seen,
+            sync_evidence: SyncEvidence::OsSyncAllReturnedOk,
+            verified_bytes_evidence: AppendedBytesEvidence::OsVisibleBytesRereadEqual,
+        };
+        Ok((
+            Self {
+                file: dest_file,
+                chain: inspected.chain,
+                valid_bytes,
+                poisoned: false,
+            },
+            receipt,
+        ))
+    }
+
+    /// Exports a bounded pruned continuation segment without dropping a pinned ancestor or head.
+    pub fn export_pruned_continuation<P: AsRef<Path>>(
+        &mut self,
+        dest: P,
+        prune_count: usize,
+        policy: PrunePolicy,
+        max_write_bytes: u64,
+    ) -> Result<PruneReceipt, JournalError> {
+        if self.poisoned {
+            return Err(JournalError::Poisoned);
+        }
+        if prune_count > policy.max_prune_records {
+            return Err(JournalError::PruneBatchLimitExceeded {
+                requested: prune_count,
+                limit: policy.max_prune_records,
+            });
+        }
+        let records = self.chain.records();
+        if prune_count > records.len() {
+            return Err(JournalError::PruneCountExceedsAvailable {
+                requested: prune_count,
+                available: records.len(),
+            });
+        }
+        if prune_count > 0 && prune_count == records.len() {
+            return Err(JournalError::PruneWouldDropHead);
+        }
+        let retained = &records[prune_count..];
+        if let Some(pinned) = policy.pinned_ancestor {
+            if pinned.kind() != TagKind::StorageRecord {
+                return Err(JournalError::RequiredAncestorKind {
+                    actual: pinned.kind(),
+                });
+            }
+            if !retained.iter().any(|record| record.record_tag() == pinned) {
+                return Err(JournalError::PruneWouldDropPinnedAncestor { pinned });
+            }
+        }
+
+        let base_parent = if prune_count == 0 {
+            None
+        } else {
+            Some(records[prune_count - 1].record_tag())
+        };
+        let pruned_bytes = records[..prune_count].iter().try_fold(0_u64, |acc, r| {
+            let len = u64::try_from(r.encoded_len()).map_err(|_| JournalError::OffsetOverflow)?;
+            acc.checked_add(len).ok_or(JournalError::OffsetOverflow)
+        })?;
+        let retained_bytes = retained.iter().try_fold(0_u64, |acc, r| {
+            let len = u64::try_from(r.encoded_len()).map_err(|_| JournalError::OffsetOverflow)?;
+            acc.checked_add(len).ok_or(JournalError::OffsetOverflow)
+        })?;
+        if retained_bytes > max_write_bytes {
+            return Err(JournalError::BackupExceedsBudget {
+                actual: retained_bytes,
+                limit: max_write_bytes,
+            });
+        }
+        let retained_cap =
+            usize::try_from(retained_bytes).map_err(|_| JournalError::OffsetOverflow)?;
+        let mut suffix = Vec::new();
+        suffix
+            .try_reserve_exact(retained_cap)
+            .map_err(|_| JournalError::AllocationFailed {
+                requested: retained_cap,
+            })?;
+        for record in retained {
+            suffix.extend_from_slice(&record.encode());
+        }
+        let scan = inspect_continuation_bytes(
+            &suffix,
+            base_parent,
+            self.chain.limits(),
+            match policy.pinned_ancestor {
+                Some(pin) => AnchorPolicy::RequireAncestor(pin),
+                None => AnchorPolicy::UnanchoredLocal,
+            },
+        )?;
+        let ByteScan::Clean(clean) = scan else {
+            return Err(JournalError::BackupVerificationFailed);
+        };
+        if clean.valid_head != self.chain.head() || clean.valid_record_count != retained.len() {
+            return Err(JournalError::BackupVerificationFailed);
+        }
+
+        let mut dest_file = open_exclusive(dest.as_ref(), true)?;
+        validate_regular_file(&dest_file)?;
+        write_sync_and_verify_file(&mut dest_file, &suffix)?;
+        Ok(PruneReceipt {
+            pruned_record_count: prune_count,
+            pruned_bytes,
+            retained_record_count: retained.len(),
+            retained_bytes,
+            base_parent,
+            retained_head: clean.valid_head,
+            sync_evidence: SyncEvidence::OsSyncAllReturnedOk,
+            verified_bytes_evidence: AppendedBytesEvidence::OsVisibleBytesRereadEqual,
+        })
     }
 }
 
@@ -794,17 +1059,34 @@ pub fn inspect_bytes(
     limits: StorageLimits,
     anchor: AnchorPolicy,
 ) -> Result<ByteScan, JournalError> {
+    inspect_continuation_bytes(bytes, None, limits, anchor)
+}
+
+/// Scans a canonical storage-record stream starting at an explicit `base_parent`.
+pub fn inspect_continuation_bytes(
+    bytes: &[u8],
+    base_parent: Option<ContentTag>,
+    limits: StorageLimits,
+    anchor: AnchorPolicy,
+) -> Result<ByteScan, JournalError> {
     anchor.validate()?;
+    if let Some(parent) = base_parent
+        && parent.kind() != TagKind::StorageRecord
+    {
+        return Err(JournalError::RequiredAncestorKind {
+            actual: parent.kind(),
+        });
+    }
     let actual = u64::try_from(bytes.len()).map_err(|_| JournalError::OffsetOverflow)?;
     let max = u64::try_from(limits.max_stream_bytes()).unwrap_or(u64::MAX);
     if actual > max {
         return Err(JournalError::FileTooLarge { actual, max });
     }
-    let inspected = inspect(bytes, limits, anchor)?;
-    if let ByteScan::Clean(report) = &inspected.scan {
+    let scan = inspect_scan(bytes, base_parent, limits, anchor)?;
+    if let ByteScan::Clean(report) = &scan {
         require_anchor_if_clean(anchor, report)?;
     }
-    Ok(inspected.scan)
+    Ok(scan)
 }
 
 struct Inspection {
@@ -812,21 +1094,26 @@ struct Inspection {
     scan: ByteScan,
 }
 
-fn inspect(
+fn inspect_scan(
     bytes: &[u8],
+    base_parent: Option<ContentTag>,
     limits: StorageLimits,
     anchor: AnchorPolicy,
-) -> Result<Inspection, JournalError> {
+) -> Result<ByteScan, JournalError> {
     let required = anchor.required();
     let mut required_seen = false;
     let mut first_error = None;
-    let mut scanner = StorageScanner::with_limits(bytes, None, limits);
+    let mut record_count = 0_usize;
+    let mut last_head = None;
+    let mut scanner = StorageScanner::with_limits(bytes, base_parent, limits);
     for result in scanner.by_ref() {
         match result {
             Ok(record) => {
                 if Some(record.record_tag()) == required {
                     required_seen = true;
                 }
+                last_head = Some(record.record_tag());
+                record_count += 1;
             }
             Err(error) => {
                 first_error = Some(error);
@@ -836,23 +1123,22 @@ fn inspect(
     }
 
     let valid_prefix = scanner.offset();
-    let chain = StorageChain::decode_with_limits(&bytes[..valid_prefix], limits)?;
     let valid_prefix_u64 = u64::try_from(valid_prefix).map_err(|_| JournalError::OffsetOverflow)?;
     let file_bytes = u64::try_from(bytes.len()).map_err(|_| JournalError::OffsetOverflow)?;
     let common = ScanReport {
         file_bytes,
         valid_prefix_bytes: valid_prefix_u64,
-        valid_record_count: chain.records().len(),
-        valid_head: chain.head(),
+        valid_record_count: record_count,
+        valid_head: last_head,
         required_ancestor_seen: required.is_none() || required_seen,
     };
 
-    let scan = if let Some(first_error) = first_error {
+    if let Some(first_error) = first_error {
         let tail = &bytes[valid_prefix..];
         let rejected_tail_bytes =
             u64::try_from(tail.len()).map_err(|_| JournalError::OffsetOverflow)?;
         let rejected_tail_tag = rejected_tail_tag(valid_prefix_u64, file_bytes, tail)?;
-        ByteScan::NeedsRecovery(RecoveryReport {
+        Ok(ByteScan::NeedsRecovery(RecoveryReport {
             file_bytes,
             valid_prefix_bytes: valid_prefix_u64,
             rejected_tail_bytes,
@@ -862,10 +1148,25 @@ fn inspect(
             rejection_class: classify_rejection(&first_error),
             first_error,
             rejected_tail_tag,
-        })
+        }))
     } else {
-        ByteScan::Clean(common)
+        Ok(ByteScan::Clean(common))
+    }
+}
+
+fn inspect(
+    bytes: &[u8],
+    limits: StorageLimits,
+    anchor: AnchorPolicy,
+) -> Result<Inspection, JournalError> {
+    let scan = inspect_scan(bytes, None, limits, anchor)?;
+    let valid_prefix = match &scan {
+        ByteScan::Clean(report) => report.valid_prefix_bytes,
+        ByteScan::NeedsRecovery(report) => report.valid_prefix_bytes,
     };
+    let valid_prefix_usize =
+        usize::try_from(valid_prefix).map_err(|_| JournalError::OffsetOverflow)?;
+    let chain = StorageChain::decode_with_limits(&bytes[..valid_prefix_usize], limits)?;
     Ok(Inspection { chain, scan })
 }
 
@@ -1088,6 +1389,101 @@ fn open_exclusive(_path: &Path, _create_new: bool) -> Result<File, JournalError>
     Err(JournalError::UnsupportedExclusivePlatform)
 }
 
+#[cfg(unix)]
+fn open_readonly_regular(path: &Path) -> Result<File, JournalError> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    options.open(path).map_err(|source| JournalError::Io {
+        phase: JournalIoPhase::OpenBackup,
+        source,
+    })
+}
+
+#[cfg(windows)]
+fn open_readonly_regular(path: &Path) -> Result<File, JournalError> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    options.open(path).map_err(|source| JournalError::Io {
+        phase: JournalIoPhase::OpenBackup,
+        source,
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_readonly_regular(_path: &Path) -> Result<File, JournalError> {
+    Err(JournalError::UnsupportedExclusivePlatform)
+}
+
+fn write_sync_and_verify_file(file: &mut File, bytes: &[u8]) -> Result<(), JournalError> {
+    let expected_len = u64::try_from(bytes.len()).map_err(|_| JournalError::OffsetOverflow)?;
+    let mut written = 0_usize;
+    while written < bytes.len() {
+        match file.write(&bytes[written..]) {
+            Ok(0) => {
+                return Err(JournalError::Io {
+                    phase: JournalIoPhase::WriteBackup,
+                    source: io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "journal backup write returned zero",
+                    ),
+                });
+            }
+            Ok(count) if count <= bytes.len() - written => written += count,
+            Ok(count) => {
+                return Err(JournalError::Io {
+                    phase: JournalIoPhase::WriteBackup,
+                    source: io::Error::other(format!(
+                        "journal backup writer accepted impossible count {count}"
+                    )),
+                });
+            }
+            Err(source) if source.kind() == io::ErrorKind::Interrupted => continue,
+            Err(source) => {
+                return Err(JournalError::Io {
+                    phase: JournalIoPhase::WriteBackup,
+                    source,
+                });
+            }
+        }
+    }
+    file.sync_all().map_err(|source| JournalError::Io {
+        phase: JournalIoPhase::SyncBackup,
+        source,
+    })?;
+    let observed = file_len(file)?;
+    if observed != expected_len {
+        return Err(JournalError::FileLengthChanged {
+            expected: expected_len,
+            actual: observed,
+        });
+    }
+    let mut reread = Vec::new();
+    reread
+        .try_reserve_exact(bytes.len())
+        .map_err(|_| JournalError::AllocationFailed {
+            requested: bytes.len(),
+        })?;
+    reread.resize(bytes.len(), 0);
+    file.seek(SeekFrom::Start(0))
+        .map_err(|source| JournalError::Io {
+            phase: JournalIoPhase::Seek,
+            source,
+        })?;
+    file.read_exact(&mut reread)
+        .map_err(|source| JournalError::Io {
+            phase: JournalIoPhase::Read,
+            source,
+        })?;
+    if reread != bytes {
+        return Err(JournalError::BackupVerificationFailed);
+    }
+    Ok(())
+}
+
 impl fmt::Display for JournalError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1101,6 +1497,41 @@ impl fmt::Display for JournalError {
             Self::FileTooLarge { actual, max } => {
                 write!(formatter, "journal has {actual} bytes; read cap is {max}")
             }
+            Self::BackupExceedsBudget { actual, limit } => {
+                write!(
+                    formatter,
+                    "journal backup/restore requires {actual} bytes; local budget is {limit}"
+                )
+            }
+            Self::BackupNotClean(report) => write!(
+                formatter,
+                "backup carrier is not clean at prefix {} ({} rejected tail bytes): {}",
+                report.valid_prefix_bytes, report.rejected_tail_bytes, report.first_error
+            ),
+            Self::BackupVerificationFailed => {
+                formatter.write_str("journal backup bytes did not reverify identically")
+            }
+            Self::RestoreVerificationFailed => {
+                formatter.write_str("restored journal bytes did not reverify identically")
+            }
+            Self::PruneBatchLimitExceeded { requested, limit } => write!(
+                formatter,
+                "prune batch of {requested} records exceeds policy limit {limit}"
+            ),
+            Self::PruneCountExceedsAvailable {
+                requested,
+                available,
+            } => write!(
+                formatter,
+                "prune request of {requested} records exceeds available {available} records"
+            ),
+            Self::PruneWouldDropHead => {
+                formatter.write_str("pruning cannot delete the current committed journal head")
+            }
+            Self::PruneWouldDropPinnedAncestor { pinned } => write!(
+                formatter,
+                "pruning would drop pinned ancestor record {pinned}"
+            ),
             Self::AllocationFailed { requested } => {
                 write!(formatter, "could not allocate {requested} journal bytes")
             }
@@ -2038,6 +2469,175 @@ mod tests {
             ));
             assert_eq!(std::fs::metadata(&path.0).unwrap().len(), expected_length);
             assert_eq!(std::fs::read(&path.0).unwrap(), expected_file);
+        }
+
+        #[test]
+        fn backup_and_restore_roundtrip_enforces_budget_anchor_and_cleanliness() {
+            let live_path = TempJournalPath::new("backup-live");
+            let backup_path = TempJournalPath::new("backup-copy");
+            let restored_path = TempJournalPath::new("backup-restored");
+            let bad_dest = TempJournalPath::new("backup-bad-dest");
+
+            let (mut live, _) = Journal::create_new(&live_path.0, StorageLimits::DEFAULT).unwrap();
+            let first = live
+                .append_synced(TagKind::World, OBJECT_SCHEMA, b"first")
+                .unwrap();
+            let second = live
+                .append_synced(TagKind::World, OBJECT_SCHEMA, b"second")
+                .unwrap();
+
+            // Budget one byte below live size fails closed without creating backup_path.
+            assert!(matches!(
+                live.backup_to(&backup_path.0, live.valid_bytes() - 1),
+                Err(JournalError::BackupExceedsBudget { .. })
+            ));
+            assert!(!backup_path.0.exists());
+
+            // Exact budget succeeds and writes verified canonical copy.
+            let backup = live.backup_to(&backup_path.0, live.valid_bytes()).unwrap();
+            assert_eq!(backup.head, Some(second.record_tag));
+            assert_eq!(backup.record_count, 2);
+            assert_eq!(backup.backed_up_bytes, live.valid_bytes());
+
+            // Restore missing an unknown required ancestor fails closed without creating dest.
+            let missing_anchor = ContentTag::from_digest(TagKind::StorageRecord, [0xAB; 32]);
+            assert!(matches!(
+                Journal::restore_from(
+                    &backup_path.0,
+                    &bad_dest.0,
+                    StorageLimits::DEFAULT,
+                    backup.backed_up_bytes,
+                    AnchorPolicy::RequireAncestor(missing_anchor),
+                ),
+                Err(JournalError::RequiredAncestorMissing { .. })
+            ));
+            assert!(!bad_dest.0.exists());
+
+            // Restore with valid ancestor succeeds and accepts new live appends.
+            let (mut restored, receipt) = Journal::restore_from(
+                &backup_path.0,
+                &restored_path.0,
+                StorageLimits::DEFAULT,
+                backup.backed_up_bytes,
+                AnchorPolicy::RequireAncestor(first.record_tag),
+            )
+            .unwrap();
+            assert_eq!(receipt.head, Some(second.record_tag));
+            assert_eq!(receipt.record_count, 2);
+            assert!(receipt.required_ancestor_seen);
+            let third = restored
+                .append_synced(TagKind::World, OBJECT_SCHEMA, b"third")
+                .unwrap();
+            assert_eq!(third.parent, Some(second.record_tag));
+
+            // Corrupt backup is refused before creating destination path.
+            let corrupt_backup = TempJournalPath::new("backup-corrupt");
+            let mut bad_bytes = std::fs::read(&backup_path.0).unwrap();
+            bad_bytes.push(0xFF);
+            std::fs::write(&corrupt_backup.0, &bad_bytes).unwrap();
+            assert!(matches!(
+                Journal::restore_from(
+                    &corrupt_backup.0,
+                    &bad_dest.0,
+                    StorageLimits::DEFAULT,
+                    bad_bytes.len() as u64,
+                    AnchorPolicy::UnanchoredLocal,
+                ),
+                Err(JournalError::BackupNotClean(_))
+            ));
+            assert!(!bad_dest.0.exists());
+        }
+
+        #[test]
+        fn bounded_pruning_preserves_head_pinned_ancestor_and_continuation_verification() {
+            let live_path = TempJournalPath::new("prune-live");
+            let pruned_path = TempJournalPath::new("prune-segment");
+            let (mut journal, _) =
+                Journal::create_new(&live_path.0, StorageLimits::DEFAULT).unwrap();
+            let r0 = journal
+                .append_synced(TagKind::World, OBJECT_SCHEMA, b"r0")
+                .unwrap();
+            let r1 = journal
+                .append_synced(TagKind::World, OBJECT_SCHEMA, b"r1")
+                .unwrap();
+            let r2 = journal
+                .append_synced(TagKind::World, OBJECT_SCHEMA, b"r2")
+                .unwrap();
+
+            // Exceeding batch cap fails closed.
+            assert!(matches!(
+                journal.export_pruned_continuation(
+                    &pruned_path.0,
+                    2,
+                    PrunePolicy {
+                        max_prune_records: 1,
+                        pinned_ancestor: Some(r2.record_tag),
+                    },
+                    journal.valid_bytes(),
+                ),
+                Err(JournalError::PruneBatchLimitExceeded {
+                    requested: 2,
+                    limit: 1
+                })
+            ));
+            // Dropping a pinned ancestor fails closed.
+            assert!(matches!(
+                journal.export_pruned_continuation(
+                    &pruned_path.0,
+                    2,
+                    PrunePolicy {
+                        max_prune_records: 4,
+                        pinned_ancestor: Some(r1.record_tag),
+                    },
+                    journal.valid_bytes(),
+                ),
+                Err(JournalError::PruneWouldDropPinnedAncestor { pinned }) if pinned == r1.record_tag
+            ));
+            // Dropping current head fails closed.
+            assert!(matches!(
+                journal.export_pruned_continuation(
+                    &pruned_path.0,
+                    3,
+                    PrunePolicy {
+                        max_prune_records: 4,
+                        pinned_ancestor: None,
+                    },
+                    journal.valid_bytes(),
+                ),
+                Err(JournalError::PruneWouldDropHead)
+            ));
+            assert!(!pruned_path.0.exists());
+
+            // Valid bounded prune keeps pinned r1..r2, base_parent=r0, head=r2.
+            let receipt = journal
+                .export_pruned_continuation(
+                    &pruned_path.0,
+                    1,
+                    PrunePolicy {
+                        max_prune_records: 4,
+                        pinned_ancestor: Some(r1.record_tag),
+                    },
+                    journal.valid_bytes(),
+                )
+                .unwrap();
+            assert_eq!(receipt.pruned_record_count, 1);
+            assert_eq!(receipt.retained_record_count, 2);
+            assert_eq!(receipt.base_parent, Some(r0.record_tag));
+            assert_eq!(receipt.retained_head, Some(r2.record_tag));
+
+            let segment_bytes = std::fs::read(&pruned_path.0).unwrap();
+            let ByteScan::Clean(scan) = inspect_continuation_bytes(
+                &segment_bytes,
+                receipt.base_parent,
+                StorageLimits::DEFAULT,
+                AnchorPolicy::RequireAncestor(r1.record_tag),
+            )
+            .unwrap() else {
+                panic!("pruned continuation did not scan clean");
+            };
+            assert_eq!(scan.valid_head, Some(r2.record_tag));
+            assert_eq!(scan.valid_record_count, 2);
+            assert!(scan.required_ancestor_seen);
         }
     }
 }

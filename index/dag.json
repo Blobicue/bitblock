@@ -11,6 +11,9 @@
   "coordinate_episode": [
    "history",
    "history_store",
+   "journal",
+   "local_bounds",
+   "program",
    "protocol",
    "world"
   ],
@@ -207,7 +210,7 @@
    "protocol"
   ]
  },
- "edges": 132,
+ "edges": 135,
  "stratum": {
   "camera": 0,
   "chem": 2,

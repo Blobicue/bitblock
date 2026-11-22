@@ -7,13 +7,21 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::Path;
 
 use crate::history::{History, Receipt, TransitionEffect, world_tag};
 use crate::history_store::{
-    HistoryReplayLimits, InMemoryHistoryVerificationError, verify_in_memory_history_with_limits,
+    HistoryAppendReceipt, HistoryCreateReceipt, HistoryJournal, HistoryRecoveryJournal,
+    HistoryReplayLimits, HistoryStoreError, InMemoryHistoryVerificationError, OpenHistoryJournal,
+    verify_in_memory_history_with_limits,
 };
+use crate::journal::{
+    AnchorPolicy, BackupReceipt, RecoveryReport, RestoreReceipt, ScanReport, TailDiscardReceipt,
+};
+use crate::local_bounds::LocalStorageProfile;
+use crate::program::Edit;
 use crate::protocol::{ContentTag, TagError, TagKind, hash_canonical};
-use crate::world::{Coord, World};
+use crate::world::{Coord, World, is_bedrock};
 
 /// Canonical schema for `CoordinateEpisodeEvidence` receipt payloads.
 pub const COORDINATE_EPISODE_EVIDENCE_SCHEMA: &[u8] = b"bitblock/coordinate-episode-evidence/v1";
@@ -340,13 +348,17 @@ pub fn coordinate_episode_derivation_policy_tag() -> ContentTag {
 /// Durable local occupancy-episode ledger (LEDGER-1).
 ///
 /// An authoritative local ledger maintaining the exact live episode per mutable occupied coordinate,
-/// consuming burns, recording fresh re-mints, and excluding bedrock coordinates (which originate at genesis).
+/// consuming burns with retained burn provenance, globally fresh episode identifiers (neither live
+/// nor burned mint IDs may be reused), and excluding bedrock from the mutable occupancy-episode map.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OccupancyEpisodeLedger {
     history_genesis: ContentTag,
     history_head: ContentTag,
     active_by_coord: HashMap<Coord, CoordinateEpisode>,
     active_by_mint: HashMap<ContentTag, Coord>,
+    closed_by_mint: HashMap<ContentTag, CoordinateEpisode>,
+    seen_mints: HashSet<ContentTag>,
+    seen_burns: HashSet<ContentTag>,
     total_mints: usize,
     total_burns: usize,
 }
@@ -359,6 +371,9 @@ impl OccupancyEpisodeLedger {
             history_head: history_genesis,
             active_by_coord: HashMap::new(),
             active_by_mint: HashMap::new(),
+            closed_by_mint: HashMap::new(),
+            seen_mints: HashSet::new(),
+            seen_burns: HashSet::new(),
             total_mints: 0,
             total_burns: 0,
         }
@@ -369,17 +384,24 @@ impl OccupancyEpisodeLedger {
         initial_world: &World,
         history: &History,
     ) -> Result<Self, CoordinateEpisodeError> {
-        let verified = verify_in_memory_history_with_limits(
-            initial_world,
-            history,
-            HistoryReplayLimits::DEFAULT,
-        )?;
+        Self::from_history_with_limits(initial_world, history, HistoryReplayLimits::DEFAULT)
+    }
+
+    /// Reconstructs the ledger state by semantically replaying a verified History under explicit limits.
+    pub fn from_history_with_limits(
+        initial_world: &World,
+        history: &History,
+        limits: HistoryReplayLimits,
+    ) -> Result<Self, CoordinateEpisodeError> {
+        let verified = verify_in_memory_history_with_limits(initial_world, history, limits)?;
         let verified_history = verified.history();
         let mut ledger = Self::new(verified_history.genesis());
         for receipt in verified_history.receipts() {
             ledger.apply_receipt(receipt)?;
         }
-        if !ledger.verify_consistency(verified_history, initial_world) {
+        if !ledger.verify_consistency(verified_history, initial_world)
+            || !ledger.verify_world_bijection(initial_world, verified.final_world())
+        {
             return Err(CoordinateEpisodeError::DerivationMismatch);
         }
         Ok(ledger)
@@ -406,11 +428,17 @@ impl OccupancyEpisodeLedger {
     ) -> Result<(), CoordinateEpisodeError> {
         match *effect {
             TransitionEffect::Mint { coord, event } => {
-                if self.active_by_mint.contains_key(&event) {
+                if is_bedrock(coord) {
+                    return Err(CoordinateEpisodeError::BedrockCoordinateForbidden);
+                }
+                if self.seen_mints.contains(&event) {
                     return Err(CoordinateEpisodeError::DuplicateMintEvent { event });
                 }
-                if self.active_by_coord.contains_key(&coord) {
-                    return Err(CoordinateEpisodeError::DuplicateMintEvent { event });
+                if let Some(existing) = self.active_by_coord.get(&coord) {
+                    return Err(CoordinateEpisodeError::ActiveCoordinateAlreadyOccupied {
+                        coord,
+                        existing_mint: existing.mint,
+                    });
                 }
                 let episode = CoordinateEpisode {
                     coord,
@@ -419,6 +447,7 @@ impl OccupancyEpisodeLedger {
                 };
                 self.active_by_coord.insert(coord, episode);
                 self.active_by_mint.insert(event, coord);
+                self.seen_mints.insert(event);
                 self.total_mints += 1;
             }
             TransitionEffect::Burn {
@@ -426,9 +455,23 @@ impl OccupancyEpisodeLedger {
                 event,
                 consumed_mint,
             } => {
+                if is_bedrock(coord) {
+                    return Err(CoordinateEpisodeError::BedrockCoordinateForbidden);
+                }
                 // Mutable coordinates already on at genesis close no post-genesis episode.
                 if consumed_mint == self.history_genesis {
                     return Ok(());
+                }
+                if self.seen_burns.contains(&event) {
+                    return Err(CoordinateEpisodeError::DuplicateBurnEvent { event });
+                }
+                if self.closed_by_mint.contains_key(&consumed_mint)
+                    || (self.seen_mints.contains(&consumed_mint)
+                        && !self.active_by_mint.contains_key(&consumed_mint))
+                {
+                    return Err(CoordinateEpisodeError::BurnedEpisodeWasAlreadyClosed {
+                        mint: consumed_mint,
+                    });
                 }
                 let Some(&mint_coord) = self.active_by_mint.get(&consumed_mint) else {
                     return Err(CoordinateEpisodeError::BurnWithoutOpenMint {
@@ -460,6 +503,15 @@ impl OccupancyEpisodeLedger {
                 }
                 self.active_by_mint.remove(&consumed_mint);
                 self.active_by_coord.remove(&coord);
+                self.closed_by_mint.insert(
+                    consumed_mint,
+                    CoordinateEpisode {
+                        coord,
+                        mint: consumed_mint,
+                        consuming_burn: Some(event),
+                    },
+                );
+                self.seen_burns.insert(event);
                 self.total_burns += 1;
             }
             TransitionEffect::NoOp { .. } => {}
@@ -472,9 +524,24 @@ impl OccupancyEpisodeLedger {
         self.active_by_coord.get(&coord)
     }
 
+    /// Returns the closed (burned) `CoordinateEpisode` and its burn provenance for `mint`, if retained.
+    pub fn closed_episode(&self, mint: ContentTag) -> Option<&CoordinateEpisode> {
+        self.closed_by_mint.get(&mint)
+    }
+
+    /// Returns the number of retained closed (burned) episodes with recorded burn provenance.
+    pub fn closed_count(&self) -> usize {
+        self.closed_by_mint.len()
+    }
+
     /// Returns `true` if `mint` identifies an open episode in the ledger.
     pub fn is_active_mint(&self, mint: ContentTag) -> bool {
         self.active_by_mint.contains_key(&mint)
+    }
+
+    /// Returns `true` if `mint` has ever been minted (live or previously burned) in this ledger.
+    pub fn has_seen_mint(&self, mint: ContentTag) -> bool {
+        self.seen_mints.contains(&mint)
     }
 
     /// Returns the map of all currently open episodes indexed by `Coord`.
@@ -507,6 +574,67 @@ impl OccupancyEpisodeLedger {
         self.history_head
     }
 
+    /// Bounded local pruning of closed-episode metadata while keeping active episodes, pins, and ID freshness.
+    pub fn prune_closed_provenance(
+        &mut self,
+        max_prune: usize,
+        pinned_mints: &HashSet<ContentTag>,
+    ) -> usize {
+        if max_prune == 0 || self.closed_by_mint.is_empty() {
+            return 0;
+        }
+        let mut removable: Vec<ContentTag> = self
+            .closed_by_mint
+            .keys()
+            .copied()
+            .filter(|mint| !pinned_mints.contains(mint))
+            .collect();
+        removable.sort_by_key(|tag| tag.digest());
+        let to_remove = removable.len().min(max_prune);
+        for mint in removable.into_iter().take(to_remove) {
+            self.closed_by_mint.remove(&mint);
+        }
+        to_remove
+    }
+
+    /// Verifies exact bijection between post-genesis mutable occupied coordinates and active episodes.
+    pub fn verify_world_bijection(&self, initial_world: &World, current_world: &World) -> bool {
+        if self.active_by_coord.len() != self.active_by_mint.len() {
+            return false;
+        }
+        for (&coord, episode) in &self.active_by_coord {
+            if is_bedrock(coord)
+                || !current_world.is_on(coord)
+                || !episode.is_active()
+                || self.active_by_mint.get(&episode.mint) != Some(&coord)
+                || !self.seen_mints.contains(&episode.mint)
+                || self.closed_by_mint.contains_key(&episode.mint)
+            {
+                return false;
+            }
+        }
+        for (&mint, episode) in &self.closed_by_mint {
+            if episode.mint != mint
+                || episode.consuming_burn.is_none()
+                || self.active_by_mint.contains_key(&mint)
+                || !self.seen_mints.contains(&mint)
+            {
+                return false;
+            }
+        }
+        for coord in current_world.iter_on() {
+            if is_bedrock(coord) {
+                continue;
+            }
+            let in_ledger = self.active_by_coord.contains_key(&coord);
+            let was_genesis_on = initial_world.is_on(coord);
+            if !in_ledger && !was_genesis_on {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Checks that the active episodes match the verified history's genesis, head, supply, and active mints.
     pub fn verify_consistency(&self, history: &History, initial_world: &World) -> bool {
         if self.history_genesis != history.genesis()
@@ -534,7 +662,272 @@ impl OccupancyEpisodeLedger {
                 return false;
             }
         }
-        true
+        self.verify_world_bijection(initial_world, verified.final_world())
+    }
+}
+
+/// Crash-safe durable local occupancy-episode ledger backed by `HistoryJournal` and `LocalStorageProfile`.
+pub struct DurableOccupancyLedger {
+    journal: HistoryJournal,
+    ledger: OccupancyEpisodeLedger,
+    initial_world: World,
+}
+
+/// Non-writable recovery handle for a durable occupancy ledger whose carrier has an unverified suffix.
+pub struct DurableLedgerRecovery {
+    recovery: HistoryRecoveryJournal,
+    ledger: OccupancyEpisodeLedger,
+    initial_world: World,
+}
+
+/// Outcome of opening an existing durable occupancy-episode ledger.
+pub enum OpenDurableOccupancyLedger {
+    Ready {
+        ledger: Box<DurableOccupancyLedger>,
+        carrier_report: ScanReport,
+    },
+    NeedsRecovery {
+        recovery: Box<DurableLedgerRecovery>,
+    },
+}
+
+/// Error returned by crash-safe durable occupancy-episode ledger operations.
+#[derive(Debug)]
+pub enum DurableLedgerError {
+    Store(HistoryStoreError),
+    Episode(CoordinateEpisodeError),
+}
+
+impl fmt::Display for DurableLedgerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Store(err) => write!(f, "durable ledger storage error: {err}"),
+            Self::Episode(err) => write!(f, "durable ledger episode error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for DurableLedgerError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Store(err) => Some(err),
+            Self::Episode(err) => Some(err),
+        }
+    }
+}
+
+impl From<HistoryStoreError> for DurableLedgerError {
+    fn from(err: HistoryStoreError) -> Self {
+        Self::Store(err)
+    }
+}
+
+impl From<CoordinateEpisodeError> for DurableLedgerError {
+    fn from(err: CoordinateEpisodeError) -> Self {
+        Self::Episode(err)
+    }
+}
+
+impl DurableOccupancyLedger {
+    /// Creates a new crash-safe durable occupancy-episode ledger bounded by `profile`.
+    pub fn create_new<P: AsRef<Path>>(
+        path: P,
+        profile: &LocalStorageProfile,
+        initial_world: &World,
+    ) -> Result<(Self, HistoryCreateReceipt), DurableLedgerError> {
+        let (journal, receipt) =
+            HistoryJournal::create_new_with_profile(path, profile, initial_world)?;
+        let ledger = OccupancyEpisodeLedger::from_history_with_limits(
+            initial_world,
+            journal.history(),
+            journal.replay_limits(),
+        )?;
+        Ok((
+            Self {
+                journal,
+                ledger,
+                initial_world: initial_world.clone(),
+            },
+            receipt,
+        ))
+    }
+
+    /// Opens an existing durable occupancy-episode ledger and replays its verified committed prefix.
+    pub fn open_existing<P: AsRef<Path>>(
+        path: P,
+        profile: &LocalStorageProfile,
+        anchor: AnchorPolicy,
+        initial_world: &World,
+    ) -> Result<OpenDurableOccupancyLedger, DurableLedgerError> {
+        match HistoryJournal::open_existing_with_profile(path, profile, anchor, initial_world)? {
+            OpenHistoryJournal::Ready {
+                journal,
+                carrier_report,
+            } => {
+                let ledger = OccupancyEpisodeLedger::from_history_with_limits(
+                    initial_world,
+                    journal.history(),
+                    journal.replay_limits(),
+                )?;
+                Ok(OpenDurableOccupancyLedger::Ready {
+                    ledger: Box::new(Self {
+                        journal: *journal,
+                        ledger,
+                        initial_world: initial_world.clone(),
+                    }),
+                    carrier_report,
+                })
+            }
+            OpenHistoryJournal::NeedsRecovery { journal } => {
+                let ledger =
+                    OccupancyEpisodeLedger::from_history(initial_world, journal.history())?;
+                Ok(OpenDurableOccupancyLedger::NeedsRecovery {
+                    recovery: Box::new(DurableLedgerRecovery {
+                        recovery: *journal,
+                        ledger,
+                        initial_world: initial_world.clone(),
+                    }),
+                })
+            }
+        }
+    }
+
+    /// Commits one tick durably to the carrier journal, then advances the live episode map atomically.
+    pub fn append_tick(
+        &mut self,
+        tick: u64,
+        edits: &[Edit],
+    ) -> Result<Option<HistoryAppendReceipt>, DurableLedgerError> {
+        let Some(receipt) = self.journal.append_tick(tick, edits)? else {
+            return Ok(None);
+        };
+        let committed = self
+            .journal
+            .history()
+            .receipts()
+            .last()
+            .expect("committed tick appends one history receipt");
+        self.ledger.apply_receipt(committed)?;
+        if !self
+            .ledger
+            .verify_world_bijection(&self.initial_world, self.journal.world())
+        {
+            return Err(DurableLedgerError::Episode(
+                CoordinateEpisodeError::DerivationMismatch,
+            ));
+        }
+        Ok(Some(receipt))
+    }
+
+    /// Writes a verified backup of the underlying journal bounded by `profile`.
+    pub fn backup_to<P: AsRef<Path>>(
+        &mut self,
+        dest: P,
+        profile: &LocalStorageProfile,
+    ) -> Result<BackupReceipt, DurableLedgerError> {
+        self.journal
+            .backup_to_with_profile(dest, profile)
+            .map_err(Into::into)
+    }
+
+    /// Verifies and restores a backup into a new durable occupancy-episode ledger.
+    pub fn restore_from<P: AsRef<Path>, Q: AsRef<Path>>(
+        backup_path: P,
+        dest_path: Q,
+        profile: &LocalStorageProfile,
+        anchor: AnchorPolicy,
+        initial_world: &World,
+    ) -> Result<(Self, RestoreReceipt), DurableLedgerError> {
+        let (journal, receipt) = HistoryJournal::restore_from_with_profile(
+            backup_path,
+            dest_path,
+            profile,
+            anchor,
+            initial_world,
+        )?;
+        let ledger = OccupancyEpisodeLedger::from_history_with_limits(
+            initial_world,
+            journal.history(),
+            journal.replay_limits(),
+        )?;
+        Ok((
+            Self {
+                journal,
+                ledger,
+                initial_world: initial_world.clone(),
+            },
+            receipt,
+        ))
+    }
+
+    /// Returns the committed `World`.
+    pub const fn world(&self) -> &World {
+        self.journal.world()
+    }
+
+    /// Returns the committed coordinate `History`.
+    pub const fn history(&self) -> &History {
+        self.journal.history()
+    }
+
+    /// Returns the live `OccupancyEpisodeLedger`.
+    pub const fn episodes(&self) -> &OccupancyEpisodeLedger {
+        &self.ledger
+    }
+
+    /// Returns a mutable reference to prune retained closed-episode metadata while preserving freshness.
+    pub fn prune_closed_provenance(
+        &mut self,
+        max_prune: usize,
+        pinned_mints: &HashSet<ContentTag>,
+    ) -> usize {
+        self.ledger.prune_closed_provenance(max_prune, pinned_mints)
+    }
+
+    /// Returns the current carrier storage-record head tag.
+    pub fn carrier_head(&self) -> Option<ContentTag> {
+        self.journal.carrier_head()
+    }
+
+    /// Derives canonical `CoordinateEpisodeEvidence` from the committed history.
+    pub fn export_evidence(&self) -> Result<CoordinateEpisodeEvidence, CoordinateEpisodeError> {
+        CoordinateEpisodeEvidence::derive_with_limits(
+            &self.initial_world,
+            self.journal.history(),
+            self.journal.replay_limits(),
+        )
+    }
+}
+
+impl DurableLedgerRecovery {
+    /// Returns the physical recovery report for the unverified carrier suffix.
+    pub const fn report(&self) -> &RecoveryReport {
+        self.recovery.report()
+    }
+
+    /// Returns the `OccupancyEpisodeLedger` reconstructed from the verified committed prefix.
+    pub const fn episodes(&self) -> &OccupancyEpisodeLedger {
+        &self.ledger
+    }
+
+    /// Explicitly discards the unverified suffix and returns a writable `DurableOccupancyLedger`.
+    pub fn discard_unverified_tail(
+        self,
+    ) -> Result<(DurableOccupancyLedger, TailDiscardReceipt), DurableLedgerError> {
+        let (journal, receipt) = self.recovery.discard_unverified_tail()?;
+        let ledger = OccupancyEpisodeLedger::from_history_with_limits(
+            &self.initial_world,
+            journal.history(),
+            journal.replay_limits(),
+        )?;
+        Ok((
+            DurableOccupancyLedger {
+                journal,
+                ledger,
+                initial_world: self.initial_world,
+            },
+            receipt,
+        ))
     }
 }
 
@@ -853,6 +1246,14 @@ pub enum CoordinateEpisodeError {
     DuplicateMintEvent {
         event: ContentTag,
     },
+    DuplicateBurnEvent {
+        event: ContentTag,
+    },
+    ActiveCoordinateAlreadyOccupied {
+        coord: Coord,
+        existing_mint: ContentTag,
+    },
+    BedrockCoordinateForbidden,
     BurnWithoutOpenMint {
         burn: ContentTag,
         consumed_mint: ContentTag,
@@ -945,6 +1346,20 @@ impl fmt::Display for CoordinateEpisodeError {
             Self::DuplicateMintEvent { event } => {
                 write!(formatter, "verified history repeated mint event {event}")
             }
+            Self::DuplicateBurnEvent { event } => {
+                write!(formatter, "verified history repeated burn event {event}")
+            }
+            Self::ActiveCoordinateAlreadyOccupied {
+                coord,
+                existing_mint,
+            } => write!(
+                formatter,
+                "coordinate ({}, {}, {}) already holds active episode {existing_mint}",
+                coord.x, coord.y, coord.z
+            ),
+            Self::BedrockCoordinateForbidden => formatter.write_str(
+                "bedrock coordinate (0, 0, 0) cannot enter the mutable occupancy-episode map",
+            ),
             Self::BurnWithoutOpenMint {
                 burn,
                 consumed_mint,
@@ -1313,5 +1728,188 @@ mod tests {
         wrong_initial.set_on(Coord::new(99, 99, 99));
         assert!(OccupancyEpisodeLedger::from_history(&wrong_initial, &history).is_err());
         assert!(!ledger.verify_consistency(&history, &wrong_initial));
+    }
+
+    #[test]
+    fn ledger_enforces_fresh_ids_burn_provenance_bedrock_exclusion_and_pruning() {
+        let (initial, history) = episode_history();
+        let evidence = CoordinateEpisodeEvidence::derive(&initial, &history).unwrap();
+        let mut ledger = OccupancyEpisodeLedger::from_history(&initial, &history).unwrap();
+
+        let burned_mint_a = evidence.episodes()[0].mint();
+        let burned_burn_a = evidence.episodes()[0].consuming_burn().unwrap();
+        let burned_mint_b0 = evidence.episodes()[1].mint();
+        let active_mint_b1 = evidence.episodes()[2].mint();
+
+        // Burn provenance is retained for every consumed episode.
+        assert_eq!(ledger.closed_count(), 2);
+        assert_eq!(
+            ledger
+                .closed_episode(burned_mint_a)
+                .unwrap()
+                .consuming_burn(),
+            Some(burned_burn_a)
+        );
+        assert!(ledger.has_seen_mint(burned_mint_a));
+        assert!(ledger.has_seen_mint(active_mint_b1));
+
+        // Reusing a burned episode ID fails closed (globally fresh IDs).
+        let reuse_burned = TransitionEffect::Mint {
+            coord: Coord::new(42, 42, 42),
+            event: burned_mint_a,
+        };
+        assert!(matches!(
+            ledger.apply_effect(&reuse_burned),
+            Err(CoordinateEpisodeError::DuplicateMintEvent { event }) if event == burned_mint_a
+        ));
+
+        // Double-burning an already closed episode fails closed.
+        let double_burn = TransitionEffect::Burn {
+            coord: A,
+            event: ContentTag::from_digest(TagKind::Event, [0x77; 32]),
+            consumed_mint: burned_mint_a,
+        };
+        assert!(matches!(
+            ledger.apply_effect(&double_burn),
+            Err(CoordinateEpisodeError::BurnedEpisodeWasAlreadyClosed { mint }) if mint == burned_mint_a
+        ));
+
+        // Bedrock cannot be minted or burned in the mutable occupancy-episode map.
+        let bedrock_mint = TransitionEffect::Mint {
+            coord: BEDROCK_COORD,
+            event: ContentTag::from_digest(TagKind::Event, [0x88; 32]),
+        };
+        assert_eq!(
+            ledger.apply_effect(&bedrock_mint),
+            Err(CoordinateEpisodeError::BedrockCoordinateForbidden)
+        );
+
+        // Pruning closed provenance respects pinned mints and NEVER clears ID freshness.
+        let mut pinned = HashSet::new();
+        pinned.insert(burned_mint_a);
+        let pruned = ledger.prune_closed_provenance(4, &pinned);
+        assert_eq!(pruned, 1);
+        assert!(ledger.closed_episode(burned_mint_a).is_some());
+        assert!(ledger.closed_episode(burned_mint_b0).is_none());
+        assert!(ledger.has_seen_mint(burned_mint_b0));
+        assert!(matches!(
+            ledger.apply_effect(&TransitionEffect::Mint {
+                coord: Coord::new(43, 43, 43),
+                event: burned_mint_b0,
+            }),
+            Err(CoordinateEpisodeError::DuplicateMintEvent { event }) if event == burned_mint_b0
+        ));
+    }
+
+    #[cfg(any(unix, windows))]
+    mod fs_tests {
+        use super::*;
+        use std::path::PathBuf;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
+
+        struct TempLedgerPath(PathBuf);
+
+        impl TempLedgerPath {
+            fn new(label: &str) -> Self {
+                let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "bitblock-ledger-{label}-{}-{id}.bbj",
+                    std::process::id()
+                ));
+                let _ = std::fs::remove_file(&path);
+                Self(path)
+            }
+        }
+
+        impl Drop for TempLedgerPath {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+
+        #[test]
+        fn durable_ledger_persists_restarts_backups_restores_and_recovers_torn_tail() {
+            let live_path = TempLedgerPath::new("live");
+            let backup_path = TempLedgerPath::new("backup");
+            let restored_path = TempLedgerPath::new("restored");
+            let initial = World::new();
+            let profile = LocalStorageProfile::DEFAULT;
+
+            let (mut durable, _) =
+                DurableOccupancyLedger::create_new(&live_path.0, &profile, &initial).unwrap();
+            let tick1 = durable
+                .append_tick(
+                    1,
+                    &[
+                        Edit::new(Operation::On, A),
+                        Edit::new(Operation::Off, BEDROCK_COORD),
+                    ],
+                )
+                .unwrap()
+                .unwrap();
+            let mint_a1 = durable.episodes().get_active(A).unwrap().mint();
+            let tick2 = durable
+                .append_tick(
+                    2,
+                    &[Edit::new(Operation::Off, A), Edit::new(Operation::On, A)],
+                )
+                .unwrap()
+                .unwrap();
+            let mint_a2 = durable.episodes().get_active(A).unwrap().mint();
+            assert_ne!(mint_a1, mint_a2);
+            assert_eq!(durable.episodes().active_count(), 1);
+            assert_eq!(durable.episodes().total_mints(), 2);
+            assert_eq!(durable.episodes().total_burns(), 1);
+            assert!(durable.episodes().closed_episode(mint_a1).is_some());
+            assert_eq!(
+                durable.export_evidence().unwrap().history_head(),
+                tick2.receipt
+            );
+            let backup = durable.backup_to(&backup_path.0, &profile).unwrap();
+            assert_eq!(backup.head, durable.carrier_head());
+            let head_before_crash = durable.carrier_head();
+            let history_head_before_crash = durable.history().head();
+            drop(durable);
+
+            // Simulate torn trailing write appended after committed tick 2 (valid declared length, truncated body).
+            let mut bytes = std::fs::read(&live_path.0).unwrap();
+            bytes.extend_from_slice(b"BBSTRREC\x00\x01\x00\x00\x00\x00\x00\x00\x00\x80torn");
+            std::fs::write(&live_path.0, &bytes).unwrap();
+
+            let OpenDurableOccupancyLedger::NeedsRecovery { recovery } =
+                DurableOccupancyLedger::open_existing(
+                    &live_path.0,
+                    &profile,
+                    AnchorPolicy::RequireAncestor(tick1.carrier_append.record_tag),
+                    &initial,
+                )
+                .unwrap()
+            else {
+                panic!("torn tail was admitted as clean");
+            };
+            assert_eq!(recovery.report().valid_head, head_before_crash);
+            assert_eq!(recovery.episodes().active_count(), 1);
+            assert_eq!(recovery.episodes().get_active(A).unwrap().mint(), mint_a2);
+
+            let (mut recovered, _discard) = recovery.discard_unverified_tail().unwrap();
+            assert_eq!(recovered.history().head(), history_head_before_crash);
+            assert_eq!(recovered.prune_closed_provenance(4, &HashSet::new()), 1);
+            assert!(recovered.episodes().has_seen_mint(mint_a1));
+
+            // Restore from backup and verify identical committed episode state.
+            let (restored, restore_receipt) = DurableOccupancyLedger::restore_from(
+                &backup_path.0,
+                &restored_path.0,
+                &profile,
+                AnchorPolicy::RequireAncestor(tick1.carrier_append.record_tag),
+                &initial,
+            )
+            .unwrap();
+            assert_eq!(restore_receipt.head, head_before_crash);
+            assert_eq!(restored.history().head(), history_head_before_crash);
+            assert_eq!(restored.episodes().get_active(A).unwrap().mint(), mint_a2);
+        }
     }
 }
