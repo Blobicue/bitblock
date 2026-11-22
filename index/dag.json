@@ -71,6 +71,13 @@
    "protocol",
    "storage"
   ],
+  "emergence_r1": [
+   "commit_r1",
+   "history",
+   "protocol",
+   "rule_1",
+   "world"
+  ],
   "frame": [
    "camera",
    "protocol"
@@ -294,7 +301,7 @@
    "protocol"
   ]
  },
- "edges": 193,
+ "edges": 198,
  "stratum": {
   "asset_d1": 3,
   "bounds_1": 10,
@@ -308,6 +315,7 @@
   "display": 5,
   "display_artifact": 6,
   "display_store": 9,
+  "emergence_r1": 5,
   "frame": 1,
   "frame_v2": 4,
   "history": 3,
@@ -353,7 +361,7 @@
   "bounds_1": 0,
   "camera": 16,
   "chem": 0,
-  "commit_r1": 7,
+  "commit_r1": 8,
   "commit_state": 4,
   "consensus_gov_d1": 3,
   "coordinate_episode": 6,
@@ -361,9 +369,10 @@
   "display": 7,
   "display_artifact": 5,
   "display_store": 1,
+  "emergence_r1": 0,
   "frame": 15,
   "frame_v2": 10,
-  "history": 15,
+  "history": 16,
   "history_store": 10,
   "identity_d1": 5,
   "interaction": 2,
@@ -382,11 +391,11 @@
   "presentation_output": 4,
   "presentation_output_v2": 2,
   "profile_bootstrap": 2,
-  "program": 29,
-  "protocol": 49,
+  "program": 30,
+  "protocol": 50,
   "render": 4,
   "replay_evidence": 1,
-  "rule_1": 3,
+  "rule_1": 4,
   "scale_assay": 0,
   "sequential": 0,
   "sidebar": 2,
@@ -399,6 +408,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 39
+  "world": 40
  }
 }
