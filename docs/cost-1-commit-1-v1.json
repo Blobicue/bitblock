@@ -2,11 +2,11 @@
   "format": "bitblock-cost-1-commit-1-v1",
   "runtime_subject": {
     "remote_ref": "refs/heads/main",
-    "commit": "2ee1e0c874a6849b67d14997cb35bc23e651b93c",
-    "tree": "734c0fa3565c3d3cb070caee48ef3d10199126e8",
-    "parent": "c9f893ac11855e3943a7c3e80a77590b947322ec",
-    "pull_request": 20,
-    "ci_runs_green_10_of_10": [44996624134, 44996627977],
+    "commit": "b9d11c57c225db10fb835bf181530d15e12bb4a8",
+    "tree": "59c097dfa9bd726d4012fde789fb46c6991d6ab6",
+    "parent": "5757e7779074bdfad5a17f01b8978ebce4292d0f",
+    "pull_request": 24,
+    "ci_runs_green_10_of_10": [45002704638, 45002708920],
     "status_at_measurement": "clean"
   },
   "toolchain": {
@@ -20,8 +20,8 @@
   "host_boundary": "Linux 7.0.0-1019-nvidia aarch64 (20-core ARM64, non-isolated host). Deterministic node/byte/GC counters are platform-independent; wall timings are host-specific and do not establish quiet-host Windows x86_64 p99.",
   "repeats": 7,
   "trajectory_64_ticks": {
-    "advance_p50_us": 124.74,
-    "advance_max_us": 223.78,
+    "advance_p50_us": 124.90,
+    "advance_max_us": 220.19,
     "world_nodes": 106,
     "active_token_nodes": 104,
     "episode_nodes": 144,
@@ -32,26 +32,41 @@
     "world_proof_bytes": 266,
     "active_token_proof_bytes": 297,
     "episode_proof_bytes": 366,
-    "verify_world_p50_us": 4.67,
-    "verify_world_max_us": 4.86,
-    "verify_active_token_p50_us": 4.78,
-    "verify_episode_p50_us": 5.30,
+    "verify_world_p50_us": 4.69,
+    "verify_world_max_us": 4.78,
+    "verify_active_token_p50_us": 4.77,
+    "verify_episode_p50_us": 5.31,
     "powered_one_byte_tighter_cap_rejected": true,
-    "independent_projection_p50_us": 1018.50,
-    "independent_projection_max_us": 1127.96
+    "independent_projection_p50_us": 1019.67,
+    "independent_projection_max_us": 1026.55
   },
   "dense_cube_4096_world_root": {
     "occupied_keys": 4096,
     "logical_tree_nodes": 8464,
     "unique_cas_nodes": 16,
-    "cold_build_p50_us": 3226.78,
-    "cold_build_max_us": 3395.32
+    "cold_build_p50_us": 3202.49,
+    "cold_build_max_us": 3245.50
   },
   "durable_16_ticks": {
+    "node_storage_layout": "checksummed-batched-nodes.pack-BBP1",
+    "append_tick_fsync_p50_us": 35317.96,
+    "append_tick_fsync_max_us": 38126.42,
+    "persisted_node_records": 206,
+    "open_and_recover_p50_us": 4100.21,
+    "open_and_recover_max_us": 8144.57
+  },
+  "prior_per_file_baseline": {
+    "commit": "2ee1e0c874a6849b67d14997cb35bc23e651b93c",
+    "tree": "734c0fa3565c3d3cb070caee48ef3d10199126e8",
+    "pull_request": 20,
+    "ci_runs_green_10_of_10": [44996624134, 44996627977],
+    "node_storage_layout": "per-node-fsync-files",
     "append_tick_fsync_p50_us": 112421.07,
     "append_tick_fsync_max_us": 147874.45,
     "persisted_node_files": 206,
     "open_and_recover_p50_us": 3309.51,
-    "open_and_recover_max_us": 3447.83
+    "open_and_recover_max_us": 3447.83,
+    "pack_batching_p50_speedup": 3.18,
+    "pack_batching_max_speedup": 3.88
   }
 }
