@@ -350,13 +350,15 @@ only. The frozen tenth sweep was nonzero, so diminishing returns has not been re
   audit chronology, preserves the pinned checkpoint-0.3 paper and audit as historical, and scopes its
   old checkpoint-obligations table only to that historical artifact.
 
-- `COMMIT-R1@base` is now `BOUNDED`: [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) and
-  [`commit-r1-assay-v1.json`](commit-r1-assay-v1.json) record the two-candidate `WorldRootV1`
-  comparison selecting Candidate A (fixed-key binary Patricia) over Candidate B (192-level SMT) on
-  `origin/main` commit `db0ede5f518924a2bebf5ce0269cd50ca69af763` (PR #12), while remaining
-  unwired research and keeping `COMMIT-1` `LOCKED`. `CODEC-1@base` (`CODEC-1@local-v1`) and
-  `SCALE-1@base` ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are likewise `BOUNDED`, unlocking
-  `TRANSITION-SPEC-D1@base` and `SCALE-2@base` to `READY`.
+- `COMMIT-R1@base` is `BOUNDED` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) /
+  [`commit-r1-assay-v1.json`](commit-r1-assay-v1.json), selecting Candidate A fixed-key binary
+  Patricia for `WorldRootV1`), `CODEC-1@base` (`local-v1`), `SCALE-1@base`
+  ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)), `TRANSITION-SPEC-D1@base`
+  ([`TRANSITION_SPEC_D1.md`](TRANSITION_SPEC_D1.md)), `REFINE-1@world`
+  ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `THREAT-D0@base`
+  ([`THREAT_D0_ENVELOPE.md`](THREAT_D0_ENVELOPE.md)), and `RELEASE-R1@framework`
+  ([`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md)) are now `BOUNDED`, unlocking
+  `COMMIT-1@base` and `SCALE-2@base` to `READY` while keeping live `World`/`world_tag` unwired.
 
 - The transcript chronology now reaches frozen Loop 10 and this coordinated descendant. The
   checkpoint-0.3 audit owns only its historical corrected reading; the frozen successor chain owns
@@ -616,13 +618,19 @@ artifact, gate, and non-claim.
 2. The local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, `LEDGER-1`) is
    `IMPLEMENTED` (with `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`),
    and `CODEC-1@base` (`local-v1`), `COMMIT-R1@base` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)),
-   and `SCALE-1@base` ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are now `BOUNDED`. The next trunk
-   checkpoint is `TRANSITION-SPEC-D1@base` (`READY`), which unlocks `COMMIT-1`.
+   `TRANSITION-SPEC-D1@base` ([`TRANSITION_SPEC_D1.md`](TRANSITION_SPEC_D1.md)), `REFINE-1@world`
+   ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `THREAT-D0@base`
+   ([`THREAT_D0_ENVELOPE.md`](THREAT_D0_ENVELOPE.md)), `RELEASE-R1@framework`
+   ([`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md)), and `SCALE-1@base`
+   ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are now `BOUNDED`. The next trunk checkpoint is
+   `COMMIT-1@base` (`READY`: authenticated local state over `WorldRootV1`, `ActiveTokenRootV1`,
+   `EpisodeRootV1`, and crash-safe `CommitmentSetV1`).
 3. `COMMIT-R1` has recorded Candidate A (fixed-key binary Patricia) as the selected `WorldRootV1`
-   hash-tree candidate in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md). Do not hook Patricia
-   into live `World`, history publication, receipts, rendering, or collision until
-   `TRANSITION-SPEC-D1` freezes the base transition contract and `COMMIT-1` closes persistence/GC
-   and non-world domain profiles.
+   hash-tree candidate in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md), and `COMMIT-1@base` is
+   now `READY` after `TRANSITION-SPEC-D1`. Build `COMMIT-1` as an explicit separately typed sidecar
+   (`WorldRootV1`, `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`) with full-rebuild and
+   crash-recovery parity without silently reinterpreting `world_tag` or coupling trie walks into
+   rendering or collision.
 4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
    field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
    end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
