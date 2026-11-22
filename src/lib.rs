@@ -8,10 +8,11 @@ pub use bitblock_core::*;
 
 #[cfg(feature = "protocol-research")]
 pub use bitblock_research::{
-    commit_r1, commit_state, coordinate_episode, display_artifact, display_store, history_store,
-    journal, ladder_bridge, local_bounds, octree_commit, optimization, output_color,
-    output_topology, physical_sensor, presentation, presentation_output, presentation_output_v2,
-    replay_evidence, scale_assay, sequential, storage, transition_spec, verkle_feasibility,
+    asset_d1, commit_r1, commit_state, consensus_gov_d1, coordinate_episode, crypto_d1,
+    display_artifact, display_store, history_store, identity_d1, journal, ladder_bridge,
+    local_bounds, octree_commit, optimization, output_color, output_topology, physical_sensor,
+    presentation, presentation_output, presentation_output_v2, replay_evidence, scale_assay,
+    sequential, storage, transition_spec, verkle_feasibility,
 };
 #[cfg(all(windows, feature = "protocol-research"))]
 pub use bitblock_research::{windows_timing, windows_topology};

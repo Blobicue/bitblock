@@ -1,5 +1,26 @@
 [
  {
+  "id": "sub:actor-identity",
+  "members": [
+   "module:identity_d1"
+  ],
+  "name": "actor-identity",
+  "terms": [
+   "actor",
+   "identity"
+  ]
+ },
+ {
+  "id": "sub:asset-d1",
+  "members": [
+   "module:asset_d1"
+  ],
+  "name": "asset-d1",
+  "terms": [
+   "asset"
+  ]
+ },
+ {
   "id": "sub:commit-1",
   "members": [
    "module:commit_state"
@@ -55,6 +76,16 @@
   ]
  },
  {
+  "id": "sub:consensus-d1",
+  "members": [
+   "module:consensus_gov_d1"
+  ],
+  "name": "consensus-d1",
+  "terms": [
+   "consensus"
+  ]
+ },
+ {
   "id": "sub:content-tag",
   "members": [
    "module:protocol"
@@ -88,6 +119,16 @@
    "coordinate",
    "episode",
    "evidence"
+  ]
+ },
+ {
+  "id": "sub:crypto-d1",
+  "members": [
+   "module:crypto_d1"
+  ],
+  "name": "crypto-d1",
+  "terms": [
+   "crypto"
   ]
  },
  {
@@ -181,6 +222,16 @@
   ]
  },
  {
+  "id": "sub:governance-d1",
+  "members": [
+   "module:consensus_gov_d1"
+  ],
+  "name": "governance-d1",
+  "terms": [
+   "governance"
+  ]
+ },
+ {
   "id": "sub:history",
   "members": [
    "module:history"
@@ -199,6 +250,16 @@
   "terms": [
    "history",
    "mode"
+  ]
+ },
+ {
+  "id": "sub:identity-d1",
+  "members": [
+   "module:identity_d1"
+  ],
+  "name": "identity-d1",
+  "terms": [
+   "identity"
   ]
  },
  {
@@ -510,6 +571,17 @@
   "terms": [
    "spec",
    "transition"
+  ]
+ },
+ {
+  "id": "sub:validator-econ-d1",
+  "members": [
+   "module:asset_d1"
+  ],
+  "name": "validator-econ-d1",
+  "terms": [
+   "econ",
+   "validator"
   ]
  },
  {

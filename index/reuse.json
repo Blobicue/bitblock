@@ -188,12 +188,6 @@
     ]
    },
    {
-    "item": "HashSuiteIdV1",
-    "modules": [
-     "commit_state"
-    ]
-   },
-   {
     "item": "INTERACTION_TAPE_SCHEMA",
     "modules": [
      "interaction"
@@ -638,6 +632,12 @@
     ]
    },
    {
+    "item": "meets_strict_supermajority",
+    "modules": [
+     "consensus_gov_d1"
+    ]
+   },
+   {
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
@@ -716,7 +716,7 @@
     ]
    }
   ],
-  "pub_items": 1092,
+  "pub_items": 1168,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -740,7 +740,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 41111,
+   "code_lines": 43380,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -921,7 +921,7 @@
    ]
   },
   "test": {
-   "code_lines": 25942,
+   "code_lines": 26401,
    "duplicated_lines": 341,
    "regions": [
     {
