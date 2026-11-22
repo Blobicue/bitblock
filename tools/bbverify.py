@@ -164,13 +164,16 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # 731 -> 733 / 753 -> 758: two unit tests in crates/research/src/verkle_feasibility.rs (run in
 # workspace quick and full) plus three protocol-research integration tests in
 # tests/verkle_r1_feasibility.rs (VERKLE-R1@feasibility).
+# 733 -> 739 / 758 -> 764: six default-feature SCALE-2 integration tests in
+# tests/scale_2_parity.rs (chunk-relative i64 extrema, negative chunk edges, Hi-Z culling +
+# delta unpacking, sub-pixel LOD parity, and bounded SpatialRenderCache caps/invalidation).
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 733, "full": 758}.items()
+    for t, count in {"quick": 739, "full": 764}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

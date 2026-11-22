@@ -3,6 +3,13 @@
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_WORLD_ID: AtomicU64 = AtomicU64::new(1);
+
+fn next_world_id() -> u64 {
+    NEXT_WORLD_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 use crate::protocol::ContentTag;
 
@@ -110,7 +117,8 @@ pub struct ChunkCoord {
 }
 
 impl ChunkCoord {
-    const fn new(x: i64, y: i64, z: i64) -> Self {
+    /// Constructs a `ChunkCoord` from signed chunk-lattice coordinates.
+    pub const fn new(x: i64, y: i64, z: i64) -> Self {
         Self { x, y, z }
     }
 }
@@ -239,8 +247,9 @@ fn tight_bounds(chunk: ChunkCoord, bits: &[u64; CHUNK_WORDS]) -> Bounds {
 }
 
 /// A sparse bit world. Coordinates not present in an allocated chunk are off.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct World {
+    instance_id: u64,
     chunks: CoordMap<ChunkCoord, Chunk>,
     octree: [CoordMap<OctantCoord, OctantSummary>; OCTREE_MAX_DEPTH as usize],
     revision_counter: u64,
@@ -252,6 +261,21 @@ pub struct World {
     /// The world fingerprint of the current bits, computed on first use and dropped by any
     /// change (see [`World::fingerprint`]).
     fingerprint: OnceLock<ContentTag>,
+}
+
+impl Clone for World {
+    fn clone(&self) -> Self {
+        Self {
+            instance_id: next_world_id(),
+            chunks: self.chunks.clone(),
+            octree: self.octree.clone(),
+            revision_counter: self.revision_counter,
+            len: self.len,
+            bounds: self.bounds,
+            deferred: self.deferred.clone(),
+            fingerprint: self.fingerprint.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -270,6 +294,7 @@ impl World {
     /// Creates a world containing exactly the permanent bedrock bit.
     pub fn new() -> Self {
         let mut world = Self {
+            instance_id: next_world_id(),
             chunks: CoordMap::default(),
             octree: std::array::from_fn(|_| CoordMap::default()),
             revision_counter: 0,
@@ -281,6 +306,12 @@ impl World {
         let inserted = world.set_on(BEDROCK_COORD);
         debug_assert!(inserted);
         world
+    }
+
+    /// Process-local unique identity of this `World` instance, used only to key ephemeral
+    /// per-renderer spatial caches alongside [`Self::revision`]. Never enters authenticated state.
+    pub(crate) const fn instance_id(&self) -> u64 {
+        self.instance_id
     }
 
     /// Compatibility constructor for code that previously requested an empty world.

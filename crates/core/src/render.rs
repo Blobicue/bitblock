@@ -5,14 +5,28 @@
 //! the currently allocated bits directly. A hierarchy for intermediate-scale LOD is
 //! intentionally deferred until a later checkpoint demonstrates the need.
 
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::sync::OnceLock;
 
 use crate::camera::{Camera, CameraProjection, ONE_PIXEL_EPSILON, ProjectedPoint, Ray, Vec3};
 use crate::frame::{FrameObservation, FrameRef, OverlayInput};
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
 use crate::world::{
-    BEDROCK_COORD, Bounds, CHUNK_WORDS, ChunkCoord, Coord, OctantCoord, OctantSummary, World,
+    BEDROCK_COORD, Bounds, CHUNK_SIDE, CHUNK_WORDS, ChunkCoord, Coord, OctantCoord, OctantSummary,
+    World,
 };
+
+const ZERO_CHUNK: ChunkCoord = ChunkCoord::new(0, 0, 0);
+/// Minimum view depth required on all eight corners of an octant/chunk AABB before hierarchical
+/// Hi-Z occlusion culling or sub-pixel LOD composition may apply.
+const HI_Z_MIN_DEPTH: f64 = 1.0;
+/// Minimum conservative projected triangle area required before multi-pixel octant/chunk Hi-Z
+/// occlusion bounds are trusted without falling back to per-bit sliver conditioning.
+const HI_Z_MIN_TRIANGLE_AREA: f64 = 1.0e-9;
+/// Default deterministic entry ceiling for [`Renderer`]'s ephemeral per-chunk open-word cache
+/// (~1.1 MiB worst case at 544 bytes per cached chunk).
+pub const DEFAULT_SPATIAL_CACHE_MAX_CHUNKS: usize = 2_048;
 
 const BACKGROUND: u32 = 0x000000;
 /// A bit whose centre lies deeper than this in view space has every cube vertex in front of
@@ -31,12 +45,11 @@ const NEAR_PLANE: f64 = 1.0e-7;
 const CROSSHAIR_GAP_RADIUS: i64 = 2;
 const CROSSHAIR_ARM_LENGTH: i64 = 3;
 const BARYCENTRIC_EPSILON: f64 = -1.0e-10;
-/// Buckets used to order occupied bits front to back.
+/// Buckets used to order occupied bits front to back within each visible chunk.
 ///
 /// The order is a heuristic and every order produces the same frame, so a linear quantization
-/// of view depth is enough. Two counting passes cost a fraction of a comparison sort, which at
-/// 12,699 bits spent more time ordering than the ordering saved.
-const DEPTH_BUCKETS: usize = 1_024;
+/// of view depth inside one chunk is enough and keeps the counting table in L1 cache.
+const CHUNK_DEPTH_BUCKETS: usize = 64;
 // Slack terms for the hidden-bit test in `nearest_possible_depth`. They bound the arithmetic
 // of the inner loop rather than describing the frame, so they are deliberately absent from
 // `renderer_profile_tag`: a skipped bit writes exactly what rasterising it would have written,
@@ -262,6 +275,282 @@ const fn shade_rgb(base: u32, k: u32) -> u32 {
     (r << 16) | (g << 8) | b
 }
 
+/// Sub-pixel hierarchical LOD policy for distant octants and chunks.
+///
+/// LOD summaries are purely ephemeral rendering accelerators and never enter `World`,
+/// `world_tag`, or any authenticated state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SubpixelLodPolicy {
+    /// Never approximate sub-pixel octants or chunks; preserve bit-exact pixel and depth parity
+    /// with `Renderer::set_reference_traversal(true)` everywhere.
+    #[default]
+    ExactOnly,
+    /// Collapse untinted octants and chunks whose entire projected bounding box fits within one
+    /// physical pixel (`<= 1.0` px on both axes) into a single top-saturated aggregate pixel,
+    /// while remaining bit-exact whenever projection exceeds the one-pixel threshold.
+    HierarchicalSubpixel,
+}
+
+/// Ephemeral spatial-cache residency and invalidation telemetry for one [`Renderer`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SpatialRenderCacheStats {
+    /// Configured hard ceiling on cached chunks.
+    pub max_chunks: usize,
+    /// Number of chunks currently cached for the active world revision.
+    pub cached_chunks: usize,
+    /// Cache hits served without recomputing `World::chunk_open_words`.
+    pub hits: u64,
+    /// Cache misses that computed `World::chunk_open_words`.
+    pub misses: u64,
+    /// Full cache invalidations triggered by a world mutation or world switch.
+    pub invalidations: u64,
+    /// Misses that were not inserted because the hard chunk cap was already reached.
+    pub cap_skips: u64,
+    /// Estimated heap memory held by the spatial cache table in bytes.
+    pub estimated_bytes: usize,
+}
+
+/// Per-frame hierarchical Hi-Z and sub-pixel LOD traversal diagnostics for [`Renderer`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RenderTraversalStats {
+    /// Sparse octree internal octants rejected in O(1) by hierarchical Hi-Z occlusion.
+    pub octants_hi_z_culled: u64,
+    /// Leaf chunks rejected in O(1) by hierarchical Hi-Z occlusion.
+    pub chunks_hi_z_culled: u64,
+    /// Occupied bits skipped via octant/chunk Hi-Z culling without per-bit projection.
+    pub bits_hi_z_culled: u64,
+    /// Distant octants or chunks collapsed into one top-saturated pixel by [`SubpixelLodPolicy::HierarchicalSubpixel`].
+    pub subpixel_lod_nodes: u64,
+    /// Occupied bits represented by collapsed sub-pixel LOD nodes.
+    pub subpixel_lod_bits: u64,
+}
+
+/// Position anchored to an exact signed [`ChunkCoord`] plus a normalized local `f64` offset in
+/// `[0.0, 16.0)^3`, retaining full 53-bit sub-voxel precision across the entire `i64^3` lattice.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChunkRelativePos {
+    /// Exact signed 16-voxel chunk coordinate holding the local frame origin.
+    pub chunk: ChunkCoord,
+    /// Local offset from `(chunk.x * 16, chunk.y * 16, chunk.z * 16)` in world units.
+    pub local: Vec3,
+}
+
+impl ChunkRelativePos {
+    /// Constructs a chunk-relative position and normalizes finite `local` offsets into `[0.0, 16.0)^3`.
+    pub fn new(chunk: ChunkCoord, local: Vec3) -> Self {
+        let (cx, lx) = normalize_chunk_axis(chunk.x, local.x);
+        let (cy, ly) = normalize_chunk_axis(chunk.y, local.y);
+        let (cz, lz) = normalize_chunk_axis(chunk.z, local.z);
+        Self {
+            chunk: ChunkCoord::new(cx, cy, cz),
+            local: Vec3::new(lx, ly, lz),
+        }
+    }
+
+    /// Constructs a chunk-relative position from an exact integer voxel `coord` plus a local `offset`.
+    pub fn from_coord_offset(coord: Coord, offset: Vec3) -> Self {
+        let chunk = ChunkCoord::new(
+            coord.x.div_euclid(CHUNK_SIDE),
+            coord.y.div_euclid(CHUNK_SIDE),
+            coord.z.div_euclid(CHUNK_SIDE),
+        );
+        let base = Vec3::new(
+            coord.x.rem_euclid(CHUNK_SIDE) as f64,
+            coord.y.rem_euclid(CHUNK_SIDE) as f64,
+            coord.z.rem_euclid(CHUNK_SIDE) as f64,
+        );
+        Self::new(chunk, base + offset)
+    }
+
+    /// Converts a finite world-space `Vec3` into a normalized chunk-relative position.
+    pub fn from_world_vec3(point: Vec3) -> Self {
+        Self::new(ZERO_CHUNK, point)
+    }
+
+    /// Translates this position by `delta` world units and re-normalizes its chunk origin.
+    pub fn translated(self, delta: Vec3) -> Self {
+        Self::new(self.chunk, self.local + delta)
+    }
+
+    /// Returns the exact integer voxel coordinate whose closed unit cube contains this position,
+    /// or `None` if non-finite or outside the signed `i64^3` lattice.
+    pub fn containing_coord(self) -> Option<Coord> {
+        fn axis(chunk: i64, local: f64) -> Option<i64> {
+            let centered = (local + 0.5).floor();
+            if !centered.is_finite() || centered.abs() >= (1_i64 << 53) as f64 {
+                return None;
+            }
+            let total = i128::from(chunk) * i128::from(CHUNK_SIDE) + centered as i128;
+            i64::try_from(total).ok()
+        }
+        Some(Coord::new(
+            axis(self.chunk.x, self.local.x)?,
+            axis(self.chunk.y, self.local.y)?,
+            axis(self.chunk.z, self.local.z)?,
+        ))
+    }
+
+    /// Expresses this position as an `f64` vector relative to `origin_chunk` using exact `i128`
+    /// chunk subtraction before conversion.
+    pub fn offset_from_chunk(self, origin_chunk: ChunkCoord) -> Vec3 {
+        let dx = (i128::from(self.chunk.x) - i128::from(origin_chunk.x)) * i128::from(CHUNK_SIDE);
+        let dy = (i128::from(self.chunk.y) - i128::from(origin_chunk.y)) * i128::from(CHUNK_SIDE);
+        let dz = (i128::from(self.chunk.z) - i128::from(origin_chunk.z)) * i128::from(CHUNK_SIDE);
+        Vec3::new(
+            dx as f64 + self.local.x,
+            dy as f64 + self.local.y,
+            dz as f64 + self.local.z,
+        )
+    }
+}
+
+/// Observer camera anchored to an exact signed [`ChunkCoord`] so eye projection, raycasting, and
+/// rendering preserve full 53-bit sub-voxel precision across extreme signed `i64^3` coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChunkRelativeCamera {
+    origin_chunk: ChunkCoord,
+    local_camera: Camera,
+}
+
+impl ChunkRelativeCamera {
+    /// Creates a chunk-relative camera at `position`, looking along `(yaw_radians, pitch_radians)`.
+    pub fn from_position(
+        position: ChunkRelativePos,
+        yaw_radians: f64,
+        pitch_radians: f64,
+        observation_distance: f64,
+        vertical_fov_radians: f64,
+    ) -> Self {
+        let local_camera = Camera::from_position(
+            position.local,
+            yaw_radians,
+            pitch_radians,
+            observation_distance,
+            vertical_fov_radians,
+        );
+        let mut camera = Self {
+            origin_chunk: position.chunk,
+            local_camera,
+        };
+        camera.renormalize();
+        camera
+    }
+
+    /// Creates a chunk-relative camera looking at `anchor` from `observation_distance` away,
+    /// re-centered onto the eye's chunk origin for maximal local precision.
+    pub fn from_anchor(
+        anchor: ChunkRelativePos,
+        observation_distance: f64,
+        yaw_radians: f64,
+        pitch_radians: f64,
+        vertical_fov_radians: f64,
+    ) -> Self {
+        let local_camera = Camera::from_anchor(
+            anchor.local,
+            observation_distance,
+            yaw_radians,
+            pitch_radians,
+            vertical_fov_radians,
+        );
+        let mut camera = Self {
+            origin_chunk: anchor.chunk,
+            local_camera,
+        };
+        camera.renormalize();
+        camera
+    }
+
+    /// Wraps a world-origin [`Camera`] at `ChunkCoord(0, 0, 0)` without altering its bits.
+    pub fn from_world_camera(camera: &Camera) -> Self {
+        Self {
+            origin_chunk: ZERO_CHUNK,
+            local_camera: camera.clone(),
+        }
+    }
+
+    /// Returns the signed chunk origin of [`Self::local_camera`].
+    pub const fn origin_chunk(&self) -> ChunkCoord {
+        self.origin_chunk
+    }
+
+    /// Returns the local [`Camera`] expressed relative to [`Self::origin_chunk`].
+    pub const fn local_camera(&self) -> &Camera {
+        &self.local_camera
+    }
+
+    /// Returns the observer's eye position as a normalized [`ChunkRelativePos`].
+    pub fn eye_position(&self) -> ChunkRelativePos {
+        ChunkRelativePos::new(self.origin_chunk, self.local_camera.position())
+    }
+
+    /// Returns the observation anchor as a normalized [`ChunkRelativePos`].
+    pub fn anchor_position(&self) -> ChunkRelativePos {
+        ChunkRelativePos::new(self.origin_chunk, self.local_camera.observation_anchor())
+    }
+
+    /// Adds yaw and pitch deltas in radians while keeping the eye position fixed.
+    pub fn rotate(&mut self, yaw_delta: f64, pitch_delta: f64) {
+        self.local_camera.rotate(yaw_delta, pitch_delta);
+    }
+
+    /// Translates the observer in camera-local coordinates `(right, up, forward)` and re-centers `origin_chunk`.
+    pub fn translate(&mut self, local_delta: Vec3) {
+        self.local_camera.translate(local_delta);
+        self.renormalize();
+    }
+
+    /// Translates the observer by a world-space offset and re-centers `origin_chunk`.
+    pub fn translate_world(&mut self, world_delta: Vec3) {
+        self.local_camera.translate_world(world_delta);
+        self.renormalize();
+    }
+
+    /// Returns the center aim ray expressed relative to [`Self::origin_chunk`].
+    pub fn center_ray_local(&self) -> Ray {
+        self.local_camera.center_ray()
+    }
+
+    fn renormalize(&mut self) {
+        let eye = ChunkRelativePos::new(self.origin_chunk, self.local_camera.position());
+        if eye.chunk == self.origin_chunk {
+            return;
+        }
+        self.origin_chunk = eye.chunk;
+        self.local_camera = Camera::from_position(
+            eye.local,
+            self.local_camera.yaw_radians(),
+            self.local_camera.pitch_radians(),
+            self.local_camera.observation_distance(),
+            self.local_camera.vertical_fov_radians(),
+        );
+    }
+}
+
+fn normalize_chunk_axis(chunk: i64, local: f64) -> (i64, f64) {
+    if !local.is_finite() {
+        return (chunk, local);
+    }
+    let side = CHUNK_SIDE as f64;
+    let shift_f = (local / side).floor();
+    if shift_f.is_finite() && shift_f >= -(1_i64 << 52) as f64 && shift_f <= (1_i64 << 52) as f64 {
+        let shift = shift_f as i64;
+        if let Some(next_chunk) = chunk.checked_add(shift) {
+            let rem = local - shift_f * side;
+            if rem >= side {
+                if let Some(c2) = next_chunk.checked_add(1) {
+                    return (c2, rem - side);
+                }
+            } else if rem < 0.0
+                && let Some(c2) = next_chunk.checked_sub(1)
+            {
+                return (c2, rem + side);
+            }
+            return (next_chunk, if rem == 0.0 { 0.0 } else { rem });
+        }
+    }
+    (chunk, local)
+}
+
 /// Software voxel rasterizer maintaining XRGB pixel and `f64` depth framebuffers.
 pub struct Renderer {
     width: u32,
@@ -309,6 +598,20 @@ pub struct Renderer {
     /// The projection of the frame now in the buffers when that frame is a complete ordinary
     /// traversal (`render_tinted_delta` may then update it in place), else `None`.
     delta_base: Option<CameraProjection>,
+    /// Chunk origin of `delta_base` (must be `ZERO_CHUNK` for world-space `render_tinted_delta`).
+    delta_origin: ChunkCoord,
+    /// Octants or chunks skipped wholesale by hierarchical Hi-Z during the last full traversal,
+    /// retained with their conservative screen boxes so a toggling delta frame can unpack any
+    /// occluded subtree whose box intersects reset pixels.
+    delta_occluded: Vec<DeltaOccludedBox>,
+    /// Reusable front-to-back min-heap for hierarchical octant/chunk traversal.
+    traversal_heap: BinaryHeap<TraversalEntry>,
+    /// Ephemeral sub-pixel LOD mode (defaults to [`SubpixelLodPolicy::ExactOnly`]).
+    subpixel_lod: SubpixelLodPolicy,
+    /// Bounded ephemeral spatial cache of `World::chunk_open_words`, keyed by `(instance_id, revision)`.
+    spatial_cache: SpatialRenderCache,
+    /// Hierarchical Hi-Z and sub-pixel LOD counters from the most recent full traversal.
+    traversal_stats: RenderTraversalStats,
     /// Whether `draw_crosshair` has inverted its pixels since the last render.
     crosshair_on: bool,
     /// Per pixel, the `owner_key` of the bit whose fragment it holds. Pixels still at the
@@ -545,6 +848,12 @@ impl Renderer {
             prev_dirty_rows: Vec::new(),
             prev_dirty_valid: false,
             delta_base: None,
+            delta_origin: ZERO_CHUNK,
+            delta_occluded: Vec::new(),
+            traversal_heap: BinaryHeap::new(),
+            subpixel_lod: SubpixelLodPolicy::ExactOnly,
+            spatial_cache: SpatialRenderCache::new(DEFAULT_SPATIAL_CACHE_MAX_CHUNKS),
+            traversal_stats: RenderTraversalStats::default(),
             crosshair_on: false,
             owner: Vec::new(),
             owner_key: 0,
@@ -625,6 +934,8 @@ impl Renderer {
         self.delta_mask.resize(len, false);
         self.all_dirty = true;
         self.delta_base = None;
+        self.delta_origin = ZERO_CHUNK;
+        self.delta_occluded.clear();
         self.recolour_hidden.clear();
     }
 
@@ -766,21 +1077,76 @@ impl Renderer {
         self.reference_traversal
     }
 
+    /// Sets the ephemeral sub-pixel hierarchical LOD policy for subsequent renders.
+    pub fn set_subpixel_lod_policy(&mut self, policy: SubpixelLodPolicy) {
+        self.subpixel_lod = policy;
+    }
+
+    /// Returns the active sub-pixel hierarchical LOD policy.
+    pub const fn subpixel_lod_policy(&self) -> SubpixelLodPolicy {
+        self.subpixel_lod
+    }
+
+    /// Sets the hard maximum number of chunks retained in the ephemeral spatial open-word cache.
+    pub fn set_spatial_cache_max_chunks(&mut self, max_chunks: usize) {
+        self.spatial_cache.set_max_chunks(max_chunks);
+    }
+
+    /// Returns residency, hit/miss, invalidation, and memory-cap diagnostics for the ephemeral spatial cache.
+    pub fn spatial_cache_stats(&self) -> SpatialRenderCacheStats {
+        self.spatial_cache.stats()
+    }
+
+    /// Returns hierarchical Hi-Z occlusion and sub-pixel LOD counters from the most recent full traversal.
+    pub const fn last_traversal_stats(&self) -> RenderTraversalStats {
+        self.traversal_stats
+    }
+
     /// Projects and rasterizes all visible occupied voxels of `world` from `camera` into the framebuffer.
     pub fn render(&mut self, world: &World, camera: &Camera) {
-        self.render_tinted(world, camera, None);
+        self.render_tinted_with_origin(world, ZERO_CHUNK, camera, None);
     }
 
     /// [`Self::render`] with an optional per-bit base colour override ([`BitTint`]).
     /// With `None` the frame is exactly what [`Self::render`] produces.
     pub fn render_tinted(&mut self, world: &World, camera: &Camera, tint: Option<BitTint<'_>>) {
+        self.render_tinted_with_origin(world, ZERO_CHUNK, camera, tint);
+    }
+
+    /// Projects and rasterizes `world` from a [`ChunkRelativeCamera`], preserving full 53-bit
+    /// sub-voxel precision across arbitrary signed `i64^3` coordinates.
+    pub fn render_chunk_relative(&mut self, world: &World, camera: &ChunkRelativeCamera) {
+        self.render_tinted_with_origin(world, camera.origin_chunk(), camera.local_camera(), None);
+    }
+
+    /// [`Self::render_chunk_relative`] with an optional per-bit base colour override ([`BitTint`]).
+    pub fn render_tinted_chunk_relative(
+        &mut self,
+        world: &World,
+        camera: &ChunkRelativeCamera,
+        tint: Option<BitTint<'_>>,
+    ) {
+        self.render_tinted_with_origin(world, camera.origin_chunk(), camera.local_camera(), tint);
+    }
+
+    fn render_tinted_with_origin(
+        &mut self,
+        world: &World,
+        origin_chunk: ChunkCoord,
+        camera: &Camera,
+        tint: Option<BitTint<'_>>,
+    ) {
         self.recolour_hidden.clear();
         let previous = self.delta_base.take();
+        let previous_origin = self.delta_origin;
+        self.delta_origin = origin_chunk;
+        self.delta_occluded.clear();
         self.delta_lists_eager = false;
         self.crosshair_on = false;
         self.clear_frame();
         self.frame_serial += 1;
         self.world_pixels = 0;
+        self.traversal_stats = RenderTraversalStats::default();
         #[cfg(test)]
         {
             self.hidden_bits = 0;
@@ -793,7 +1159,12 @@ impl Renderer {
             return;
         }
 
-        if let Some(camera_coord) = coord_containing(camera.position())
+        let camera_coord = if origin_chunk == ZERO_CHUNK {
+            coord_containing(camera.position())
+        } else {
+            ChunkRelativePos::new(origin_chunk, camera.position()).containing_coord()
+        };
+        if let Some(camera_coord) = camera_coord
             && world.is_on(camera_coord)
         {
             let color = tint
@@ -811,7 +1182,7 @@ impl Renderer {
             .expect("nonzero renderer viewport must produce a projection context");
 
         if let Some(bounds) = world.bounds() {
-            let (min, max) = bounds_aabb(bounds);
+            let (min, max) = chunk_relative_bounds_aabb(origin_chunk, bounds);
             if projection.bounds_fit_one_pixel(min, max) {
                 if let Some(projected) = projection.project(min + (max - min) * 0.5) {
                     self.plot(
@@ -827,15 +1198,16 @@ impl Renderer {
 
         if !self.optimized_traversal() {
             for coord in world.iter_on() {
-                self.draw_bit_with(projection, coord, tint);
+                self.draw_bit_with_origin(origin_chunk, projection, coord, tint);
             }
             return;
         }
 
         // Nearest first. The depth buffer then holds the closest surfaces early, which is what
-        // makes the hidden-bit test in `draw_bit` succeed often enough to pay for itself.
-        // Traversal order is free to change: `plot` resolves equal depths by the lower RGB word,
-        // so the frame is a per-pixel minimum over the bits and does not depend on their order.
+        // makes both hierarchical octant/chunk Hi-Z culling and the per-bit hidden-bit test
+        // succeed often enough to pay for themselves. Traversal order is free to change: `plot`
+        // resolves equal depths by the lower RGB word, so the frame is a per-pixel minimum over
+        // the bits and does not depend on their order.
         self.tiles_wide = (self.width as usize).div_ceil(COVER_TILE);
         let tiles = self.tiles_wide * (self.height as usize).div_ceil(COVER_TILE);
         self.tile_max.clear();
@@ -850,17 +1222,19 @@ impl Renderer {
 
         self.delta_index.clear();
         self.delta_members_ok = false;
-        self.delta_index_ok =
-            self.width <= u32::from(u16::MAX) && self.height <= u32::from(u16::MAX);
-        self.recording = true;
-        self.traverse(world, projection, tint);
+        self.delta_index_ok = origin_chunk == ZERO_CHUNK
+            && self.width <= u32::from(u16::MAX)
+            && self.height <= u32::from(u16::MAX);
+        self.recording = self.delta_index_ok;
+        self.traverse(world, origin_chunk, projection, tint);
         self.recording = false;
         self.delta_full_len = self.delta_index.len();
         self.delta_traversal_len = self.delta_full_len;
         self.delta_csr_built = false;
         if self.delta_index_ok {
             self.delta_base = Some(projection);
-            self.delta_lists_eager = previous.is_none_or(|p| p.bit_identical(&projection));
+            self.delta_lists_eager = previous_origin == ZERO_CHUNK
+                && previous.is_none_or(|p| p.bit_identical(&projection));
         }
     }
 
@@ -902,127 +1276,308 @@ impl Renderer {
         self.delta_csr_built
     }
 
-    /// The ordered traversal of `render_tinted`: every bit the octree/chunk frustum and
-    /// enclosed-bit culls keep, drawn nearest first.
-    fn traverse(&mut self, world: &World, projection: CameraProjection, tint: Option<BitTint<'_>>) {
-        let mut keyed = std::mem::take(&mut self.keyed);
-        keyed.clear();
-        let mut nearest = f64::INFINITY;
-        let mut farthest = f64::NEG_INFINITY;
-        for (root_octant, root_summary) in world.root_octants() {
-            self.visit_frustum_octant(
-                world,
-                projection,
-                root_octant,
-                root_summary,
-                &mut keyed,
-                &mut nearest,
-                &mut farthest,
-            );
-        }
-
-        let span = farthest - nearest;
-        let scale = if span > 0.0 && span.is_finite() {
-            (DEPTH_BUCKETS - 1) as f64 / span
-        } else {
-            0.0
-        };
-        // `as usize` saturates, so a non-finite or out-of-range key lands in a real bucket
-        // instead of panicking. Which one does not matter: this only chooses an order.
-        let bucket = |key: f64| (((key - nearest) * scale) as usize).min(DEPTH_BUCKETS - 1);
-
-        let mut offsets = [0_usize; DEPTH_BUCKETS];
-        for &(key, _) in &keyed {
-            offsets[bucket(key)] += 1;
-        }
-        let mut start = 0;
-        for offset in &mut offsets {
-            let count = *offset;
-            *offset = start;
-            start += count;
-        }
-
-        let mut order = std::mem::take(&mut self.order);
-        order.clear();
-        order.resize(keyed.len(), BEDROCK_COORD);
-        for &(key, coord) in &keyed {
-            let slot = &mut offsets[bucket(key)];
-            order[*slot] = coord;
-            *slot += 1;
-        }
-
-        for &coord in &order {
-            self.draw_bit_with(projection, coord, tint);
-        }
-        self.keyed = keyed;
-        self.order = order;
-        #[cfg(test)]
-        self.assert_enclosed_bits_write_nothing(projection, tint);
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn visit_frustum_octant(
+    /// Hierarchical front-to-back traversal: pops octants and chunks nearest-first from a
+    /// global min-heap, rejects occluded octants/chunks in O(1) via conservative Hi-Z bounds
+    /// before touching their voxels, optionally collapses sub-pixel octants/chunks under
+    /// [`SubpixelLodPolicy::HierarchicalSubpixel`], and draws remaining chunks with L1-local
+    /// front-to-back ordering and bounded `chunk_open_words` caching.
+    fn traverse(
         &mut self,
         world: &World,
+        origin_chunk: ChunkCoord,
         projection: CameraProjection,
-        octant: OctantCoord,
-        summary: OctantSummary,
-        keyed: &mut Vec<(f64, Coord)>,
-        nearest: &mut f64,
-        farthest: &mut f64,
+        tint: Option<BitTint<'_>>,
     ) {
-        let (omin, omax) = bounds_aabb(summary.bounds);
-        if projection.aabb_definitely_outside_frustum(omin, omax) {
-            #[cfg(test)]
-            if self.verify_hidden_bits {
-                self.verify_culled_octant_writes_nothing(world, projection, octant, summary);
+        self.spatial_cache
+            .sync_world(world.instance_id(), world.revision());
+        let mut heap = std::mem::take(&mut self.traversal_heap);
+        heap.clear();
+        let mut keyed = std::mem::take(&mut self.keyed);
+        let mut order = std::mem::take(&mut self.order);
+
+        for (root_octant, root_summary) in world.root_octants() {
+            let (omin, omax) = chunk_relative_bounds_aabb(origin_chunk, root_summary.bounds);
+            if projection.aabb_definitely_outside_frustum(omin, omax) {
+                #[cfg(test)]
+                if self.verify_hidden_bits {
+                    self.verify_culled_octant_writes_nothing(
+                        world,
+                        origin_chunk,
+                        projection,
+                        root_octant,
+                        root_summary,
+                        tint,
+                    );
+                }
+                continue;
             }
-            return;
+            let min_z = aabb_min_view_depth(projection, omin, omax);
+            heap.push(TraversalEntry {
+                min_z,
+                node: TraversalNode::Octant(root_octant, root_summary),
+            });
         }
-        let mut mask = summary.child_mask;
-        while mask != 0 {
-            let child_idx = mask.trailing_zeros() as u8;
-            mask &= mask - 1;
-            let cx = octant.x * 2 + i64::from((child_idx >> 2) & 1);
-            let cy = octant.y * 2 + i64::from((child_idx >> 1) & 1);
-            let cz = octant.z * 2 + i64::from(child_idx & 1);
-            if octant.depth == 1 {
-                let chunk_coord = ChunkCoord {
-                    x: cx,
-                    y: cy,
-                    z: cz,
-                };
-                if let (Some(chunk_bounds), Some((_count, words))) = (
-                    world.chunk_bounds(chunk_coord),
-                    world.chunk_words(chunk_coord),
-                ) {
-                    let (chunk_min, chunk_max) = bounds_aabb(chunk_bounds);
-                    if projection.aabb_definitely_outside_frustum(chunk_min, chunk_max) {
-                        #[cfg(test)]
-                        self.verify_culled_chunk_writes_nothing(projection, chunk_coord, words);
-                        continue;
+
+        let allow_subpixel_lod =
+            self.subpixel_lod == SubpixelLodPolicy::HierarchicalSubpixel && tint.is_none();
+
+        while let Some(entry) = heap.pop() {
+            match entry.node {
+                TraversalNode::Octant(octant, summary) => {
+                    let (omin, omax) = chunk_relative_bounds_aabb(origin_chunk, summary.bounds);
+                    if let Some(hiz) =
+                        aabb_hi_z_probe(projection, self.width, self.height, omin, omax)
+                    {
+                        if hiz.left >= hiz.right || hiz.top >= hiz.bottom {
+                            #[cfg(test)]
+                            if self.verify_hidden_bits {
+                                self.verify_culled_octant_writes_nothing(
+                                    world,
+                                    origin_chunk,
+                                    projection,
+                                    octant,
+                                    summary,
+                                    tint,
+                                );
+                            }
+                            continue;
+                        }
+                        if let Some(bound) = hiz.depth_bound
+                            && self.box_corners_occluded(
+                                hiz.left, hiz.right, hiz.top, hiz.bottom, bound,
+                            )
+                            && let Some(covering) = self.covering_depth_count(
+                                hiz.left,
+                                hiz.right,
+                                hiz.top,
+                                hiz.bottom,
+                                bound,
+                                bound,
+                                summary.occupied_bits as u64,
+                            )
+                            && covering < bound
+                        {
+                            self.traversal_stats.octants_hi_z_culled += 1;
+                            self.traversal_stats.bits_hi_z_culled += summary.occupied_bits as u64;
+                            if self.recording && self.delta_index_ok {
+                                self.delta_occluded.push(DeltaOccludedBox {
+                                    target: OccludedTarget::Octant(octant),
+                                    x0: hiz.left as u16,
+                                    x1: hiz.right as u16,
+                                    y0: hiz.top as u16,
+                                    y1: hiz.bottom as u16,
+                                });
+                            }
+                            #[cfg(test)]
+                            {
+                                self.hidden_bits += summary.occupied_bits as u64;
+                                if self.verify_hidden_bits {
+                                    self.verify_culled_octant_writes_nothing(
+                                        world,
+                                        origin_chunk,
+                                        projection,
+                                        octant,
+                                        summary,
+                                        tint,
+                                    );
+                                }
+                            }
+                            continue;
+                        }
+                        if allow_subpixel_lod
+                            && hiz.raw_span_x <= SMALL_BIT_EXTENT
+                            && hiz.raw_span_y <= SMALL_BIT_EXTENT
+                        {
+                            let contains_bedrock =
+                                bounds_contains_coord(summary.bounds, BEDROCK_COORD);
+                            if (!contains_bedrock || summary.occupied_bits == 1)
+                                && let Some(center_proj) =
+                                    projection.project(omin + (omax - omin) * 0.5)
+                            {
+                                let color = if contains_bedrock {
+                                    BEDROCK_PIXEL
+                                } else {
+                                    AGGREGATE_BIT
+                                };
+                                self.plot(
+                                    center_proj.x.floor() as i64,
+                                    center_proj.y.floor() as i64,
+                                    hiz.min_z.min(center_proj.depth),
+                                    color,
+                                );
+                                self.traversal_stats.subpixel_lod_nodes += 1;
+                                self.traversal_stats.subpixel_lod_bits +=
+                                    summary.occupied_bits as u64;
+                                self.delta_index_ok = false;
+                                continue;
+                            }
+                        }
                     }
-                    // The enclosed-bit cull. A bit whose whole 3 x 3 x 3 neighbourhood is on can
-                    // never own a pixel of the finished frame: every point of its surface, edges
-                    // and corners included, lies at least one unit inside that block, so the ray
-                    // to it crosses the block's boundary -- a front face of some neighbour --
-                    // strictly and well nearer. (Six face neighbours are not enough: an edge of
-                    // such a bit can lie on a concave crease, where an exact depth tie lets the
-                    // lower-RGB rule pick its face.) Leaving it out of the traversal therefore
-                    // changes nothing, and the work then scales with the surface of a solid rather
-                    // than its volume. `enclosed_cull_applies` limits it to chunks where that
-                    // argument holds for the rasteriser as written: every bit and neighbour fully
-                    // in front of the camera (no face dropped for a vertex behind it) and none
-                    // small enough for the single-pixel path (which plots the nearest vertex depth
-                    // at the centre pixel, where a neighbour need not land). Tests rasterise every
-                    // culled bit over the finished frame.
+
+                    let mut mask = summary.child_mask;
+                    while mask != 0 {
+                        let child_idx = mask.trailing_zeros() as u8;
+                        mask &= mask - 1;
+                        let cx = octant.x * 2 + i64::from((child_idx >> 2) & 1);
+                        let cy = octant.y * 2 + i64::from((child_idx >> 1) & 1);
+                        let cz = octant.z * 2 + i64::from(child_idx & 1);
+                        if octant.depth == 1 {
+                            let chunk_coord = ChunkCoord::new(cx, cy, cz);
+                            if let (Some(chunk_bounds), Some((count, words))) = (
+                                world.chunk_bounds(chunk_coord),
+                                world.chunk_words(chunk_coord),
+                            ) {
+                                #[cfg(not(test))]
+                                let _ = words;
+                                let (cmin, cmax) =
+                                    chunk_relative_bounds_aabb(origin_chunk, chunk_bounds);
+                                if projection.aabb_definitely_outside_frustum(cmin, cmax) {
+                                    #[cfg(test)]
+                                    self.verify_culled_chunk_writes_nothing(
+                                        origin_chunk,
+                                        projection,
+                                        chunk_coord,
+                                        words,
+                                        tint,
+                                    );
+                                    continue;
+                                }
+                                let min_z = aabb_min_view_depth(projection, cmin, cmax);
+                                heap.push(TraversalEntry {
+                                    min_z,
+                                    node: TraversalNode::Chunk(chunk_coord, chunk_bounds, count),
+                                });
+                            }
+                        } else {
+                            let child_octant = OctantCoord {
+                                depth: octant.depth - 1,
+                                x: cx,
+                                y: cy,
+                                z: cz,
+                            };
+                            if let Some(child_summary) = world.octant_summary(child_octant) {
+                                let (cmin, cmax) =
+                                    chunk_relative_bounds_aabb(origin_chunk, child_summary.bounds);
+                                if projection.aabb_definitely_outside_frustum(cmin, cmax) {
+                                    #[cfg(test)]
+                                    if self.verify_hidden_bits {
+                                        self.verify_culled_octant_writes_nothing(
+                                            world,
+                                            origin_chunk,
+                                            projection,
+                                            child_octant,
+                                            child_summary,
+                                            tint,
+                                        );
+                                    }
+                                    continue;
+                                }
+                                let min_z = aabb_min_view_depth(projection, cmin, cmax);
+                                heap.push(TraversalEntry {
+                                    min_z,
+                                    node: TraversalNode::Octant(child_octant, child_summary),
+                                });
+                            }
+                        }
+                    }
+                }
+                TraversalNode::Chunk(chunk_coord, chunk_bounds, count) => {
+                    let Some((_live_count, all_words)) = world.chunk_words(chunk_coord) else {
+                        continue;
+                    };
+                    let (cmin, cmax) = chunk_relative_bounds_aabb(origin_chunk, chunk_bounds);
+                    if let Some(hiz) =
+                        aabb_hi_z_probe(projection, self.width, self.height, cmin, cmax)
+                    {
+                        if hiz.left >= hiz.right || hiz.top >= hiz.bottom {
+                            #[cfg(test)]
+                            self.verify_culled_chunk_writes_nothing(
+                                origin_chunk,
+                                projection,
+                                chunk_coord,
+                                all_words,
+                                tint,
+                            );
+                            continue;
+                        }
+                        if let Some(bound) = hiz.depth_bound
+                            && self.box_corners_occluded(
+                                hiz.left, hiz.right, hiz.top, hiz.bottom, bound,
+                            )
+                            && let Some(covering) = self.covering_depth_count(
+                                hiz.left,
+                                hiz.right,
+                                hiz.top,
+                                hiz.bottom,
+                                bound,
+                                bound,
+                                u64::from(count),
+                            )
+                            && covering < bound
+                        {
+                            self.traversal_stats.chunks_hi_z_culled += 1;
+                            self.traversal_stats.bits_hi_z_culled += u64::from(count);
+                            if self.recording && self.delta_index_ok {
+                                self.delta_occluded.push(DeltaOccludedBox {
+                                    target: OccludedTarget::Chunk(chunk_coord),
+                                    x0: hiz.left as u16,
+                                    x1: hiz.right as u16,
+                                    y0: hiz.top as u16,
+                                    y1: hiz.bottom as u16,
+                                });
+                            }
+                            #[cfg(test)]
+                            {
+                                self.hidden_bits += u64::from(count);
+                                self.verify_culled_chunk_writes_nothing(
+                                    origin_chunk,
+                                    projection,
+                                    chunk_coord,
+                                    all_words,
+                                    tint,
+                                );
+                            }
+                            continue;
+                        }
+                        if allow_subpixel_lod
+                            && hiz.raw_span_x <= SMALL_BIT_EXTENT
+                            && hiz.raw_span_y <= SMALL_BIT_EXTENT
+                        {
+                            let contains_bedrock =
+                                bounds_contains_coord(chunk_bounds, BEDROCK_COORD);
+                            if (!contains_bedrock || count == 1)
+                                && let Some(center_proj) =
+                                    projection.project(cmin + (cmax - cmin) * 0.5)
+                            {
+                                let color = if contains_bedrock {
+                                    BEDROCK_PIXEL
+                                } else {
+                                    AGGREGATE_BIT
+                                };
+                                self.plot(
+                                    center_proj.x.floor() as i64,
+                                    center_proj.y.floor() as i64,
+                                    hiz.min_z.min(center_proj.depth),
+                                    color,
+                                );
+                                self.traversal_stats.subpixel_lod_nodes += 1;
+                                self.traversal_stats.subpixel_lod_bits += u64::from(count);
+                                self.delta_index_ok = false;
+                                continue;
+                            }
+                        }
+                    }
+
+                    // The enclosed-bit cull (cached in bounded `spatial_cache` per world revision).
                     let exposed;
                     let words = if self.enclosed_cull_enabled()
-                        && enclosed_cull_applies(projection, chunk_bounds)
+                        && enclosed_cull_applies_rel(origin_chunk, projection, chunk_bounds)
                     {
-                        exposed = world.chunk_open_words(chunk_coord);
+                        exposed = self
+                            .spatial_cache
+                            .get_or_compute_open_words(world, chunk_coord);
                         #[cfg(test)]
-                        for (word, (&all, &kept)) in words.iter().zip(&exposed).enumerate() {
+                        for (word, (&all, &kept)) in all_words.iter().zip(&exposed).enumerate() {
                             let culled = all & !kept;
                             self.enclosed_bits += u64::from(culled.count_ones());
                             if (self.verify_hidden_bits || self.verify_enclosed_bits) && culled != 0
@@ -1036,44 +1591,77 @@ impl Renderer {
                         }
                         &exposed
                     } else {
-                        words
+                        all_words
                     };
+
+                    keyed.clear();
+                    let mut nearest = f64::INFINITY;
+                    let mut farthest = f64::NEG_INFINITY;
                     for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-                        let key = projection.view_depth(coord_center(coord));
-                        *nearest = f64::min(*nearest, key);
-                        *farthest = f64::max(*farthest, key);
+                        let key = projection.view_depth(chunk_relative_coord(origin_chunk, coord));
+                        nearest = f64::min(nearest, key);
+                        farthest = f64::max(farthest, key);
                         keyed.push((key, coord));
                     }
-                }
-            } else {
-                let child_octant = OctantCoord {
-                    depth: octant.depth - 1,
-                    x: cx,
-                    y: cy,
-                    z: cz,
-                };
-                if let Some(child_summary) = world.octant_summary(child_octant) {
-                    self.visit_frustum_octant(
-                        world,
-                        projection,
-                        child_octant,
-                        child_summary,
-                        keyed,
-                        nearest,
-                        farthest,
-                    );
+                    if keyed.is_empty() {
+                        continue;
+                    }
+                    if keyed.len() <= 32 {
+                        keyed.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+                        for &(_, coord) in &keyed {
+                            self.draw_bit_with_origin(origin_chunk, projection, coord, tint);
+                        }
+                    } else {
+                        let span = farthest - nearest;
+                        let scale = if span > 0.0 && span.is_finite() {
+                            (CHUNK_DEPTH_BUCKETS - 1) as f64 / span
+                        } else {
+                            0.0
+                        };
+                        let bucket = |key: f64| {
+                            (((key - nearest) * scale) as usize).min(CHUNK_DEPTH_BUCKETS - 1)
+                        };
+                        let mut offsets = [0_usize; CHUNK_DEPTH_BUCKETS];
+                        for &(key, _) in &keyed {
+                            offsets[bucket(key)] += 1;
+                        }
+                        let mut start = 0;
+                        for offset in &mut offsets {
+                            let c = *offset;
+                            *offset = start;
+                            start += c;
+                        }
+                        order.clear();
+                        order.resize(keyed.len(), BEDROCK_COORD);
+                        for &(key, coord) in &keyed {
+                            let slot = &mut offsets[bucket(key)];
+                            order[*slot] = coord;
+                            *slot += 1;
+                        }
+                        for &coord in &order {
+                            self.draw_bit_with_origin(origin_chunk, projection, coord, tint);
+                        }
+                    }
                 }
             }
         }
+
+        self.traversal_heap = heap;
+        self.keyed = keyed;
+        self.order = order;
+        #[cfg(test)]
+        self.assert_enclosed_bits_write_nothing(origin_chunk, projection, tint);
     }
 
     #[cfg(test)]
     fn verify_culled_octant_writes_nothing(
         &mut self,
         world: &World,
+        origin_chunk: ChunkCoord,
         projection: CameraProjection,
         octant: OctantCoord,
         summary: OctantSummary,
+        tint: Option<BitTint<'_>>,
     ) {
         let mut mask = summary.child_mask;
         while mask != 0 {
@@ -1083,13 +1671,15 @@ impl Renderer {
             let cy = octant.y * 2 + i64::from((child_idx >> 1) & 1);
             let cz = octant.z * 2 + i64::from(child_idx & 1);
             if octant.depth == 1 {
-                let chunk_coord = ChunkCoord {
-                    x: cx,
-                    y: cy,
-                    z: cz,
-                };
+                let chunk_coord = ChunkCoord::new(cx, cy, cz);
                 if let Some((_count, words)) = world.chunk_words(chunk_coord) {
-                    self.verify_culled_chunk_writes_nothing(projection, chunk_coord, words);
+                    self.verify_culled_chunk_writes_nothing(
+                        origin_chunk,
+                        projection,
+                        chunk_coord,
+                        words,
+                        tint,
+                    );
                 }
             } else {
                 let child_octant = OctantCoord {
@@ -1101,9 +1691,11 @@ impl Renderer {
                 if let Some(child_summary) = world.octant_summary(child_octant) {
                     self.verify_culled_octant_writes_nothing(
                         world,
+                        origin_chunk,
                         projection,
                         child_octant,
                         child_summary,
+                        tint,
                     );
                 }
             }
@@ -1113,22 +1705,27 @@ impl Renderer {
     #[cfg(test)]
     fn verify_culled_chunk_writes_nothing(
         &mut self,
+        origin_chunk: ChunkCoord,
         projection: CameraProjection,
         chunk_coord: ChunkCoord,
         words: &[u64; CHUNK_WORDS],
+        tint: Option<BitTint<'_>>,
     ) {
         if !self.verify_hidden_bits {
             return;
         }
         self.verify_hidden_bits = false;
-        let (pixels, depth, world_pixels, hidden_bits) = (
+        let was_recording = self.recording;
+        self.recording = false;
+        let (pixels, depth, world_pixels, hidden_bits, coarse_hidden) = (
             self.pixels.clone(),
             self.depth.clone(),
             self.world_pixels,
             self.hidden_bits,
+            self.coarse_hidden,
         );
         for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-            self.draw_bit(projection, coord);
+            self.draw_bit_with_origin(origin_chunk, projection, coord, tint);
         }
         assert_eq!(
             self.pixels, pixels,
@@ -1145,6 +1742,8 @@ impl Renderer {
         );
         assert_eq!(self.world_pixels, world_pixels);
         self.hidden_bits = hidden_bits;
+        self.coarse_hidden = coarse_hidden;
+        self.recording = was_recording;
         self.verify_hidden_bits = true;
     }
 
@@ -1432,10 +2031,14 @@ impl Renderer {
         // 2. Bits to draw: indexed bits reaching a reset pixel ...
         let mut redraw: Vec<(f64, Coord)> = Vec::new();
         self.collect_delta_candidates(world, projection, &reset, stamp, &mut redraw);
-        // ... the changed bits, and the on neighbours of every bit that turned off; less those
-        // the new world deeply encloses where the enclosed-bit cull applies. Bits that turned
-        // on and those neighbours may be missing from the index, so they are recorded into it.
+        // ... the changed bits, any Hi-Z occluded subtrees whose box reaches a reset pixel, and
+        // the on neighbours of every bit that turned off; less those the new world deeply encloses
+        // where the enclosed-bit cull applies. Bits that turned on, unpacked subtrees, and those
+        // neighbours may be missing from the index, so they are recorded into it.
         let mut fresh: Vec<Coord> = neighbours;
+        if !self.delta_occluded.is_empty() && !reset.is_empty() {
+            self.unpack_delta_occluded(world, projection, &reset, &mut fresh);
+        }
         for &(coord, toggled, open_now, _) in loud.iter() {
             if !open_now {
                 continue;
@@ -1448,6 +2051,14 @@ impl Renderer {
         }
 
         dedup_draws(&mut redraw, &mut fresh);
+        if fresh.len() > 1 {
+            fresh.sort_unstable_by(|&a, &b| {
+                projection
+                    .view_depth(coord_center(a))
+                    .total_cmp(&projection.view_depth(coord_center(b)))
+                    .then_with(|| a.cmp(&b))
+            });
+        }
 
         // 3. Draw, nearest first (any order gives the same frame).
         self.delta_redraw = true;
@@ -1541,12 +2152,80 @@ impl Renderer {
         }
     }
 
+    /// Unpacks any Hi-Z occluded octant/chunk whose screen box hits a reset pixel in `delta_mask`
+    /// so its currently-on exposed bits are drawn and recorded into `delta_index` once.
+    fn unpack_delta_occluded(
+        &mut self,
+        world: &World,
+        projection: CameraProjection,
+        reset: &[usize],
+        fresh: &mut Vec<Coord>,
+    ) {
+        let width = self.width as usize;
+        let (mut rx0, mut rx1, mut ry0, mut ry1) = (usize::MAX, 0, usize::MAX, 0);
+        for &index in reset {
+            let (x, y) = (index % width, index / width);
+            rx0 = rx0.min(x);
+            rx1 = rx1.max(x + 1);
+            ry0 = ry0.min(y);
+            ry1 = ry1.max(y + 1);
+        }
+        let cull_enabled = self.enclosed_cull_enabled();
+        let occluded = std::mem::take(&mut self.delta_occluded);
+        let mut kept = Vec::with_capacity(occluded.len());
+        let push_chunk = |chunk: ChunkCoord, out: &mut Vec<Coord>| {
+            let Some((_count, words)) = world.chunk_words(chunk) else {
+                return;
+            };
+            let exposed;
+            let active = if cull_enabled
+                && world
+                    .chunk_bounds(chunk)
+                    .is_some_and(|b| enclosed_cull_applies_rel(ZERO_CHUNK, projection, b))
+            {
+                exposed = world.chunk_open_words(chunk);
+                &exposed
+            } else {
+                words
+            };
+            out.extend(World::iter_chunk_coords(chunk, active));
+        };
+        for entry in occluded {
+            let (x0, x1, y0, y1) = (
+                usize::from(entry.x0),
+                usize::from(entry.x1),
+                usize::from(entry.y0),
+                usize::from(entry.y1),
+            );
+            let overlaps = x0 < rx1 && x1 > rx0 && y0 < ry1 && y1 > ry0;
+            let hits = overlaps
+                && (y0.max(ry0)..y1.min(ry1)).any(|y| {
+                    let row = y * width;
+                    self.delta_mask[row + x0.max(rx0)..row + x1.min(rx1)]
+                        .iter()
+                        .any(|&m| m)
+                });
+            if !hits {
+                kept.push(entry);
+                continue;
+            }
+            match entry.target {
+                OccludedTarget::Chunk(chunk) => push_chunk(chunk, fresh),
+                OccludedTarget::Octant(octant) => {
+                    collect_octant_chunks(world, octant, &mut |chunk| push_chunk(chunk, fresh));
+                }
+            }
+        }
+        self.delta_occluded = kept;
+    }
+
     /// The projection a delta frame may reuse the buffers under, or `None` when it must not
     /// (no complete ordinary frame, another projection, or a frame `render_tinted` would not
     /// draw by the ordered traversal).
     fn delta_projection(&self, world: &World, camera: &Camera) -> Option<CameraProjection> {
         let base = self.delta_base?;
-        if self.width == 0
+        if self.delta_origin != ZERO_CHUNK
+            || self.width == 0
             || self.height == 0
             || world.is_empty()
             || self.all_dirty
@@ -1872,6 +2551,7 @@ impl Renderer {
     #[cfg(test)]
     fn assert_enclosed_bits_write_nothing(
         &mut self,
+        origin_chunk: ChunkCoord,
         projection: CameraProjection,
         tint: Option<BitTint<'_>>,
     ) {
@@ -1883,7 +2563,7 @@ impl Renderer {
         let width = self.width as usize;
         let world_pixels = self.world_pixels;
         for coord in std::mem::take(&mut self.enclosed_skipped) {
-            let center = coord_center(coord);
+            let center = chunk_relative_coord(origin_chunk, coord);
             let projected = cube_vertices(center).map(|vertex| projection.project(vertex));
             assert!(
                 projected.iter().all(Option::is_some),
@@ -1976,6 +2656,16 @@ impl Renderer {
         coord: Coord,
         tint: Option<BitTint<'_>>,
     ) {
+        self.draw_bit_with_origin(ZERO_CHUNK, projection, coord, tint);
+    }
+
+    fn draw_bit_with_origin(
+        &mut self,
+        origin_chunk: ChunkCoord,
+        projection: CameraProjection,
+        coord: Coord,
+        tint: Option<BitTint<'_>>,
+    ) {
         // A prior tint-only frame already proved that this bit loses every depth test
         // strictly. Recolour changes no fragment depth or geometry, so it still writes and
         // marks nothing. A projection change or full render clears the proofs first, and a
@@ -1983,7 +2673,7 @@ impl Renderer {
         if self.marking && self.recolour_hidden.contains(coord) {
             #[cfg(test)]
             {
-                let center = coord_center(coord);
+                let center = chunk_relative_coord(origin_chunk, coord);
                 let projected = cube_vertices(center).map(|v| projection.project(v));
                 self.owner_key = owner_key(coord);
                 self.recolour_reused += 1;
@@ -1991,7 +2681,7 @@ impl Renderer {
             }
             return;
         }
-        let center = coord_center(coord);
+        let center = chunk_relative_coord(origin_chunk, coord);
         let vertices = cube_vertices(center);
         let projected = vertices.map(|vertex| projection.project(vertex));
 
@@ -2055,6 +2745,20 @@ impl Renderer {
                 return;
             }
 
+            let trims =
+                max_x - min_x > OCCLUSION_TRIM_EXTENT || max_y - min_y > OCCLUSION_TRIM_EXTENT;
+            if !self.marks_only && !trims {
+                let width = self.width as usize;
+                let xm = (left as usize + right as usize - 1) / 2;
+                let ym = (top as usize + bottom as usize - 1) / 2;
+                // `!(a < b)` is deliberate: it is true for NaN, conservatively drawing the bit.
+                #[allow(clippy::neg_cmp_op_on_partial_ord)]
+                if !(self.depth[ym * width + xm] < nearest_vertex) {
+                    self.draw_faces(projection, coord, center, &projected, tint);
+                    return;
+                }
+            }
+
             // The hidden-bit test. Front-to-back traversal fills the near surfaces first, so by
             // the time a covered bit is reached the depth buffer already holds something strictly
             // nearer at every pixel the bit could touch. Rasterising it would then lose every
@@ -2075,8 +2779,6 @@ impl Renderer {
             }
             let covering =
                 self.covering_depth(left, right, top, bottom, nearest_vertex, nearest_possible);
-            let trims =
-                max_x - min_x > OCCLUSION_TRIM_EXTENT || max_y - min_y > OCCLUSION_TRIM_EXTENT;
             if let Some(covering) = covering
                 && covering < nearest_possible
             {
@@ -2222,6 +2924,30 @@ impl Renderer {
     /// level. When `skip_below <= limit`, a coarse success implies every tile bound in the box
     /// is below `limit` and `skip_below`, so the tile walk would have skipped too, without
     /// refreshing a tile: the skip decisions and the tile record are unchanged.
+    /// O(1) 5-point sample guard for octant/chunk Hi-Z queries: if any corner or the center of
+    /// `[left, right) x [top, bottom)` is not already strictly nearer than `bound`, the box cannot
+    /// be fully occluded, avoiding any tile/coarse scan while preserving identical skip decisions
+    /// and `tile_max` updates between `coarse` and `tiles_only`.
+    #[inline]
+    fn box_corners_occluded(
+        &self,
+        left: i64,
+        right: i64,
+        top: i64,
+        bottom: i64,
+        bound: f64,
+    ) -> bool {
+        let width = self.width as usize;
+        let (x0, x1) = (left as usize, right as usize - 1);
+        let (y0, y1) = (top as usize, bottom as usize - 1);
+        let (xm, ym) = ((x0 + x1) / 2, (y0 + y1) / 2);
+        self.depth[y0 * width + x0] < bound
+            && self.depth[y0 * width + x1] < bound
+            && self.depth[y1 * width + x0] < bound
+            && self.depth[y1 * width + x1] < bound
+            && self.depth[ym * width + xm] < bound
+    }
+
     // `!(a < b)` is deliberate: it is true for NaN, which `a >= b` is not.
     #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn covering_depth(
@@ -2232,6 +2958,20 @@ impl Renderer {
         bottom: i64,
         limit: f64,
         skip_below: f64,
+    ) -> Option<f64> {
+        self.covering_depth_count(left, right, top, bottom, limit, skip_below, 1)
+    }
+
+    #[allow(clippy::neg_cmp_op_on_partial_ord, clippy::too_many_arguments)]
+    fn covering_depth_count(
+        &mut self,
+        left: i64,
+        right: i64,
+        top: i64,
+        bottom: i64,
+        limit: f64,
+        skip_below: f64,
+        #[cfg_attr(not(test), allow(unused_variables))] bits_proven: u64,
     ) -> Option<f64> {
         let width = self.width as usize;
         let height = self.height as usize;
@@ -2272,7 +3012,7 @@ impl Renderer {
         if coarse_covers {
             #[cfg(test)]
             {
-                self.coarse_hidden += 1;
+                self.coarse_hidden += bits_proven;
             }
             return Some(coarse);
         }
@@ -2409,7 +3149,11 @@ impl Renderer {
             return;
         }
 
-        if span_raster_applies(a, b, c) && self.span_raster_enabled() {
+        // On tiny triangles (<= 16 bounding-box pixels, e.g. 2x2–4x4 distant surface voxels), the
+        // direct per-pixel loop avoids `RowEdge` division/crossing setup while executing the exact
+        // same bit-identical arithmetic.
+        let box_pixels = (max_x - min_x).saturating_mul(max_y - min_y);
+        if box_pixels > 16 && span_raster_applies(a, b, c) && self.span_raster_enabled() {
             self.raster_triangle_spans(a, b, c, color, area, min_x, max_x, min_y, max_y);
             return;
         }
@@ -2753,8 +3497,13 @@ fn select_raycast_hit(best: Option<Hit>, candidate: Hit) -> Option<Hit> {
     replace.then_some(candidate).or(best)
 }
 
-fn test_raycast_coord(best: Option<Hit>, ray: Ray, coord: Coord) -> Option<Hit> {
-    let center = coord_center(coord);
+fn test_raycast_coord_rel(
+    best: Option<Hit>,
+    origin_chunk: ChunkCoord,
+    ray: Ray,
+    coord: Coord,
+) -> Option<Hit> {
+    let center = chunk_relative_coord(origin_chunk, coord);
     let min = center - Vec3::splat(0.5);
     let max = center + Vec3::splat(0.5);
     let Some((distance, normal)) = ray_box(ray, min, max) else {
@@ -2784,10 +3533,20 @@ pub fn ray_aabb_entry_distance(ray: Ray, min: Vec3, max: Vec3) -> Option<f64> {
 
 /// Exhaustively tests every occupied coordinate in `world` to find the nearest ray intersection.
 pub fn raycast_reference(world: &World, ray: Ray) -> Option<Hit> {
+    raycast_chunk_relative_reference(world, ZERO_CHUNK, ray)
+}
+
+/// Exhaustively tests every occupied coordinate in `world` against `local_ray` expressed relative
+/// to `origin_chunk`, preserving full 53-bit sub-voxel precision across the entire `i64^3` lattice.
+pub fn raycast_chunk_relative_reference(
+    world: &World,
+    origin_chunk: ChunkCoord,
+    local_ray: Ray,
+) -> Option<Hit> {
     let mut best: Option<Hit> = None;
 
     for coord in world.iter_on() {
-        best = test_raycast_coord(best, ray, coord);
+        best = test_raycast_coord_rel(best, origin_chunk, local_ray, coord);
     }
 
     best
@@ -2917,18 +3676,28 @@ fn walk_octant_near_to_far<S, FEntry, FCutoff, FChunk>(
 
 /// Finds the nearest occupied voxel hit along `ray` using near-to-far octree and chunk AABB pruning.
 pub fn raycast(world: &World, ray: Ray) -> Option<Hit> {
+    raycast_chunk_relative(world, ZERO_CHUNK, ray)
+}
+
+/// Finds the nearest occupied voxel hit along `local_ray` relative to `origin_chunk` using
+/// near-to-far octree and chunk AABB pruning with exact `i128` chunk subtraction.
+pub fn raycast_chunk_relative(
+    world: &World,
+    origin_chunk: ChunkCoord,
+    local_ray: Ray,
+) -> Option<Hit> {
     let mut best: Option<Hit> = None;
     walk_octree_near_to_far(
         world,
         &mut best,
         &|bounds| {
-            let (bmin, bmax) = bounds_aabb(bounds);
-            ray_aabb_entry_distance(ray, bmin, bmax)
+            let (bmin, bmax) = chunk_relative_bounds_aabb(origin_chunk, bounds);
+            ray_aabb_entry_distance(local_ray, bmin, bmax)
         },
         &|current, entry| current.is_some_and(|hit| entry > hit.distance),
         &mut |current, chunk_coord, words| {
             for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-                *current = test_raycast_coord(*current, ray, coord);
+                *current = test_raycast_coord_rel(*current, origin_chunk, local_ray, coord);
             }
         },
     );
@@ -2952,13 +3721,14 @@ fn validate_sweep_movement(start: Vec3, delta: Vec3) -> f64 {
     movement_length
 }
 
-fn test_sweep_coord(
+fn test_sweep_coord_rel(
     best: Option<(f64, Coord)>,
+    origin_chunk: ChunkCoord,
     start: Vec3,
     delta: Vec3,
     coord: Coord,
 ) -> Option<(f64, Coord)> {
-    let center = coord_center(coord);
+    let center = chunk_relative_coord(origin_chunk, coord);
     let min = center - Vec3::splat(0.5);
     let max = center + Vec3::splat(0.5);
     let Some(fraction) = segment_box_entry_fraction(start, delta, min, max) else {
@@ -2977,11 +3747,22 @@ fn test_sweep_coord(
 
 /// Exhaustively sweeps a point segment across all occupied voxels without chunk-level pruning.
 pub fn sweep_point_reference(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
-    let movement_length = validate_sweep_movement(start, delta);
+    sweep_point_chunk_relative_reference(world, ZERO_CHUNK, start, delta)
+}
+
+/// Exhaustively sweeps a chunk-relative segment `local_start..=(local_start + delta)` across all
+/// occupied voxels in `world` using exact `i128` chunk subtraction.
+pub fn sweep_point_chunk_relative_reference(
+    world: &World,
+    origin_chunk: ChunkCoord,
+    local_start: Vec3,
+    delta: Vec3,
+) -> Option<SweepHit> {
+    let movement_length = validate_sweep_movement(local_start, delta);
     let mut best: Option<(f64, Coord)> = None;
 
     for coord in world.iter_on() {
-        best = test_sweep_coord(best, start, delta, coord);
+        best = test_sweep_coord_rel(best, origin_chunk, local_start, delta, coord);
     }
 
     best.map(|(fraction, coord)| SweepHit {
@@ -2997,19 +3778,30 @@ pub fn sweep_point_reference(world: &World, start: Vec3, delta: Vec3) -> Option<
 /// making the result independent of the world's unspecified iteration order. The segment start,
 /// delta, endpoint, and Euclidean delta length must all be finite.
 pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
-    let movement_length = validate_sweep_movement(start, delta);
+    sweep_point_chunk_relative(world, ZERO_CHUNK, start, delta)
+}
+
+/// Sweeps a chunk-relative segment `local_start..=(local_start + delta)` relative to `origin_chunk`
+/// using near-to-far octree and chunk AABB pruning with exact `i128` chunk subtraction.
+pub fn sweep_point_chunk_relative(
+    world: &World,
+    origin_chunk: ChunkCoord,
+    local_start: Vec3,
+    delta: Vec3,
+) -> Option<SweepHit> {
+    let movement_length = validate_sweep_movement(local_start, delta);
     let mut best: Option<(f64, Coord)> = None;
     walk_octree_near_to_far(
         world,
         &mut best,
         &|bounds| {
-            let (bmin, bmax) = bounds_aabb(bounds);
-            segment_box_entry_fraction(start, delta, bmin, bmax)
+            let (bmin, bmax) = chunk_relative_bounds_aabb(origin_chunk, bounds);
+            segment_box_entry_fraction(local_start, delta, bmin, bmax)
         },
         &|current, fraction| current.is_some_and(|(best_fraction, _)| fraction > best_fraction),
         &mut |current, chunk_coord, words| {
             for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-                *current = test_sweep_coord(*current, start, delta, coord);
+                *current = test_sweep_coord_rel(*current, origin_chunk, local_start, delta, coord);
             }
         },
     );
@@ -3047,6 +3839,376 @@ pub fn bounds_aabb(bounds: Bounds) -> (Vec3, Vec3) {
     )
 }
 
+/// Returns the `origin_chunk`-relative `f64` coordinate of `coord`'s unit-cube center using exact
+/// `i128` subtraction before conversion.
+pub fn chunk_relative_coord(origin_chunk: ChunkCoord, coord: Coord) -> Vec3 {
+    if origin_chunk == ZERO_CHUNK {
+        return coord_center(coord);
+    }
+    let ox = i128::from(origin_chunk.x) * i128::from(CHUNK_SIDE);
+    let oy = i128::from(origin_chunk.y) * i128::from(CHUNK_SIDE);
+    let oz = i128::from(origin_chunk.z) * i128::from(CHUNK_SIDE);
+    Vec3::new(
+        (i128::from(coord.x) - ox) as f64,
+        (i128::from(coord.y) - oy) as f64,
+        (i128::from(coord.z) - oz) as f64,
+    )
+}
+
+/// Expands inclusive integer voxel `Bounds` into `origin_chunk`-relative `min` and `max` AABB
+/// corners, preserving exact representation within `±2^52` and outward rounding beyond `2^52`.
+pub fn chunk_relative_bounds_aabb(origin_chunk: ChunkCoord, bounds: Bounds) -> (Vec3, Vec3) {
+    if origin_chunk == ZERO_CHUNK {
+        return bounds_aabb(bounds);
+    }
+    const EXACT_LIMIT: i128 = 1_i128 << 52;
+    let axis_min = |c: i64, o_chunk: i64| -> f64 {
+        let d = i128::from(c) - i128::from(o_chunk) * i128::from(CHUNK_SIDE);
+        let v = d as f64 - 0.5;
+        if d.abs() >= EXACT_LIMIT {
+            v.next_down()
+        } else {
+            v
+        }
+    };
+    let axis_max = |c: i64, o_chunk: i64| -> f64 {
+        let d = i128::from(c) - i128::from(o_chunk) * i128::from(CHUNK_SIDE);
+        let v = d as f64 + 0.5;
+        if d.abs() >= EXACT_LIMIT {
+            v.next_up()
+        } else {
+            v
+        }
+    };
+    (
+        Vec3::new(
+            axis_min(bounds.min.x, origin_chunk.x),
+            axis_min(bounds.min.y, origin_chunk.y),
+            axis_min(bounds.min.z, origin_chunk.z),
+        ),
+        Vec3::new(
+            axis_max(bounds.max.x, origin_chunk.x),
+            axis_max(bounds.max.y, origin_chunk.y),
+            axis_max(bounds.max.z, origin_chunk.z),
+        ),
+    )
+}
+
+fn bounds_contains_coord(bounds: Bounds, coord: Coord) -> bool {
+    coord.x >= bounds.min.x
+        && coord.x <= bounds.max.x
+        && coord.y >= bounds.min.y
+        && coord.y <= bounds.max.y
+        && coord.z >= bounds.min.z
+        && coord.z <= bounds.max.z
+}
+
+fn collect_octant_chunks(world: &World, octant: OctantCoord, visit: &mut impl FnMut(ChunkCoord)) {
+    let Some(summary) = world.octant_summary(octant) else {
+        return;
+    };
+    let mut mask = summary.child_mask;
+    while mask != 0 {
+        let child_idx = mask.trailing_zeros() as u8;
+        mask &= mask - 1;
+        let cx = octant.x * 2 + i64::from((child_idx >> 2) & 1);
+        let cy = octant.y * 2 + i64::from((child_idx >> 1) & 1);
+        let cz = octant.z * 2 + i64::from(child_idx & 1);
+        if octant.depth == 1 {
+            visit(ChunkCoord::new(cx, cy, cz));
+        } else {
+            collect_octant_chunks(
+                world,
+                OctantCoord {
+                    depth: octant.depth - 1,
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                },
+                visit,
+            );
+        }
+    }
+}
+
+/// Conservative minimum view depth across the eight corners of `[min, max]`.
+fn aabb_min_view_depth(projection: CameraProjection, min: Vec3, max: Vec3) -> f64 {
+    let mut best = f64::INFINITY;
+    for corner in crate::camera::bounds_corners(min, max) {
+        let depth = projection.view_depth(corner);
+        if depth < best {
+            best = depth;
+        }
+    }
+    best
+}
+
+struct HiZBox {
+    left: i64,
+    right: i64,
+    top: i64,
+    bottom: i64,
+    min_z: f64,
+    raw_span_x: f64,
+    raw_span_y: f64,
+    depth_bound: Option<f64>,
+}
+
+/// Projects the eight corners of an octant/chunk AABB and derives a conservative screen box and
+/// lower-bound fragment depth valid for every voxel inside `[min, max]`.
+fn aabb_hi_z_probe(
+    projection: CameraProjection,
+    width: u32,
+    height: u32,
+    min: Vec3,
+    max: Vec3,
+) -> Option<HiZBox> {
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    let mut min_z = f64::INFINITY;
+    let mut max_z = f64::NEG_INFINITY;
+    for corner in crate::camera::bounds_corners(min, max) {
+        let p = projection.project(corner)?;
+        if !(p.depth > HI_Z_MIN_DEPTH && p.x.is_finite() && p.y.is_finite()) {
+            return None;
+        }
+        min_x = min_x.min(p.x);
+        max_x = max_x.max(p.x);
+        min_y = min_y.min(p.y);
+        max_y = max_y.max(p.y);
+        min_z = min_z.min(p.depth);
+        max_z = max_z.max(p.depth);
+    }
+
+    let raw_span_x = max_x - min_x;
+    let raw_span_y = max_y - min_y;
+    let left = (min_x.floor() - 1.0).max(0.0) as i64;
+    let right = (max_x.ceil() + 1.0).min(f64::from(width)) as i64;
+    let top = (min_y.floor() - 1.0).max(0.0) as i64;
+    let bottom = (max_y.ceil() + 1.0).min(f64::from(height)) as i64;
+
+    let focal = projection.focal_length();
+    let (half_w, half_h) = projection.half_extent();
+    let s_vox = (focal + half_w.max(half_h) + 2.0) * 2.0 / min_z;
+
+    let depth_bound = if !(focal.is_finite() && focal > 0.0 && s_vox.is_finite()) {
+        None
+    } else if s_vox <= 0.9 * SMALL_BIT_EXTENT {
+        // Every voxel in `[min, max]` is strictly inside the single-pixel path, so triangle
+        // barycentric conditioning cannot apply and `nearest_depth >= min_z`.
+        let b = min_z * (1.0 - 1.0e-9);
+        (b.is_finite() && b > 0.0 && b < min_z).then_some(b)
+    } else {
+        let pos = projection.position();
+        if pos.x.abs() > 1.0e12 || pos.y.abs() > 1.0e12 || pos.z.abs() > 1.0e12 {
+            None
+        } else {
+            let basis = projection.basis();
+            let axis_plane_dist = |p: f64, lo: f64, hi: f64, zero_plane_collinear: bool| -> f64 {
+                if p < lo {
+                    lo - p
+                } else if p > hi {
+                    p - hi
+                } else {
+                    let d = ((p - 0.5) - (p - 0.5).round()).abs();
+                    if d == 0.0 && zero_plane_collinear {
+                        // A face lying exactly on this plane projects all four vertices onto the
+                        // exact viewport centerline with zero 2D signed area and is skipped by
+                        // `raster_triangle`; the nearest drawable grid plane sits 1.0 unit away.
+                        1.0
+                    } else {
+                        d
+                    }
+                }
+            };
+            let d_plane = axis_plane_dist(
+                pos.x,
+                min.x,
+                max.x,
+                basis.forward.x == 0.0 && basis.up.x == 0.0,
+            )
+            .min(axis_plane_dist(
+                pos.y,
+                min.y,
+                max.y,
+                basis.forward.y == 0.0 && basis.right.y == 0.0,
+            ))
+            .min(axis_plane_dist(
+                pos.z,
+                min.z,
+                max.z,
+                basis.forward.z == 0.0 && basis.up.z == 0.0,
+            ));
+            let min_area = 0.5 * focal * focal * d_plane / (max_z * max_z * max_z);
+            if min_area.is_finite() && min_area > HI_Z_MIN_TRIANGLE_AREA {
+                let conditioning = OCCLUSION_EDGE_SLACK * (s_vox + 2.0) * (s_vox + 2.0) / min_area;
+                let b = min_z * (1.0 - 1.0e-9) / (1.0 + OCCLUSION_WEIGHT_SLACK + conditioning);
+                (b.is_finite() && b > 0.0 && b < min_z).then_some(b)
+            } else {
+                None
+            }
+        }
+    };
+
+    Some(HiZBox {
+        left,
+        right,
+        top,
+        bottom,
+        min_z,
+        raw_span_x,
+        raw_span_y,
+        depth_bound,
+    })
+}
+
+#[derive(Clone, Copy)]
+enum TraversalNode {
+    Octant(OctantCoord, OctantSummary),
+    Chunk(ChunkCoord, Bounds, u16),
+}
+
+impl TraversalNode {
+    fn tie_key(self) -> (u8, i64, i64, i64) {
+        match self {
+            Self::Octant(o, _) => (o.depth, o.x, o.y, o.z),
+            Self::Chunk(c, _, _) => (0, c.x, c.y, c.z),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TraversalEntry {
+    min_z: f64,
+    node: TraversalNode,
+}
+
+impl PartialEq for TraversalEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.min_z.to_bits() == other.min_z.to_bits() && self.node.tie_key() == other.node.tie_key()
+    }
+}
+
+impl Eq for TraversalEntry {}
+
+impl PartialOrd for TraversalEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TraversalEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Reversed for min-heap: smallest `min_z` pops first.
+        other
+            .min_z
+            .total_cmp(&self.min_z)
+            .then_with(|| other.node.tie_key().cmp(&self.node.tie_key()))
+    }
+}
+
+#[derive(Clone, Copy)]
+enum OccludedTarget {
+    Octant(OctantCoord),
+    Chunk(ChunkCoord),
+}
+
+#[derive(Clone, Copy)]
+struct DeltaOccludedBox {
+    target: OccludedTarget,
+    x0: u16,
+    x1: u16,
+    y0: u16,
+    y1: u16,
+}
+
+/// Bounded ephemeral per-chunk `chunk_open_words` cache keyed by `(world.instance_id(), world.revision())`.
+struct SpatialRenderCache {
+    world_key: Option<(u64, u64)>,
+    max_chunks: usize,
+    open_chunks: crate::world::CoordMap<ChunkCoord, [u64; CHUNK_WORDS]>,
+    hits: u64,
+    misses: u64,
+    invalidations: u64,
+    cap_skips: u64,
+}
+
+impl SpatialRenderCache {
+    fn new(max_chunks: usize) -> Self {
+        Self {
+            world_key: None,
+            max_chunks,
+            open_chunks: Default::default(),
+            hits: 0,
+            misses: 0,
+            invalidations: 0,
+            cap_skips: 0,
+        }
+    }
+
+    fn set_max_chunks(&mut self, max_chunks: usize) {
+        self.max_chunks = max_chunks;
+        if self.open_chunks.len() > max_chunks {
+            self.open_chunks.clear();
+            self.open_chunks.shrink_to(max_chunks);
+            if self.world_key.is_some() {
+                self.invalidations += 1;
+            }
+        }
+    }
+
+    fn sync_world(&mut self, instance_id: u64, revision: u64) {
+        let key = (instance_id, revision);
+        if self.world_key != Some(key) {
+            if self.world_key.is_some() {
+                self.invalidations += 1;
+            }
+            self.open_chunks.clear();
+            self.world_key = Some(key);
+        }
+    }
+
+    fn get_or_compute_open_words(
+        &mut self,
+        world: &World,
+        chunk: ChunkCoord,
+    ) -> [u64; CHUNK_WORDS] {
+        if self.max_chunks == 0 {
+            self.misses += 1;
+            self.cap_skips += 1;
+            return world.chunk_open_words(chunk);
+        }
+        if let Some(&words) = self.open_chunks.get(&chunk) {
+            self.hits += 1;
+            return words;
+        }
+        self.misses += 1;
+        let words = world.chunk_open_words(chunk);
+        if self.open_chunks.len() < self.max_chunks {
+            self.open_chunks.insert(chunk, words);
+        } else {
+            self.cap_skips += 1;
+        }
+        words
+    }
+
+    fn stats(&self) -> SpatialRenderCacheStats {
+        let entry_size =
+            std::mem::size_of::<ChunkCoord>() + std::mem::size_of::<[u64; CHUNK_WORDS]>() + 8;
+        SpatialRenderCacheStats {
+            max_chunks: self.max_chunks,
+            cached_chunks: self.open_chunks.len(),
+            hits: self.hits,
+            misses: self.misses,
+            invalidations: self.invalidations,
+            cap_skips: self.cap_skips,
+            estimated_bytes: self.open_chunks.capacity() * entry_size,
+        }
+    }
+}
+
 /// Least view depth, in world units, of every point of a chunk (and its neighbours) for
 /// the enclosed-bit cull. Far above rounding in `view_depth`, far below any useful view.
 const ENCLOSED_MIN_DEPTH: f64 = 1.0e-3;
@@ -3071,7 +4233,15 @@ const ENCLOSED_MIN_SPAN: f64 = 1.25 * SMALL_BIT_EXTENT;
 /// bounds `D` from above, so if `focal / d >= ENCLOSED_MIN_SPAN` (`d` = that corner's distance),
 /// no bit there takes the single-pixel path.
 fn enclosed_cull_applies(projection: CameraProjection, bounds: Bounds) -> bool {
-    let (min, max) = bounds_aabb(bounds);
+    enclosed_cull_applies_rel(ZERO_CHUNK, projection, bounds)
+}
+
+fn enclosed_cull_applies_rel(
+    origin_chunk: ChunkCoord,
+    projection: CameraProjection,
+    bounds: Bounds,
+) -> bool {
+    let (min, max) = chunk_relative_bounds_aabb(origin_chunk, bounds);
     let (min, max) = (min - Vec3::splat(1.0), max + Vec3::splat(1.0));
     let focal = projection.focal_length();
     if !(focal.is_finite() && focal > 0.0) {

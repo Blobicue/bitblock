@@ -92,6 +92,12 @@
     ]
    },
    {
+    "item": "DEFAULT_SPATIAL_CACHE_MAX_CHUNKS",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "DecodedNodeChildren",
     "modules": [
      "commit_state"
@@ -464,6 +470,12 @@
     ]
    },
    {
+    "item": "SpatialRenderCacheStats",
+    "modules": [
+     "render"
+    ]
+   },
+   {
     "item": "StoreRecoveryReport",
     "modules": [
      "commit_state"
@@ -549,6 +561,18 @@
    },
    {
     "item": "changed_rows",
+    "modules": [
+     "render"
+    ]
+   },
+   {
+    "item": "chunk_relative_bounds_aabb",
+    "modules": [
+     "render"
+    ]
+   },
+   {
+    "item": "chunk_relative_coord",
     "modules": [
      "render"
     ]
@@ -692,19 +716,13 @@
     ]
    },
    {
-    "item": "translate_world",
-    "modules": [
-     "camera"
-    ]
-   },
-   {
     "item": "validate_domain_kv",
     "modules": [
      "commit_state"
     ]
    }
   ],
-  "pub_items": 1066,
+  "pub_items": 1092,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -728,7 +746,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 39851,
+   "code_lines": 40888,
    "duplicated_lines": 407,
    "regions": [
     {

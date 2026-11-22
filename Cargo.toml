@@ -66,6 +66,10 @@ name = "scale_1_probe"
 required-features = ["protocol-research"]
 
 [[example]]
+name = "scale_2_probe"
+required-features = ["protocol-research"]
+
+[[example]]
 name = "verkle_r1_feasibility_probe"
 required-features = ["protocol-research"]
 
