@@ -4643,11 +4643,43 @@ impl Default for MemoryCommitmentStore {
 mod durable_fs {
     use super::*;
     use std::fs::{self, File, OpenOptions};
-    use std::io::Write;
+    use std::io::{Read, Seek, SeekFrom, Write};
     use std::path::{Path, PathBuf};
 
     #[cfg(windows)]
     use std::os::windows::fs::OpenOptionsExt;
+
+    const PACK_MAGIC: [u8; 4] = *b"BBP1";
+    const PACK_HEADER_LEN: usize = 4 + 32 + 1 + 32 + 4;
+    const PACK_TRAILER_LEN: usize = 32;
+    const PACK_MAX_RECORD_PAYLOAD: usize = 16 * 1024 * 1024;
+
+    fn append_pack_record(buf: &mut Vec<u8>, key: &NodeStoreKey, payload: &[u8]) -> u64 {
+        let header_start = buf.len();
+        buf.extend_from_slice(&PACK_MAGIC);
+        buf.extend_from_slice(&key.commitment_profile_id);
+        buf.push(key.domain_tag.code());
+        buf.extend_from_slice(&key.node_hash);
+        buf.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        let payload_rel_offset = (buf.len() - header_start) as u64;
+        buf.extend_from_slice(payload);
+        let sum: [u8; 32] = Sha256::digest(&buf[header_start..]).into();
+        buf.extend_from_slice(&sum);
+        payload_rel_offset
+    }
+
+    fn read_pack_slice(
+        file: &mut File,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, CommitStateError> {
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|e| map_io("seek nodes.pack", e))?;
+        let mut out = vec![0u8; len as usize];
+        file.read_exact(&mut out)
+            .map_err(|e| map_io("read nodes.pack", e))?;
+        Ok(out)
+    }
 
     fn hex_encode(bytes: &[u8]) -> String {
         const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -4753,9 +4785,9 @@ mod durable_fs {
         }
     }
 
-    /// Crash-safe filesystem commitment store implementing staged node writes, checksummed
-    /// provisional pins, immutable manifests, atomic head CAS, exclusive writer locking, and
-    /// write-barrier mark/sweep GC.
+    /// Crash-safe filesystem commitment store implementing batched checksummed pack-file node
+    /// staging (`nodes/nodes.pack`), checksummed provisional pins, immutable manifests, atomic
+    /// head CAS, exclusive writer locking, and compacting write-barrier mark/sweep GC.
     pub struct DurableCommitmentStore {
         root_dir: PathBuf,
         _lock_file: File,
@@ -4765,6 +4797,8 @@ mod durable_fs {
         permanent_pins: BTreeSet<[u8; 32]>,
         pin_epoch: u64,
         next_attempt_id: u64,
+        pack_index: BTreeMap<NodeStoreKey, (u64, u32)>,
+        pack_valid_len: u64,
     }
 
     impl DurableCommitmentStore {
@@ -4790,12 +4824,18 @@ mod durable_fs {
                 permanent_pins: BTreeSet::new(),
                 pin_epoch: 0,
                 next_attempt_id: 1,
+                pack_index: BTreeMap::new(),
+                pack_valid_len: 0,
             };
             let report = store.recover_internal()?;
             Ok((store, report))
         }
 
-        fn node_path(&self, key: &NodeStoreKey) -> PathBuf {
+        fn pack_path(&self) -> PathBuf {
+            self.root_dir.join("nodes").join("nodes.pack")
+        }
+
+        fn legacy_node_path(&self, key: &NodeStoreKey) -> PathBuf {
             self.root_dir.join("nodes").join(format!(
                 "{}_{:02x}_{}.node",
                 hex_encode(&key.commitment_profile_id),
@@ -4824,6 +4864,34 @@ mod durable_fs {
 
         fn head_path(&self) -> PathBuf {
             self.root_dir.join("head.ptr")
+        }
+
+        fn read_raw_node_with_pack(
+            &self,
+            pack_file: &mut Option<File>,
+            key: &NodeStoreKey,
+        ) -> Result<Vec<u8>, CommitStateError> {
+            if let Some(&(offset, len)) = self.pack_index.get(key) {
+                if pack_file.is_none() {
+                    let f = File::open(self.pack_path()).map_err(|_| {
+                        CommitStateError::CorruptOrMissingNode {
+                            expected_hash: key.node_hash,
+                        }
+                    })?;
+                    *pack_file = Some(f);
+                }
+                let f = pack_file.as_mut().expect("pack file just opened");
+                return read_pack_slice(f, offset, len).map_err(|_| {
+                    CommitStateError::CorruptOrMissingNode {
+                        expected_hash: key.node_hash,
+                    }
+                });
+            }
+            fs::read(self.legacy_node_path(key)).map_err(|_| {
+                CommitStateError::CorruptOrMissingNode {
+                    expected_hash: key.node_hash,
+                }
+            })
         }
 
         /// Returns the current recovered or published head `CommitmentSetIdV1`.
@@ -4865,32 +4933,33 @@ mod durable_fs {
         /// Reads and canonically verifies one persisted node record by `NodeStoreKey`.
         pub fn read_verified_node(&self, key: &NodeStoreKey) -> Result<Vec<u8>, CommitStateError> {
             let profile = self.profiles.resolve_profile(&key.commitment_profile_id)?;
-            let bytes = fs::read(self.node_path(key)).map_err(|_| {
-                CommitStateError::CorruptOrMissingNode {
-                    expected_hash: key.node_hash,
-                }
-            })?;
+            let mut pack_file = None;
+            let bytes = self.read_raw_node_with_pack(&mut pack_file, key)?;
             let _ = decode_and_verify_node_record(profile, &key.node_hash, &bytes)?;
             Ok(bytes)
         }
 
-        /// Returns the filesystem path of one stored node record (for external fault/corruption tests).
+        /// Returns the filesystem path holding a stored node record (for external fault/corruption tests).
         pub fn node_file_path(&self, key: &NodeStoreKey) -> PathBuf {
-            self.node_path(key)
+            if self.pack_index.contains_key(key) {
+                self.pack_path()
+            } else {
+                self.legacy_node_path(key)
+            }
         }
 
-        /// Counts persisted `.node` files in the node directory.
+        /// Counts persisted node records across `nodes/nodes.pack` and any legacy `.node` files.
         pub fn persisted_node_count(&self) -> Result<usize, CommitStateError> {
-            let mut count = 0usize;
+            let mut legacy = 0usize;
             for entry in fs::read_dir(self.root_dir.join("nodes"))
                 .map_err(|e| map_io("read nodes dir", e))?
             {
                 let entry = entry.map_err(|e| map_io("read nodes entry", e))?;
                 if entry.path().extension().and_then(|s| s.to_str()) == Some("node") {
-                    count += 1;
+                    legacy += 1;
                 }
             }
-            Ok(count)
+            Ok(self.pack_index.len() + legacy)
         }
 
         fn write_permanent_pin(&mut self, set_id: [u8; 32]) -> Result<(), CommitStateError> {
@@ -4902,6 +4971,20 @@ mod durable_fs {
             self.permanent_pins.insert(set_id);
             self.pin_epoch = self.pin_epoch.saturating_add(1);
             Ok(())
+        }
+
+        /// Removes a permanent pin file on disk and increments the pin epoch.
+        pub fn unpin_permanent(&mut self, set_id: &[u8; 32]) -> Result<bool, CommitStateError> {
+            if !self.permanent_pins.remove(set_id) {
+                return Ok(false);
+            }
+            let path = self.permanent_pin_path(set_id);
+            if path.exists() {
+                fs::remove_file(&path).map_err(|e| map_io("remove permanent pin", e))?;
+                sync_dir_best_effort(&self.root_dir.join("pins"))?;
+            }
+            self.pin_epoch = self.pin_epoch.saturating_add(1);
+            Ok(true)
         }
 
         /// Publishes a candidate `CommitmentSetV1` and its nodes durably with optional crash injection.
@@ -4928,29 +5011,66 @@ mod durable_fs {
             )?;
             let candidate_id = set.id();
 
-            // 1. Stage content-addressed nodes durably and verify any reused existing node.
+            // 1. Verify staged nodes and batch all newly introduced nodes into one synced append to
+            //    `nodes/nodes.pack` (single `write_all` + single `sync_all` per publication).
+            let mut batch_buf: Vec<u8> = Vec::new();
+            let mut pending: Vec<(NodeStoreKey, u64, u32)> = Vec::new();
+            let mut verify_reader: Option<File> = None;
+            let base_offset = self.pack_valid_len;
             for (key, bytes) in staged_nodes {
                 let profile = self.profiles.resolve_profile(&key.commitment_profile_id)?;
                 let _ = decode_and_verify_node_record(profile, &key.node_hash, bytes)?;
-                let np = self.node_path(key);
-                if np.exists() {
-                    let existing = fs::read(&np).map_err(|e| map_io("read existing node", e))?;
+                if self.pack_index.contains_key(key) || self.legacy_node_path(key).exists() {
+                    let existing = self.read_raw_node_with_pack(&mut verify_reader, key)?;
                     if existing != *bytes {
                         return Err(CommitStateError::CorruptOrMissingNode {
                             expected_hash: key.node_hash,
                         });
                     }
                 } else {
-                    write_atomic_synced(&np, bytes)?;
+                    let rec_start = base_offset + batch_buf.len() as u64;
+                    let rel = append_pack_record(&mut batch_buf, key, bytes);
+                    pending.push((*key, rec_start + rel, bytes.len() as u32));
                 }
             }
-            // 2. Verify complete reachable closure by reading back from disk.
+            drop(verify_reader);
+
+            if !batch_buf.is_empty() {
+                let pack_path = self.pack_path();
+                let was_new = !pack_path.exists();
+                {
+                    let mut pack = OpenOptions::new()
+                        .create(true)
+                        .truncate(false)
+                        .read(true)
+                        .write(true)
+                        .open(&pack_path)
+                        .map_err(|e| map_io("open nodes.pack for batch append", e))?;
+                    pack.set_len(base_offset)
+                        .map_err(|e| map_io("align nodes.pack tail", e))?;
+                    pack.seek(SeekFrom::Start(base_offset))
+                        .map_err(|e| map_io("seek nodes.pack append", e))?;
+                    pack.write_all(&batch_buf)
+                        .map_err(|e| map_io("write nodes.pack batch", e))?;
+                    pack.sync_all()
+                        .map_err(|e| map_io("sync nodes.pack batch", e))?;
+                }
+                if was_new {
+                    sync_dir_best_effort(&self.root_dir.join("nodes"))?;
+                }
+                for (key, payload_offset, payload_len) in pending {
+                    self.pack_index.insert(key, (payload_offset, payload_len));
+                }
+                self.pack_valid_len = base_offset + batch_buf.len() as u64;
+            }
+
+            // 2. Verify complete reachable closure by reading back from disk via one shared handle.
             let roots = root_keys_for_set(set);
+            let mut closure_reader: Option<File> = None;
             let _ = verify_closure_from_lookup(&self.profiles, &self.op_limits, &roots, |k| {
-                fs::read(self.node_path(k)).map_err(|_| CommitStateError::CorruptOrMissingNode {
-                    expected_hash: k.node_hash,
-                })
+                self.read_raw_node_with_pack(&mut closure_reader, k)
             })?;
+            drop(closure_reader);
             if crash_point == CrashPoint::AfterNodeStaging {
                 return Err(CommitStateError::SimulatedCrash(crash_point));
             }
@@ -5027,22 +5147,103 @@ mod durable_fs {
             Ok(candidate_id)
         }
 
+        fn scan_pack_file(&mut self) -> Result<bool, CommitStateError> {
+            self.pack_index.clear();
+            self.pack_valid_len = 0;
+            let pack_path = self.pack_path();
+            if !pack_path.exists() {
+                return Ok(false);
+            }
+            let data = fs::read(&pack_path).map_err(|e| map_io("read nodes.pack", e))?;
+            let mut pos = 0usize;
+            let mut has_torn_tail = false;
+            while pos < data.len() {
+                if data.len() - pos < PACK_HEADER_LEN + PACK_TRAILER_LEN {
+                    has_torn_tail = true;
+                    break;
+                }
+                if data[pos..pos + 4] != PACK_MAGIC {
+                    has_torn_tail = true;
+                    break;
+                }
+                let mut profile_id = [0u8; 32];
+                profile_id.copy_from_slice(&data[pos + 4..pos + 36]);
+                let Some(domain_tag) = DomainTagV1::from_code(data[pos + 36]) else {
+                    has_torn_tail = true;
+                    break;
+                };
+                let mut node_hash = [0u8; 32];
+                node_hash.copy_from_slice(&data[pos + 37..pos + 69]);
+                let payload_len =
+                    u32::from_le_bytes(data[pos + 69..pos + 73].try_into().unwrap()) as usize;
+                if payload_len > PACK_MAX_RECORD_PAYLOAD
+                    || data.len() - pos < PACK_HEADER_LEN + payload_len + PACK_TRAILER_LEN
+                {
+                    has_torn_tail = true;
+                    break;
+                }
+                let payload_start = pos + PACK_HEADER_LEN;
+                let payload_end = payload_start + payload_len;
+                let trailer_end = payload_end + PACK_TRAILER_LEN;
+                let expected_sum: [u8; 32] = Sha256::digest(&data[pos..payload_end]).into();
+                if data[payload_end..trailer_end] != expected_sum {
+                    has_torn_tail = true;
+                    break;
+                }
+                let Ok(profile) = self.profiles.resolve_profile(&profile_id) else {
+                    has_torn_tail = true;
+                    break;
+                };
+                if decode_and_verify_node_record(
+                    profile,
+                    &node_hash,
+                    &data[payload_start..payload_end],
+                )
+                .is_err()
+                {
+                    has_torn_tail = true;
+                    break;
+                }
+                let key = NodeStoreKey {
+                    commitment_profile_id: profile_id,
+                    domain_tag,
+                    node_hash,
+                };
+                self.pack_index
+                    .entry(key)
+                    .or_insert((payload_start as u64, payload_len as u32));
+                pos = trailer_end;
+            }
+            self.pack_valid_len = pos as u64;
+            Ok(has_torn_tail)
+        }
+
         fn recover_internal(&mut self) -> Result<StoreRecoveryReport, CommitStateError> {
+            let has_torn_tail = self.scan_pack_file()?;
             let head_id = self.head_set_id()?;
             let mut verified_nodes = 0usize;
             if let Some(hid) = head_id {
                 let set = self.read_manifest(&hid)?;
                 set.validate(&self.profiles, &self.domain_registry, None)?;
                 let roots = root_keys_for_set(&set);
+                let mut reader = None;
                 let (visited, _) =
                     verify_closure_from_lookup(&self.profiles, &self.op_limits, &roots, |k| {
-                        fs::read(self.node_path(k)).map_err(|_| {
-                            CommitStateError::CorruptOrMissingNode {
-                                expected_hash: k.node_hash,
-                            }
-                        })
+                        self.read_raw_node_with_pack(&mut reader, k)
                     })?;
                 verified_nodes = visited.len();
+            }
+            // Only truncate an unreferenced torn staging tail after confirming the committed head
+            // closure is 100% intact (any corruption inside a reachable node already failed closed).
+            if has_torn_tail {
+                let pack = OpenOptions::new()
+                    .write(true)
+                    .open(self.pack_path())
+                    .map_err(|e| map_io("open nodes.pack for tail truncate", e))?;
+                pack.set_len(self.pack_valid_len)
+                    .map_err(|e| map_io("truncate torn nodes.pack tail", e))?;
+                pack.sync_all()
+                    .map_err(|e| map_io("sync truncated nodes.pack", e))?;
             }
 
             let mut max_attempt = 0u64;
@@ -5130,13 +5331,10 @@ mod durable_fs {
             }
             roots.sort();
             roots.dedup();
+            let mut reader = None;
             let (reachable, work_units) =
                 verify_closure_from_lookup(&self.profiles, &self.op_limits, &roots, |k| {
-                    fs::read(self.node_path(k)).map_err(|_| {
-                        CommitStateError::CorruptOrMissingNode {
-                            expected_hash: k.node_hash,
-                        }
-                    })
+                    self.read_raw_node_with_pack(&mut reader, k)
                 })?;
             Ok(GcMarkSnapshot {
                 pin_epoch: epoch,
@@ -5145,7 +5343,8 @@ mod durable_fs {
             })
         }
 
-        /// Completes a bounded sweep on disk only if `pin_epoch` is unchanged since `mark`.
+        /// Completes a bounded sweep on disk only if `pin_epoch` is unchanged since `mark`,
+        /// atomically compacting `nodes/nodes.pack` and removing unreferenced legacy `.node` files.
         pub fn finish_gc_sweep(
             &mut self,
             mark: &GcMarkSnapshot,
@@ -5156,6 +5355,47 @@ mod durable_fs {
                     current_epoch: self.pin_epoch,
                 });
             }
+
+            let mut reclaimed = 0usize;
+            let mut remaining = 0usize;
+
+            // 1. Compact `nodes/nodes.pack` atomically when present.
+            if !self.pack_index.is_empty() {
+                let mut reader = Some(
+                    File::open(self.pack_path())
+                        .map_err(|e| map_io("open nodes.pack for gc", e))?,
+                );
+                let mut compacted = Vec::new();
+                let mut next_index = BTreeMap::new();
+                let mut pack_reclaimed = 0usize;
+                for (&key, &(offset, len)) in &self.pack_index {
+                    let drop_node = !mark.reachable.contains(&key)
+                        && ((reclaimed + pack_reclaimed) as u64)
+                            < self.op_limits.max_gc_sweep_nodes;
+                    if drop_node {
+                        pack_reclaimed += 1;
+                    } else {
+                        let payload = read_pack_slice(
+                            reader.as_mut().expect("gc pack reader open"),
+                            offset,
+                            len,
+                        )?;
+                        let rec_start = compacted.len() as u64;
+                        let rel = append_pack_record(&mut compacted, &key, &payload);
+                        next_index.insert(key, (rec_start + rel, len));
+                        remaining += 1;
+                    }
+                }
+                drop(reader);
+                if pack_reclaimed > 0 {
+                    write_atomic_synced(&self.pack_path(), &compacted)?;
+                    self.pack_index = next_index;
+                    self.pack_valid_len = compacted.len() as u64;
+                    reclaimed += pack_reclaimed;
+                }
+            }
+
+            // 2. Sweep any legacy individual `.node` files.
             let reachable_names: HashSet<String> = mark
                 .reachable
                 .iter()
@@ -5168,9 +5408,8 @@ mod durable_fs {
                     )
                 })
                 .collect();
-            let mut reclaimed = 0usize;
-            let mut remaining = 0usize;
             let nodes_dir = self.root_dir.join("nodes");
+            let mut removed_legacy = false;
             for entry in fs::read_dir(&nodes_dir).map_err(|e| map_io("read nodes dir", e))? {
                 let entry = entry.map_err(|e| map_io("read nodes entry", e))?;
                 let path = entry.path();
@@ -5185,11 +5424,14 @@ mod durable_fs {
                 {
                     fs::remove_file(&path).map_err(|e| map_io("sweep orphan node", e))?;
                     reclaimed += 1;
+                    removed_legacy = true;
                 } else {
                     remaining += 1;
                 }
             }
-            sync_dir_best_effort(&nodes_dir)?;
+            if removed_legacy {
+                sync_dir_best_effort(&nodes_dir)?;
+            }
             Ok(GcSweepOutcome::Completed {
                 reclaimed_nodes: reclaimed,
                 remaining_nodes: remaining,

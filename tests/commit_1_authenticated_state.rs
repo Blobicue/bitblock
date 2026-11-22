@@ -674,3 +674,95 @@ fn durable_filesystem_crash_recovery_gauntlet_across_all_five_crash_points() {
         let _ = fs::remove_dir_all(&dir);
     }
 }
+
+#[test]
+fn durable_pack_compaction_gc_and_torn_tail_recovery() {
+    let dir = unique_temp_dir("pack_gc_tail");
+    let journal_path = dir.join("ledger.bbj");
+    let store_dir = dir.join("commit_store");
+    let profile = LocalStorageProfile::DEFAULT;
+    let initial_world = World::new();
+
+    let (mut dal, _create, genesis_id) = DurableAuthenticatedLedger::create_new(
+        &journal_path,
+        &store_dir,
+        &profile,
+        scope_digest(),
+        &initial_world,
+    )
+    .unwrap();
+
+    let mut intermediate_ids = Vec::new();
+    for tick in 1..=8_u64 {
+        let (_, set_id) = dal
+            .append_tick(
+                tick,
+                &[Edit::new(Operation::On, Coord::new(tick as i64, 0, 0))],
+            )
+            .unwrap()
+            .expect("tick committed");
+        if tick < 8 {
+            intermediate_ids.push(set_id);
+        }
+    }
+    let head_id = dal.store().head_set_id().unwrap().unwrap();
+    let pack_path = store_dir.join("nodes").join("nodes.pack");
+    assert!(pack_path.exists(), "batched nodes.pack must exist");
+    let size_before_gc = fs::metadata(&pack_path).unwrap().len();
+    let count_before_gc = dal.store().persisted_node_count().unwrap();
+    drop(dal);
+
+    // 1. Simulate a torn mid-append tail in `nodes.pack` after a committed head -> recovery must
+    //    verify the committed head closure intact and cleanly truncate the unreferenced torn tail.
+    {
+        use std::io::Write;
+        let mut f = fs::OpenOptions::new()
+            .append(true)
+            .open(&pack_path)
+            .unwrap();
+        f.write_all(b"BBP1\xde\xad\xbe\xef_torn_tail").unwrap();
+        f.sync_all().unwrap();
+    }
+    let (mut store, report) = DurableCommitmentStore::open_and_recover(&store_dir).unwrap();
+    assert_eq!(report.recovered_head, Some(head_id));
+    assert_eq!(fs::metadata(&pack_path).unwrap().len(), size_before_gc);
+    assert_eq!(store.persisted_node_count().unwrap(), count_before_gc);
+
+    // 2. Unpin intermediate sets, mark+sweep compacting `nodes.pack`, and verify both genesis and
+    //    head remain intact on reopen while pack file shrinks.
+    for id in &intermediate_ids {
+        assert!(store.unpin_permanent(id).unwrap());
+    }
+    let mark = store.begin_gc_mark().unwrap();
+    match store.finish_gc_sweep(&mark).unwrap() {
+        GcSweepOutcome::Completed {
+            reclaimed_nodes,
+            remaining_nodes,
+        } => {
+            assert!(reclaimed_nodes > 0, "expected orphan pack nodes reclaimed");
+            assert_eq!(remaining_nodes + reclaimed_nodes, count_before_gc);
+        }
+        other => panic!("expected compacting sweep completion, got {other:?}"),
+    }
+    let size_after_gc = fs::metadata(&pack_path).unwrap().len();
+    assert!(
+        size_after_gc < size_before_gc,
+        "compacted pack ({size_after_gc} B) must be smaller than pre-GC pack ({size_before_gc} B)"
+    );
+    assert_eq!(store.read_manifest(&genesis_id).unwrap().id(), genesis_id);
+    drop(store);
+
+    let (reopened, _scan, rec_report) = DurableAuthenticatedLedger::open_and_recover(
+        &journal_path,
+        &store_dir,
+        &profile,
+        scope_digest(),
+        AnchorPolicy::UnanchoredLocal,
+        &initial_world,
+    )
+    .unwrap();
+    assert_eq!(rec_report.recovered_head, Some(head_id));
+    assert_eq!(reopened.ledger().history().receipts().len(), 8);
+
+    let _ = fs::remove_dir_all(&dir);
+}

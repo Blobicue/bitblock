@@ -167,13 +167,15 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # 733 -> 739 / 758 -> 764: six default-feature SCALE-2 integration tests in
 # tests/scale_2_parity.rs (chunk-relative i64 extrema, negative chunk edges, Hi-Z culling +
 # delta unpacking, sub-pixel LOD parity, and bounded SpatialRenderCache caps/invalidation).
+# 764 -> 765 (full): one protocol-research DurableCommitmentStore pack-compaction GC & torn-tail
+# recovery test in tests/commit_1_authenticated_state.rs.
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 739, "full": 764}.items()
+    for t, count in {"quick": 739, "full": 765}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
