@@ -92,7 +92,7 @@ candidate to choose its own authority.
 | PS-049 | EMERGENCE-R1 | base | LOCKED |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
 | PS-051 | SCALE-1 | base | BOUNDED |
-| PS-052 | SCALE-2 | base | READY |
+| PS-052 | SCALE-2 | base | IMPLEMENTED |
 | PS-053 | CONSENSUS-D1 | base | LOCKED |
 | PS-054 | CONSENSUS-D1 | mechanism-choice | OPEN-DECISION |
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | LOCKED |
@@ -1096,15 +1096,31 @@ is invalid input, not a third collision row.
 
 ### `SCALE-2` — chunk-relative queries and hierarchical observation
 
-- **Status:** `PS-052:SCALE-2@base=READY`.
+- **Status:** `PS-052:SCALE-2@base=IMPLEMENTED`.
 - **Depends on:** `SCALE-1` and its parity vectors.
 - **Motive:** preserve exact interaction across far coordinates and large occupied worlds without
   scanning every on bit for every query.
-- **Artifact:** chunk-relative camera/collision coordinates, spatial query index, hierarchical
-  occupancy/LOD summaries, exact top-saturation composition, invalidation rules, and bounded caches.
-- **Gate:** optimized and reference paths agree for frames, aim, collision, bounds, and edits over
-  adversarial coordinates including negative chunk edges and signed extrema; measured budgets pass.
-- **Non-claim:** rendering LOD must not become the authenticated or consensus state representation.
+- **Artifact:** chunk-relative camera/render/raycast/sweep coordinates (`ChunkRelativePos`,
+  `ChunkRelativeCamera`, `render_chunk_relative`, `raycast_chunk_relative`,
+  `sweep_point_chunk_relative`), hierarchical front-to-back min-heap octant/chunk Hi-Z occlusion
+  culling with lazy delta unpacking, ephemeral sub-pixel top-saturation LOD
+  (`SubpixelLodPolicy::HierarchicalSubpixel`), revision- and instance-keyed bounded
+  `SpatialRenderCache` (`crates/core/src/render.rs`, `crates/core/src/world.rs`,
+  `crates/core/src/camera.rs`), CI integration parity suite (`tests/scale_2_parity.rs`),
+  reproducible visual snapshot/benchmark probe (`examples/scale_2_probe.rs`), and pinned
+  measurements/provenance in [`SCALE_2_RECEIPT.md`](SCALE_2_RECEIPT.md) /
+  [`scale-2-measurement-v1.json`](scale-2-measurement-v1.json).
+- **Gate:** optimized and reference paths agree bit-for-bit for frames, aim, collision, bounds, and
+  edits across negative chunk edges (`-17..=17`), `±10^17`, and `i64::MIN`/`i64::MAX` extrema (with
+  powered raw-`f64` collapse negative control) on `origin/main` commit
+  `7ba33058be3c1695c06bc80de69fdd296ff365a6` (tree `0c58e9db0836953f6cd70ca0bf1c85348f89f0f6`,
+  PR #22 CI runs `45000629176` and `45000632946`, 10/10 jobs green); all `SCALE-1` workloads pass
+  the 8.33 ms render budget (`HollowShell_58809`: 3.459 ms; `HollowShell_149787`: 5.577 ms) while
+  oblique 75k-visible-surface rendering (`HollowShell_149787_Angled`: 22.861 ms) is honestly
+  retained as an explicit non-claim.
+- **Non-claim:** rendering LOD and spatial caches remain strictly ephemeral and must never become
+  the authenticated or consensus state representation; single-threaded software rasterization does
+  not claim unlimited visible-surface scale.
 
 ## Consensus and Layer 1 branch
 
@@ -1809,10 +1825,9 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
 | 3 | `PS-044:LANGUAGE-R1@base=READY` |
-| 4 | `PS-052:SCALE-2@base=READY` |
-| 5 | `PS-062:COST-1@base=READY` |
-| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 7 | `PS-086:RELEASE-R1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 6 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1845,7 +1860,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `6` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
