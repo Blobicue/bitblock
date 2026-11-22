@@ -89,7 +89,7 @@ candidate to choose its own authority.
 | PS-046 | VM-D1 | base | BOUNDED |
 | PS-047 | VM-1 | base | READY |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
-| PS-049 | EMERGENCE-R1 | base | READY |
+| PS-049 | EMERGENCE-R1 | base | BOUNDED |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
 | PS-051 | SCALE-1 | base | BOUNDED |
 | PS-052 | SCALE-2 | base | IMPLEMENTED |
@@ -1063,13 +1063,15 @@ is invalid input, not a third collision row.
 
 ### `EMERGENCE-R1` — bounded emergence assays
 
-- **Status:** `PS-049:EMERGENCE-R1@base=READY`.
+- **Status:** `PS-049:EMERGENCE-R1@base=BOUNDED`.
 - **Depends on:** `RULE-1`.
 - **Motive:** turn the founding question—whether simple bit/tick rules produce higher-order
   structure—into observations that can fail rather than examples selected for looking interesting.
 - **Artifact:** frozen rule versions, initial states, seeds or committed randomness if used, action
   tapes, explicit metrics for persistence/replication/compression/computation or another named
-  behavior, null models, negative controls, and retained runs. A richer VM assay is hypothetical
+  behavior, null models, negative controls, and retained runs (pinned in
+  [`EMERGENCE_R1_RECEIPT.md`](EMERGENCE_R1_RECEIPT.md) and
+  [`emergence-r1-assay-v1.json`](emergence-r1-assay-v1.json)). A richer VM assay is hypothetical
   until it receives its own declared phase and structured dependency row.
 - **Gate:** predeclared metrics distinguish the candidate behavior from its controls over the
   declared finite corpus and reproduce under an independent executor; qualitative images remain
@@ -1868,11 +1870,10 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 2 | `PS-021:REFINE-1@base=READY` |
 | 3 | `PS-039:RESOURCE-1@base=READY` |
 | 4 | `PS-047:VM-1@base=READY` |
-| 5 | `PS-049:EMERGENCE-R1@base=READY` |
-| 6 | `PS-062:COST-1@base=READY` |
-| 7 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 8 | `PS-078:GENESIS-D1@base=READY` |
-| 9 | `PS-086:RELEASE-R1@base=READY` |
+| 5 | `PS-062:COST-1@base=READY` |
+| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 7 | `PS-078:GENESIS-D1@base=READY` |
+| 8 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1905,7 +1906,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `9` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

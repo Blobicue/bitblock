@@ -1,0 +1,45 @@
+{
+  "schema": "bitblock/emergence-r1-assay-receipt/v1",
+  "merged_main_commit": "f0c428e7fcd01aaa0a9701aeb0f2137228afc51c",
+  "merged_main_tree": "23efdc31ec9860595ee502c374d7554975930490",
+  "merged_main_parent": "677364fcbb1a38efdc479357ff7e7c0994852eaf",
+  "pr_number": 36,
+  "ci_run_ids": [45038296661, 45038301971],
+  "corpus_spec_tag": "#bb.policy.sha256.5cby7wdtezi5y64vo6pcsjt5kdcurkmezxnjsq5oidbavlca4mza",
+  "assay_report_tag": "#bb.receipt.sha256.54o2gvb4dxly2gxewna3zzvw6ufdtmiiveyc6msducfjbstadzca",
+  "corpus_parameters": {
+    "soup_bounds_inclusive": [-4, 3],
+    "soup_density_pct": 20,
+    "horizon_ticks": 20,
+    "max_live_cells_cap": 10000,
+    "seeds": [2977628161, 2977628162, 2977628163, 2977628164],
+    "rule_codes": {
+      "1": "B5/S45 (RULE-1 candidate)",
+      "2": "B6/S45 (subcritical control)",
+      "3": "B4/S45 (supercritical control)"
+    },
+    "subject_kinds": {
+      "1": "Bays 10-cell diagonal glider",
+      "2": "10-cell period-4 oscillator",
+      "3": "6-cell octahedron still life",
+      "4": "SplitMix64 randomized soup"
+    }
+  },
+  "trajectories": [
+    {"rule_code": 1, "subject_kind": 1, "seed": 0, "initial": 10, "final": 10, "peak": 10, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 1856, "hamming": 10, "centroid_l1_x100": 1000, "period": 0},
+    {"rule_code": 1, "subject_kind": 2, "seed": 0, "initial": 10, "final": 10, "peak": 10, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 1856, "hamming": 10, "centroid_l1_x100": 0, "period": 4},
+    {"rule_code": 1, "subject_kind": 3, "seed": 0, "initial": 6, "final": 6, "peak": 6, "survival_ticks": 20, "active_ticks": 0, "cap_hit": false, "morton_bps": 2500, "hamming": 6, "centroid_l1_x100": 0, "period": 1},
+    {"rule_code": 1, "subject_kind": 4, "seed": 2977628161, "initial": 120, "final": 48, "peak": 120, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 1096, "hamming": 61, "centroid_l1_x100": 557, "period": 0},
+    {"rule_code": 1, "subject_kind": 4, "seed": 2977628162, "initial": 90, "final": 0, "peak": 90, "survival_ticks": 19, "active_ticks": 20, "cap_hit": false, "morton_bps": 11666, "hamming": 0, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 1, "subject_kind": 4, "seed": 2977628163, "initial": 108, "final": 0, "peak": 139, "survival_ticks": 15, "active_ticks": 16, "cap_hit": false, "morton_bps": 11666, "hamming": 0, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 1, "subject_kind": 4, "seed": 2977628164, "initial": 103, "final": 0, "peak": 103, "survival_ticks": 16, "active_ticks": 17, "cap_hit": false, "morton_bps": 11666, "hamming": 6, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 2, "subject_kind": 4, "seed": 2977628161, "initial": 120, "final": 0, "peak": 120, "survival_ticks": 7, "active_ticks": 8, "cap_hit": false, "morton_bps": 11666, "hamming": 0, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 2, "subject_kind": 4, "seed": 2977628162, "initial": 90, "final": 0, "peak": 90, "survival_ticks": 4, "active_ticks": 5, "cap_hit": false, "morton_bps": 11666, "hamming": 0, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 2, "subject_kind": 4, "seed": 2977628163, "initial": 108, "final": 0, "peak": 108, "survival_ticks": 4, "active_ticks": 5, "cap_hit": false, "morton_bps": 11666, "hamming": 0, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 2, "subject_kind": 4, "seed": 2977628164, "initial": 103, "final": 0, "peak": 103, "survival_ticks": 7, "active_ticks": 8, "cap_hit": false, "morton_bps": 11666, "hamming": 0, "centroid_l1_x100": 0, "period": 0},
+    {"rule_code": 3, "subject_kind": 4, "seed": 2977628161, "initial": 120, "final": 1472, "peak": 1472, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 873, "hamming": 2406, "centroid_l1_x100": 265, "period": 0},
+    {"rule_code": 3, "subject_kind": 4, "seed": 2977628162, "initial": 90, "final": 1609, "peak": 1609, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 870, "hamming": 2406, "centroid_l1_x100": 259, "period": 0},
+    {"rule_code": 3, "subject_kind": 4, "seed": 2977628163, "initial": 108, "final": 1166, "peak": 1166, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 863, "hamming": 1763, "centroid_l1_x100": 176, "period": 0},
+    {"rule_code": 3, "subject_kind": 4, "seed": 2977628164, "initial": 103, "final": 1348, "peak": 1348, "survival_ticks": 20, "active_ticks": 20, "cap_hit": false, "morton_bps": 877, "hamming": 2424, "centroid_l1_x100": 241, "period": 0}
+  ]
+}
