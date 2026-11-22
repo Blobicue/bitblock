@@ -11,10 +11,11 @@ semantic history.
   / `chem/render-scale-2026-11` waves are merged history preserved below.
 - Current milestone: the complete local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`,
   `STORAGE-1`, `LEDGER-1`, `COMMIT-1`) is `IMPLEMENTED` alongside bounded contracts/assays/proofs
-  (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `CODEC-1`, `REFINE-1@world`, `REFINE-1@accounting`,
-  `REFINE-1@commitment`, `THREAT-D0`, `RELEASE-R1@framework`, `SCALE-1`), the
-  `chem/render-scale-2026-11` SIMD128 worker/octree/delta-render stack is merged on `main`, and
-  the Loop 11 planning reconciliation aligns the mutable planning docs and powered checker controls.
+  (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `VERKLE-R1@feasibility`, `CODEC-1`, `REFINE-1@world`,
+  `REFINE-1@accounting`, `REFINE-1@commitment`, `THREAT-D0`, `RELEASE-R1@framework`, `SCALE-1`,
+  `COST-1@budget` + `COMMIT-1` measurements), the `chem/render-scale-2026-11` SIMD128
+  worker/octree/delta-render stack is merged on `main`, and the Loop 11 planning reconciliation
+  aligns the mutable planning docs and powered checker controls.
 - Agent onboarding / knowledge graph: `docs/AGENT_ONBOARDING.md`. It explains bbgraph `index/`
   for protocol, metrics, and gates, and GitNexus `.gitnexus/` (local only; MCP repo `bitblock`) for symbols, calls,
   flows, and blast radius.
@@ -643,10 +644,13 @@ artifact, gate, and non-claim.
    Advancing from the local trunk into the pre-genesis network design branch (`CRYPTO-D1`,
    `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `ASSET-D1`, `RULE-1`, `LANGUAGE-R1`) requires
    explicit human decisions on the `OPEN-DECISION` nodes.
-4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
-   field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
-   end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
-   Proof-size intuition alone cannot select it or delay `COMMIT-R1`.
+4. `VERKLE-R1@feasibility` is now `BOUNDED` ([`VERKLE_R1_FEASIBILITY.md`](VERKLE_R1_FEASIBILITY.md)
+   / [`verkle-r1-feasibility-v1.json`](verkle-r1-feasibility-v1.json)), pinning the self-excluding
+   Bandersnatch IPA-256 profile descriptor, injective 32-byte coordinate embedding (`< 2^184 << r`),
+   rejected KZG/RSA/PQ alternatives, 7-world cost & batch crossover comparison, and migration design
+   while explicitly deferring prototype admission (`VERKLE-R1@candidate-scope=LOCKED`,
+   `VERKLE-R1@prototype=LOCKED`). `COST-1` measurements for `COMMIT-1` are recorded in
+   [`COST_1_COMMIT_1_MEASUREMENTS.md`](COST_1_COMMIT_1_MEASUREMENTS.md).
 5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
 6. `SCALE-2@base` is now `READY` following the pinned `SCALE-1` measurements and failure brackets
