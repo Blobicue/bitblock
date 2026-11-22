@@ -79,7 +79,7 @@ candidate to choose its own authority.
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
 | PS-038 | ASSET-1 | base | LOCKED |
-| PS-039 | RESOURCE-1 | base | LOCKED |
+| PS-039 | RESOURCE-1 | base | READY |
 | PS-040 | ECONOMIC-STATE-1 | base | LOCKED |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
@@ -87,7 +87,7 @@ candidate to choose its own authority.
 | PS-044 | LANGUAGE-R1 | base | BOUNDED |
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
 | PS-046 | VM-D1 | base | BOUNDED |
-| PS-047 | VM-1 | base | LOCKED |
+| PS-047 | VM-1 | base | READY |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
 | PS-049 | EMERGENCE-R1 | base | READY |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
@@ -114,11 +114,11 @@ candidate to choose its own authority.
 | PS-071 | HASH-SOURCE-R1 | base | READY |
 | PS-072 | HASH-SOURCE-R1 | candidate | NOT-STARTED |
 | PS-073 | HASH-R1 | base | LOCKED |
-| PS-074 | BOUNDS-1 | base | READY |
+| PS-074 | BOUNDS-1 | base | BOUNDED |
 | PS-075 | GOVERNANCE-D1 | base | BOUNDED |
 | PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
 | PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
-| PS-078 | GENESIS-D1 | base | LOCKED |
+| PS-078 | GENESIS-D1 | base | READY |
 | PS-079 | PROFILE-D1 | base | LOCKED |
 | PS-080 | TRANSITION-SPEC-1 | base | LOCKED |
 | PS-081 | GOVERNANCE-1 | base | LOCKED |
@@ -932,7 +932,7 @@ is invalid input, not a third collision row.
 
 ### `RESOURCE-1` — fees, rent, and economic resource policy
 
-- **Status:** `PS-039:RESOURCE-1@base=LOCKED`.
+- **Status:** `PS-039:RESOURCE-1@base=READY`.
 - **Depends on:** `BOUNDS-1`, `PROFILE-SCOPE-D0`; target-profile economic charging adds the
   conditional design edge CE-14, while a non-economic profile may choose deterministic quotas.
 - **Motive:** prevent the huge coordinate space and proof/history creation from becoming an
@@ -1036,7 +1036,7 @@ is invalid input, not a third collision row.
 
 ### `VM-1` — bounded deterministic interpreter
 
-- **Status:** `PS-047:VM-1@base=LOCKED`.
+- **Status:** `PS-047:VM-1@base=READY`.
 - **Depends on:** `VM-D1`, `ACCOUNT-1`, `CODEC-1`, and `BOUNDS-1` for the activated language profile.
 - **Motive:** turn exact spatial programs into reproducible state transitions.
 - **Artifact:** bounded interpreter plus an independent reference executor implementing the frozen
@@ -1454,15 +1454,21 @@ is invalid input, not a third collision row.
 
 ### `BOUNDS-1` — protocol admission and state-growth bounds
 
-- **Status:** `PS-074:BOUNDS-1@base=READY`.
+- **Status:** `PS-074:BOUNDS-1@base=BOUNDED`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `THREAT-1`, `LOCAL-BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, and the
   common proof shapes frozen by `COMMIT-R1`; target-profile program scope realizes the design edge
   CE-05, not a dependency on the later interpreter implementation.
 - **Motive:** make every accepted remote input and retained obligation processable under a committed
   deterministic limit before fees or consensus rely on it.
-- **Artifact:** checked maxima and pre-mutation charging for payloads, batches, signatures, keys,
-  proofs, nodes, hashes, allocations, execution, program gas, state writes, retained roots/history,
-  sync, recovery, and per-peer work.
+- **Artifact:** [`BOUNDS_1_RECEIPT.md`](BOUNDS_1_RECEIPT.md) and
+  [`bounds-1-measurement-v1.json`](bounds-1-measurement-v1.json) (PR #34 commit
+  `ec5b76358b06351652fde5e9bed05a8d52bb5cad`, `crates/research/src/bounds_1.rs`,
+  `tools/bounds_1_vectors.py`, `tests/wave5_bounds_1.rs`, and `examples/bounds_1_stress_probe.rs`)
+  freeze `ProtocolBoundsProfileV1` (`<= 2 MiB` block, `<= 1,024` txs, `<= 2,048` Ed25519 sigs,
+  `<= 4,096` state writes/block, `<= 12 KiB` / `<= 256`-depth proofs, `400 ms` verify ceiling,
+  per-peer DoS caps, zero-allocation preflight, `tighten_only` widening refusal, and deterministic
+  `SafeHaltEvidenceV1`), separate `LocalVmBoundsV1` (`CE-05`), and worst-case release measurements
+  (`72.523 ms` p50 / `78.675 ms` max vs `400 ms` ceiling).
 - **Gate:** worst-shaped accepted inputs stay within the predeclared work/allocation/storage
   envelope; over-bound inputs reject before materialization; a consensus-accepted artifact that
   exceeds the already committed bound triggers the declared safe-halt path rather than a raised
@@ -1511,7 +1517,7 @@ is invalid input, not a third collision row.
 
 ### `GENESIS-D1` — reproducible non-self-referential genesis configuration
 
-- **Status:** `PS-078:GENESIS-D1@base=LOCKED`.
+- **Status:** `PS-078:GENESIS-D1@base=READY`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `BOUNDS-1`, `CODEC-1`, `COMMIT-R1` profile definitions;
   launch-profile activated logical domains add CE-06–CE-09. Successor target predicates never add
   state to this immutable launch artifact.
@@ -1860,11 +1866,13 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-049:EMERGENCE-R1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-074:BOUNDS-1@base=READY` |
-| 7 | `PS-086:RELEASE-R1@base=READY` |
+| 3 | `PS-039:RESOURCE-1@base=READY` |
+| 4 | `PS-047:VM-1@base=READY` |
+| 5 | `PS-049:EMERGENCE-R1@base=READY` |
+| 6 | `PS-062:COST-1@base=READY` |
+| 7 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 8 | `PS-078:GENESIS-D1@base=READY` |
+| 9 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1897,7 +1905,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `9` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
