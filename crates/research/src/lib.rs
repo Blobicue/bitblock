@@ -17,6 +17,7 @@ pub use bitblock_core::{
 };
 
 pub mod commit_r1;
+pub mod commit_state;
 pub mod coordinate_episode;
 pub mod display_artifact;
 pub mod display_store;

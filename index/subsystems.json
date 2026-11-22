@@ -1,5 +1,15 @@
 [
  {
+  "id": "sub:commit-1",
+  "members": [
+   "module:commit_state"
+  ],
+  "name": "commit-1",
+  "terms": [
+   "commit"
+  ]
+ },
+ {
   "id": "sub:commit-profile",
   "members": [
    "module:commit_r1"

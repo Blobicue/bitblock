@@ -549,6 +549,11 @@ impl OccupancyEpisodeLedger {
         &self.active_by_coord
     }
 
+    /// Returns the map of all retained closed (burned) episodes indexed by mint `ContentTag`.
+    pub fn closed_episodes(&self) -> &HashMap<ContentTag, CoordinateEpisode> {
+        &self.closed_by_mint
+    }
+
     /// Returns the number of currently active mutable coordinate episodes.
     pub fn active_count(&self) -> usize {
         self.active_by_coord.len()

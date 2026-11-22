@@ -8,6 +8,17 @@
    "protocol",
    "world"
   ],
+  "commit_state": [
+   "commit_r1",
+   "coordinate_episode",
+   "history",
+   "history_store",
+   "journal",
+   "local_bounds",
+   "program",
+   "protocol",
+   "world"
+  ],
   "coordinate_episode": [
    "history",
    "history_store",
@@ -217,11 +228,12 @@
    "protocol"
   ]
  },
- "edges": 140,
+ "edges": 149,
  "stratum": {
   "camera": 0,
   "chem": 2,
   "commit_r1": 2,
+  "commit_state": 6,
   "coordinate_episode": 5,
   "display": 5,
   "display_artifact": 6,
@@ -262,20 +274,21 @@
  "transitive_dependents": {
   "camera": 16,
   "chem": 0,
-  "commit_r1": 2,
-  "coordinate_episode": 1,
+  "commit_r1": 3,
+  "commit_state": 0,
+  "coordinate_episode": 2,
   "display": 7,
   "display_artifact": 5,
   "display_store": 1,
   "frame": 15,
   "frame_v2": 10,
-  "history": 7,
-  "history_store": 5,
+  "history": 8,
+  "history_store": 6,
   "interaction": 2,
-  "journal": 7,
+  "journal": 8,
   "ladder_bridge": 0,
   "lib": 0,
-  "local_bounds": 5,
+  "local_bounds": 6,
   "main": 0,
   "octree_commit": 1,
   "optimization": 0,
@@ -285,19 +298,19 @@
   "presentation": 6,
   "presentation_output": 4,
   "presentation_output_v2": 2,
-  "program": 21,
-  "protocol": 37,
+  "program": 22,
+  "protocol": 38,
   "render": 4,
   "replay_evidence": 1,
   "scale_assay": 0,
   "sequential": 0,
   "sidebar": 2,
-  "storage": 12,
+  "storage": 13,
   "tick": 11,
   "transition_spec": 0,
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 28
+  "world": 29
  }
 }

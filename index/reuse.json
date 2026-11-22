@@ -80,15 +80,21 @@
     ]
    },
    {
-    "item": "CoordinateEpisode",
+    "item": "CompositionLayerV1",
     "modules": [
-     "coordinate_episode"
+     "commit_state"
     ]
    },
    {
     "item": "DECLARED_SENSOR_PROFILE_SCHEMA",
     "modules": [
      "physical_sensor"
+    ]
+   },
+   {
+    "item": "DecodedNodeChildren",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -104,15 +110,33 @@
     ]
    },
    {
-    "item": "DurableLedgerError",
+    "item": "DomainRegistryEntryV1",
     "modules": [
-     "coordinate_episode"
+     "commit_state"
     ]
    },
    {
     "item": "DurableLedgerRecovery",
     "modules": [
      "coordinate_episode"
+    ]
+   },
+   {
+    "item": "EVENT_KEY_BITS",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "EVENT_KEY_BYTES",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "EmptyRootRuleIdV1",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -152,6 +176,18 @@
     ]
    },
    {
+    "item": "GcMarkSnapshot",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "HashSuiteIdV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "INTERACTION_TAPE_SCHEMA",
     "modules": [
      "interaction"
@@ -164,6 +200,12 @@
     ]
    },
    {
+    "item": "InactiveSentinelIdV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "InteractionTapeParseError",
     "modules": [
      "interaction"
@@ -173,6 +215,12 @@
     "item": "JOURNAL_REJECTED_TAIL_SCHEMA",
     "modules": [
      "journal"
+    ]
+   },
+   {
+    "item": "KeyCodecIdV1",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -326,6 +374,12 @@
     ]
    },
    {
+    "item": "ProjectedRootsV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA",
     "modules": [
      "physical_sensor"
@@ -341,6 +395,24 @@
     "item": "ReplayedHistory",
     "modules": [
      "history_store"
+    ]
+   },
+   {
+    "item": "RequiredDomainV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "RootEntryV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "RootTypeV1",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -404,6 +476,12 @@
     ]
    },
    {
+    "item": "StoreRecoveryReport",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "SweepHit",
     "modules": [
      "render"
@@ -428,15 +506,45 @@
     ]
    },
    {
+    "item": "TreeAlgorithmIdV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "TypedPatriciaProofV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "TypedProofStep",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "UnavailableTopologyFacts",
     "modules": [
      "output_topology"
     ]
    },
    {
+    "item": "ValueCodecIdV1",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "VerifiedInMemoryHistory",
     "modules": [
      "history_store"
+    ]
+   },
+   {
+    "item": "WIRE_LEN",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -482,6 +590,12 @@
     ]
    },
    {
+    "item": "compute_typed_node_hash",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "dolly",
     "modules": [
      "camera"
@@ -494,9 +608,21 @@
     ]
    },
    {
-    "item": "from_history_with_limits",
+    "item": "from_canonical_bytes_bounded",
     "modules": [
-     "coordinate_episode"
+     "commit_state"
+    ]
+   },
+   {
+    "item": "from_episode",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "from_event_tag",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -542,9 +668,45 @@
     ]
    },
    {
+    "item": "read_manifest",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "rebuild_projected_tries",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "required_domains",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "resolve_profile",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
+    "item": "resolve_proof_policy",
+    "modules": [
+     "commit_state"
+    ]
+   },
+   {
     "item": "rgb_gradient_challenge_policy_tag",
     "modules": [
      "physical_sensor"
+    ]
+   },
+   {
+    "item": "root_for",
+    "modules": [
+     "commit_state"
     ]
    },
    {
@@ -558,9 +720,15 @@
     "modules": [
      "camera"
     ]
+   },
+   {
+    "item": "validate_domain_kv",
+    "modules": [
+     "commit_state"
+    ]
    }
   ],
-  "pub_items": 917,
+  "pub_items": 1038,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -584,7 +752,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 34478,
+   "code_lines": 39147,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -673,12 +841,12 @@
      "right": "interaction:1328"
     },
     {
-     "left": "coordinate_episode:1119",
+     "left": "coordinate_episode:1124",
      "lines": 9,
      "right": "physical_sensor:1384"
     },
     {
-     "left": "coordinate_episode:1324",
+     "left": "coordinate_episode:1329",
      "lines": 9,
      "right": "display:1150"
     },
@@ -765,7 +933,7 @@
    ]
   },
   "test": {
-   "code_lines": 25379,
+   "code_lines": 25818,
    "duplicated_lines": 341,
    "regions": [
     {
