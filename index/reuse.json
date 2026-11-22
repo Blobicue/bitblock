@@ -320,12 +320,6 @@
     ]
    },
    {
-    "item": "PatriciaNode",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
     "item": "PreparedTick",
     "modules": [
      "history"
@@ -506,12 +500,6 @@
     ]
    },
    {
-    "item": "insert_counted",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
     "item": "is_occupied",
     "modules": [
      "commit_r1"
@@ -521,24 +509,6 @@
     "item": "length_squared",
     "modules": [
      "camera"
-    ]
-   },
-   {
-    "item": "multiproof_wire_bytes",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
-    "item": "node_counts",
-    "modules": [
-     "commit_r1"
-    ]
-   },
-   {
-    "item": "non_default_branch_count",
-    "modules": [
-     "commit_r1"
     ]
    },
    {
@@ -596,7 +566,7 @@
     ]
    }
   ],
-  "pub_items": 889,
+  "pub_items": 893,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -620,7 +590,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 33663,
+   "code_lines": 33732,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -801,7 +771,7 @@
    ]
   },
   "test": {
-   "code_lines": 24707,
+   "code_lines": 25151,
    "duplicated_lines": 341,
    "regions": [
     {

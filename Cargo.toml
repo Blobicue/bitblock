@@ -56,3 +56,11 @@ overflow-checks = true
 lto = "thin"
 strip = true
 codegen-units = 1
+
+[[example]]
+name = "commit_r1_assay_probe"
+required-features = ["protocol-research"]
+
+[[example]]
+name = "scale_1_probe"
+required-features = ["protocol-research"]
