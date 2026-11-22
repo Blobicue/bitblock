@@ -1508,7 +1508,13 @@
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:journal"}
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:local_bounds"}
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:storage"}
+{"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:commit_r1"}
+{"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:commit_state"}
+{"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:tick"}
+{"from": "proof:proof/BitblockProof/AccountingRefinement.lean", "kind": "proves", "to": "module:tick"}
 {"from": "proof:proof/BitblockProof/ChunkRefinement.lean", "kind": "proves", "to": "module:world"}
+{"from": "proof:proof/BitblockProof/CommitmentRefinement.lean", "kind": "proves", "to": "module:commit_r1"}
+{"from": "proof:proof/BitblockProof/CommitmentRefinement.lean", "kind": "proves", "to": "module:commit_state"}
 {"from": "proof:proof/BitblockProof/OctreeRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/World.lean", "kind": "proves", "to": "module:world"}
 {"from": "module:chem", "kind": "tests_with", "to": "module:history"}
@@ -1580,6 +1586,11 @@
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:protocol"}
 {"from": "example:examples/world_tag_alloc_probe.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:camera"}
+{"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:history"}
+{"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:program"}
+{"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:tick"}
+{"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:commit_r1"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:coordinate_episode"}
@@ -1605,6 +1616,9 @@
 {"from": "example:tests/commit_1_authenticated_state.rs", "kind": "uses", "to": "module:program"}
 {"from": "example:tests/commit_1_authenticated_state.rs", "kind": "uses", "to": "module:transition_spec"}
 {"from": "example:tests/commit_1_authenticated_state.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/commitment_refinement_correspondence.rs", "kind": "uses", "to": "module:commit_r1"}
+{"from": "example:tests/commitment_refinement_correspondence.rs", "kind": "uses", "to": "module:commit_state"}
+{"from": "example:tests/commitment_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:coordinate_episode"}
 {"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:program"}

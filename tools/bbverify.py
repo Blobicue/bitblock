@@ -158,13 +158,16 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # Python cross-parity assertions) and five protocol-research integration tests in
 # tests/commit_1_authenticated_state.rs (depth-192/256 boundaries, adversarial proof controls,
 # logical pruning, GC write-barrier race, and 5-crash-point filesystem recovery gauntlet).
+# 728 -> 731 / 747 -> 753: three default-feature REFINE-1@accounting correspondence tests in
+# tests/accounting_refinement_correspondence.rs and three protocol-research REFINE-1@commitment
+# correspondence tests in tests/commitment_refinement_correspondence.rs.
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 728, "full": 747}.items()
+    for t, count in {"quick": 731, "full": 753}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

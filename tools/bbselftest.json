@@ -523,6 +523,18 @@
             "mutation_sites": 0
         },
         {
+            "module": "tick",
+            "proofs_include": [
+                "accountingrefinement"
+            ]
+        },
+        {
+            "module": "commit_state",
+            "proofs_include": [
+                "commitmentrefinement"
+            ]
+        },
+        {
             "total_mutation_sites": 320,
             "modules_with_mutation_sites": 31,
             "module_sites": {

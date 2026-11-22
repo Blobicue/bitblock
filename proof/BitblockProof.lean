@@ -3,3 +3,5 @@ import BitblockProof.MintBurn
 import BitblockProof.QuotedByteCost
 import BitblockProof.ChunkRefinement
 import BitblockProof.OctreeRefinement
+import BitblockProof.AccountingRefinement
+import BitblockProof.CommitmentRefinement
