@@ -146,6 +146,12 @@
     ]
    },
    {
+    "item": "EmergenceAssayReportV1",
+    "modules": [
+     "emergence_r1"
+    ]
+   },
+   {
     "item": "EmptyRootRuleIdV1",
     "modules": [
      "commit_state"
@@ -446,6 +452,12 @@
     ]
    },
    {
+    "item": "SOUP_BOX_ORIGIN",
+    "modules": [
+     "emergence_r1"
+    ]
+   },
+   {
     "item": "STORAGE_RECORD_SCHEMA",
     "modules": [
      "storage"
@@ -626,6 +638,12 @@
     ]
    },
    {
+    "item": "evaluate_trajectory",
+    "modules": [
+     "emergence_r1"
+    ]
+   },
+   {
     "item": "from_canonical_bytes_bounded",
     "modules": [
      "commit_state"
@@ -740,7 +758,7 @@
     ]
    }
   ],
-  "pub_items": 1285,
+  "pub_items": 1304,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -764,7 +782,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 46268,
+   "code_lines": 46768,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -945,7 +963,7 @@
    ]
   },
   "test": {
-   "code_lines": 26725,
+   "code_lines": 26740,
    "duplicated_lines": 341,
    "regions": [
     {

@@ -25,6 +25,7 @@ pub mod coordinate_episode;
 pub mod crypto_d1;
 pub mod display_artifact;
 pub mod display_store;
+pub mod emergence_r1;
 pub mod history_store;
 pub mod identity_d1;
 pub mod journal;

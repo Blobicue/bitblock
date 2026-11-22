@@ -1244,6 +1244,8 @@
 {"from": "module:display_artifact", "kind": "declares", "to": "schema:bitblock/display-capture-artifact/v1"}
 {"from": "module:display_store", "kind": "declares", "to": "schema:bitblock/display-artifact-test/v1"}
 {"from": "module:display_store", "kind": "declares", "to": "schema:bitblock/wrong-display-artifact/v1"}
+{"from": "module:emergence_r1", "kind": "declares", "to": "schema:bitblock/emergence-r1/assay-report/v1"}
+{"from": "module:emergence_r1", "kind": "declares", "to": "schema:bitblock/emergence-r1/corpus-spec/v1"}
 {"from": "module:frame", "kind": "declares", "to": "schema:bitblock/frame-input/v1"}
 {"from": "module:frame", "kind": "declares", "to": "schema:bitblock/frame-receipt/v1"}
 {"from": "module:frame", "kind": "declares", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
@@ -1396,6 +1398,11 @@
 {"from": "module:display_store", "kind": "depends_on", "to": "module:presentation_output_v2"}
 {"from": "module:display_store", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:display_store", "kind": "depends_on", "to": "module:storage"}
+{"from": "module:emergence_r1", "kind": "depends_on", "to": "module:commit_r1"}
+{"from": "module:emergence_r1", "kind": "depends_on", "to": "module:history"}
+{"from": "module:emergence_r1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:emergence_r1", "kind": "depends_on", "to": "module:rule_1"}
+{"from": "module:emergence_r1", "kind": "depends_on", "to": "module:world"}
 {"from": "module:frame", "kind": "depends_on", "to": "module:camera"}
 {"from": "module:frame", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:frame_v2", "kind": "depends_on", "to": "module:frame"}
@@ -1653,6 +1660,9 @@
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:scale_assay"}
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/compositor_buffer_probe.rs", "kind": "uses", "to": "module:sidebar"}
+{"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:camera"}
+{"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:emergence_r1"}
+{"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:render"}
 {"from": "example:examples/frame_receipts.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/frame_receipts.rs", "kind": "uses", "to": "module:frame"}
 {"from": "example:examples/frame_receipts.rs", "kind": "uses", "to": "module:render"}
@@ -1788,6 +1798,7 @@
 {"from": "example:tests/wave5_bounds_1.rs", "kind": "uses", "to": "module:threat_1"}
 {"from": "example:tests/wave5_bounds_1.rs", "kind": "uses", "to": "module:vm_d1"}
 {"from": "example:tests/wave5_bounds_1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave6_emergence_r1.rs", "kind": "uses", "to": "module:emergence_r1"}
 {"from": "example:tests/world_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/local-vm-bounds/v1"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/protocol-profile/v1"}
@@ -1863,6 +1874,8 @@
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:edit_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:edit_vectors", "kind": "vectors", "to": "schema:bitblock/edit/op-u8-i64-be/v1"}
+{"from": "tool:emergence_r1_vectors", "kind": "vectors", "to": "schema:bitblock/emergence-r1/assay-report/v1"}
+{"from": "tool:emergence_r1_vectors", "kind": "vectors", "to": "schema:bitblock/emergence-r1/corpus-spec/v1"}
 {"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/frame-input/v1"}
 {"from": "tool:frame_chain_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v1"}

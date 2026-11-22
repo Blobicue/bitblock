@@ -199,6 +199,16 @@
   ]
  },
  {
+  "id": "sub:emergence-r1",
+  "members": [
+   "module:emergence_r1"
+  ],
+  "name": "emergence-r1",
+  "terms": [
+   "emergence"
+  ]
+ },
+ {
   "id": "sub:frame",
   "members": [
    "module:frame"

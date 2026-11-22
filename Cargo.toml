@@ -92,3 +92,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "bounds_1_stress_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "emergence_r1_visual_probe"
+required-features = ["protocol-research"]
