@@ -680,12 +680,14 @@ artifact, gate, and non-claim.
    [`LANGUAGE_R1_RECEIPT.md`](LANGUAGE_R1_RECEIPT.md),
    [`THREAT_1_MODEL.md`](THREAT_1_MODEL.md), [`VM_D1_SPEC.md`](VM_D1_SPEC.md),
    [`BOUNDS_1_RECEIPT.md`](BOUNDS_1_RECEIPT.md) /
-   [`bounds-1-measurement-v1.json`](bounds-1-measurement-v1.json), and
+   [`bounds-1-measurement-v1.json`](bounds-1-measurement-v1.json),
    [`EMERGENCE_R1_RECEIPT.md`](EMERGENCE_R1_RECEIPT.md) /
-   [`emergence-r1-assay-v1.json`](emergence-r1-assay-v1.json)) promote `PROFILE-SCOPE-D0`,
-   `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, and `EMERGENCE-R1` to `BOUNDED`, unlocking
-   `GENESIS-D1@base=READY`, `RESOURCE-1@base=READY`, and `VM-1@base=READY` while keeping
-   `PROTOCOL-ID-1` honestly `LOCKED` until `GENESIS-D1` passes.
+   [`emergence-r1-assay-v1.json`](emergence-r1-assay-v1.json), and
+   [`RESOURCE_1_RECEIPT.md`](RESOURCE_1_RECEIPT.md) /
+   [`resource-1-simulation-v1.json`](resource-1-simulation-v1.json)) promote `PROFILE-SCOPE-D0`,
+   `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`, and `RESOURCE-1` to `BOUNDED`,
+   satisfying `CE-08`/`CE-14` while `GENESIS-D1@base=READY` and `VM-1@base=READY` remain ready and
+   `PROTOCOL-ID-1` remains honestly `LOCKED` until `GENESIS-D1` passes.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
