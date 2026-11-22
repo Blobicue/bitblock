@@ -66,7 +66,7 @@ candidate to choose its own authority.
 | PS-023 | REFINE-1 | accounting | BOUNDED |
 | PS-024 | REFINE-1 | commitment | BOUNDED |
 | PS-025 | REFINE-1 | vm | LOCKED |
-| PS-026 | IDENTITY-D1 | base | LOCKED |
+| PS-026 | IDENTITY-D1 | base | BOUNDED |
 | PS-027 | PROTOCOL-ID-1 | base | LOCKED |
 | PS-028 | IDENTITY-1 | base | LOCKED |
 | PS-029 | AUTH-COMMIT-1 | base | LOCKED |
@@ -75,17 +75,17 @@ candidate to choose its own authority.
 | PS-032 | MULTI-1 | base | LOCKED |
 | PS-033 | SEQUENCER-1 | base | LOCKED |
 | PS-034 | SYNC-1 | base | LOCKED |
-| PS-035 | ASSET-D1 | base | LOCKED |
-| PS-036 | ASSET-D1 | asset-meaning | OPEN-DECISION |
-| PS-037 | VALIDATOR-ECON-D1 | base | LOCKED |
+| PS-035 | ASSET-D1 | base | BOUNDED |
+| PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
+| PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
 | PS-038 | ASSET-1 | base | LOCKED |
 | PS-039 | RESOURCE-1 | base | LOCKED |
 | PS-040 | ECONOMIC-STATE-1 | base | LOCKED |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
-| PS-042 | RULE-1 | base | LOCKED |
-| PS-043 | RULE-1 | rule-choice | OPEN-DECISION |
+| PS-042 | RULE-1 | base | READY |
+| PS-043 | RULE-1 | rule-choice | BOUNDED |
 | PS-044 | LANGUAGE-R1 | base | READY |
-| PS-045 | LANGUAGE-R1 | grammar-choice | OPEN-DECISION |
+| PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
 | PS-046 | VM-D1 | base | LOCKED |
 | PS-047 | VM-1 | base | LOCKED |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
@@ -93,8 +93,8 @@ candidate to choose its own authority.
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
 | PS-051 | SCALE-1 | base | BOUNDED |
 | PS-052 | SCALE-2 | base | IMPLEMENTED |
-| PS-053 | CONSENSUS-D1 | base | LOCKED |
-| PS-054 | CONSENSUS-D1 | mechanism-choice | OPEN-DECISION |
+| PS-053 | CONSENSUS-D1 | base | BOUNDED |
+| PS-054 | CONSENSUS-D1 | mechanism-choice | BOUNDED |
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | LOCKED |
 | PS-056 | CONSENSUS-1 | base | LOCKED |
 | PS-057 | CLIENT-1 | base | LOCKED |
@@ -108,16 +108,16 @@ candidate to choose its own authority.
 | PS-065 | EXECUTOR-1 | base | LOCKED |
 | PS-066 | THREAT-D0 | base | BOUNDED |
 | PS-067 | THREAT-1 | base | LOCKED |
-| PS-068 | CRYPTO-D1 | base | LOCKED |
-| PS-069 | CRYPTO-D1 | primitive-selection | OPEN-DECISION |
+| PS-068 | CRYPTO-D1 | base | BOUNDED |
+| PS-069 | CRYPTO-D1 | primitive-selection | BOUNDED |
 | PS-070 | CRYPTO-1 | base | LOCKED |
 | PS-071 | HASH-SOURCE-R1 | base | READY |
 | PS-072 | HASH-SOURCE-R1 | candidate | NOT-STARTED |
 | PS-073 | HASH-R1 | base | LOCKED |
 | PS-074 | BOUNDS-1 | base | LOCKED |
-| PS-075 | GOVERNANCE-D1 | base | LOCKED |
-| PS-076 | GOVERNANCE-D1 | authority-choice | OPEN-DECISION |
-| PS-077 | PROFILE-SCOPE-D0 | base | LOCKED |
+| PS-075 | GOVERNANCE-D1 | base | BOUNDED |
+| PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
+| PS-077 | PROFILE-SCOPE-D0 | base | READY |
 | PS-078 | GENESIS-D1 | base | LOCKED |
 | PS-079 | PROFILE-D1 | base | LOCKED |
 | PS-080 | TRANSITION-SPEC-1 | base | LOCKED |
@@ -671,14 +671,18 @@ a checker error.
 
 ### `IDENTITY-D1` — actor and authorization schema
 
-- **Status:** `PS-026:IDENTITY-D1@base=LOCKED`.
+- **Status:** `PS-026:IDENTITY-D1@base=BOUNDED`.
 - **Depends on:** `ACCOUNT-1`, `CODEC-1`, `THREAT-D0`, and primitive/key-encoding choices from
   `CRYPTO-D1`.
 - **Motive:** define what a credential and permission mean before genesis identifiers bind them or
   signed actions use them.
-- **Artifact:** canonical actor descriptor, credential roles, authorization subjects/actions,
-  delegation, threshold policy, rotation/revocation/recovery state, nonce model, and initial
-  descriptor-set encoding. Actor identity remains distinct from validator identity and camera state.
+- **Artifact:** [`IDENTITY_D1_DECISION.md`](IDENTITY_D1_DECISION.md) (PR #26 commit
+  `ac503dce78ffb3951ea489ddb1d2cc35f4a1f178`), `crates/research/src/identity_d1.rs`,
+  `tools/pre_genesis_d1_vectors.py`, and `tests/pre_genesis_d1_contracts.rs` pinning stable
+  pre-genesis `ActorIdV1`, role-separated `ThresholdPolicyV1`, `AuthorizationDescriptorV1`
+  rotation/revocation, DFS cycle-checked delegations, sequential `ActorNonceV1`, and explicit
+  `On`/`Off`-only atomic `TransactionBodyV1` batches. Actor identity remains distinct from
+  validator identity and camera state.
 - **Gate:** independent codec plus invalid-key, duplicate-descriptor, ambiguous-threshold,
   cross-role, delegation-cycle, rotation/revocation/recovery, and nonce-initialization vectors. The
   schema can be encoded without knowing the derived `genesis_id`.
@@ -882,12 +886,14 @@ is invalid input, not a third collision row.
 
 ### `ASSET-D1` — choose what a block asset means
 
-- **Status:** `PS-035:ASSET-D1@base=LOCKED`, `PS-036:ASSET-D1@asset-meaning=OPEN-DECISION`.
+- **Status:** `PS-035:ASSET-D1@base=BOUNDED`, `PS-036:ASSET-D1@asset-meaning=BOUNDED`.
 - **Depends on:** `LEDGER-1`; threat/resource analysis may force revision.
 - **Motive:** prevent one word—“coin”—from hiding incompatible state machines.
-- **Artifact:** a decision record choosing and specifying occupancy collectible, coordinate edit
-  right, fungible unit, dual-domain design, or no monetary asset; it names rejected alternatives,
-  conservation rules, bedrock treatment, transferability, and recovery behavior.
+- **Artifact:** [`ASSET_D1_DECISION.md`](ASSET_D1_DECISION.md) (PR #26 commit
+  `ac503dce78ffb3951ea489ddb1d2cc35f4a1f178`), `crates/research/src/asset_d1.rs`, and
+  `tools/pre_genesis_d1_vectors.py` pinning the dual-domain model (transferable occupancy-episode
+  tokens + strictly separate fungible native fee/deposit/stake unit), bedrock exclusion, burned
+  base fees + refundable per-block deposit (no state rent), and `AssetConservationLedgerV1`.
 - **Gate:** the chosen meaning maps every mint, burn, re-mint, transfer, failed action, fork, rent,
   and governance event to one atomic outcome without contradictory supply equations.
 - **Non-claim:** choosing semantics does not establish demand, price, legal status, fair
@@ -895,14 +901,15 @@ is invalid input, not a third collision row.
 
 ### `VALIDATOR-ECON-D1` — pre-genesis stake and incentive schema
 
-- **Status:** `PS-037:VALIDATOR-ECON-D1@base=LOCKED`.
+- **Status:** `PS-037:VALIDATOR-ECON-D1@base=BOUNDED`.
 - **Depends on:** `ASSET-D1`, `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`.
 - **Motive:** define stake, weight, issuance, rewards, penalties, and exits before a consensus
   candidate or genesis payload can treat economic state as authority.
-- **Artifact:** pre-genesis-encodable stake/weight source, bonding and unbonding, reward/issuance,
-  slashable evidence and penalty, withdrawal/recovery, validator-entry/exit, concentration, and
-  long-range assumptions; it declares the state and transition slots later implemented by
-  `ECONOMIC-STATE-1` without choosing the consensus mechanism for non-stake profiles.
+- **Artifact:** [`ASSET_D1_DECISION.md`](ASSET_D1_DECISION.md) (PR #26 commit
+  `ac503dce78ffb3951ea489ddb1d2cc35f4a1f178`), `crates/research/src/asset_d1.rs`
+  (`ValidatorEconPolicyV1` and `ValidatorStakeBookV1`), and `tools/pre_genesis_d1_vectors.py`
+  pinning bonded PoS stake/weight bounds, unbonding and activation delays, equivocation/inactivity
+  slashing, reward caps, `< 1/3` concentration cap, and closed stake conservation.
 - **Gate:** supply and weight equations close over genesis, join, exit, reward, slash, inactivity,
   key change, fork, and recovery vectors; evidence lifetime, unbonding horizon, bootstrap trust, and
   stake-origin assumptions are explicit; a validator cannot select or fabricate its own initial
@@ -975,11 +982,12 @@ is invalid input, not a third collision row.
 
 ### `RULE-1` — one finite autonomous transformation rule
 
-- **Status:** `PS-042:RULE-1@base=LOCKED`, `PS-043:RULE-1@rule-choice=OPEN-DECISION`.
+- **Status:** `PS-042:RULE-1@base=READY`, `PS-043:RULE-1@rule-choice=BOUNDED`.
 - **Depends on:** `ACCOUNT-1`.
 - **Motive:** test the emergence hypothesis with the smallest executable semantics.
-- **Artifact:** one opt-in, finite, tick-scoped rule over exact coordinates with declared read/write
-  neighborhood, ordering, boundary, conflict, quiescence, and resource behavior.
+- **Artifact:** [`RULE_1_DECISION.md`](RULE_1_DECISION.md) selects synchronous 3D Moore-neighborhood
+  Life (`B5/S45`) with permanent bedrock `1`, strict active-frontier work caps, and opt-in
+  execution; runtime implementation and visual verification remain queued for `RULE-1@base`.
 - **Gate:** base/step vectors, symmetry cases, powered mutants, headless/live parity, and exact
   `(initial state, accepted actions, rule version)` replay.
 - **Non-claim:** one rule does not demonstrate universal computation, useful emergence, or a
@@ -987,11 +995,12 @@ is invalid input, not a third collision row.
 
 ### `LANGUAGE-R1` — exact spatial grammar research
 
-- **Status:** `PS-044:LANGUAGE-R1@base=READY`, `PS-045:LANGUAGE-R1@grammar-choice=OPEN-DECISION`.
+- **Status:** `PS-044:LANGUAGE-R1@base=READY`, `PS-045:LANGUAGE-R1@grammar-choice=BOUNDED`.
 - **Depends on:** `WORLD-0`, `PROOF-0` claim discipline.
 - **Motive:** let arrangements of bits denote symbols and instructions without visual ambiguity.
-- **Artifact:** canonical coordinate normalization, origin/orientation, framing, namespaces,
-  delimiters, symbol table, parse errors, versioning, and canonical source serialization.
+- **Artifact:** [`LANGUAGE_R1_DECISION.md`](LANGUAGE_R1_DECISION.md) selects strict `+X/+Y/+Z`
+  framed 3D regions with typed fail-closed parse errors and opt-in local VM execution first (not
+  v1 consensus code); dual-language parser implementation remains queued for `LANGUAGE-R1@base`.
 - **Gate:** independent parsers agree over valid/invalid corpora; rotations, translations,
   reflections, overlaps, missing delimiters, and visually similar but coordinate-distinct patterns
   have explicit results.
@@ -1126,14 +1135,17 @@ is invalid input, not a third collision row.
 
 ### `CONSENSUS-D1` — pre-genesis consensus and network-role selection
 
-- **Status:** `PS-053:CONSENSUS-D1@base=LOCKED`, `PS-054:CONSENSUS-D1@mechanism-choice=OPEN-DECISION`.
+- **Status:** `PS-053:CONSENSUS-D1@base=BOUNDED`, `PS-054:CONSENSUS-D1@mechanism-choice=BOUNDED`.
 - **Depends on:** `THREAT-D0`, `CRYPTO-D1`, `CODEC-1`, `COST-1` design inputs; a target-profile
   stake-weighted candidate realizes CE-04 before it can be selected.
 - **Motive:** freeze the validator/sequencer role schema and initial authority bytes before genesis
   identifies them, without pretending the protocol is implemented or tested.
-- **Artifact:** selected candidate mechanism, quantitative design envelope, proposal/vote/certificate
-  schemas, initial validator descriptor and weight rules, role/retention model, data-before-vote,
-  validator-set transition shape, finality/confirmation vocabulary, and rejected alternatives.
+- **Artifact:** [`CONSENSUS_D1_DECISION.md`](CONSENSUS_D1_DECISION.md) (PR #26 commit
+  `ac503dce78ffb3951ea489ddb1d2cc35f4a1f178`), `crates/research/src/consensus_gov_d1.rs`, and
+  `tools/pre_genesis_d1_vectors.py` pinning deterministic-finality 2-phase BFT + bonded PoS
+  (`> 2/3` strict Ed25519 quorum certificates, full-possession data-before-vote, rolling retention
+  `>= unbonding_delay_epochs`, weak-subjectivity sync, optional separate archive role, single
+  `i64³` world, transparent state, zero bridges/oracles in v1).
 - **Gate:** the selected design has one non-self-referential initial authority encoding and named
   safety/liveness assumptions, quorum rule, network powers, bootstrap trust, and falsifiers; a
   candidate cannot select its own authority.
@@ -1369,13 +1381,15 @@ is invalid input, not a third collision row.
 
 ### `CRYPTO-D1` — primitive and key-encoding selection
 
-- **Status:** `PS-068:CRYPTO-D1@base=LOCKED`, `PS-069:CRYPTO-D1@primitive-selection=OPEN-DECISION`.
+- **Status:** `PS-068:CRYPTO-D1@base=BOUNDED`, `PS-069:CRYPTO-D1@primitive-selection=BOUNDED`.
 - **Depends on:** `CODEC-1`, `THREAT-D0`.
 - **Motive:** freeze the primitive, suite identifier, key bytes, validation, and signing/hash domain
   assumptions needed to define identity without also pretending the operational lifecycle exists.
-- **Artifact:** selected signature/hash candidates, canonical key encodings and validation,
-  signature encoding, suite/domain identifiers, signing-preimage framing, baseline cryptographic
-  assumptions, implementation choices, and external analysis plan.
+- **Artifact:** [`CRYPTO_D1_DECISION.md`](CRYPTO_D1_DECISION.md) (PR #26 commit
+  `ac503dce78ffb3951ea489ddb1d2cc35f4a1f178`), `crates/research/src/crypto_d1.rs`,
+  `tools/crypto_d1_vectors.py`, and `tests/pre_genesis_d1_contracts.rs` pinning strict RFC 8032
+  Ed25519 + SHA-256 (`CryptoSuiteDescriptorV1`), 9 role-separated signing domains, small-order /
+  `y >= p` / `S >= L` rejection, and pure-Python RFC 8032 independent verification.
 - **Gate:** invalid/weak/noncanonical key, wrong-suite/domain, signature malleability, parser,
   cross-protocol replay, and primitive-level vectors plus an explicit rejected-alternative record.
 - **Non-claim:** a sound primitive does not secure its codec, random generation, keys, operators,
@@ -1441,14 +1455,15 @@ is invalid input, not a third collision row.
 
 ### `GOVERNANCE-D1` — upgrade and emergency authority schema
 
-- **Status:** `PS-075:GOVERNANCE-D1@base=LOCKED`, `PS-076:GOVERNANCE-D1@authority-choice=OPEN-DECISION`.
+- **Status:** `PS-075:GOVERNANCE-D1@base=BOUNDED`, `PS-076:GOVERNANCE-D1@authority-choice=BOUNDED`.
 - **Depends on:** `IDENTITY-D1`, `THREAT-D0`, `CRYPTO-D1`.
 - **Motive:** name who may activate a migration, halt for a proven authority/root fault, or authorize
   recovery without leaving those powers as an operator convention.
-- **Artifact:** pre-genesis-encodable governance subjects and permissions, proposal/approval
-  threshold, timelock,
-  conflict-of-interest and validator-set rules, emergency scope, safe-halt trigger, restart
-  authority, compensation versus forbidden history rewrite, appeal/expiry, and public evidence.
+- **Artifact:** [`GOVERNANCE_D1_DECISION.md`](GOVERNANCE_D1_DECISION.md) (PR #26 commit
+  `ac503dce78ffb3951ea489ddb1d2cc35f4a1f178`), `crates/research/src/consensus_gov_d1.rs`, and
+  `tools/pre_genesis_d1_vectors.py` pinning `> 2/3` bonded-stake timelocked upgrades, automatic
+  deterministic safe-halt on proven faults, strictly pause-only auto-expiring `m-of-n` emergency
+  council, and a hard ban on rewriting finalized history.
 - **Gate:** unauthorized, replayed, conflicting, rushed, censored, compromised-key, stale-set,
   rollback, emergency-overreach, and restart vectors have deterministic outcomes under the threat
   model; no emergency action silently violates finalized/confirmed history or supply invariants.
@@ -1457,7 +1472,7 @@ is invalid input, not a third collision row.
 
 ### `PROFILE-SCOPE-D0` — pre-ID feature and configuration scope
 
-- **Status:** `PS-077:PROFILE-SCOPE-D0@base=LOCKED`.
+- **Status:** `PS-077:PROFILE-SCOPE-D0@base=READY`.
 - **Depends on:** `TRANSITION-SPEC-D1`, `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`,
   `COMMIT-R1`, `CODEC-1`, `COST-1`; target-profile conditional design prerequisites are CE-01–CE-03
   and CE-41.
@@ -1825,10 +1840,12 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-044:LANGUAGE-R1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-086:RELEASE-R1@base=READY` |
+| 3 | `PS-042:RULE-1@base=READY` |
+| 4 | `PS-044:LANGUAGE-R1@base=READY` |
+| 5 | `PS-062:COST-1@base=READY` |
+| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 7 | `PS-077:PROFILE-SCOPE-D0@base=READY` |
+| 8 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1861,7 +1878,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `6` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

@@ -640,32 +640,42 @@ artifact, gate, and non-claim.
 3. `COMMIT-1` implements Candidate A (fixed-key binary Patricia selected in
    [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)) as a separately typed sidecar (`WorldRootV1`,
    `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`) with full-rebuild parity, independent
-   projection verification, pin-epoch write-barrier GC, and 5-crash-point filesystem recovery
-   without reinterpreting legacy `world_tag` or coupling trie walks into rendering or collision.
-   Advancing from the local trunk into the pre-genesis network design branch (`CRYPTO-D1`,
-   `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `ASSET-D1`, `RULE-1`, `LANGUAGE-R1`) requires
-   explicit human decisions on the `OPEN-DECISION` nodes.
+   projection verification, pin-epoch write-barrier GC, and batched checksummed `nodes/nodes.pack`
+   filesystem durability without reinterpreting legacy `world_tag` or coupling trie walks into
+   rendering or collision. All six pre-genesis design/rule `OPEN-DECISION` tuples are now resolved
+   by human decision and backed by executable contracts (`PR #26` `ac503dc`): `CRYPTO-D1`
+   ([`CRYPTO_D1_DECISION.md`](CRYPTO_D1_DECISION.md)), `IDENTITY-D1`
+   ([`IDENTITY_D1_DECISION.md`](IDENTITY_D1_DECISION.md)), `ASSET-D1` & `VALIDATOR-ECON-D1`
+   ([`ASSET_D1_DECISION.md`](ASSET_D1_DECISION.md)), `CONSENSUS-D1`
+   ([`CONSENSUS_D1_DECISION.md`](CONSENSUS_D1_DECISION.md)), `GOVERNANCE-D1`
+   ([`GOVERNANCE_D1_DECISION.md`](GOVERNANCE_D1_DECISION.md)), `RULE-1@rule-choice`
+   ([`RULE_1_DECISION.md`](RULE_1_DECISION.md)), and `LANGUAGE-R1@grammar-choice`
+   ([`LANGUAGE_R1_DECISION.md`](LANGUAGE_R1_DECISION.md)), unlocking `RULE-1@base=READY` and
+   `PROFILE-SCOPE-D0@base=READY`.
 4. `VERKLE-R1@feasibility` is now `BOUNDED` ([`VERKLE_R1_FEASIBILITY.md`](VERKLE_R1_FEASIBILITY.md)
    / [`verkle-r1-feasibility-v1.json`](verkle-r1-feasibility-v1.json)), pinning the self-excluding
    Bandersnatch IPA-256 profile descriptor, injective 32-byte coordinate embedding (`< 2^184 << r`),
    rejected KZG/RSA/PQ alternatives, 7-world cost & batch crossover comparison, and migration design
    while explicitly deferring prototype admission (`VERKLE-R1@candidate-scope=LOCKED`,
-   `VERKLE-R1@prototype=LOCKED`). `COST-1` measurements for `COMMIT-1` are recorded in
+   `VERKLE-R1@prototype=LOCKED`). `COST-1` measurements for `COMMIT-1` (including the `3.18×` p50 /
+   `3.88×` max batched `nodes.pack` speedup) are recorded in
    [`COST_1_COMMIT_1_MEASUREMENTS.md`](COST_1_COMMIT_1_MEASUREMENTS.md).
-5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
-   startup. If changed, update the constructor path, vectors, controls, and docs together.
+5. **Startup choice closed:** adjacent observer spawn at `distance = 1.0` (`(0, 0, -1)` facing
+   bedrock) is formally retained as Bitblock's canonical default, preserving immediate visual
+   legibility and all pinned camera/frame golden vectors.
 6. `SCALE-2@base` is now `IMPLEMENTED` ([`SCALE_2_RECEIPT.md`](SCALE_2_RECEIPT.md) /
    [`scale-2-measurement-v1.json`](scale-2-measurement-v1.json)), closing both `SCALE-1` failure
    brackets (`HollowShell_58809`: `3.459 ms`, `HollowShell_149787`: `5.577 ms`, exact `±10^17` &
    `i64::MIN`/`MAX` chunk-relative precision, bounded `SpatialRenderCache`, and ephemeral sub-pixel
    LOD strictly outside `world_tag`; no “near-infinite performance” claim is licensed).
-7. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
-   then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
-   recorded disqualification of the examined Aethor TSH/PDH constructions and IterHash; do not
-   conflate them with a different missing design.
-8. Decide `RULE-1` (`OPEN-DECISION`): one finite opt-in local transformation rule with a named
-   neighborhood, ordering, resource bound, and deterministic `(initial state, accepted tape, rule
-   version)` replay. Do not combine it with asset or network authority.
+7. `HASH-SOURCE-R1` remains explicitly parked (`READY` / `NOT-STARTED`) with `SHA-256` frozen as
+   the sole v1 hash suite (with versioned suite-ID agility). Only open `HASH-R1` if/when the user
+   supplies a pinned source repository/commit; preserve the disqualification of Aethor TSH/PDH and
+   IterHash.
+8. `RULE-1@rule-choice` is now `BOUNDED` ([`RULE_1_DECISION.md`](RULE_1_DECISION.md): synchronous
+   3D Moore-neighborhood Life `B5/S45`, permanent bedrock `1`, strict frontier caps, opt-in only),
+   unlocking `RULE-1@base=READY` for Wave 2 implementation and visual verification. `LANGUAGE-R1`
+   (`+X/+Y/+Z` framed 3D regions, local VM first) and `PROFILE-SCOPE-D0` are queued in Wave 3.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
