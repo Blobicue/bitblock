@@ -483,6 +483,16 @@
   ]
  },
  {
+  "id": "sub:rule-1",
+  "members": [
+   "module:rule_1"
+  ],
+  "name": "rule-1",
+  "terms": [
+   "rule"
+  ]
+ },
+ {
   "id": "sub:scale-assay",
   "members": [
    "module:scale_assay"
