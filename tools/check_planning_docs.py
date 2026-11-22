@@ -275,7 +275,7 @@ EXPECTED_BASE_DEPENDENCY_DIGEST = (
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "9d91cef93ec8c8ebb37d88256485c78aa26f6aa73d40f9078795007d13cdf055"
+    "aa2c50677d3bfc55ee97b826a1e7a95b4897b872843857222f6fdd863ee910a2"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,7 +7779,7 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-017:VERKLE-R1@feasibility=READY` |",
+        "| 2 | `PS-021:REFINE-1@base=READY` |",
         "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 8 | `PS-086:RELEASE-R1@base=READY` |\n",
+        "| 7 | `PS-086:RELEASE-R1@base=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 8 | `PS-086:RELEASE-R1@base=READY` |",
-        "| 8 | `PS-086:RELEASE-R1@base=READY` |\n"
-        "| 9 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 7 | `PS-086:RELEASE-R1@base=READY` |",
+        "| 7 | `PS-086:RELEASE-R1@base=READY` |\n"
+        "| 8 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-017:VERKLE-R1@feasibility=READY` |",
+        "| 1 | `PS-021:REFINE-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-017:VERKLE-R1@feasibility=READY` |",
+        "| 2 | `PS-021:REFINE-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )

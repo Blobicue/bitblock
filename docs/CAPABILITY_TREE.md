@@ -57,7 +57,7 @@ candidate to choose its own authority.
 | PS-014 | TRANSITION-SPEC-D1 | base | BOUNDED |
 | PS-015 | COMMIT-R1 | base | BOUNDED |
 | PS-016 | VERKLE-R1 | base | READY |
-| PS-017 | VERKLE-R1 | feasibility | READY |
+| PS-017 | VERKLE-R1 | feasibility | BOUNDED |
 | PS-018 | VERKLE-R1 | candidate-scope | LOCKED |
 | PS-019 | VERKLE-R1 | prototype | LOCKED |
 | PS-020 | COMMIT-1 | base | IMPLEMENTED |
@@ -565,26 +565,36 @@ a checker error.
 
 ### `VERKLE-R1` — separate Verkle feasibility and prototype lane
 
-- **Status:** `PS-016:VERKLE-R1@base=READY`, `PS-017:VERKLE-R1@feasibility=READY`, `PS-018:VERKLE-R1@candidate-scope=LOCKED`, `PS-019:VERKLE-R1@prototype=LOCKED`.
+- **Status:** `PS-016:VERKLE-R1@base=READY`, `PS-017:VERKLE-R1@feasibility=BOUNDED`, `PS-018:VERKLE-R1@candidate-scope=LOCKED`, `PS-019:VERKLE-R1@prototype=LOCKED`.
 - **Depends on:** `WORLD-0`, `PROOF-0`.
 - **Motive:** evaluate whether a vector-commitment map could materially improve witnesses or updates
   without silently importing trusted setup, field/curve, codec, cryptographic, or migration risk.
-- **Artifact:** feasibility report fixing the candidate vector-commitment primitive, setup/custody
-  model, field/curve and subgroup rules, coordinate-to-field mapping, commitment/opening codecs,
-  update and multiproof model, verifier work, storage/availability obligations, implementation and
-  audit maturity, pinned cost workloads, and migration/historical-verification design, plus the
-  exact canonical self-excluding vector-commitment profile descriptor bytes and domain-separated
-  identifier consumed by a later `DomainRegistryV1`. Neither descriptor nor identifier depends on
-  candidate/genesis/profile identifiers or a produced root. The later prototype is a separately
-  identified artifact in the same `verkle-selected` closure, after the candidate-profile dependency
-  in CE-40. Feasibility reuses the cost-measurement method without inheriting the authenticated-map
-  comparison lane or competing in its already bounded two-candidate decision.
-- **Gate:** feasibility reports exact security assumptions and measured cost thresholds with rejected
-  alternatives. Prototype admission additionally requires the selected crypto suite, independent
-  canonical codecs and implementation, subgroup/noncanonical/malformed-proof controls, worst-case
-  update/opening/batch/storage bounds, powered controls, and a deterministic old/new-root migration
-  plus historical verifier under the exact candidate profile. Failure keeps the prototype locked
-  and cannot reopen the two-candidate `COMMIT-R1` decision by rhetoric.
+- **Artifact:** [`VERKLE_R1_FEASIBILITY.md`](VERKLE_R1_FEASIBILITY.md) and
+  [`verkle-r1-feasibility-v1.json`](verkle-r1-feasibility-v1.json), backed by portable Rust
+  codecs/analyzer `crates/research/src/verkle_feasibility.rs` (`VerkleCoordinateKeyV1`,
+  `VerkleLeafSlotEncodingV1`, self-excluding 247-byte `VectorCommitmentProfileDescriptorV1`,
+  `analyze_verkle_256_world`), independent stdlib Python vectors
+  (`tools/verkle_feasibility_vectors.py`), integration suite (`tests/verkle_r1_feasibility.rs`),
+  and release probe (`examples/verkle_r1_feasibility_probe.rs`), fix the primary feasibility
+  subject (Bandersnatch Pedersen + arity-256 IPA transparent basis,
+  `#bb.policy.sha256.p74jrvkyumadcmam5hrp5cum4smpcciyng2yxfmsmvqbla2lepfq`) and rejected
+  alternatives (BLS12-381 KZG trusted setup, Catalano–Fiore RSA, deferred lattice/FRI), subgroup
+  rules, injective 32-byte coordinate embedding (`< 2^184 << r_Bandersnatch`), 7-world cost &
+  batch crossover comparison, and migration/historical-verification design. Neither descriptor nor
+  identifier depends on candidate/genesis/profile identifiers or a produced root. The later
+  prototype remains a separately identified `LOCKED` artifact in the same `verkle-selected`
+  closure, after the candidate-profile dependency in CE-40. Feasibility reuses the cost-measurement
+  method without inheriting the authenticated-map comparison lane or competing in its already
+  bounded two-candidate decision.
+- **Gate:** feasibility reports exact security assumptions, rejected alternatives, and measured
+  cost thresholds on `origin/main` commit `2ee1e0c874a6849b67d14997cb35bc23e651b93c` (tree
+  `734c0fa3565c3d3cb070caee48ef3d10199126e8`, PR #20 CI runs `44996624134` and `44996627977`, 10/10
+  jobs green; `bbmutate.py verkle_feasibility`: `9/9` KILLED), explicitly deferring prototype work
+  for local and early profiles. Prototype admission additionally requires the selected crypto
+  suite, independent canonical codecs and implementation, subgroup/noncanonical/malformed-proof
+  controls, worst-case update/opening/batch/storage bounds, powered controls, and a deterministic
+  old/new-root migration plus historical verifier under the exact candidate profile. Failure keeps
+  the prototype locked and cannot reopen the two-candidate `COMMIT-R1` decision by rhetoric.
 - **Non-claim:** feasibility, shorter-looking witnesses, or a matching prototype does not establish
   cryptographic security, production readiness, selection, or authority.
 
@@ -1261,7 +1271,10 @@ is invalid input, not a third collision row.
   dispositions; [`cost-1-measurement-v1.json`](cost-1-measurement-v1.json) pins their raw receipts
   for default binary/dependency size, touched-state memory, tick work, renderer/collision work,
   commitment updates, proof verification, bandwidth, database writes, retained history, recovery,
-  and idle overhead.
+  and idle overhead; [`COST_1_COMMIT_1_MEASUREMENTS.md`](COST_1_COMMIT_1_MEASUREMENTS.md) and
+  [`cost-1-commit-1-v1.json`](cost-1-commit-1-v1.json) (`examples/commit_1_cost_probe.rs`, PR #20
+  commit `2ee1e0c874a6849b67d14997cb35bc23e651b93c`) extend the budget with research-gated
+  `COMMIT-1` measurements and powered proof-cap controls.
 - **Gate:** every reported number identifies build, workload, machine where relevant, deterministic
   counters where possible, distribution/failure point, and powered control; budgets are fixed before
   optimizing against them.
@@ -1794,13 +1807,12 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-017:VERKLE-R1@feasibility=READY` |
-| 3 | `PS-021:REFINE-1@base=READY` |
-| 4 | `PS-044:LANGUAGE-R1@base=READY` |
-| 5 | `PS-052:SCALE-2@base=READY` |
-| 6 | `PS-062:COST-1@base=READY` |
-| 7 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 8 | `PS-086:RELEASE-R1@base=READY` |
+| 2 | `PS-021:REFINE-1@base=READY` |
+| 3 | `PS-044:LANGUAGE-R1@base=READY` |
+| 4 | `PS-052:SCALE-2@base=READY` |
+| 5 | `PS-062:COST-1@base=READY` |
+| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 7 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1833,7 +1845,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `8` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
