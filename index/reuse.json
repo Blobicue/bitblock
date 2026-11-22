@@ -374,6 +374,12 @@
     ]
    },
    {
+    "item": "ReplayedDisplayArtifacts",
+    "modules": [
+     "display_store"
+    ]
+   },
+   {
     "item": "ReplayedHistory",
     "modules": [
      "history_store"
@@ -455,6 +461,12 @@
     "item": "TickRecord",
     "modules": [
      "interaction"
+    ]
+   },
+   {
+    "item": "TickTransaction",
+    "modules": [
+     "history"
     ]
    },
    {
@@ -542,6 +554,12 @@
     ]
    },
    {
+    "item": "length_squared",
+    "modules": [
+     "camera"
+    ]
+   },
+   {
     "item": "multiproof_wire_bytes",
     "modules": [
      "commit_r1"
@@ -563,6 +581,12 @@
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
+    ]
+   },
+   {
+    "item": "prepare_capture_artifact",
+    "modules": [
+     "display_store"
     ]
    },
    {
@@ -594,6 +618,12 @@
     "modules": [
      "commit_r1"
     ]
+   },
+   {
+    "item": "translate_world",
+    "modules": [
+     "camera"
+    ]
    }
   ],
   "pub_items": 863,
@@ -620,7 +650,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 36285,
+   "code_lines": 32762,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -827,7 +857,7 @@
     {
      "left": "display_store:1705",
      "lines": 19,
-     "right": "main:4227"
+     "right": "main:441"
     },
     {
      "left": "output_topology:1499",
@@ -835,9 +865,9 @@
      "right": "presentation_output:678"
     },
     {
-     "left": "main:4269",
+     "left": "main:483",
      "lines": 17,
-     "right": "main:5581"
+     "right": "main:1795"
     },
     {
      "left": "presentation_output:708",
@@ -847,7 +877,7 @@
     {
      "left": "display_store:1669",
      "lines": 12,
-     "right": "main:4186"
+     "right": "main:400"
     },
     {
      "left": "history:1206",
@@ -892,7 +922,7 @@
     {
      "left": "frame_v2:997",
      "lines": 8,
-     "right": "main:5003"
+     "right": "main:1217"
     },
     {
      "left": "history_store:1669",
