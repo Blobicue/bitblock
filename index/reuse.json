@@ -488,6 +488,12 @@
     ]
    },
    {
+    "item": "ThreatPropertyEntryV1",
+    "modules": [
+     "threat_1"
+    ]
+   },
+   {
     "item": "TickRecord",
     "modules": [
      "interaction"
@@ -527,6 +533,18 @@
     "item": "VerkleTreeShapeMetricsV1",
     "modules": [
      "verkle_feasibility"
+    ]
+   },
+   {
+    "item": "VmBatchReceiptV1",
+    "modules": [
+     "vm_d1"
+    ]
+   },
+   {
+    "item": "VmInvocationOutcomeV1",
+    "modules": [
+     "vm_d1"
     ]
    },
    {
@@ -716,7 +734,7 @@
     ]
    }
   ],
-  "pub_items": 1215,
+  "pub_items": 1242,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -740,7 +758,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 44774,
+   "code_lines": 45684,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -921,7 +939,7 @@
    ]
   },
   "test": {
-   "code_lines": 26586,
+   "code_lines": 26670,
    "duplicated_lines": 341,
    "regions": [
     {

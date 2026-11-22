@@ -44,8 +44,10 @@ pub mod rule_1;
 pub mod scale_assay;
 pub mod sequential;
 pub mod storage;
+pub mod threat_1;
 pub mod transition_spec;
 pub mod verkle_feasibility;
+pub mod vm_d1;
 #[cfg(windows)]
 pub mod windows_timing;
 #[cfg(windows)]
