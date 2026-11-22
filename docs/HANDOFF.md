@@ -675,13 +675,15 @@ artifact, gate, and non-claim.
 8. `RULE-1@base` is now `IMPLEMENTED` ([`RULE_1_RECEIPT.md`](RULE_1_RECEIPT.md): opt-in synchronous
    3D Moore-neighborhood Life `B5/S45`, permanent bedrock `1`, fail-closed frontier caps, 48-way
    octahedral symmetry, independent Python stepper parity, `History` replay parity, and visually
-   verified multi-tick PNG snapshots), unlocking `EMERGENCE-R1@base=READY`. Wave 3–5 receipts
+   verified multi-tick PNG snapshots). Wave 3–6 receipts
    ([`PROFILE_SCOPE_D0_RECEIPT.md`](PROFILE_SCOPE_D0_RECEIPT.md),
    [`LANGUAGE_R1_RECEIPT.md`](LANGUAGE_R1_RECEIPT.md),
-   [`THREAT_1_MODEL.md`](THREAT_1_MODEL.md), [`VM_D1_SPEC.md`](VM_D1_SPEC.md), and
+   [`THREAT_1_MODEL.md`](THREAT_1_MODEL.md), [`VM_D1_SPEC.md`](VM_D1_SPEC.md),
    [`BOUNDS_1_RECEIPT.md`](BOUNDS_1_RECEIPT.md) /
-   [`bounds-1-measurement-v1.json`](bounds-1-measurement-v1.json)) promote `PROFILE-SCOPE-D0`,
-   `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, and `BOUNDS-1` to `BOUNDED`, unlocking
+   [`bounds-1-measurement-v1.json`](bounds-1-measurement-v1.json), and
+   [`EMERGENCE_R1_RECEIPT.md`](EMERGENCE_R1_RECEIPT.md) /
+   [`emergence-r1-assay-v1.json`](emergence-r1-assay-v1.json)) promote `PROFILE-SCOPE-D0`,
+   `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, and `EMERGENCE-R1` to `BOUNDED`, unlocking
    `GENESIS-D1@base=READY`, `RESOURCE-1@base=READY`, and `VM-1@base=READY` while keeping
    `PROTOCOL-ID-1` honestly `LOCKED` until `GENESIS-D1` passes.
 
