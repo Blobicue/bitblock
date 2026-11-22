@@ -8,6 +8,7 @@ rust-version = "1.96"
 # Unconditionally feature-enabled: this crate *is* the research surface, so the
 # core variants it needs are never optional from here.
 bitblock-core = { path = "../core", features = ["protocol-research"] }
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast", "zeroize"] }
 sha2 = { version = "=0.10.9", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
