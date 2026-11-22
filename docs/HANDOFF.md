@@ -10,11 +10,11 @@ semantic history.
   HEAD SHA here). The earlier `Gaia-0-0-1-1` remote, `codex/*` branches, and `chem/emergent-scale-2026-10`
   / `chem/render-scale-2026-11` waves are merged history preserved below.
 - Current milestone: the complete local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`,
-  `STORAGE-1`, `LEDGER-1`, `COMMIT-1`) is `IMPLEMENTED` alongside bounded contracts/assays
-  (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `CODEC-1`, `REFINE-1@world`, `THREAT-D0`,
-  `RELEASE-R1@framework`, `SCALE-1`), the `chem/render-scale-2026-11` SIMD128 worker/octree/
-  delta-render stack is merged on `main`, and the Loop 11 planning reconciliation aligns the
-  mutable planning docs and powered checker controls.
+  `STORAGE-1`, `LEDGER-1`, `COMMIT-1`) is `IMPLEMENTED` alongside bounded contracts/assays/proofs
+  (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `CODEC-1`, `REFINE-1@world`, `REFINE-1@accounting`,
+  `REFINE-1@commitment`, `THREAT-D0`, `RELEASE-R1@framework`, `SCALE-1`), the
+  `chem/render-scale-2026-11` SIMD128 worker/octree/delta-render stack is merged on `main`, and
+  the Loop 11 planning reconciliation aligns the mutable planning docs and powered checker controls.
 - Agent onboarding / knowledge graph: `docs/AGENT_ONBOARDING.md`. It explains bbgraph `index/`
   for protocol, metrics, and gates, and GitNexus `.gitnexus/` (local only; MCP repo `bitblock`) for symbols, calls,
   flows, and blast radius.
@@ -352,15 +352,18 @@ only. The frozen tenth sweep was nonzero, so diminishing returns has not been re
   audit chronology, preserves the pinned checkpoint-0.3 paper and audit as historical, and scopes its
   old checkpoint-obligations table only to that historical artifact.
 
-- `COMMIT-R1@base` is `BOUNDED` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) /
+- `COMMIT-1@base` is `IMPLEMENTED` ([`COMMIT_1_RECEIPT.md`](COMMIT_1_RECEIPT.md)), while
+  `COMMIT-R1@base` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) /
   [`commit-r1-assay-v1.json`](commit-r1-assay-v1.json), selecting Candidate A fixed-key binary
   Patricia for `WorldRootV1`), `CODEC-1@base` (`local-v1`), `SCALE-1@base`
   ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)), `TRANSITION-SPEC-D1@base`
   ([`TRANSITION_SPEC_D1.md`](TRANSITION_SPEC_D1.md)), `REFINE-1@world`
-  ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `THREAT-D0@base`
+  ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `REFINE-1@accounting`
+  ([`REFINE_1_ACCOUNTING.md`](REFINE_1_ACCOUNTING.md)), `REFINE-1@commitment`
+  ([`REFINE_1_COMMITMENT.md`](REFINE_1_COMMITMENT.md)), `THREAT-D0@base`
   ([`THREAT_D0_ENVELOPE.md`](THREAT_D0_ENVELOPE.md)), and `RELEASE-R1@framework`
-  ([`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md)) are now `BOUNDED`, unlocking
-  `COMMIT-1@base` and `SCALE-2@base` to `READY` while keeping live `World`/`world_tag` unwired.
+  ([`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md)) are `BOUNDED`, keeping live
+  `World`/`world_tag` unwired.
 
 - The transcript chronology now reaches frozen Loop 10 and this coordinated descendant. The
   checkpoint-0.3 audit owns only its historical corrected reading; the frozen successor chain owns
@@ -625,11 +628,13 @@ artifact, gate, and non-claim.
    `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`), while
    `CODEC-1@base` (`local-v1`), `COMMIT-R1@base` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)),
    `TRANSITION-SPEC-D1@base` ([`TRANSITION_SPEC_D1.md`](TRANSITION_SPEC_D1.md)), `REFINE-1@world`
-   ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `THREAT-D0@base`
+   ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `REFINE-1@accounting`
+   ([`REFINE_1_ACCOUNTING.md`](REFINE_1_ACCOUNTING.md)), `REFINE-1@commitment`
+   ([`REFINE_1_COMMITMENT.md`](REFINE_1_COMMITMENT.md)), `THREAT-D0@base`
    ([`THREAT_D0_ENVELOPE.md`](THREAT_D0_ENVELOPE.md)), `RELEASE-R1@framework`
    ([`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md)), and `SCALE-1@base`
-   ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are `BOUNDED`. Completing `COMMIT-1` unlocked
-   `REFINE-1@commitment` (`PD-02`) alongside `REFINE-1@accounting` (`PD-01`) to `READY`.
+   ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are `BOUNDED`. All non-VM `REFINE-1` phases are now
+   verified under Lean 4 `--trust=0` (`REFINE-1@vm` remains `LOCKED` on `VM-1`).
 3. `COMMIT-1` implements Candidate A (fixed-key binary Patricia selected in
    [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)) as a separately typed sidecar (`WorldRootV1`,
    `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`) with full-rebuild parity, independent

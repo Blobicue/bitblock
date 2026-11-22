@@ -63,8 +63,8 @@ candidate to choose its own authority.
 | PS-020 | COMMIT-1 | base | IMPLEMENTED |
 | PS-021 | REFINE-1 | base | READY |
 | PS-022 | REFINE-1 | world | BOUNDED |
-| PS-023 | REFINE-1 | accounting | READY |
-| PS-024 | REFINE-1 | commitment | READY |
+| PS-023 | REFINE-1 | accounting | BOUNDED |
+| PS-024 | REFINE-1 | commitment | BOUNDED |
 | PS-025 | REFINE-1 | vm | LOCKED |
 | PS-026 | IDENTITY-D1 | base | LOCKED |
 | PS-027 | PROTOCOL-ID-1 | base | LOCKED |
@@ -623,23 +623,39 @@ a checker error.
 
 ### `REFINE-1` — Rust/model correspondence
 
-- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=READY`, `PS-024:REFINE-1@commitment=READY`, `PS-025:REFINE-1@vm=LOCKED`.
+- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=BOUNDED`, `PS-024:REFINE-1@commitment=BOUNDED`, `PS-025:REFINE-1@vm=LOCKED`.
 - **Depends on:** `WORLD-0`.
-- **Motive:** connect abstract world theorems to the actual chunked implementation.
+- **Motive:** connect abstract world, accounting, and commitment theorems to their actual Rust
+  implementations.
 - **Artifact:** [`REFINE_1_WORLD.md`](REFINE_1_WORLD.md) pairs the `--trust=0` Lean 4 capsules
   (`World.lean`, `ChunkRefinement.lean` 27 theorems, `OctreeRefinement.lean` 54 theorems) with the
   Rust correspondence suite `tests/world_refinement_correspondence.rs` (named abstraction function
   `alpha_world`, exhaustive 4,096-index local bijection, `13^3 = 2,197` signed boundary/extrema
   chunk-splitting checks, base/step edit/eviction/bedrock/`flush_octree` simulation, and powered
-  truncated-division and bedrock-drop controls). PD-01 through PD-03 add the exact implemented
-  surface only to the accounting, commitment, or VM refinement phase respectively.
+  truncated-division and bedrock-drop controls). [`REFINE_1_ACCOUNTING.md`](REFINE_1_ACCOUNTING.md)
+  pairs `AccountingRefinement.lean` (21 `--trust=0` theorems covering the 10-lane bijection, 7
+  `AttemptKind` attributions, exact `submitted = camera + edit + control` partition, fail-closed
+  `65,536` admission, per-lane `Reconciles`/`ValidLedger`, and swapped-lane/dropped-control/over-limit
+  negative controls) with `tests/accounting_refinement_correspondence.rs` (`alpha_accounting` against
+  `TickActionLedger`/`TickAttempt`/`TickOutcome`). [`REFINE_1_COMMITMENT.md`](REFINE_1_COMMITMENT.md)
+  pairs `CommitmentRefinement.lean` (27 `--trust=0` theorems covering `CoordinateKeyV1` sign-bias
+  bijection & order preservation, arbitrary-width `CanonicalPat` structural uniqueness
+  `canonicalPat_unique_of_alpha_eq`, `verifyPatProof_sound`/`canonicalPat_provePat_complete`, and
+  6 non-canonical shape/proof negative controls) with `tests/commitment_refinement_correspondence.rs`
+  (`alpha_commitment` over `13^2 = 169` signed boundary pairs, all `4! = 24` 192-bit & 256-bit
+  insertion permutations, delete restoration, proof checks, and forged-shape rejections). PD-01
+  through PD-03 add the exact implemented surface only to the accounting, commitment, or VM
+  refinement phase respectively.
 - **Gate:** named abstraction function plus base/step proof or a precisely bounded exhaustive
   procedure with powered negative controls; no silent appeal from a finite sample to all `i64³`.
   The `REFINE-1@world` receipt is `origin/main` commit `58cefcb9e9b4ae24cb90861571489560266d6b23`
   (tree `2166e50bcce90d14ea80abec8b2190dd9ba6b93c`, PR #14 CI runs `44978821303` and `44978824816`,
+  10/10 jobs green). The `REFINE-1@accounting` and `REFINE-1@commitment` receipt is `origin/main`
+  commit `e22312bfb778adce1cc7ba3917e368765e91d8e9` (tree
+  `7481353f1996ea5d1883f44a36136884da80bb2c`, PR #18 CI runs `44994236191` and `44994240648`,
   10/10 jobs green).
 - **Non-claim:** a model theorem without full compiler verification does not certify compiled Rust
-  machine code across all `2^192` coordinates.
+  machine code across all `2^192` coordinates or cryptographic hash collision resistance.
 
 ## Identity and multiplayer branch
 
@@ -1780,13 +1796,11 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-017:VERKLE-R1@feasibility=READY` |
 | 3 | `PS-021:REFINE-1@base=READY` |
-| 4 | `PS-023:REFINE-1@accounting=READY` |
-| 5 | `PS-024:REFINE-1@commitment=READY` |
-| 6 | `PS-044:LANGUAGE-R1@base=READY` |
-| 7 | `PS-052:SCALE-2@base=READY` |
-| 8 | `PS-062:COST-1@base=READY` |
-| 9 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 10 | `PS-086:RELEASE-R1@base=READY` |
+| 4 | `PS-044:LANGUAGE-R1@base=READY` |
+| 5 | `PS-052:SCALE-2@base=READY` |
+| 6 | `PS-062:COST-1@base=READY` |
+| 7 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 8 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1819,7 +1833,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `10` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
