@@ -544,6 +544,16 @@
   ]
  },
  {
+  "id": "sub:resource-1",
+  "members": [
+   "module:resource_1"
+  ],
+  "name": "resource-1",
+  "terms": [
+   "resource"
+  ]
+ },
+ {
   "id": "sub:rule-1",
   "members": [
    "module:rule_1"
