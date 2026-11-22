@@ -14,6 +14,12 @@
     ]
    },
    {
+    "item": "BlockResourceSettlementV1",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
     "item": "BoundsViolationV1",
     "modules": [
      "bounds_1"
@@ -98,9 +104,81 @@
     ]
    },
    {
+    "item": "DEFAULT_BASE_FEE_CHANGE_DENOMINATOR",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_GAS_PER_ED25519_SIG",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_GAS_PER_OCCUPANCY_OP",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_GAS_PER_PROOF_BYTE",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_GAS_PER_STATE_WRITE",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_GAS_PER_TX_BASE",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_GAS_PER_TX_BYTE",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_MAX_BASE_FEE_PER_GAS",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_MAX_BLOCK_GAS",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_MAX_PRIORITY_TIP_PER_GAS",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "DEFAULT_MIN_BASE_FEE_PER_GAS",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
     "item": "DEFAULT_SPATIAL_CACHE_MAX_CHUNKS",
     "modules": [
      "render"
+    ]
+   },
+   {
+    "item": "DEFAULT_TARGET_BLOCK_GAS",
+    "modules": [
+     "resource_1"
     ]
    },
    {
@@ -380,6 +458,18 @@
     ]
    },
    {
+    "item": "RESOURCE_1_POLICY_SCHEMA",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
+    "item": "RESOURCE_1_SETTLEMENT_SCHEMA",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
     "item": "RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA",
     "modules": [
      "physical_sensor"
@@ -527,6 +617,12 @@
     "item": "TreeAlgorithmIdV1",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "TxResourceChargeV1",
+    "modules": [
+     "resource_1"
     ]
    },
    {
@@ -680,6 +776,12 @@
     ]
    },
    {
+    "item": "meter_work",
+    "modules": [
+     "resource_1"
+    ]
+   },
+   {
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
@@ -758,7 +860,7 @@
     ]
    }
   ],
-  "pub_items": 1304,
+  "pub_items": 1328,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -782,7 +884,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 46768,
+   "code_lines": 47416,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -963,7 +1065,7 @@
    ]
   },
   "test": {
-   "code_lines": 26740,
+   "code_lines": 26819,
    "duplicated_lines": 341,
    "regions": [
     {

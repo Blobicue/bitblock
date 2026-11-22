@@ -42,6 +42,7 @@ pub mod presentation_output;
 pub mod presentation_output_v2;
 pub mod profile_bootstrap;
 pub mod replay_evidence;
+pub mod resource_1;
 pub mod rule_1;
 pub mod scale_assay;
 pub mod sequential;
