@@ -92,30 +92,6 @@
     ]
    },
    {
-    "item": "DEFAULT_MAX_BACKUP_RESTORE_BYTES",
-    "modules": [
-     "local_bounds"
-    ]
-   },
-   {
-    "item": "DEFAULT_MAX_RECORDS_PER_COMMIT",
-    "modules": [
-     "local_bounds"
-    ]
-   },
-   {
-    "item": "DEFAULT_MAX_RESTART_SCAN_BYTES",
-    "modules": [
-     "local_bounds"
-    ]
-   },
-   {
-    "item": "DEFAULT_MAX_STAGED_WRITE_BYTES",
-    "modules": [
-     "local_bounds"
-    ]
-   },
-   {
     "item": "DisplayArtifactInventoryEntry",
     "modules": [
      "display_store"
@@ -125,6 +101,18 @@
     "item": "DisplayArtifactRecoveryJournal",
     "modules": [
      "display_store"
+    ]
+   },
+   {
+    "item": "DurableLedgerError",
+    "modules": [
+     "coordinate_episode"
+    ]
+   },
+   {
+    "item": "DurableLedgerRecovery",
+    "modules": [
+     "coordinate_episode"
     ]
    },
    {
@@ -161,24 +149,6 @@
     "item": "FrameAdmissionV2",
     "modules": [
      "frame_v2"
-    ]
-   },
-   {
-    "item": "HistoryAppendReceipt",
-    "modules": [
-     "history_store"
-    ]
-   },
-   {
-    "item": "HistoryCreateReceipt",
-    "modules": [
-     "history_store"
-    ]
-   },
-   {
-    "item": "HistoryRecoveryJournal",
-    "modules": [
-     "history_store"
     ]
    },
    {
@@ -221,12 +191,6 @@
     "item": "LANE_WHEEL_LINES",
     "modules": [
      "tick"
-    ]
-   },
-   {
-    "item": "LOCAL_BOUNDS_PROFILE_SCHEMA",
-    "modules": [
-     "local_bounds"
     ]
    },
    {
@@ -512,12 +476,6 @@
     ]
    },
    {
-    "item": "check_restart_scan",
-    "modules": [
-     "local_bounds"
-    ]
-   },
-   {
     "item": "common_prefix_len",
     "modules": [
      "commit_r1"
@@ -539,6 +497,12 @@
     "item": "end_iteration",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "from_history_with_limits",
+    "modules": [
+     "coordinate_episode"
     ]
    },
    {
@@ -624,9 +588,15 @@
     "modules": [
      "camera"
     ]
+   },
+   {
+    "item": "verify_world_bijection",
+    "modules": [
+     "coordinate_episode"
+    ]
    }
   ],
-  "pub_items": 863,
+  "pub_items": 889,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -650,7 +620,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 32762,
+   "code_lines": 33663,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -709,7 +679,7 @@
      "right": "physical_sensor:1607"
     },
     {
-     "left": "history_store:535",
+     "left": "history_store:536",
      "lines": 12,
      "right": "sequential:1397"
     },
@@ -739,12 +709,12 @@
      "right": "interaction:1328"
     },
     {
-     "left": "coordinate_episode:726",
+     "left": "coordinate_episode:1119",
      "lines": 9,
      "right": "physical_sensor:1384"
     },
     {
-     "left": "coordinate_episode:923",
+     "left": "coordinate_episode:1324",
      "lines": 9,
      "right": "display:1150"
     },
@@ -754,7 +724,7 @@
      "right": "frame:590"
     },
     {
-     "left": "history_store:443",
+     "left": "history_store:444",
      "lines": 9,
      "right": "sequential:1320"
     },
@@ -786,7 +756,7 @@
     {
      "left": "display_store:298",
      "lines": 8,
-     "right": "history_store:340"
+     "right": "history_store:341"
     },
     {
      "left": "interaction:1131",
@@ -831,7 +801,7 @@
    ]
   },
   "test": {
-   "code_lines": 24209,
+   "code_lines": 24707,
    "duplicated_lines": 341,
    "regions": [
     {
@@ -882,7 +852,7 @@
     {
      "left": "history:1206",
      "lines": 12,
-     "right": "history_store:1573"
+     "right": "history_store:1650"
     },
     {
      "left": "physical_sensor:1654",
@@ -895,7 +865,7 @@
      "right": "optimization:1699"
     },
     {
-     "left": "journal:1305",
+     "left": "journal:1736",
      "lines": 10,
      "right": "storage:994"
     },
@@ -912,7 +882,7 @@
     {
      "left": "display_store:1509",
      "lines": 8,
-     "right": "journal:1858"
+     "right": "journal:2289"
     },
     {
      "left": "display_store:1647",
@@ -925,14 +895,14 @@
      "right": "main:1217"
     },
     {
-     "left": "history_store:1669",
+     "left": "history_store:1746",
      "lines": 8,
-     "right": "history_store:1748"
+     "right": "history_store:1825"
     },
     {
-     "left": "history_store:2133",
+     "left": "history_store:2210",
      "lines": 8,
-     "right": "journal:1856"
+     "right": "journal:2287"
     },
     {
      "left": "physical_sensor:1693",

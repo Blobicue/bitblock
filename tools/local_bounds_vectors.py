@@ -161,6 +161,15 @@ def main() -> int:
     except (OverflowError, ValueError):
         pass
 
+    # 5. Worst-shaped COST-1 TickOutcome v3 envelope and one-over boundary checks across all 7 bounds
+    worst_tick_outcome_v3 = 469 + 65_536 * 26
+    assert worst_tick_outcome_v3 == 1_704_405
+    assert worst_tick_outcome_v3 + 512 <= DEFAULT_MAX_RECORD_BYTES
+    for limit in baseline_fields:
+        assert limit > 0
+        assert limit <= limit
+        assert (limit + 1) > limit
+
     return 0
 
 

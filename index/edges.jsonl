@@ -1310,6 +1310,9 @@
 {"from": "module:commit_r1", "kind": "depends_on", "to": "module:world"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:history_store"}
+{"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:journal"}
+{"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:local_bounds"}
+{"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:program"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:world"}
 {"from": "module:display", "kind": "depends_on", "to": "module:frame"}
@@ -1478,7 +1481,6 @@
 {"from": "proof:proof/BitblockProof/OctreeRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/World.lean", "kind": "proves", "to": "module:world"}
 {"from": "module:chem", "kind": "tests_with", "to": "module:history"}
-{"from": "module:coordinate_episode", "kind": "tests_with", "to": "module:program"}
 {"from": "module:display_artifact", "kind": "tests_with", "to": "module:frame_v2"}
 {"from": "module:display_store", "kind": "tests_with", "to": "module:output_color"}
 {"from": "module:display_store", "kind": "tests_with", "to": "module:output_topology"}
