@@ -1304,6 +1304,9 @@
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/storage-record/envelope/v1"}
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/test-object/v1"}
 {"from": "module:tick", "kind": "declares", "to": "schema:bitblock/tick-outcome/v3"}
+{"from": "module:transition_spec", "kind": "declares", "to": "schema:bitblock/transition-spec-d1/base-contract/v1"}
+{"from": "module:transition_spec", "kind": "declares", "to": "schema:bitblock/transition-spec-d1/base-receipt/v1"}
+{"from": "module:transition_spec", "kind": "declares", "to": "schema:bitblock/transition-spec-d1/extension-slot/v1"}
 {"from": "module:windows_present", "kind": "declares", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}
 {"from": "module:chem", "kind": "depends_on", "to": "module:world"}
 {"from": "module:commit_r1", "kind": "depends_on", "to": "module:protocol"}
@@ -1433,6 +1436,11 @@
 {"from": "module:tick", "kind": "depends_on", "to": "module:frame"}
 {"from": "module:tick", "kind": "depends_on", "to": "module:program"}
 {"from": "module:tick", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:transition_spec", "kind": "depends_on", "to": "module:coordinate_episode"}
+{"from": "module:transition_spec", "kind": "depends_on", "to": "module:history"}
+{"from": "module:transition_spec", "kind": "depends_on", "to": "module:program"}
+{"from": "module:transition_spec", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:transition_spec", "kind": "depends_on", "to": "module:world"}
 {"from": "module:windows_present", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:windows_timing", "kind": "depends_on", "to": "module:frame_v2"}
 {"from": "module:windows_timing", "kind": "depends_on", "to": "module:presentation"}
@@ -1568,6 +1576,12 @@
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:storage"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:tick"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:coordinate_episode"}
+{"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:history"}
+{"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:program"}
+{"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:transition_spec"}
+{"from": "example:tests/transition_spec_d1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/world_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
 {"from": "tool:codec_parity_corpus", "kind": "vectors", "to": "schema:bitblock/commit-r1/morton-gap-stream/v1"}
 {"from": "tool:codec_parity_corpus", "kind": "vectors", "to": "schema:bitblock/commit-r1/patricia-proof/v1"}
 {"from": "tool:codec_parity_corpus", "kind": "vectors", "to": "schema:bitblock/commit-r1/smt-proof/v1"}
@@ -1735,5 +1749,9 @@
 {"from": "tool:storage_record_vectors", "kind": "vectors", "to": "schema:bitblock/storage-record/envelope/v1"}
 {"from": "tool:tick_outcome_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:tick_outcome_vectors", "kind": "vectors", "to": "schema:bitblock/tick-outcome/v3"}
+{"from": "tool:transition_spec_d1_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
+{"from": "tool:transition_spec_d1_vectors", "kind": "vectors", "to": "schema:bitblock/transition-spec-d1/base-contract/v1"}
+{"from": "tool:transition_spec_d1_vectors", "kind": "vectors", "to": "schema:bitblock/transition-spec-d1/base-receipt/v1"}
+{"from": "tool:transition_spec_d1_vectors", "kind": "vectors", "to": "schema:bitblock/transition-spec-d1/extension-slot/v1"}
 {"from": "tool:windows_present_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:windows_present_vectors", "kind": "vectors", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}

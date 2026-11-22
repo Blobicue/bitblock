@@ -492,6 +492,17 @@
   ]
  },
  {
+  "id": "sub:transition-spec-d1",
+  "members": [
+   "module:transition_spec"
+  ],
+  "name": "transition-spec-d1",
+  "terms": [
+   "spec",
+   "transition"
+  ]
+ },
+ {
   "id": "sub:windows-present-policy",
   "members": [
    "module:presentation",

@@ -558,15 +558,9 @@
     "modules": [
      "camera"
     ]
-   },
-   {
-    "item": "verify_world_bijection",
-    "modules": [
-     "coordinate_episode"
-    ]
    }
   ],
-  "pub_items": 893,
+  "pub_items": 917,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -590,7 +584,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 33732,
+   "code_lines": 34478,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -771,7 +765,7 @@
    ]
   },
   "test": {
-   "code_lines": 25151,
+   "code_lines": 25379,
    "duplicated_lines": 341,
    "regions": [
     {

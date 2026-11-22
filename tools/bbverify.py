@@ -151,13 +151,16 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # 713 -> 719 / 724 -> 732: four COMMIT-R1 proof-policy/boundary/fork/truncation
 # tests in commit_r1.rs and four CODEC-1@local-v1 dual-language integration tests
 # in tests/codec_parity_v1.rs (2 default + 2 protocol-research).
+# 719 -> 725 / 732 -> 739: three TRANSITION-SPEC-D1 unit tests in transition_spec.rs,
+# three REFINE-1@world correspondence integration tests in tests/world_refinement_correspondence.rs,
+# and one protocol-research integration test in tests/transition_spec_d1.rs.
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 719, "full": 732}.items()
+    for t, count in {"quick": 725, "full": 739}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
