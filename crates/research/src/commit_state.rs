@@ -4711,6 +4711,7 @@ mod durable_fs {
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(false)
                 .share_mode(0)
                 .open(lock_path)
                 .map_err(|e| map_io("acquire windows exclusive store lock", e))?;
