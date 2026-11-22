@@ -227,6 +227,16 @@ impl CameraProjection {
         self.focal_length
     }
 
+    /// Half-width and half-height of the viewport in physical pixels.
+    pub(crate) fn half_extent(self) -> (f64, f64) {
+        (self.half_width, self.half_height)
+    }
+
+    /// Orthonormal camera basis vectors `(forward, right, up)`.
+    pub(crate) fn basis(self) -> CameraBasis {
+        self.basis
+    }
+
     /// The depth [`Self::project`] would report for `point`, without the screen coordinates.
     ///
     /// It evaluates the same expression on the same operands, so it agrees bit for bit with
