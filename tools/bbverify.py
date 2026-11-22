@@ -154,7 +154,7 @@ WINDOWS_ONLY_TESTS = {
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 705, "full": 716}.items()
+    for t, count in {"quick": 706, "full": 717}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

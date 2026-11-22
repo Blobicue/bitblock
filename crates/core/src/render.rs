@@ -10,7 +10,9 @@ use std::sync::OnceLock;
 use crate::camera::{Camera, CameraProjection, ONE_PIXEL_EPSILON, ProjectedPoint, Ray, Vec3};
 use crate::frame::{FrameObservation, FrameRef, OverlayInput};
 use crate::protocol::{ContentTag, TagKind, hash_canonical};
-use crate::world::{BEDROCK_COORD, Bounds, Coord, World};
+use crate::world::{
+    BEDROCK_COORD, Bounds, CHUNK_WORDS, ChunkCoord, Coord, OctantCoord, OctantSummary, World,
+};
 
 const BACKGROUND: u32 = 0x000000;
 /// A bit whose centre lies deeper than this in view space has every cube vertex in front of
@@ -900,86 +902,23 @@ impl Renderer {
         self.delta_csr_built
     }
 
-    /// The ordered traversal of `render_tinted`: every bit the chunk frustum and enclosed-bit
-    /// culls keep, drawn nearest first.
+    /// The ordered traversal of `render_tinted`: every bit the octree/chunk frustum and
+    /// enclosed-bit culls keep, drawn nearest first.
     fn traverse(&mut self, world: &World, projection: CameraProjection, tint: Option<BitTint<'_>>) {
         let mut keyed = std::mem::take(&mut self.keyed);
         keyed.clear();
         let mut nearest = f64::INFINITY;
         let mut farthest = f64::NEG_INFINITY;
-        for (chunk_coord, _count, chunk_bounds, words) in world.iter_chunks() {
-            let (chunk_min, chunk_max) = bounds_aabb(chunk_bounds);
-            if projection.aabb_definitely_outside_frustum(chunk_min, chunk_max) {
-                #[cfg(test)]
-                if self.verify_hidden_bits {
-                    self.verify_hidden_bits = false;
-                    let (pixels, depth, world_pixels, hidden_bits) = (
-                        self.pixels.clone(),
-                        self.depth.clone(),
-                        self.world_pixels,
-                        self.hidden_bits,
-                    );
-                    for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-                        self.draw_bit(projection, coord);
-                    }
-                    assert_eq!(
-                        self.pixels, pixels,
-                        "culled chunk {chunk_coord:?} would have written a pixel"
-                    );
-                    let word = self
-                        .depth
-                        .iter()
-                        .zip(&depth)
-                        .position(|(after, before)| after.to_bits() != before.to_bits());
-                    assert_eq!(
-                        word, None,
-                        "culled chunk {chunk_coord:?} would have written a depth"
-                    );
-                    assert_eq!(self.world_pixels, world_pixels);
-                    self.hidden_bits = hidden_bits;
-                    self.verify_hidden_bits = true;
-                }
-                continue;
-            }
-            // The enclosed-bit cull. A bit whose whole 3 x 3 x 3 neighbourhood is on can never
-            // own a pixel of the finished frame: every point of its surface, edges and corners
-            // included, lies at least one unit inside that block, so the ray to it crosses the
-            // block's boundary -- a front face of some neighbour -- strictly and well nearer.
-            // (Six face neighbours are not enough: an edge of such a bit can lie on a concave
-            // crease, where an exact depth tie lets the lower-RGB rule pick its face.) Leaving
-            // it out of the traversal therefore changes nothing, and the work then scales with
-            // the surface of a solid rather than its volume. `enclosed_cull_applies` limits it
-            // to chunks where that argument holds for the rasteriser as written: every bit and
-            // neighbour fully in front of the camera (no face dropped for a vertex behind it)
-            // and none small enough for the single-pixel path (which plots the nearest vertex
-            // depth at the centre pixel, where a neighbour need not land). Tests rasterise every
-            // culled bit over the finished frame.
-            let exposed;
-            let words = if self.enclosed_cull_enabled()
-                && enclosed_cull_applies(projection, chunk_bounds)
-            {
-                exposed = world.chunk_open_words(chunk_coord);
-                #[cfg(test)]
-                for (word, (&all, &kept)) in words.iter().zip(&exposed).enumerate() {
-                    let culled = all & !kept;
-                    self.enclosed_bits += u64::from(culled.count_ones());
-                    if (self.verify_hidden_bits || self.verify_enclosed_bits) && culled != 0 {
-                        let mut only = [0_u64; crate::world::CHUNK_WORDS];
-                        only[word] = culled;
-                        self.enclosed_skipped
-                            .extend(crate::world::World::iter_chunk_coords(chunk_coord, &only));
-                    }
-                }
-                &exposed
-            } else {
-                words
-            };
-            for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-                let key = projection.view_depth(coord_center(coord));
-                nearest = f64::min(nearest, key);
-                farthest = f64::max(farthest, key);
-                keyed.push((key, coord));
-            }
+        for (root_octant, root_summary) in world.root_octants() {
+            self.visit_frustum_octant(
+                world,
+                projection,
+                root_octant,
+                root_summary,
+                &mut keyed,
+                &mut nearest,
+                &mut farthest,
+            );
         }
 
         let span = farthest - nearest;
@@ -1019,6 +958,194 @@ impl Renderer {
         self.order = order;
         #[cfg(test)]
         self.assert_enclosed_bits_write_nothing(projection, tint);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn visit_frustum_octant(
+        &mut self,
+        world: &World,
+        projection: CameraProjection,
+        octant: OctantCoord,
+        summary: OctantSummary,
+        keyed: &mut Vec<(f64, Coord)>,
+        nearest: &mut f64,
+        farthest: &mut f64,
+    ) {
+        let (omin, omax) = bounds_aabb(summary.bounds);
+        if projection.aabb_definitely_outside_frustum(omin, omax) {
+            #[cfg(test)]
+            if self.verify_hidden_bits {
+                self.verify_culled_octant_writes_nothing(world, projection, octant, summary);
+            }
+            return;
+        }
+        let mut mask = summary.child_mask;
+        while mask != 0 {
+            let child_idx = mask.trailing_zeros() as u8;
+            mask &= mask - 1;
+            let cx = octant.x * 2 + i64::from((child_idx >> 2) & 1);
+            let cy = octant.y * 2 + i64::from((child_idx >> 1) & 1);
+            let cz = octant.z * 2 + i64::from(child_idx & 1);
+            if octant.depth == 1 {
+                let chunk_coord = ChunkCoord {
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                };
+                if let (Some(chunk_bounds), Some((_count, words))) = (
+                    world.chunk_bounds(chunk_coord),
+                    world.chunk_words(chunk_coord),
+                ) {
+                    let (chunk_min, chunk_max) = bounds_aabb(chunk_bounds);
+                    if projection.aabb_definitely_outside_frustum(chunk_min, chunk_max) {
+                        #[cfg(test)]
+                        self.verify_culled_chunk_writes_nothing(projection, chunk_coord, words);
+                        continue;
+                    }
+                    // The enclosed-bit cull. A bit whose whole 3 x 3 x 3 neighbourhood is on can
+                    // never own a pixel of the finished frame: every point of its surface, edges
+                    // and corners included, lies at least one unit inside that block, so the ray
+                    // to it crosses the block's boundary -- a front face of some neighbour --
+                    // strictly and well nearer. (Six face neighbours are not enough: an edge of
+                    // such a bit can lie on a concave crease, where an exact depth tie lets the
+                    // lower-RGB rule pick its face.) Leaving it out of the traversal therefore
+                    // changes nothing, and the work then scales with the surface of a solid rather
+                    // than its volume. `enclosed_cull_applies` limits it to chunks where that
+                    // argument holds for the rasteriser as written: every bit and neighbour fully
+                    // in front of the camera (no face dropped for a vertex behind it) and none
+                    // small enough for the single-pixel path (which plots the nearest vertex depth
+                    // at the centre pixel, where a neighbour need not land). Tests rasterise every
+                    // culled bit over the finished frame.
+                    let exposed;
+                    let words = if self.enclosed_cull_enabled()
+                        && enclosed_cull_applies(projection, chunk_bounds)
+                    {
+                        exposed = world.chunk_open_words(chunk_coord);
+                        #[cfg(test)]
+                        for (word, (&all, &kept)) in words.iter().zip(&exposed).enumerate() {
+                            let culled = all & !kept;
+                            self.enclosed_bits += u64::from(culled.count_ones());
+                            if (self.verify_hidden_bits || self.verify_enclosed_bits) && culled != 0
+                            {
+                                let mut only = [0_u64; CHUNK_WORDS];
+                                only[word] = culled;
+                                self.enclosed_skipped.extend(
+                                    crate::world::World::iter_chunk_coords(chunk_coord, &only),
+                                );
+                            }
+                        }
+                        &exposed
+                    } else {
+                        words
+                    };
+                    for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+                        let key = projection.view_depth(coord_center(coord));
+                        *nearest = f64::min(*nearest, key);
+                        *farthest = f64::max(*farthest, key);
+                        keyed.push((key, coord));
+                    }
+                }
+            } else {
+                let child_octant = OctantCoord {
+                    depth: octant.depth - 1,
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                };
+                if let Some(child_summary) = world.octant_summary(child_octant) {
+                    self.visit_frustum_octant(
+                        world,
+                        projection,
+                        child_octant,
+                        child_summary,
+                        keyed,
+                        nearest,
+                        farthest,
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn verify_culled_octant_writes_nothing(
+        &mut self,
+        world: &World,
+        projection: CameraProjection,
+        octant: OctantCoord,
+        summary: OctantSummary,
+    ) {
+        let mut mask = summary.child_mask;
+        while mask != 0 {
+            let child_idx = mask.trailing_zeros() as u8;
+            mask &= mask - 1;
+            let cx = octant.x * 2 + i64::from((child_idx >> 2) & 1);
+            let cy = octant.y * 2 + i64::from((child_idx >> 1) & 1);
+            let cz = octant.z * 2 + i64::from(child_idx & 1);
+            if octant.depth == 1 {
+                let chunk_coord = ChunkCoord {
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                };
+                if let Some((_count, words)) = world.chunk_words(chunk_coord) {
+                    self.verify_culled_chunk_writes_nothing(projection, chunk_coord, words);
+                }
+            } else {
+                let child_octant = OctantCoord {
+                    depth: octant.depth - 1,
+                    x: cx,
+                    y: cy,
+                    z: cz,
+                };
+                if let Some(child_summary) = world.octant_summary(child_octant) {
+                    self.verify_culled_octant_writes_nothing(
+                        world,
+                        projection,
+                        child_octant,
+                        child_summary,
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn verify_culled_chunk_writes_nothing(
+        &mut self,
+        projection: CameraProjection,
+        chunk_coord: ChunkCoord,
+        words: &[u64; CHUNK_WORDS],
+    ) {
+        if !self.verify_hidden_bits {
+            return;
+        }
+        self.verify_hidden_bits = false;
+        let (pixels, depth, world_pixels, hidden_bits) = (
+            self.pixels.clone(),
+            self.depth.clone(),
+            self.world_pixels,
+            self.hidden_bits,
+        );
+        for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+            self.draw_bit(projection, coord);
+        }
+        assert_eq!(
+            self.pixels, pixels,
+            "culled chunk {chunk_coord:?} would have written a pixel"
+        );
+        let word = self
+            .depth
+            .iter()
+            .zip(&depth)
+            .position(|(after, before)| after.to_bits() != before.to_bits());
+        assert_eq!(
+            word, None,
+            "culled chunk {chunk_coord:?} would have written a depth"
+        );
+        assert_eq!(self.world_pixels, world_pixels);
+        self.hidden_bits = hidden_bits;
+        self.verify_hidden_bits = true;
     }
 
     /// [`Self::render_tinted`] for a frame that differs from the one now in the buffers only at
@@ -2666,23 +2793,145 @@ pub fn raycast_reference(world: &World, ray: Ray) -> Option<Hit> {
     best
 }
 
-/// Finds the nearest occupied voxel hit along `ray` using chunk-bounds AABB pruning.
-pub fn raycast(world: &World, ray: Ray) -> Option<Hit> {
-    let mut best: Option<Hit> = None;
+/// Walks the 8-level sparse octree near-to-far for a monotone AABB entry metric (such as ray
+/// distance or segment entry fraction), stopping as soon as `exceeds_best(state, entry)` holds.
+fn walk_octree_near_to_far<S, FEntry, FCutoff, FChunk>(
+    world: &World,
+    state: &mut S,
+    entry_of: &FEntry,
+    exceeds_best: &FCutoff,
+    visit_chunk: &mut FChunk,
+) where
+    FEntry: Fn(Bounds) -> Option<f64>,
+    FCutoff: Fn(&S, f64) -> bool,
+    FChunk: FnMut(&mut S, ChunkCoord, &[u64; CHUNK_WORDS]),
+{
+    let mut roots: Vec<(f64, OctantCoord, OctantSummary)> = world
+        .root_octants()
+        .filter_map(|(octant, summary)| Some((entry_of(summary.bounds)?, octant, summary)))
+        .collect();
+    roots.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
 
-    for (chunk_coord, _count, chunk_bounds, words) in world.iter_chunks() {
-        let (cmin, cmax) = bounds_aabb(chunk_bounds);
-        let Some(chunk_entry) = ray_aabb_entry_distance(ray, cmin, cmax) else {
-            continue;
-        };
-        if best.is_some_and(|current| chunk_entry > current.distance) {
-            continue;
+    for (entry, octant, summary) in roots {
+        if exceeds_best(state, entry) {
+            break;
         }
-        for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-            best = test_raycast_coord(best, ray, coord);
+        walk_octant_near_to_far(
+            world,
+            octant,
+            summary,
+            state,
+            entry_of,
+            exceeds_best,
+            visit_chunk,
+        );
+    }
+}
+
+fn walk_octant_near_to_far<S, FEntry, FCutoff, FChunk>(
+    world: &World,
+    octant: OctantCoord,
+    summary: OctantSummary,
+    state: &mut S,
+    entry_of: &FEntry,
+    exceeds_best: &FCutoff,
+    visit_chunk: &mut FChunk,
+) where
+    FEntry: Fn(Bounds) -> Option<f64>,
+    FCutoff: Fn(&S, f64) -> bool,
+    FChunk: FnMut(&mut S, ChunkCoord, &[u64; CHUNK_WORDS]),
+{
+    if octant.depth == 1 {
+        let mut chunks: [(f64, ChunkCoord); 8] = [(0.0, ChunkCoord { x: 0, y: 0, z: 0 }); 8];
+        let mut len = 0_usize;
+        let mut mask = summary.child_mask;
+        while mask != 0 {
+            let child_idx = mask.trailing_zeros() as u8;
+            mask &= mask - 1;
+            let chunk_coord = ChunkCoord {
+                x: octant.x * 2 + i64::from((child_idx >> 2) & 1),
+                y: octant.y * 2 + i64::from((child_idx >> 1) & 1),
+                z: octant.z * 2 + i64::from(child_idx & 1),
+            };
+            if let Some(chunk_bounds) = world.chunk_bounds(chunk_coord)
+                && let Some(entry) = entry_of(chunk_bounds)
+                && !exceeds_best(state, entry)
+            {
+                chunks[len] = (entry, chunk_coord);
+                len += 1;
+            }
         }
+        chunks[..len].sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+        for &(entry, chunk_coord) in &chunks[..len] {
+            if exceeds_best(state, entry) {
+                break;
+            }
+            if let Some((_count, words)) = world.chunk_words(chunk_coord) {
+                visit_chunk(state, chunk_coord, words);
+            }
+        }
+        return;
     }
 
+    let mut children: [Option<(f64, OctantCoord, OctantSummary)>; 8] = [None; 8];
+    let mut len = 0_usize;
+    let mut mask = summary.child_mask;
+    while mask != 0 {
+        let child_idx = mask.trailing_zeros() as u8;
+        mask &= mask - 1;
+        let child_octant = OctantCoord {
+            depth: octant.depth - 1,
+            x: octant.x * 2 + i64::from((child_idx >> 2) & 1),
+            y: octant.y * 2 + i64::from((child_idx >> 1) & 1),
+            z: octant.z * 2 + i64::from(child_idx & 1),
+        };
+        if let Some(child_summary) = world.octant_summary(child_octant)
+            && let Some(entry) = entry_of(child_summary.bounds)
+            && !exceeds_best(state, entry)
+        {
+            children[len] = Some((entry, child_octant, child_summary));
+            len += 1;
+        }
+    }
+    children[..len].sort_unstable_by(|a, b| {
+        a.expect("populated child")
+            .0
+            .total_cmp(&b.expect("populated child").0)
+    });
+    for child in &children[..len] {
+        let (entry, child_octant, child_summary) = child.expect("populated child");
+        if exceeds_best(state, entry) {
+            break;
+        }
+        walk_octant_near_to_far(
+            world,
+            child_octant,
+            child_summary,
+            state,
+            entry_of,
+            exceeds_best,
+            visit_chunk,
+        );
+    }
+}
+
+/// Finds the nearest occupied voxel hit along `ray` using near-to-far octree and chunk AABB pruning.
+pub fn raycast(world: &World, ray: Ray) -> Option<Hit> {
+    let mut best: Option<Hit> = None;
+    walk_octree_near_to_far(
+        world,
+        &mut best,
+        &|bounds| {
+            let (bmin, bmax) = bounds_aabb(bounds);
+            ray_aabb_entry_distance(ray, bmin, bmax)
+        },
+        &|current, entry| current.is_some_and(|hit| entry > hit.distance),
+        &mut |current, chunk_coord, words| {
+            for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+                *current = test_raycast_coord(*current, ray, coord);
+            }
+        },
+    );
     best
 }
 
@@ -2750,19 +2999,20 @@ pub fn sweep_point_reference(world: &World, start: Vec3, delta: Vec3) -> Option<
 pub fn sweep_point(world: &World, start: Vec3, delta: Vec3) -> Option<SweepHit> {
     let movement_length = validate_sweep_movement(start, delta);
     let mut best: Option<(f64, Coord)> = None;
-
-    for (chunk_coord, _count, chunk_bounds, words) in world.iter_chunks() {
-        let (cmin, cmax) = bounds_aabb(chunk_bounds);
-        let Some(chunk_fraction) = segment_box_entry_fraction(start, delta, cmin, cmax) else {
-            continue;
-        };
-        if best.is_some_and(|(best_fraction, _)| chunk_fraction > best_fraction) {
-            continue;
-        }
-        for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
-            best = test_sweep_coord(best, start, delta, coord);
-        }
-    }
+    walk_octree_near_to_far(
+        world,
+        &mut best,
+        &|bounds| {
+            let (bmin, bmax) = bounds_aabb(bounds);
+            segment_box_entry_fraction(start, delta, bmin, bmax)
+        },
+        &|current, fraction| current.is_some_and(|(best_fraction, _)| fraction > best_fraction),
+        &mut |current, chunk_coord, words| {
+            for coord in crate::world::World::iter_chunk_coords(chunk_coord, words) {
+                *current = test_sweep_coord(*current, start, delta, coord);
+            }
+        },
+    );
 
     best.map(|(fraction, coord)| SweepHit {
         coord,
@@ -5640,6 +5890,61 @@ mod tests {
         assert_eq!(
             coord_containing(Vec3::new(i64::MIN as f64, 0.0, 0.0)),
             Some(Coord::new(i64::MIN, 0, 0))
+        );
+    }
+
+    #[test]
+    fn octree_pruning_matches_reference_across_distant_macro_octants() {
+        let mut world = World::new();
+        // Place clusters in distinct macro-octants (each depth-8 root spans 4096 voxels per axis),
+        // including an enclosed 5x5x5 cube in front of the observer so octree frustum pruning and
+        // enclosed-bit culling are exercised together.
+        for dx in -2..=2_i64 {
+            for dy in -2..=2_i64 {
+                for dz in 8..=12_i64 {
+                    world.set_on(Coord::new(dx, dy, dz));
+                }
+            }
+        }
+        for base in [
+            (0_i64, 0_i64, -5_000_i64),
+            (6_000, 0, 10),
+            (-6_000, 5_000, -5_000),
+            (0, 0, 4_500),
+        ] {
+            for dx in 0..3 {
+                world.set_on(Coord::new(base.0 + dx, base.1, base.2));
+            }
+        }
+        assert!(world.root_octants().count() >= 4);
+
+        let camera = Camera::for_observer_spawn();
+        let mut opt = Renderer::new(161, 161);
+        opt.verify_hidden_bits = true;
+        opt.render(&world, &camera);
+
+        let mut reference = Renderer::new(161, 161);
+        reference.set_reference_traversal(true);
+        reference.render(&world, &camera);
+        assert_eq!(opt.pixels(), reference.pixels());
+        assert_eq!(opt.world_pixel_count(), reference.world_pixel_count());
+
+        let ray = Ray {
+            origin: Vec3::new(0.0, 0.0, -10.0),
+            direction: Vec3::Z,
+        };
+        assert_eq!(raycast(&world, ray), raycast_reference(&world, ray));
+        assert_eq!(
+            sweep_point(
+                &world,
+                Vec3::new(0.0, 0.0, -6_000.0),
+                Vec3::new(0.0, 0.0, 12_000.0),
+            ),
+            sweep_point_reference(
+                &world,
+                Vec3::new(0.0, 0.0, -6_000.0),
+                Vec3::new(0.0, 0.0, 12_000.0),
+            )
         );
     }
 }
