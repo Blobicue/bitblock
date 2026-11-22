@@ -38,6 +38,7 @@ pub mod presentation;
 pub mod presentation_output;
 pub mod presentation_output_v2;
 pub mod replay_evidence;
+pub mod rule_1;
 pub mod scale_assay;
 pub mod sequential;
 pub mod storage;

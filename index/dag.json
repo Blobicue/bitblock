@@ -194,6 +194,12 @@
    "interaction",
    "protocol"
   ],
+  "rule_1": [
+   "history",
+   "program",
+   "protocol",
+   "world"
+  ],
   "scale_assay": [
    "camera",
    "commit_r1",
@@ -253,7 +259,7 @@
    "protocol"
   ]
  },
- "edges": 164,
+ "edges": 168,
  "stratum": {
   "asset_d1": 3,
   "camera": 0,
@@ -289,6 +295,7 @@
   "protocol": 0,
   "render": 2,
   "replay_evidence": 4,
+  "rule_1": 4,
   "scale_assay": 4,
   "sequential": 5,
   "sidebar": 3,
@@ -315,7 +322,7 @@
   "display_store": 1,
   "frame": 15,
   "frame_v2": 10,
-  "history": 9,
+  "history": 10,
   "history_store": 7,
   "identity_d1": 2,
   "interaction": 2,
@@ -332,10 +339,11 @@
   "presentation": 6,
   "presentation_output": 4,
   "presentation_output_v2": 2,
-  "program": 23,
-  "protocol": 43,
+  "program": 24,
+  "protocol": 44,
   "render": 4,
   "replay_evidence": 1,
+  "rule_1": 0,
   "scale_assay": 0,
   "sequential": 0,
   "sidebar": 2,
@@ -346,6 +354,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 33
+  "world": 34
  }
 }
