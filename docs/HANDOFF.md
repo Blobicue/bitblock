@@ -672,9 +672,10 @@ artifact, gate, and non-claim.
    the sole v1 hash suite (with versioned suite-ID agility). Only open `HASH-R1` if/when the user
    supplies a pinned source repository/commit; preserve the disqualification of Aethor TSH/PDH and
    IterHash.
-8. `RULE-1@rule-choice` is now `BOUNDED` ([`RULE_1_DECISION.md`](RULE_1_DECISION.md): synchronous
-   3D Moore-neighborhood Life `B5/S45`, permanent bedrock `1`, strict frontier caps, opt-in only),
-   unlocking `RULE-1@base=READY` for Wave 2 implementation and visual verification. `LANGUAGE-R1`
+8. `RULE-1@base` is now `IMPLEMENTED` ([`RULE_1_RECEIPT.md`](RULE_1_RECEIPT.md): opt-in synchronous
+   3D Moore-neighborhood Life `B5/S45`, permanent bedrock `1`, fail-closed frontier caps, 48-way
+   octahedral symmetry, independent Python stepper parity, `History` replay parity, and visually
+   verified multi-tick PNG snapshots), unlocking `EMERGENCE-R1@base=READY`. `LANGUAGE-R1`
    (`+X/+Y/+Z` framed 3D regions, local VM first) and `PROFILE-SCOPE-D0` are queued in Wave 3.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
