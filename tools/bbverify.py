@@ -161,13 +161,16 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # 728 -> 731 / 747 -> 753: three default-feature REFINE-1@accounting correspondence tests in
 # tests/accounting_refinement_correspondence.rs and three protocol-research REFINE-1@commitment
 # correspondence tests in tests/commitment_refinement_correspondence.rs.
+# 731 -> 733 / 753 -> 758: two unit tests in crates/research/src/verkle_feasibility.rs (run in
+# workspace quick and full) plus three protocol-research integration tests in
+# tests/verkle_r1_feasibility.rs (VERKLE-R1@feasibility).
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 731, "full": 753}.items()
+    for t, count in {"quick": 733, "full": 758}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test

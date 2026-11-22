@@ -212,6 +212,12 @@
    "protocol",
    "world"
   ],
+  "verkle_feasibility": [
+   "commit_r1",
+   "commit_state",
+   "protocol",
+   "world"
+  ],
   "windows_present": [
    "protocol"
   ],
@@ -228,7 +234,7 @@
    "protocol"
   ]
  },
- "edges": 149,
+ "edges": 153,
  "stratum": {
   "camera": 0,
   "chem": 2,
@@ -266,6 +272,7 @@
   "storage": 1,
   "tick": 3,
   "transition_spec": 6,
+  "verkle_feasibility": 7,
   "windows_present": 1,
   "windows_timing": 6,
   "windows_topology": 3,
@@ -274,21 +281,21 @@
  "transitive_dependents": {
   "camera": 16,
   "chem": 0,
-  "commit_r1": 3,
-  "commit_state": 0,
-  "coordinate_episode": 2,
+  "commit_r1": 4,
+  "commit_state": 1,
+  "coordinate_episode": 3,
   "display": 7,
   "display_artifact": 5,
   "display_store": 1,
   "frame": 15,
   "frame_v2": 10,
-  "history": 8,
-  "history_store": 6,
+  "history": 9,
+  "history_store": 7,
   "interaction": 2,
-  "journal": 8,
+  "journal": 9,
   "ladder_bridge": 0,
   "lib": 0,
-  "local_bounds": 6,
+  "local_bounds": 7,
   "main": 0,
   "octree_commit": 1,
   "optimization": 0,
@@ -298,19 +305,20 @@
   "presentation": 6,
   "presentation_output": 4,
   "presentation_output_v2": 2,
-  "program": 22,
-  "protocol": 38,
+  "program": 23,
+  "protocol": 39,
   "render": 4,
   "replay_evidence": 1,
   "scale_assay": 0,
   "sequential": 0,
   "sidebar": 2,
-  "storage": 13,
+  "storage": 14,
   "tick": 11,
   "transition_spec": 0,
+  "verkle_feasibility": 0,
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 29
+  "world": 30
  }
 }

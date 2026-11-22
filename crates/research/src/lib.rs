@@ -38,6 +38,7 @@ pub mod scale_assay;
 pub mod sequential;
 pub mod storage;
 pub mod transition_spec;
+pub mod verkle_feasibility;
 #[cfg(windows)]
 pub mod windows_timing;
 #[cfg(windows)]

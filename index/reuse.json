@@ -518,9 +518,9 @@
     ]
    },
    {
-    "item": "WIRE_LEN",
+    "item": "VerkleTreeShapeMetricsV1",
     "modules": [
-     "commit_state"
+     "verkle_feasibility"
     ]
    },
    {
@@ -704,7 +704,7 @@
     ]
    }
   ],
-  "pub_items": 1038,
+  "pub_items": 1066,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -728,7 +728,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 39148,
+   "code_lines": 39851,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -909,7 +909,7 @@
    ]
   },
   "test": {
-   "code_lines": 25818,
+   "code_lines": 25942,
    "duplicated_lines": 341,
    "regions": [
     {

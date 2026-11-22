@@ -513,6 +513,16 @@
   ]
  },
  {
+  "id": "sub:verkle-r1",
+  "members": [
+   "module:verkle_feasibility"
+  ],
+  "name": "verkle-r1",
+  "terms": [
+   "verkle"
+  ]
+ },
+ {
   "id": "sub:windows-present-policy",
   "members": [
    "module:presentation",
