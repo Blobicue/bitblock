@@ -64,3 +64,11 @@ required-features = ["protocol-research"]
 [[example]]
 name = "scale_1_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "verkle_r1_feasibility_probe"
+required-features = ["protocol-research"]
+
+[[example]]
+name = "commit_1_cost_probe"
+required-features = ["protocol-research"]
