@@ -35,6 +35,57 @@ pub const KEY_BITS: usize = 192;
 /// Byte length (`24`) of a 192-bit `CoordinateKeyV1` or `MortonKeyV1` key.
 pub const KEY_BYTES: usize = 24;
 
+/// Explicit verifier resource limits for bounded `COMMIT-R1` point-proof checks.
+///
+/// Limits are checked before decoding or hashing so attacker-sized witnesses
+/// fail closed before allocation or SHA-256 work. A machine-local cap may only
+/// tighten a resolved profile policy via [`ProofPolicyLimits::tighten`]; widening
+/// any numeric limit rejects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProofPolicyLimits {
+    /// Maximum serialized proof byte length accepted before decoding.
+    pub max_proof_bytes: usize,
+    /// Maximum traversal steps (Patricia) or non-default sibling entries (SMT).
+    pub max_steps: usize,
+    /// Maximum `node_hash` invocations permitted during verification.
+    pub max_hash_invocations: usize,
+}
+
+impl ProofPolicyLimits {
+    /// Default R1 bounded policy for Candidate A (`PatriciaPointProof`) verification.
+    ///
+    /// Covers worst-case 192-branch proofs (`2 + 192 * 35 + 26 = 6,748` bytes, rounded to 7 KiB),
+    /// up to 192 traversal steps, and up to 193 `node_hash` invocations (1 terminal + 192 steps).
+    pub const PATRICIA_R1_DEFAULT: Self = Self {
+        max_proof_bytes: 7 * 1024,
+        max_steps: KEY_BITS,
+        max_hash_invocations: KEY_BITS + 1,
+    };
+
+    /// Default R1 bounded policy for Candidate B (`SmtPointProof`) verification.
+    ///
+    /// Covers full 192-sibling proofs (`24 + 1 + 2 + 192 * 32 = 6,171` bytes), up to 192
+    /// non-default sibling hashes, and up to 193 `node_hash` invocations (1 present leaf + 192 levels).
+    pub const SMT_R1_DEFAULT: Self = Self {
+        max_proof_bytes: KEY_BYTES + 3 + KEY_BITS * 32,
+        max_steps: KEY_BITS,
+        max_hash_invocations: KEY_BITS + 1,
+    };
+
+    /// Applies an optional machine-local cap that may tighten, never widen, `self`.
+    ///
+    /// Returns `None` if any field in `local_cap` exceeds the corresponding limit in `self`.
+    pub const fn tighten(self, local_cap: Self) -> Option<Self> {
+        if local_cap.max_proof_bytes > self.max_proof_bytes
+            || local_cap.max_steps > self.max_steps
+            || local_cap.max_hash_invocations > self.max_hash_invocations
+        {
+            return None;
+        }
+        Some(local_cap)
+    }
+}
+
 const TREE_DOMAIN: &[u8] = b"bitblock/world-root/v1";
 const PROFILE_ID: &[u8] = b"bitblock/commit-profile/r1";
 const HASH_SUITE: &[u8] = b"sha256";
@@ -994,6 +1045,34 @@ impl SparseMerkleTree {
         current == expected_root
     }
 
+    /// Bounded byte-level point-proof verification enforcing `limits` before decoding or hashing.
+    ///
+    /// Returns `Some(true)` if present, `Some(false)` if absent, or `None` if malformed,
+    /// non-canonical, wrong root, or exceeding any numeric limit in `limits`.
+    pub fn verify_proof_bytes_with_limits(
+        expected_root: [u8; 32],
+        key: &CoordinateKeyV1,
+        proof_bytes: &[u8],
+        limits: ProofPolicyLimits,
+    ) -> Option<bool> {
+        if proof_bytes.len() > limits.max_proof_bytes {
+            return None;
+        }
+        let proof = SmtPointProof::from_canonical_bytes(proof_bytes)?;
+        if proof.non_default_siblings.len() > limits.max_steps {
+            return None;
+        }
+        let required_hashes = KEY_BITS + usize::from(proof.is_present);
+        if required_hashes > limits.max_hash_invocations {
+            return None;
+        }
+        if Self::verify_proof(expected_root, key, &proof) {
+            Some(proof.is_present)
+        } else {
+            None
+        }
+    }
+
     /// Computes the canonical deduplicated multiproof wire byte size for a batch of query keys.
     pub fn multiproof_wire_bytes(&self, query_keys: &[CoordinateKeyV1]) -> usize {
         if query_keys.is_empty() {
@@ -1853,7 +1932,7 @@ impl MerklePatriciaTrie {
         key: &CoordinateKeyV1,
         proof: &PatriciaPointProof,
     ) -> Option<bool> {
-        let empty_node_hash = node_hash(MPT_EMPTY_TYPE, 0, &[]);
+        let empty_node_hash = mpt_empty_hash();
 
         let (mut current_hash, is_present, mut current_depth, mut prev_was_extension) =
             match &proof.terminal {
@@ -2003,6 +2082,30 @@ impl MerklePatriciaTrie {
         }
 
         Some(is_present)
+    }
+
+    /// Bounded byte-level point-proof verification enforcing `limits` before decoding or hashing.
+    ///
+    /// Returns `Some(true)` if present, `Some(false)` if absent, or `None` if malformed,
+    /// non-canonical, wrong root, or exceeding any numeric limit in `limits`.
+    pub fn verify_proof_bytes_with_limits(
+        expected_root: [u8; 32],
+        key: &CoordinateKeyV1,
+        proof_bytes: &[u8],
+        limits: ProofPolicyLimits,
+    ) -> Option<bool> {
+        if proof_bytes.len() > limits.max_proof_bytes {
+            return None;
+        }
+        let proof = PatriciaPointProof::from_canonical_bytes(proof_bytes)?;
+        if proof.steps.len() > limits.max_steps {
+            return None;
+        }
+        let required_hashes = 1 + proof.steps.len();
+        if required_hashes > limits.max_hash_invocations {
+            return None;
+        }
+        Self::verify_proof(expected_root, key, &proof)
     }
 
     /// Computes the canonical deduplicated multiproof wire byte size for a batch of query keys.
@@ -2872,5 +2975,493 @@ mod tests {
             MerklePatriciaTrie::verify_proof(mpt_clean.root(), &a, &overflow_proof),
             None
         );
+    }
+
+    #[test]
+    fn proof_policy_limits_enforce_exact_boundaries_and_refuse_widening() {
+        let mut world = World::new();
+        world.set_on(Coord::new(1, 2, 3));
+        world.set_on(Coord::new(-10, 5, -7));
+        world.set_on(Coord::new(0, 0, 1));
+
+        let patricia = MerklePatriciaTrie::from_world(&world);
+        let smt = SparseMerkleTree::from_world(&world);
+        let present_key = CoordinateKeyV1::from_coord(Coord::new(0, 0, 1));
+        let absent_key = CoordinateKeyV1::from_coord(Coord::new(9, 9, 9));
+
+        // 1. Local cap tightening succeeds only when every field is <= policy; widening any field rejects.
+        let p_default = ProofPolicyLimits::PATRICIA_R1_DEFAULT;
+        assert_eq!(p_default.tighten(p_default), Some(p_default));
+        let tighter = ProofPolicyLimits {
+            max_proof_bytes: p_default.max_proof_bytes - 1,
+            max_steps: p_default.max_steps - 1,
+            max_hash_invocations: p_default.max_hash_invocations - 1,
+        };
+        assert_eq!(p_default.tighten(tighter), Some(tighter));
+        assert_eq!(
+            p_default.tighten(ProofPolicyLimits {
+                max_proof_bytes: p_default.max_proof_bytes + 1,
+                ..p_default
+            }),
+            None
+        );
+        assert_eq!(
+            p_default.tighten(ProofPolicyLimits {
+                max_steps: p_default.max_steps + 1,
+                ..p_default
+            }),
+            None
+        );
+        assert_eq!(
+            p_default.tighten(ProofPolicyLimits {
+                max_hash_invocations: p_default.max_hash_invocations + 1,
+                ..p_default
+            }),
+            None
+        );
+
+        // 2. Patricia exact boundary passes; one-over on each limit independently rejects.
+        let p_proof = patricia.prove(&present_key);
+        let p_bytes = p_proof.to_canonical_bytes();
+        let p_exact = ProofPolicyLimits {
+            max_proof_bytes: p_bytes.len(),
+            max_steps: p_proof.steps.len(),
+            max_hash_invocations: 1 + p_proof.steps.len(),
+        };
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof_bytes_with_limits(
+                patricia.root(),
+                &present_key,
+                &p_bytes,
+                p_exact,
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof_bytes_with_limits(
+                patricia.root(),
+                &present_key,
+                &p_bytes,
+                ProofPolicyLimits {
+                    max_proof_bytes: p_bytes.len() - 1,
+                    ..p_exact
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof_bytes_with_limits(
+                patricia.root(),
+                &present_key,
+                &p_bytes,
+                ProofPolicyLimits {
+                    max_steps: p_proof.steps.len() - 1,
+                    ..p_exact
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof_bytes_with_limits(
+                patricia.root(),
+                &present_key,
+                &p_bytes,
+                ProofPolicyLimits {
+                    max_hash_invocations: p_proof.steps.len(),
+                    ..p_exact
+                },
+            ),
+            None
+        );
+
+        // 3. SMT exact boundary passes (both present=193 and absent=192 hashes); one-over independently rejects.
+        let s_present = smt.prove(&present_key);
+        let s_present_bytes = s_present.to_canonical_bytes();
+        let s_exact = ProofPolicyLimits {
+            max_proof_bytes: s_present_bytes.len(),
+            max_steps: s_present.non_default_siblings.len(),
+            max_hash_invocations: KEY_BITS + 1,
+        };
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                smt.root(),
+                &present_key,
+                &s_present_bytes,
+                s_exact,
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                smt.root(),
+                &present_key,
+                &s_present_bytes,
+                ProofPolicyLimits {
+                    max_proof_bytes: s_present_bytes.len() - 1,
+                    ..s_exact
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                smt.root(),
+                &present_key,
+                &s_present_bytes,
+                ProofPolicyLimits {
+                    max_steps: s_present.non_default_siblings.len() - 1,
+                    ..s_exact
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                smt.root(),
+                &present_key,
+                &s_present_bytes,
+                ProofPolicyLimits {
+                    max_hash_invocations: KEY_BITS,
+                    ..s_exact
+                },
+            ),
+            None
+        );
+
+        let s_absent = smt.prove(&absent_key);
+        let s_absent_bytes = s_absent.to_canonical_bytes();
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                smt.root(),
+                &absent_key,
+                &s_absent_bytes,
+                ProofPolicyLimits {
+                    max_proof_bytes: s_absent_bytes.len(),
+                    max_steps: s_absent.non_default_siblings.len(),
+                    max_hash_invocations: KEY_BITS,
+                },
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                smt.root(),
+                &absent_key,
+                &s_absent_bytes,
+                ProofPolicyLimits {
+                    max_proof_bytes: s_absent_bytes.len(),
+                    max_steps: s_absent.non_default_siblings.len(),
+                    max_hash_invocations: KEY_BITS - 1,
+                },
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn boundary_depths_0_191_192_and_reversal_controls() {
+        // 1. Empty map zero-step proof vs illegal non-empty steps with EmptyRoot
+        let empty_mpt = MerklePatriciaTrie::from_sorted_keys(Vec::new());
+        let empty_smt = SparseMerkleTree::from_sorted_keys(Vec::new());
+        let q0 = CoordinateKeyV1::from_coord(Coord::new(0, 0, 0));
+        let p_empty = empty_mpt.prove(&q0);
+        assert!(p_empty.steps.is_empty());
+        assert_eq!(p_empty.terminal, PatriciaTerminal::EmptyRoot);
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof_bytes_with_limits(
+                empty_mpt.root(),
+                &q0,
+                &p_empty.to_canonical_bytes(),
+                ProofPolicyLimits::PATRICIA_R1_DEFAULT,
+            ),
+            Some(false)
+        );
+        let illegal_empty = PatriciaPointProof {
+            steps: vec![PatriciaProofStep::Branch {
+                depth: 0,
+                direction: 1,
+                sibling_hash: [0x22; 32],
+            }],
+            terminal: PatriciaTerminal::EmptyRoot,
+        };
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof(empty_mpt.root(), &q0, &illegal_empty),
+            None
+        );
+        assert_eq!(
+            SparseMerkleTree::verify_proof_bytes_with_limits(
+                empty_smt.root(),
+                &q0,
+                &empty_smt.prove(&q0).to_canonical_bytes(),
+                ProofPolicyLimits::SMT_R1_DEFAULT,
+            ),
+            Some(false)
+        );
+
+        // 2. Depth 191 branch + depth 192 zero-bit-suffix leaves on both (0,0,0)/(0,0,1) and signed extrema
+        let k_zero = CoordinateKeyV1::from_coord(Coord::new(0, 0, 0));
+        let k_one = CoordinateKeyV1::from_coord(Coord::new(0, 0, 1));
+        let k_neg = CoordinateKeyV1::from_coord(Coord::new(-1, 0, 0)); // diverges at depth 0!
+        let k_min = CoordinateKeyV1::from_coord(Coord::new(i64::MIN, i64::MIN, i64::MIN));
+        let k_max_m1 = CoordinateKeyV1::from_coord(Coord::new(i64::MAX, i64::MAX, i64::MAX - 1));
+        let k_max = CoordinateKeyV1::from_coord(Coord::new(i64::MAX, i64::MAX, i64::MAX));
+        let keys = vec![k_min, k_neg, k_zero, k_one, k_max_m1, k_max];
+
+        let mpt = MerklePatriciaTrie::from_sorted_keys(keys.clone());
+        let smt = SparseMerkleTree::from_sorted_keys(keys.clone());
+
+        for k in &keys {
+            let pp = mpt.prove(k);
+            assert_eq!(
+                MerklePatriciaTrie::verify_proof_bytes_with_limits(
+                    mpt.root(),
+                    k,
+                    &pp.to_canonical_bytes(),
+                    ProofPolicyLimits::PATRICIA_R1_DEFAULT,
+                ),
+                Some(true)
+            );
+            let sp = smt.prove(k);
+            assert_eq!(
+                SparseMerkleTree::verify_proof_bytes_with_limits(
+                    smt.root(),
+                    k,
+                    &sp.to_canonical_bytes(),
+                    ProofPolicyLimits::SMT_R1_DEFAULT,
+                ),
+                Some(true)
+            );
+        }
+
+        // Verify k_zero and k_max genuinely reach depth-192 zero-suffix leaves under a depth-191 branch
+        let p_max = mpt.prove(&k_max);
+        assert_eq!(
+            p_max.terminal,
+            PatriciaTerminal::Leaf {
+                depth: KEY_BITS,
+                key: k_max
+            }
+        );
+        assert!(matches!(
+            p_max.steps.last(),
+            Some(PatriciaProofStep::Branch { depth: 191, .. })
+        ));
+        assert!(matches!(
+            p_max.steps.first(),
+            Some(PatriciaProofStep::Branch { depth: 0, .. })
+        ));
+
+        // Off-by-one child depth mutation must reject
+        let mut bad_depth = p_max.clone();
+        bad_depth.terminal = PatriciaTerminal::Leaf {
+            depth: KEY_BITS - 1,
+            key: k_max,
+        };
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof(mpt.root(), &k_max, &bad_depth),
+            None
+        );
+
+        // Nonzero unused padding bits in packed Patricia extension must reject at wire decode
+        let p_max_bytes = p_max.to_canonical_bytes();
+        // Find an Extension step whose bit_len % 8 != 0 and flip its low unused padding bit
+        let mut cursor = 2usize;
+        let step_count = u16::from_be_bytes([p_max_bytes[0], p_max_bytes[1]]) as usize;
+        let mut tested_padding = false;
+        for _ in 0..step_count {
+            let tag = p_max_bytes[cursor];
+            cursor += 1;
+            if tag == STEP_TAG_BRANCH {
+                cursor += 34;
+            } else {
+                let bit_len =
+                    u16::from_be_bytes([p_max_bytes[cursor + 1], p_max_bytes[cursor + 2]]) as usize;
+                let packed_len = bit_len.div_ceil(8);
+                if !bit_len.is_multiple_of(8) {
+                    let mut dirty = p_max_bytes.clone();
+                    dirty[cursor + 3 + packed_len - 1] |= 1;
+                    assert!(
+                        PatriciaPointProof::from_canonical_bytes(&dirty).is_none(),
+                        "nonzero unused padding bit in Patricia extension must reject"
+                    );
+                    tested_padding = true;
+                    break;
+                }
+                cursor += 3 + packed_len;
+            }
+        }
+        assert!(
+            tested_padding,
+            "expected at least one non-byte-aligned extension in depth-191 fixture"
+        );
+
+        // SMT controls: bitmap bit flip at decision depth 0 and 191, reversed sibling wire order, D[d] vs D[d+1]
+        let s_max = smt.prove(&k_max);
+        assert!(s_max.active_decision_depths().contains(&0));
+        assert!(s_max.active_decision_depths().contains(&191));
+        let mut rev_sibs = s_max.clone();
+        rev_sibs.non_default_siblings.reverse();
+        assert_ne!(rev_sibs.non_default_siblings, s_max.non_default_siblings);
+        assert!(!SparseMerkleTree::verify_proof(
+            smt.root(),
+            &k_max,
+            &rev_sibs
+        ));
+
+        // Flip bitmap bit at depth 0 (popcount mismatch) and substitute D[0] for sibling at depth 0
+        let mut flip0 = s_max.clone();
+        flip0.bitmap[0] ^= 0x80;
+        assert!(!SparseMerkleTree::verify_proof(smt.root(), &k_max, &flip0));
+
+        let mut wrong_default = s_max.clone();
+        wrong_default.non_default_siblings[0] = smt_default_hashes()[0];
+        assert!(!SparseMerkleTree::verify_proof(
+            smt.root(),
+            &k_max,
+            &wrong_default
+        ));
+    }
+
+    #[test]
+    fn sibling_forks_and_permutation_rebuilds_preserve_canonical_roots() {
+        let mut base_coords = vec![
+            Coord::new(0, 0, 0),
+            Coord::new(0, 0, 1),
+            Coord::new(-1, 0, 0),
+            Coord::new(-16, -16, -16),
+            Coord::new(15, 15, 15),
+            Coord::new(1_048_576, -1_048_576, 42),
+            Coord::new(i64::MIN, 0, i64::MAX),
+        ];
+        for i in 1..20_i64 {
+            base_coords.push(Coord::new(i * 3 - 25, i * 5 - 40, -i * 7 + 12));
+        }
+
+        // 1. Multiple insertion/deletion permutations must yield identical roots and PatriciaNode trees
+        let mut world_ref = World::new();
+        for &c in &base_coords {
+            world_ref.set_on(c);
+        }
+        let mpt_ref = MerklePatriciaTrie::from_world(&world_ref);
+        let smt_ref = SparseMerkleTree::from_world(&world_ref);
+
+        for stride in [1usize, 3, 5, 7, 11, 13] {
+            let mut mpt = MerklePatriciaTrie::from_sorted_keys(Vec::new());
+            let mut smt = SparseMerkleTree::from_sorted_keys(Vec::new());
+            let n = base_coords.len();
+            let mut visited = vec![false; n];
+            let mut idx = 0usize;
+            for _ in 0..n {
+                while visited[idx] {
+                    idx = (idx + 1) % n;
+                }
+                visited[idx] = true;
+                let k = CoordinateKeyV1::from_coord(base_coords[idx]);
+                assert!(mpt.insert(k));
+                assert!(smt.insert(k));
+                // Idempotent duplicate insert returns false without mutating root
+                assert!(!mpt.insert(k));
+                assert!(!smt.insert(k));
+                idx = (idx + stride) % n;
+            }
+            assert_eq!(mpt.root(), mpt_ref.root());
+            assert_eq!(mpt.root_node(), mpt_ref.root_node());
+            assert_eq!(smt.root(), smt_ref.root());
+        }
+
+        // 2. Sibling forks via Arc path-copy clone: old roots & proofs remain valid across mutations
+        let base_mpt_root = mpt_ref.root();
+        let base_smt_root = smt_ref.root();
+        let probe_key = CoordinateKeyV1::from_coord(Coord::new(15, 15, 15));
+        let base_mpt_proof = mpt_ref.prove(&probe_key);
+        let base_smt_proof = smt_ref.prove(&probe_key);
+
+        let mut fork_a_mpt = mpt_ref.clone();
+        let mut fork_b_mpt = mpt_ref.clone();
+        let mut fork_a_smt = smt_ref.clone();
+        let mut fork_b_smt = smt_ref.clone();
+
+        let ka = CoordinateKeyV1::from_coord(Coord::new(500, 600, 700));
+        let kb = CoordinateKeyV1::from_coord(Coord::new(-500, -600, -700));
+        assert!(fork_a_mpt.insert(ka));
+        assert!(fork_a_smt.insert(ka));
+        assert!(fork_b_mpt.insert(kb));
+        assert!(fork_b_smt.insert(kb));
+        assert!(fork_b_mpt.delete(&probe_key));
+        assert!(fork_b_smt.delete(&probe_key));
+
+        assert_ne!(fork_a_mpt.root(), base_mpt_root);
+        assert_ne!(fork_b_mpt.root(), base_mpt_root);
+        assert_ne!(fork_a_mpt.root(), fork_b_mpt.root());
+        assert_ne!(fork_a_smt.root(), fork_b_smt.root());
+
+        // Switching back to base root still verifies old proof; fork_b proves probe_key absent
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof(base_mpt_root, &probe_key, &base_mpt_proof),
+            Some(true)
+        );
+        assert!(SparseMerkleTree::verify_proof(
+            base_smt_root,
+            &probe_key,
+            &base_smt_proof
+        ));
+        assert_eq!(
+            MerklePatriciaTrie::verify_proof(
+                fork_b_mpt.root(),
+                &probe_key,
+                &fork_b_mpt.prove(&probe_key)
+            ),
+            Some(false)
+        );
+
+        // 3. Delete/reinsert restoration: W0 -> W1 -> W0 -> W1
+        let root_a1_mpt = fork_a_mpt.root();
+        let root_a1_smt = fork_a_smt.root();
+        assert!(fork_a_mpt.delete(&ka));
+        assert!(fork_a_smt.delete(&ka));
+        assert_eq!(fork_a_mpt.root(), base_mpt_root);
+        assert_eq!(fork_a_mpt.root_node(), mpt_ref.root_node());
+        assert_eq!(fork_a_smt.root(), base_smt_root);
+        assert!(fork_a_mpt.insert(ka));
+        assert!(fork_a_smt.insert(ka));
+        assert_eq!(fork_a_mpt.root(), root_a1_mpt);
+        assert_eq!(fork_a_smt.root(), root_a1_smt);
+    }
+
+    #[test]
+    fn wire_proof_decoders_reject_every_prefix_truncation_and_trailing_byte() {
+        let mut world = World::new();
+        for c in [
+            Coord::new(0, 0, 1),
+            Coord::new(-1, 2, -3),
+            Coord::new(42, -99, 7),
+        ] {
+            world.set_on(c);
+        }
+        let mpt = MerklePatriciaTrie::from_world(&world);
+        let smt = SparseMerkleTree::from_world(&world);
+        let key = CoordinateKeyV1::from_coord(Coord::new(0, 0, 1));
+
+        let p_bytes = mpt.prove(&key).to_canonical_bytes();
+        for cut in 0..p_bytes.len() {
+            assert!(
+                PatriciaPointProof::from_canonical_bytes(&p_bytes[..cut]).is_none(),
+                "PatriciaPointProof must reject prefix truncation at {cut}"
+            );
+        }
+        let mut p_trail = p_bytes.clone();
+        p_trail.push(0);
+        assert!(PatriciaPointProof::from_canonical_bytes(&p_trail).is_none());
+
+        let s_bytes = smt.prove(&key).to_canonical_bytes();
+        for cut in 0..s_bytes.len() {
+            assert!(
+                SmtPointProof::from_canonical_bytes(&s_bytes[..cut]).is_none(),
+                "SmtPointProof must reject prefix truncation at {cut}"
+            );
+        }
+        let mut s_trail = s_bytes.clone();
+        s_trail.push(0);
+        assert!(SmtPointProof::from_canonical_bytes(&s_trail).is_none());
     }
 }
