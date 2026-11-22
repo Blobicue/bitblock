@@ -350,9 +350,13 @@ only. The frozen tenth sweep was nonzero, so diminishing returns has not been re
   audit chronology, preserves the pinned checkpoint-0.3 paper and audit as historical, and scopes its
   old checkpoint-obligations table only to that historical artifact.
 
-- `COMMIT-R1@base` remains only `READY`; the authenticated-state plan now says it is scoped to a
-  future two-candidate `WorldRootV1` comparison and explicitly does not claim a selected or
-  implemented authenticated map.
+- `COMMIT-R1@base` is now `BOUNDED`: [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) and
+  [`commit-r1-assay-v1.json`](commit-r1-assay-v1.json) record the two-candidate `WorldRootV1`
+  comparison selecting Candidate A (fixed-key binary Patricia) over Candidate B (192-level SMT) on
+  `origin/main` commit `db0ede5f518924a2bebf5ce0269cd50ca69af763` (PR #12), while remaining
+  unwired research and keeping `COMMIT-1` `LOCKED`. `CODEC-1@base` (`CODEC-1@local-v1`) and
+  `SCALE-1@base` ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are likewise `BOUNDED`, unlocking
+  `TRANSITION-SPEC-D1@base` and `SCALE-2@base` to `READY`.
 
 - The transcript chronology now reaches frozen Loop 10 and this coordinated descendant. The
   checkpoint-0.3 audit owns only its historical corrected reading; the frozen successor chain owns
@@ -609,22 +613,26 @@ artifact, gate, and non-claim.
    `lean proof capsule`) executes on every push/PR and is recorded as automatic CI evidence, while
    attribution of a complete Layer-1 convergence/release evidence pass remains gated on a frozen
    zero-gap successor sweep and cannot replace physical display or external custody review.
-2. The local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, `LEDGER-1`) is now
-   `IMPLEMENTED` (with `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`).
-   Next trunk checkpoints are closing `CODEC-1` + `COMMIT-R1` selection before unlocking
-   `TRANSITION-SPEC-D1` and `COMMIT-1`.
-3. `COMMIT-R1` can proceed to a recorded decision: freeze the common key/node/proof/resource
-   profiles and compare fixed-key binary Patricia with a 192-level sparse Merkle tree (and arity-8
-   `SparseOctreeV1` assay evidence). Do not hook a candidate into live `World`, history publication,
-   receipts, rendering, or collision until the shared assay passes and `TRANSITION-SPEC-D1` exists.
+2. The local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, `LEDGER-1`) is
+   `IMPLEMENTED` (with `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`),
+   and `CODEC-1@base` (`local-v1`), `COMMIT-R1@base` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)),
+   and `SCALE-1@base` ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are now `BOUNDED`. The next trunk
+   checkpoint is `TRANSITION-SPEC-D1@base` (`READY`), which unlocks `COMMIT-1`.
+3. `COMMIT-R1` has recorded Candidate A (fixed-key binary Patricia) as the selected `WorldRootV1`
+   hash-tree candidate in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md). Do not hook Patricia
+   into live `World`, history publication, receipts, rendering, or collision until
+   `TRANSITION-SPEC-D1` freezes the base transition contract and `COMMIT-1` closes persistence/GC
+   and non-world domain profiles.
 4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
    field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
    end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
    Proof-size intuition alone cannot select it or delay `COMMIT-R1`.
 5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-6. Expand `SCALE-1`/`COST-1` measurements on the merged octree-pruned renderer (`SCALE-2` parity
-   work) before making wider scale claims; no “near-infinite performance” claim is licensed.
+6. `SCALE-2@base` is now `READY` following the pinned `SCALE-1` measurements and failure brackets
+   in [`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md) (58,809 visible surface bits misses 8.33 ms; 149,787
+   misses 16.67 ms). Implement chunk-relative queries and exact-parity hierarchical LOD strictly
+   outside authenticated state; no “near-infinite performance” claim is licensed.
 7. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
    then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
    recorded disqualification of the examined Aethor TSH/PDH constructions and IterHash; do not

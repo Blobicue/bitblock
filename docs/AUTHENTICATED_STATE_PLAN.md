@@ -1,11 +1,14 @@
 # Authenticated state research plan
 
-This document records the proposed Merkle-Patricia-versus-sparse-Merkle checkpoint for Bitblock.
-It is a **research and decision plan**, not an implemented commitment, selected consensus schema,
-or security proof. The authenticated-map choice remains open until both candidates pass the same
-vectors and their costs are measured. That choice is scoped to the first two-candidate hash-tree
-tournament; the separate Verkle feasibility lane below is explicitly deferred rather than ranked
-or silently treated as a losing candidate.
+This document records the Merkle-Patricia-versus-sparse-Merkle research plan for Bitblock.
+It is a **research and decision plan**, not a live implemented commitment, selected consensus
+schema, or security proof. The two-candidate `COMMIT-R1` hash-tree assay and decision record now
+reside in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) and
+[`commit-r1-assay-v1.json`](commit-r1-assay-v1.json) (selecting Candidate A, fixed-key binary
+Patricia, for future `WorldRootV1` integration while remaining unwired in live `World` and keeping
+`COMMIT-1` `LOCKED` pending `TRANSITION-SPEC-D1`). That selection is scoped solely to the
+two-candidate hash-tree tournament; the separate Verkle feasibility lane below remains explicitly
+deferred rather than ranked or silently treated as a losing candidate.
 
 The corresponding capability nodes are `COMMIT-R1` and `COMMIT-1` in
 [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md). The wider root hierarchy and proof meanings are in
@@ -85,8 +88,10 @@ World, active-token, episode, authorization, nonce, and asset proofs are not sub
 they use the same generic node codec. Their root wrapper type, tree-domain bytes, key codec, value
 codec, version, and commitment profile must be explicit.
 
-`COMMIT-R1` is scoped to implementing and comparing only `WorldRootV1`; it has not started and has
-not selected or implemented either candidate. The other names reserve the required type
+`COMMIT-R1` is scoped to implementing and comparing only `WorldRootV1`; its recorded two-candidate
+research decision selecting Candidate A (fixed-key binary Patricia) is pinned in
+[`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md), while live runtime wiring remains locked behind
+`TRANSITION-SPEC-D1` and `COMMIT-1`. The other names reserve the required type
 and domain separations; their key widths, value schemas, and authoritative integration remain
 locked behind their owning capability nodes. `ActiveTokenRootV1` shares the 192-bit coordinate key
 but still needs independent `MintIdV1` value-codec/root vectors. `EventIdV1` width and
@@ -1380,7 +1385,10 @@ relative to an exact typed root.
 
 ## Open decisions retained
 
-1. Binary Patricia or 192-level sparse Merkle after the common assay?
+1. Binary Patricia or 192-level sparse Merkle after the common assay? Resolved for `WorldRootV1`
+   research in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) (Candidate A binary Patricia
+   selected over Candidate B SMT; still unwired in live `World` pending `TRANSITION-SPEC-D1` and
+   `COMMIT-1`).
 2. Exact `ProfileIdHashV1`/`CommitmentSetIdHashV1` suites, hash-tree node/root codecs, fully
    versioned proof-codec IDs, hash suite, descriptor bytes, tags, and resulting profile/policy
    identifiers?

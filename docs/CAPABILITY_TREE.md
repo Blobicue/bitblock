@@ -54,8 +54,8 @@ candidate to choose its own authority.
 | PS-011 | STORAGE-1 | base | IMPLEMENTED |
 | PS-012 | STORAGE-1 | research-journals | BOUNDED |
 | PS-013 | LEDGER-1 | base | IMPLEMENTED |
-| PS-014 | TRANSITION-SPEC-D1 | base | LOCKED |
-| PS-015 | COMMIT-R1 | base | READY |
+| PS-014 | TRANSITION-SPEC-D1 | base | READY |
+| PS-015 | COMMIT-R1 | base | BOUNDED |
 | PS-016 | VERKLE-R1 | base | READY |
 | PS-017 | VERKLE-R1 | feasibility | READY |
 | PS-018 | VERKLE-R1 | candidate-scope | LOCKED |
@@ -91,8 +91,8 @@ candidate to choose its own authority.
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
 | PS-049 | EMERGENCE-R1 | base | LOCKED |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
-| PS-051 | SCALE-1 | base | READY |
-| PS-052 | SCALE-2 | base | LOCKED |
+| PS-051 | SCALE-1 | base | BOUNDED |
+| PS-052 | SCALE-2 | base | READY |
 | PS-053 | CONSENSUS-D1 | base | LOCKED |
 | PS-054 | CONSENSUS-D1 | mechanism-choice | OPEN-DECISION |
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | LOCKED |
@@ -104,7 +104,7 @@ candidate to choose its own authority.
 | PS-061 | VALUE-1 | base | LOCKED |
 | PS-062 | COST-1 | base | READY |
 | PS-063 | COST-1 | budget | BOUNDED |
-| PS-064 | CODEC-1 | base | READY |
+| PS-064 | CODEC-1 | base | BOUNDED |
 | PS-065 | EXECUTOR-1 | base | LOCKED |
 | PS-066 | THREAT-D0 | base | READY |
 | PS-067 | THREAT-1 | base | LOCKED |
@@ -518,7 +518,7 @@ a checker error.
 
 ### `TRANSITION-SPEC-D1` — base occupancy/episode transition contract
 
-- **Status:** `PS-014:TRANSITION-SPEC-D1@base=LOCKED`.
+- **Status:** `PS-014:TRANSITION-SPEC-D1@base=READY`.
 - **Depends on:** `ACCOUNT-1`, `LEDGER-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
 - **Motive:** freeze the substrate transition and the interface by which later profile extensions
   compose, without making base semantics depend on identity, fees, consensus, or optional features.
@@ -536,15 +536,23 @@ a checker error.
 
 ### `COMMIT-R1` — authenticated-map research
 
-- **Status:** `PS-015:COMMIT-R1@base=READY`.
+- **Status:** `PS-015:COMMIT-R1@base=BOUNDED`.
 - **Depends on:** `WORLD-0`, `PROOF-0` claim discipline.
 - **Motive:** compare proof-carrying sparse-state structures before one becomes consensus-critical.
-- **Artifact:** the side-by-side fixed-key binary Patricia and 192-level sparse Merkle prototypes,
-  vectors, malformed-proof corpus, and measurements specified in
-  [`AUTHENTICATED_STATE_PLAN.md`](AUTHENTICATED_STATE_PLAN.md).
-- **Gate:** both candidates pass the same logical-map/root/proof/deletion/fork vectors and report
-  bounded update, witness, multiproof, storage, and rebuild costs. A winner is selected only by a
-  recorded decision with rejected alternatives and migration consequences. “Winner” means only the
+- **Artifact:** side-by-side fixed-key binary Patricia and 192-level sparse Merkle prototypes,
+  bounded verifier policy (`ProofPolicyLimits`, `verify_proof_bytes_with_limits`), R2/R3/R4
+  soundness/fork/permutation controls (`crates/research/src/commit_r1.rs`), independent Python
+  vectors (`tools/commit_r1_vectors.py`, `tools/codec_parity_corpus.py`), reproducible release
+  assay (`examples/commit_r1_assay_probe.rs`), and recorded decision in
+  [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) /
+  [`commit-r1-assay-v1.json`](commit-r1-assay-v1.json).
+- **Gate:** both candidates passed the same logical-map/root/proof/deletion/fork vectors and
+  reported bounded update, witness, multiproof, node-count, and rebuild costs on `origin/main`
+  commit `db0ede5f518924a2bebf5ce0269cd50ca69af763` (tree
+  `944ceb99e8c6774d07c84321037aab6e43e042ec`, PR #12 CI runs `44976235042` and `44976260396`,
+  10/10 jobs green; `bbmutate.py commit_r1` 19/19 KILLED). [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)
+  selects Candidate A (fixed-key binary Patricia) for `WorldRootV1` over rejected Candidate B
+  (192-level SMT) with explicit falsifiers and migration consequences. “Winner” means only the
   selected structure among these two admitted hash-structure candidates under their frozen assay;
   it neither rejects nor admits `VERKLE-R1` or any future family.
 - **Non-claim:** a prototype root does not replace the current `world_tag`, authenticate a block,
@@ -1022,18 +1030,26 @@ is invalid input, not a third collision row.
 
 ### `SCALE-1` — measure before redesign
 
-- **Status:** `PS-051:SCALE-1@base=READY`.
+- **Status:** `PS-051:SCALE-1@base=BOUNDED`.
 - **Depends on:** `WORLD-0`, `OBSERVE-0`.
 - **Motive:** identify the real limits behind “near-infinite” intent.
-- **Artifact:** reproducible workloads separating allocated bits, chunks, visible contributions,
-  collision candidates, zoom depth, frame dimensions, proof updates, and memory.
-- **Gate:** measurements report distributions and hard failure points under pinned builds; every
-  proposed index names which measured cost it reduces and what semantic parity it must preserve.
-- **Non-claim:** a benchmark sample does not prove unlimited scale or future hardware behavior.
+- **Artifact:** deterministic 5-workload structural report (`crates/research/src/scale_assay.rs`,
+  `tools/scale_assay_vectors.py`, `#bb.receipt.sha256.xq6oxiyyao3khyp3i7r6zbz3zwewouc75btw4s733xp62zeic3ma`),
+  reproducible raw multi-sample latency/parity probe (`examples/scale_1_probe.rs`), and pinned
+  measurements/failure brackets in [`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md) /
+  [`scale-1-measurement-v1.json`](scale-1-measurement-v1.json).
+- **Gate:** raw 15-sample distributions and hard failure brackets (58,809 bits crosses 8.33 ms
+  render budget; 149,787 bits crosses 16.67 ms 60 Hz tick budget) are pinned to `origin/main`
+  commit `db0ede5f518924a2bebf5ce0269cd50ca69af763` (tree
+  `944ceb99e8c6774d07c84321037aab6e43e042ec`, PR #12 CI runs `44976235042` and `44976260396`,
+  10/10 jobs green), with exact pixel, raycast, and sweep-point parity verified against reference
+  traversals and every proposed `SCALE-2` index naming its target cost and parity boundary.
+- **Non-claim:** a benchmark sample on one host does not prove unlimited scale or future hardware
+  behavior.
 
 ### `SCALE-2` — chunk-relative queries and hierarchical observation
 
-- **Status:** `PS-052:SCALE-2@base=LOCKED`.
+- **Status:** `PS-052:SCALE-2@base=READY`.
 - **Depends on:** `SCALE-1` and its parity vectors.
 - **Motive:** preserve exact interaction across far coordinates and large occupied worlds without
   scanning every on bit for every query.
@@ -1217,15 +1233,24 @@ is invalid input, not a third collision row.
 
 ### `CODEC-1` — independent canonical-codec parity
 
-- **Status:** `PS-064:CODEC-1@base=READY`.
+- **Status:** `PS-064:CODEC-1@base=BOUNDED`.
 - **Depends on:** `PROOF-0` framing discipline and a frozen schema.
 - **Motive:** ensure “the same bytes” does not mean only that one encoder can decode itself.
-- **Artifact:** language-neutral positive/negative corpus plus an independent implementation for
-  every activated key, value, transaction, block, receipt, proof, vote, and migration codec.
+- **Artifact:** `CODEC-1@local-v1` dual-language positive and adversarial negative corpus: 75/75
+  protocol schemas independently reconstructed across 37 stdlib Python vector suites, paired
+  adversarial truncation/trailing/overflow/noncanonical/cross-domain corpus
+  (`tools/codec_parity_corpus.py` and Rust integration suite `tests/codec_parity_v1.rs`), V8
+  `wasm32` `+simd128` byte-exact parity (`tools/wasm_parity_check.mjs`, 39/39 constants), and
+  canonical endianness mutation kill coverage (`tools/bbmutate.py`). Future network, transaction,
+  block, vote, program, and migration codecs repeat `CODEC-1` under their own schema profiles.
 - **Gate:** exact byte/root parity; alternate bytes, unknown/duplicate fields, truncation, overlong
   lengths, overflow, noncanonical order, and cross-domain/version replay reject before allocation or
-  mutation.
-- **Non-claim:** same-code round trips or matching valid vectors alone are not independent parity.
+  mutation. The `CODEC-1@local-v1` receipt is `origin/main` commit
+  `db0ede5f518924a2bebf5ce0269cd50ca69af763` (tree `944ceb99e8c6774d07c84321037aab6e43e042ec`,
+  PR #12 CI runs `44976235042` and `44976260396`, 10/10 jobs green).
+- **Non-claim:** passing `CODEC-1@local-v1` does not grant parity to future network, vote, asset,
+  VM, or migration schemas; same-code round trips or matching valid vectors alone are not
+  independent parity.
 
 ### `EXECUTOR-1` — independent transition executor
 
@@ -1724,19 +1749,18 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
-| 1 | `PS-015:COMMIT-R1@base=READY` |
+| 1 | `PS-014:TRANSITION-SPEC-D1@base=READY` |
 | 2 | `PS-016:VERKLE-R1@base=READY` |
 | 3 | `PS-017:VERKLE-R1@feasibility=READY` |
 | 4 | `PS-021:REFINE-1@base=READY` |
 | 5 | `PS-022:REFINE-1@world=READY` |
 | 6 | `PS-044:LANGUAGE-R1@base=READY` |
-| 7 | `PS-051:SCALE-1@base=READY` |
+| 7 | `PS-052:SCALE-2@base=READY` |
 | 8 | `PS-062:COST-1@base=READY` |
-| 9 | `PS-064:CODEC-1@base=READY` |
-| 10 | `PS-066:THREAT-D0@base=READY` |
-| 11 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 12 | `PS-086:RELEASE-R1@base=READY` |
-| 13 | `PS-087:RELEASE-R1@framework=READY` |
+| 9 | `PS-066:THREAT-D0@base=READY` |
+| 10 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 11 | `PS-086:RELEASE-R1@base=READY` |
+| 12 | `PS-087:RELEASE-R1@framework=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1769,7 +1793,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `13` |
+| `ready_frontier_count_u32` | `12` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
