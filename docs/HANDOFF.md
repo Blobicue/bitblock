@@ -678,8 +678,10 @@ artifact, gate, and non-claim.
    verified multi-tick PNG snapshots), unlocking `EMERGENCE-R1@base=READY`. Wave 3 receipts
    [`PROFILE_SCOPE_D0_RECEIPT.md`](PROFILE_SCOPE_D0_RECEIPT.md) and
    [`LANGUAGE_R1_RECEIPT.md`](LANGUAGE_R1_RECEIPT.md) promote `PROFILE-SCOPE-D0@base` and
-   `LANGUAGE-R1@base` to `BOUNDED`, unlocking `THREAT-1@base=READY` and `VM-D1@base=READY` while
-   keeping `GENESIS-D1`, `PROTOCOL-ID-1`, and `BOUNDS-1` honestly `LOCKED`.
+   `LANGUAGE-R1@base` to `BOUNDED`. Wave 4 receipts [`THREAT_1_MODEL.md`](THREAT_1_MODEL.md) and
+   [`VM_D1_SPEC.md`](VM_D1_SPEC.md) promote `THREAT-1@base` and `VM-D1@base` to `BOUNDED`,
+   unlocking `BOUNDS-1@base=READY` while keeping `GENESIS-D1`, `PROTOCOL-ID-1`, `RESOURCE-1`,
+   and `VM-1` honestly `LOCKED` until `BOUNDS-1` passes.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):

@@ -86,7 +86,7 @@ candidate to choose its own authority.
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
 | PS-044 | LANGUAGE-R1 | base | BOUNDED |
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
-| PS-046 | VM-D1 | base | READY |
+| PS-046 | VM-D1 | base | BOUNDED |
 | PS-047 | VM-1 | base | LOCKED |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
 | PS-049 | EMERGENCE-R1 | base | READY |
@@ -107,14 +107,14 @@ candidate to choose its own authority.
 | PS-064 | CODEC-1 | base | BOUNDED |
 | PS-065 | EXECUTOR-1 | base | LOCKED |
 | PS-066 | THREAT-D0 | base | BOUNDED |
-| PS-067 | THREAT-1 | base | READY |
+| PS-067 | THREAT-1 | base | BOUNDED |
 | PS-068 | CRYPTO-D1 | base | BOUNDED |
 | PS-069 | CRYPTO-D1 | primitive-selection | BOUNDED |
 | PS-070 | CRYPTO-1 | base | LOCKED |
 | PS-071 | HASH-SOURCE-R1 | base | READY |
 | PS-072 | HASH-SOURCE-R1 | candidate | NOT-STARTED |
 | PS-073 | HASH-R1 | base | LOCKED |
-| PS-074 | BOUNDS-1 | base | LOCKED |
+| PS-074 | BOUNDS-1 | base | READY |
 | PS-075 | GOVERNANCE-D1 | base | BOUNDED |
 | PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
 | PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
@@ -1016,13 +1016,18 @@ is invalid input, not a third collision row.
 
 ### `VM-D1` — frozen visual-machine semantics
 
-- **Status:** `PS-046:VM-D1@base=READY`.
+- **Status:** `PS-046:VM-D1@base=BOUNDED`.
 - **Depends on:** `LANGUAGE-R1`, `RULE-1`, `ACCOUNT-1`, `TRANSITION-SPEC-D1`.
 - **Motive:** define the instruction and work surface before either the bounds checker or interpreter
   is asked to validate it.
-- **Artifact:** versioned instruction set, parse-to-instruction mapping, integer state semantics,
-  read/write sets, ordering/conflicts, scheduler, traps, rollback/commit behavior, randomness input
-  if any, and a pre-execution work-accounting formula.
+- **Artifact:** [`VM_D1_SPEC.md`](VM_D1_SPEC.md) (PR #32 commit
+  `8bb352dee5cc2c2db7e34634ea2e883cf7e806df`, `crates/research/src/vm_d1.rs`,
+  `tools/threat_1_and_vm_d1_vectors.py`, `tests/wave4_threat_1_and_vm_d1.rs`, and
+  `examples/vm_d1_visual_probe.rs`) freezes `VmSpecD1`, checked `i64` stack semantics over the
+  exact 8 `LANGUAGE-R1` v1 opcodes, zero randomness, camera/renderer independence, deterministic
+  per-opcode & per-write gas work formula, 7 typed fail-closed traps with atomic rollback,
+  ascending-anchor multi-program scheduling with strict disjoint-write enforcement, `History`
+  commit parity, and visually inspected `801×801` before/after execution snapshots.
 - **Gate:** every opcode/program form has one finite step or deterministic trap in model vectors;
   ambiguous parses, uncharged work, hidden renderer/camera input, and undefined conflict order stop
   the draft before `BOUNDS-1@program` begins.
@@ -1376,12 +1381,16 @@ is invalid input, not a third collision row.
 
 ### `THREAT-1` — quantitative adversary model
 
-- **Status:** `PS-067:THREAT-1@base=READY`.
+- **Status:** `PS-067:THREAT-1@base=BOUNDED`.
 - **Depends on:** `THREAT-D0`, `PROFILE-SCOPE-D0`, measured `COST-1` facts.
 - **Motive:** make “secure” falsifiable against declared attacker powers and time horizons.
-- **Artifact:** static/adaptive corruption, network scheduling/partition/eclipsing, validator weight,
-  key compromise, client bootstrap, economic budget, denial-of-service capacity, censorship,
-  bridge/oracle, supply-chain, and operational powers mapped to properties and mitigations.
+- **Artifact:** [`THREAT_1_MODEL.md`](THREAT_1_MODEL.md) (PR #32 commit
+  `8bb352dee5cc2c2db7e34634ea2e883cf7e806df`, `crates/research/src/threat_1.rs`,
+  `tools/threat_1_and_vm_d1_vectors.py`, and `tests/wave4_threat_1_and_vm_d1.rs`) quantifies all
+  11 `THREAT-D0` attacker classes (`ThreatModelV1` and `ThreatClaimMapV1`: `< 1/3` Byzantine
+  weight, `2 s` block time, `10 s` GST, `21`-epoch unbonding / `28`-epoch retention, `>= 8` honest
+  peers, `3-of-5` release builders, `CONSENSUS-1` `<= 3 * active_validators` inclusion window, and
+  explicit v1 exclusions for `SEQUENCER-1` censorship, physical power/display, and bridges/oracles).
 - **Gate:** every public property names assumptions, loss condition, detection/recovery behavior,
   excluded attacks, and the gate/artifact that bears on it.
 - **Non-claim:** a list of attack names without thresholds, powers, or failure conditions is not an
@@ -1445,7 +1454,7 @@ is invalid input, not a third collision row.
 
 ### `BOUNDS-1` — protocol admission and state-growth bounds
 
-- **Status:** `PS-074:BOUNDS-1@base=LOCKED`.
+- **Status:** `PS-074:BOUNDS-1@base=READY`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `THREAT-1`, `LOCAL-BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, and the
   common proof shapes frozen by `COMMIT-R1`; target-profile program scope realizes the design edge
   CE-05, not a dependency on the later interpreter implementation.
@@ -1851,12 +1860,11 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-046:VM-D1@base=READY` |
-| 4 | `PS-049:EMERGENCE-R1@base=READY` |
-| 5 | `PS-062:COST-1@base=READY` |
-| 6 | `PS-067:THREAT-1@base=READY` |
-| 7 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 8 | `PS-086:RELEASE-R1@base=READY` |
+| 3 | `PS-049:EMERGENCE-R1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 6 | `PS-074:BOUNDS-1@base=READY` |
+| 7 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1889,7 +1897,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `8` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
