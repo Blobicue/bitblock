@@ -82,14 +82,14 @@ candidate to choose its own authority.
 | PS-039 | RESOURCE-1 | base | LOCKED |
 | PS-040 | ECONOMIC-STATE-1 | base | LOCKED |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
-| PS-042 | RULE-1 | base | READY |
+| PS-042 | RULE-1 | base | IMPLEMENTED |
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
 | PS-044 | LANGUAGE-R1 | base | READY |
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
 | PS-046 | VM-D1 | base | LOCKED |
 | PS-047 | VM-1 | base | LOCKED |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
-| PS-049 | EMERGENCE-R1 | base | LOCKED |
+| PS-049 | EMERGENCE-R1 | base | READY |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
 | PS-051 | SCALE-1 | base | BOUNDED |
 | PS-052 | SCALE-2 | base | IMPLEMENTED |
@@ -982,12 +982,15 @@ is invalid input, not a third collision row.
 
 ### `RULE-1` — one finite autonomous transformation rule
 
-- **Status:** `PS-042:RULE-1@base=READY`, `PS-043:RULE-1@rule-choice=BOUNDED`.
+- **Status:** `PS-042:RULE-1@base=IMPLEMENTED`, `PS-043:RULE-1@rule-choice=BOUNDED`.
 - **Depends on:** `ACCOUNT-1`.
 - **Motive:** test the emergence hypothesis with the smallest executable semantics.
-- **Artifact:** [`RULE_1_DECISION.md`](RULE_1_DECISION.md) selects synchronous 3D Moore-neighborhood
-  Life (`B5/S45`) with permanent bedrock `1`, strict active-frontier work caps, and opt-in
-  execution; runtime implementation and visual verification remain queued for `RULE-1@base`.
+- **Artifact:** [`RULE_1_DECISION.md`](RULE_1_DECISION.md) and [`RULE_1_RECEIPT.md`](RULE_1_RECEIPT.md)
+  (PR #28 commit `9200f7177111451f686ab9464dcdd63c9b3ba1d6`, `crates/research/src/rule_1.rs`,
+  `tools/rule_1_vectors.py`, `tests/rule_1_b5s45.rs`, and `examples/rule_1_visual_probe.rs`)
+  implement opt-in synchronous 3D Moore-neighborhood Life (`B5/S45`) with permanent bedrock `1`,
+  fail-closed frontier caps, 48-way octahedral symmetry, `History` replay parity, independent
+  Python stepper parity, and visually inspected multi-tick PNG snapshots.
 - **Gate:** base/step vectors, symmetry cases, powered mutants, headless/live parity, and exact
   `(initial state, accepted actions, rule version)` replay.
 - **Non-claim:** one rule does not demonstrate universal computation, useful emergence, or a
@@ -1050,7 +1053,7 @@ is invalid input, not a third collision row.
 
 ### `EMERGENCE-R1` — bounded emergence assays
 
-- **Status:** `PS-049:EMERGENCE-R1@base=LOCKED`.
+- **Status:** `PS-049:EMERGENCE-R1@base=READY`.
 - **Depends on:** `RULE-1`.
 - **Motive:** turn the founding question—whether simple bit/tick rules produce higher-order
   structure—into observations that can fail rather than examples selected for looking interesting.
@@ -1840,8 +1843,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-042:RULE-1@base=READY` |
-| 4 | `PS-044:LANGUAGE-R1@base=READY` |
+| 3 | `PS-044:LANGUAGE-R1@base=READY` |
+| 4 | `PS-049:EMERGENCE-R1@base=READY` |
 | 5 | `PS-062:COST-1@base=READY` |
 | 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 7 | `PS-077:PROFILE-SCOPE-D0@base=READY` |
