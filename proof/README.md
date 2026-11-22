@@ -49,6 +49,32 @@ It remains an abstract Lean model over mathematical `Int` and finite lists, not
 a proof over Rust's `HashMap` implementation, `i64` overflow, or `f64` camera
 arithmetic.
 
+`BitblockProof.AccountingRefinement` formalizes the `ACCOUNT-1` per-tick
+action-accounting ledger corresponding to `crates/core/src/tick.rs`
+(`TickActionLedger`, `TickAttempt`, `ACTION_LANE_COUNT = 10`,
+`MAX_ACTIONS_PER_TICK = 65_536`). It proves the `0..9` lane-ordinal bijection,
+exact partition `submitted = cameraLaneTotal + editLaneTotal + controlLaneTotal`,
+fail-closed admission at `65,536` actions before mutation, base+step trace fold
+preservation across all 10 lanes, per-lane reconciliation against ordered edit
+attempts, and powered negative controls for swapped edit lanes (equal total,
+false split), v2 control-lane dropping, and over-limit batch refusal.
+
+`BitblockProof.CommitmentRefinement` formalizes the `COMMIT-1` fixed-width
+binary Merkle Patricia Trie normalization and `CoordinateKeyV1` sign-bias
+encoding corresponding to `crates/research/src/commit_state.rs` and
+`crates/research/src/commit_r1.rs`. It proves exact bijection, range bounds,
+strict order preservation, and scalar boundary vectors for `biasSigned64` over
+all signed 64-bit integers (with a raw two's-complement negative control),
+structural uniqueness of `CanonicalPat` over arbitrary fixed bit-width `rem`
+(`canonicalPat_unique_of_alpha_eq` covering both 192-bit `WorldRootV1`/
+`ActiveTokenRootV1` and 256-bit `EpisodeRootV1`), soundness and completeness of
+canonical point proofs (`verifyPatProof_sound`, `canonicalPat_provePat_complete`),
+and powered negative controls rejecting adjacent extensions, extension-to-leaf,
+empty branch children, empty extension paths, forged extension-to-leaf proofs,
+and non-divergent extension proofs. It remains an abstract model over Lean lists
+and mathematical integers, not a verified compiler proof of Rust SHA-256 hashing
+or machine code.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own

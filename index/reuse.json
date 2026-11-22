@@ -230,18 +230,6 @@
     ]
    },
    {
-    "item": "LANE_FIT_WORLD",
-    "modules": [
-     "tick"
-    ]
-   },
-   {
-    "item": "LANE_WHEEL_LINES",
-    "modules": [
-     "tick"
-    ]
-   },
-   {
     "item": "LOCAL_REPLAY_BUILD_SCHEMA",
     "modules": [
      "replay_evidence"
@@ -507,18 +495,6 @@
    },
    {
     "item": "TreeAlgorithmIdV1",
-    "modules": [
-     "commit_state"
-    ]
-   },
-   {
-    "item": "TypedPatriciaProofV1",
-    "modules": [
-     "commit_state"
-    ]
-   },
-   {
-    "item": "TypedProofStep",
     "modules": [
      "commit_state"
     ]
