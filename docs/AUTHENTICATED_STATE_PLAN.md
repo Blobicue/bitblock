@@ -1,14 +1,15 @@
 # Authenticated state research plan
 
 This document records the Merkle-Patricia-versus-sparse-Merkle research plan for Bitblock.
-It is a **research and decision plan**, not a live implemented commitment, selected consensus
-schema, or security proof. The two-candidate `COMMIT-R1` hash-tree assay and decision record now
-reside in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) and
+It is a **research and decision plan**, not a selected consensus schema or security proof. The
+two-candidate `COMMIT-R1` hash-tree assay and decision record reside in
+[`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md) and
 [`commit-r1-assay-v1.json`](commit-r1-assay-v1.json) (selecting Candidate A, fixed-key binary
-Patricia, for future `WorldRootV1` integration while remaining unwired in live `World` and keeping
-`COMMIT-1` `LOCKED` pending `TRANSITION-SPEC-D1`). That selection is scoped solely to the
-two-candidate hash-tree tournament; the separate Verkle feasibility lane below remains explicitly
-deferred rather than ranked or silently treated as a losing candidate.
+Patricia, over Candidate B SMT). The resulting local authenticated-state sidecar (`COMMIT-1`:
+`WorldRootV1`, `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`, and crash-safe store) is
+now implemented and receipted in [`COMMIT_1_RECEIPT.md`](COMMIT_1_RECEIPT.md) while keeping legacy
+`world_tag` and live rendering/collision untouched. The separate Verkle feasibility lane below
+remains explicitly deferred rather than ranked or silently treated as a losing candidate.
 
 The corresponding capability nodes are `COMMIT-R1` and `COMMIT-1` in
 [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md). The wider root hierarchy and proof meanings are in

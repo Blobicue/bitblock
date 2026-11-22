@@ -60,11 +60,11 @@ candidate to choose its own authority.
 | PS-017 | VERKLE-R1 | feasibility | READY |
 | PS-018 | VERKLE-R1 | candidate-scope | LOCKED |
 | PS-019 | VERKLE-R1 | prototype | LOCKED |
-| PS-020 | COMMIT-1 | base | READY |
+| PS-020 | COMMIT-1 | base | IMPLEMENTED |
 | PS-021 | REFINE-1 | base | READY |
 | PS-022 | REFINE-1 | world | BOUNDED |
-| PS-023 | REFINE-1 | accounting | LOCKED |
-| PS-024 | REFINE-1 | commitment | LOCKED |
+| PS-023 | REFINE-1 | accounting | READY |
+| PS-024 | REFINE-1 | commitment | READY |
 | PS-025 | REFINE-1 | vm | LOCKED |
 | PS-026 | IDENTITY-D1 | base | LOCKED |
 | PS-027 | PROTOCOL-ID-1 | base | LOCKED |
@@ -590,31 +590,40 @@ a checker error.
 
 ### `COMMIT-1` — authenticated local state
 
-- **Status:** `PS-020:COMMIT-1@base=READY`.
+- **Status:** `PS-020:COMMIT-1@base=IMPLEMENTED`.
 - **Depends on:** `LEDGER-1`, `TRANSITION-SPEC-D1`, `COMMIT-R1`, `STORAGE-1`, `CODEC-1` at every
   activated commitment schema; each domain also requires a frozen numeric commitment-limit profile.
 - **Motive:** support independently verifiable occupancy, absence, active-episode, and provenance
   queries without replaying or hashing the complete live set for every query.
-- **Artifact:** context-free separately typed world, active-token, and episode roots; canonical
-  membership/non-membership proofs; full-rebuild parity; one immutable `CommitmentSetV1` binding
-  the ledger head and all roots, with staged-node then recoverable-head publication beside the
-  corresponding ledger head. `COMMIT-R1` validates only the 192-bit world map: `MintIdV1` value
-  framing and the still-unfrozen `EventIdV1`/episode profile must each pass their own domain gates
-  before those roots are included. Authorization, nonce, and asset roots are later typed
-  instantiations, not prerequisites hidden inside this node.
-- **Gate:** incremental root equals a full rebuild after every generated transition; same logical
-  map has one root regardless of insertion order; insert/delete restores the old world root when
-  logical occupancy is restored; every activated key/value domain passes the same applicable
-  canonicalization/proof/parity gates; malformed, cross-domain, stale-version, and over-bound
-  witnesses reject. Independent projection rebuilds prove active-token keys/values and episode
-  status against the exact same ledger head/manifest after every transition and recovery; crash
-  assays recover the previous or next complete commitment set, never a mixed tuple.
+- **Artifact:** [`COMMIT_1_RECEIPT.md`](COMMIT_1_RECEIPT.md), portable + durable Rust sidecar
+  `crates/research/src/commit_state.rs` (`WorldRootV1`, `ActiveTokenRootV1`, `EpisodeRootV1`,
+  `TypedPatriciaTrie`, `TypedPatriciaProofV1`, `ExpectedProofContextV1`, `verify_lookup`,
+  `verify_claim`, `ProofPolicyDescriptorV1`, `CommitmentOperationalLimitsDescriptorV1`,
+  `CommitmentProfileDescriptorV1`, `DomainRegistryV1`, `ProfileRegistryV1`, `CommitmentSetV1`,
+  `LocalAuthenticatedSidecar`, `verify_independent_projection`, `MemoryCommitmentStore`,
+  `DurableCommitmentStore`, and `DurableAuthenticatedLedger`), independent stdlib Python vectors
+  (`tools/commit_state_vectors.py` covering all 9 schemas), and integration suite
+  (`tests/commit_1_authenticated_state.rs`). Authorization, nonce, and asset domains remain
+  recorded as typed inactive sentinels in `DomainRegistryV1::local_v1()`.
+- **Gate:** incremental updates equal fresh full rebuilds after every generated transition and
+  logical episode prune; insertion-order permutations produce one canonical root; insert/delete
+  restores the prior world root while active-token and episode roots advance with fresh `MintIdV1`
+  and burn provenance; all 9 schemas match independent Python vectors bit-for-bit (`87/87`
+  vectored; `bbmutate.py commit_state`: `61/61` KILLED); malformed, cross-domain, stale-version,
+  widened-cap, and over-bound witnesses reject fail-closed; independent projection rebuilds match
+  `CommitmentSetV1` after transitions and recovery; crash assays across all 5 publication
+  boundaries (`AfterNodeStaging` through `AfterPinPromotion`), failed CAS, on-disk corruption, and
+  GC pin-epoch races recover one complete commitment set or fail closed without mixed tuples.
+  The implementation receipt is `origin/main` commit `cb2b7751bfb7c9763120f58568ebe34d6cb7d9a0`
+  (tree `63cdc7c1f1a3f18a0e69a530283a9945a95593d2`, PR #16 CI runs `44982516645` and `44982520445`,
+  10/10 jobs green across Windows/Linux Rust, `wasm32` `+simd128` V8 parity, Python vectors,
+  generated index, and Lean proof capsules).
 - **Non-claim:** an authenticated map proves a statement relative to a supplied root, not that the
   root is canonical, finalized, available, honestly executed, or economically meaningful.
 
 ### `REFINE-1` — Rust/model correspondence
 
-- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=LOCKED`, `PS-024:REFINE-1@commitment=LOCKED`, `PS-025:REFINE-1@vm=LOCKED`.
+- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=READY`, `PS-024:REFINE-1@commitment=READY`, `PS-025:REFINE-1@vm=LOCKED`.
 - **Depends on:** `WORLD-0`.
 - **Motive:** connect abstract world theorems to the actual chunked implementation.
 - **Artifact:** [`REFINE_1_WORLD.md`](REFINE_1_WORLD.md) pairs the `--trust=0` Lean 4 capsules
@@ -1770,13 +1779,14 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-017:VERKLE-R1@feasibility=READY` |
-| 3 | `PS-020:COMMIT-1@base=READY` |
-| 4 | `PS-021:REFINE-1@base=READY` |
-| 5 | `PS-044:LANGUAGE-R1@base=READY` |
-| 6 | `PS-052:SCALE-2@base=READY` |
-| 7 | `PS-062:COST-1@base=READY` |
-| 8 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 9 | `PS-086:RELEASE-R1@base=READY` |
+| 3 | `PS-021:REFINE-1@base=READY` |
+| 4 | `PS-023:REFINE-1@accounting=READY` |
+| 5 | `PS-024:REFINE-1@commitment=READY` |
+| 6 | `PS-044:LANGUAGE-R1@base=READY` |
+| 7 | `PS-052:SCALE-2@base=READY` |
+| 8 | `PS-062:COST-1@base=READY` |
+| 9 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 10 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1809,7 +1819,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `9` |
+| `ready_frontier_count_u32` | `10` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

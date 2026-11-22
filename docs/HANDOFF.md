@@ -9,10 +9,12 @@ semantic history.
 - Active remote and branch: `Blobicue/bitblock`, branch `main` (see branch tip; do not pin a moving
   HEAD SHA here). The earlier `Gaia-0-0-1-1` remote, `codex/*` branches, and `chem/emergent-scale-2026-10`
   / `chem/render-scale-2026-11` waves are merged history preserved below.
-- Current milestone: the local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`,
-  `LEDGER-1`) is `IMPLEMENTED` under `PS-009`..`PS-013`, the `chem/render-scale-2026-11` SIMD128
-  worker/octree/delta-render stack is merged on `main`, and the Loop 11 planning reconciliation
-  aligns the mutable planning docs and powered checker controls.
+- Current milestone: the complete local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`,
+  `STORAGE-1`, `LEDGER-1`, `COMMIT-1`) is `IMPLEMENTED` alongside bounded contracts/assays
+  (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `CODEC-1`, `REFINE-1@world`, `THREAT-D0`,
+  `RELEASE-R1@framework`, `SCALE-1`), the `chem/render-scale-2026-11` SIMD128 worker/octree/
+  delta-render stack is merged on `main`, and the Loop 11 planning reconciliation aligns the
+  mutable planning docs and powered checker controls.
 - Agent onboarding / knowledge graph: `docs/AGENT_ONBOARDING.md`. It explains bbgraph `index/`
   for protocol, metrics, and gates, and GitNexus `.gitnexus/` (local only; MCP repo `bitblock`) for symbols, calls,
   flows, and blast radius.
@@ -594,8 +596,11 @@ self-verified. Neither path produces physical display evidence.
 - Do not call the text edit language a self-executing programming language; no autonomous block
   transformation rules exist.
 - Do not call local mint/burn provenance a cryptocurrency, ownership system, or balance ledger.
-- Do not claim a Merkle Patricia trie or sparse Merkle tree is selected or implemented; both are
-  research candidates, and the legacy `world_tag` remains the current full-set identity.
+- Do not claim that `COMMIT-1` authenticated roots replace legacy `world_tag`, prove consensus
+  finality, guarantee data availability, or wire Patricia traversals into rendering/collision;
+  `COMMIT-1` (`WorldRootV1`, `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`) is a
+  separately typed research-gated sidecar while legacy `world_tag` remains the default full-set
+  world identity.
 - Do not interpret the earlier zoomed-out multi-pixel observation as a hidden fractal without a
   captured state/frame artifact.
 - Do not claim that the full 1,112-metric registry is collected on every frame; the sidebar shows a
@@ -615,22 +620,24 @@ artifact, gate, and non-claim.
    `lean proof capsule`) executes on every push/PR and is recorded as automatic CI evidence, while
    attribution of a complete Layer-1 convergence/release evidence pass remains gated on a frozen
    zero-gap successor sweep and cannot replace physical display or external custody review.
-2. The local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, `LEDGER-1`) is
-   `IMPLEMENTED` (with `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`),
-   and `CODEC-1@base` (`local-v1`), `COMMIT-R1@base` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)),
+2. The entire local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, `LEDGER-1`, and
+   `COMMIT-1` in [`COMMIT_1_RECEIPT.md`](COMMIT_1_RECEIPT.md)) is `IMPLEMENTED` (with
+   `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`), while
+   `CODEC-1@base` (`local-v1`), `COMMIT-R1@base` ([`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)),
    `TRANSITION-SPEC-D1@base` ([`TRANSITION_SPEC_D1.md`](TRANSITION_SPEC_D1.md)), `REFINE-1@world`
    ([`REFINE_1_WORLD.md`](REFINE_1_WORLD.md)), `THREAT-D0@base`
    ([`THREAT_D0_ENVELOPE.md`](THREAT_D0_ENVELOPE.md)), `RELEASE-R1@framework`
    ([`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md)), and `SCALE-1@base`
-   ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are now `BOUNDED`. The next trunk checkpoint is
-   `COMMIT-1@base` (`READY`: authenticated local state over `WorldRootV1`, `ActiveTokenRootV1`,
-   `EpisodeRootV1`, and crash-safe `CommitmentSetV1`).
-3. `COMMIT-R1` has recorded Candidate A (fixed-key binary Patricia) as the selected `WorldRootV1`
-   hash-tree candidate in [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md), and `COMMIT-1@base` is
-   now `READY` after `TRANSITION-SPEC-D1`. Build `COMMIT-1` as an explicit separately typed sidecar
-   (`WorldRootV1`, `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`) with full-rebuild and
-   crash-recovery parity without silently reinterpreting `world_tag` or coupling trie walks into
-   rendering or collision.
+   ([`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md)) are `BOUNDED`. Completing `COMMIT-1` unlocked
+   `REFINE-1@commitment` (`PD-02`) alongside `REFINE-1@accounting` (`PD-01`) to `READY`.
+3. `COMMIT-1` implements Candidate A (fixed-key binary Patricia selected in
+   [`COMMIT_R1_DECISION.md`](COMMIT_R1_DECISION.md)) as a separately typed sidecar (`WorldRootV1`,
+   `ActiveTokenRootV1`, `EpisodeRootV1`, `CommitmentSetV1`) with full-rebuild parity, independent
+   projection verification, pin-epoch write-barrier GC, and 5-crash-point filesystem recovery
+   without reinterpreting legacy `world_tag` or coupling trie walks into rendering or collision.
+   Advancing from the local trunk into the pre-genesis network design branch (`CRYPTO-D1`,
+   `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `ASSET-D1`, `RULE-1`, `LANGUAGE-R1`) requires
+   explicit human decisions on the `OPEN-DECISION` nodes.
 4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
    field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
    end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
