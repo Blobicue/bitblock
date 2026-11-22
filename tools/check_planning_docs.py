@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "0a60b05566502fdd676d597352c799df24dc49cb9e0ffd769930019945c58e43"
+EXPECTED_STATUS_DIGEST = "41cca0572a641e45bc46738022dafd910799b33660f73e4019b84fab6ded6311"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "06a667a5d67f9984ab31ff657c463006f39a5478eef609d2cf8247501cee2a60"
+    "28a192f852e8f503eeeaacc5d33c11296d3f937eb03acd3f0cd61a90a8b3de8d"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,8 +7779,8 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 3 | `PS-017:VERKLE-R1@feasibility=READY` |",
-        "| 3 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
+        "| 2 | `PS-017:VERKLE-R1@feasibility=READY` |",
+        "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
     if frontier_locked == text:
@@ -7792,7 +7792,7 @@ def run_self_tests(
     )
 
     frontier_substitution = text.replace(
-        "| 1 | `PS-014:TRANSITION-SPEC-D1@base=READY` |",
+        "| 1 | `PS-016:VERKLE-R1@base=READY` |",
         "| 1 | `PS-010:LOCAL-BOUNDS-1@base=READY` |",
         1,
     )
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 12 | `PS-087:RELEASE-R1@framework=READY` |\n",
+        "| 9 | `PS-086:RELEASE-R1@base=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 12 | `PS-087:RELEASE-R1@framework=READY` |",
-        "| 12 | `PS-087:RELEASE-R1@framework=READY` |\n"
-        "| 13 | `PS-014:TRANSITION-SPEC-D1@base=READY` |",
+        "| 9 | `PS-086:RELEASE-R1@base=READY` |",
+        "| 9 | `PS-086:RELEASE-R1@base=READY` |\n"
+        "| 10 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7832,12 +7832,12 @@ def run_self_tests(
     )
 
     frontier_reorder = text.replace(
-        "| 1 | `PS-014:TRANSITION-SPEC-D1@base=READY` |",
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 1 | `PS-017:VERKLE-R1@feasibility=READY` |",
         1,
     ).replace(
+        "| 2 | `PS-017:VERKLE-R1@feasibility=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 2 | `PS-014:TRANSITION-SPEC-D1@base=READY` |",
         1,
     )
     if frontier_reorder == text:

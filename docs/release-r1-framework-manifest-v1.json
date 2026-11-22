@@ -1,0 +1,101 @@
+{
+  "format": "bitblock-release-r1-framework-manifest-v1",
+  "receipt_finalized_utc": "2026-11-22T03:09:59Z",
+  "runtime_subject": {
+    "remote_ref": "refs/heads/main",
+    "commit": "58cefcb9e9b4ae24cb90861571489560266d6b23",
+    "tree": "2166e50bcce90d14ea80abec8b2190dd9ba6b93c",
+    "parent": "77e3bb35e93ef4418c63266d92994fbee0ed7eb3",
+    "pr_number": 14,
+    "ci_runs": [
+      "44978821303",
+      "44978824816"
+    ]
+  },
+  "framework_manifest_sha256": "3177a72ddef44016a9247f7b634a04083f813899f4ba9d2165aa75192cf86a56",
+  "manifest": {
+    "authority_label": "CANDIDATE-FRAMEWORK-ONLY (not an admitted RELEASE-1 artifact)",
+    "cargo_lock_package_count": 212,
+    "cargo_lock_sha256": "6ede64eba06c0ca16e19b734924f01a134e61f825bf3229a4e4ec5e76320c339",
+    "committed_wasm_sha256": "bf1bf37bd8f1a3ea93a54263a40eaf0bf25051090af9a2d934b3e7650a9d7e21",
+    "direct_dependency_pins": [
+      {
+        "crate": "sha2",
+        "manifest": "Cargo.toml",
+        "pin": "=0.10.9"
+      },
+      {
+        "crate": "softbuffer",
+        "manifest": "Cargo.toml",
+        "pin": "=0.4.8"
+      },
+      {
+        "crate": "windows-sys",
+        "manifest": "Cargo.toml",
+        "pin": "=0.61.2"
+      },
+      {
+        "crate": "winit",
+        "manifest": "Cargo.toml",
+        "pin": "=0.30.13"
+      },
+      {
+        "crate": "sha2",
+        "manifest": "crates/core/Cargo.toml",
+        "pin": "=0.10.9"
+      },
+      {
+        "crate": "windows-sys",
+        "manifest": "crates/core/Cargo.toml",
+        "pin": "=0.61.2"
+      },
+      {
+        "crate": "libc",
+        "manifest": "crates/research/Cargo.toml",
+        "pin": "=0.2.189"
+      },
+      {
+        "crate": "sha2",
+        "manifest": "crates/research/Cargo.toml",
+        "pin": "=0.10.9"
+      },
+      {
+        "crate": "windows-sys",
+        "manifest": "crates/research/Cargo.toml",
+        "pin": "=0.61.2"
+      },
+      {
+        "crate": "sha2",
+        "manifest": "crates/wasm/Cargo.toml",
+        "pin": "=0.10.9"
+      }
+    ],
+    "feature_profile": "default+protocol-research",
+    "format": "bitblock-release-r1-framework-manifest-v1",
+    "lean_ladderlang_capsule_sources": [
+      {
+        "path": "Ladderlang/Core.lean",
+        "sha256": "088e2b99b592b3a1feb1ac0976f7f7acddb87f67b14770101487e085ed38269e"
+      },
+      {
+        "path": "Ladderlang/Entries.lean",
+        "sha256": "a587035cde5bb39c357ffe4bb15458e9cb0b7cc335364f329375eb4f9372bf5e"
+      }
+    ],
+    "lean_toolchain": "leanprover/lean4:v4.33.0",
+    "lean_toolchain_sha256": "302cd63c54178885b89e669f33b38f12f4dd7ae7e5cac537b3203e3768d8fb2b",
+    "rust_toolchain": {
+      "channel": "1.96.0",
+      "profile": "minimal"
+    },
+    "rust_toolchain_sha256": "0d7b2f6589d3a2d9ea22b782a107ddafc0da08bdca08e3524b0cf4db12c12da9",
+    "sbom_sha256": "ec8e25d4d782dd899a0fdbbe4a41642a1e3b6018b5cf3e7d2b1af07590e53489"
+  },
+  "powered_negative_controls": [
+    "mutated_rust_toolchain_channel_changes_framework_id",
+    "mutated_cargo_lock_sbom_changes_framework_id",
+    "mutated_feature_profile_changes_framework_id",
+    "mutated_lean_source_manifest_changes_framework_id",
+    "mutated_committed_wasm_digest_changes_framework_id"
+  ]
+}

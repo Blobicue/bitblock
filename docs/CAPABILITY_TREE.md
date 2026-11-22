@@ -54,15 +54,15 @@ candidate to choose its own authority.
 | PS-011 | STORAGE-1 | base | IMPLEMENTED |
 | PS-012 | STORAGE-1 | research-journals | BOUNDED |
 | PS-013 | LEDGER-1 | base | IMPLEMENTED |
-| PS-014 | TRANSITION-SPEC-D1 | base | READY |
+| PS-014 | TRANSITION-SPEC-D1 | base | BOUNDED |
 | PS-015 | COMMIT-R1 | base | BOUNDED |
 | PS-016 | VERKLE-R1 | base | READY |
 | PS-017 | VERKLE-R1 | feasibility | READY |
 | PS-018 | VERKLE-R1 | candidate-scope | LOCKED |
 | PS-019 | VERKLE-R1 | prototype | LOCKED |
-| PS-020 | COMMIT-1 | base | LOCKED |
+| PS-020 | COMMIT-1 | base | READY |
 | PS-021 | REFINE-1 | base | READY |
-| PS-022 | REFINE-1 | world | READY |
+| PS-022 | REFINE-1 | world | BOUNDED |
 | PS-023 | REFINE-1 | accounting | LOCKED |
 | PS-024 | REFINE-1 | commitment | LOCKED |
 | PS-025 | REFINE-1 | vm | LOCKED |
@@ -106,7 +106,7 @@ candidate to choose its own authority.
 | PS-063 | COST-1 | budget | BOUNDED |
 | PS-064 | CODEC-1 | base | BOUNDED |
 | PS-065 | EXECUTOR-1 | base | LOCKED |
-| PS-066 | THREAT-D0 | base | READY |
+| PS-066 | THREAT-D0 | base | BOUNDED |
 | PS-067 | THREAT-1 | base | LOCKED |
 | PS-068 | CRYPTO-D1 | base | LOCKED |
 | PS-069 | CRYPTO-D1 | primitive-selection | OPEN-DECISION |
@@ -127,7 +127,7 @@ candidate to choose its own authority.
 | PS-084 | PROFILE-1 | base | LOCKED |
 | PS-085 | SIGNER-OPS-1 | base | LOCKED |
 | PS-086 | RELEASE-R1 | base | READY |
-| PS-087 | RELEASE-R1 | framework | READY |
+| PS-087 | RELEASE-R1 | framework | BOUNDED |
 | PS-088 | RELEASE-R1 | candidate | LOCKED |
 | PS-089 | RELEASE-1 | base | LOCKED |
 | PS-090 | RELEASE-1 | admitted | LOCKED |
@@ -518,19 +518,24 @@ a checker error.
 
 ### `TRANSITION-SPEC-D1` — base occupancy/episode transition contract
 
-- **Status:** `PS-014:TRANSITION-SPEC-D1@base=READY`.
+- **Status:** `PS-014:TRANSITION-SPEC-D1@base=BOUNDED`.
 - **Depends on:** `ACCOUNT-1`, `LEDGER-1`, `CODEC-1`, `COMMIT-R1` profile definitions.
 - **Motive:** freeze the substrate transition and the interface by which later profile extensions
   compose, without making base semantics depend on identity, fees, consensus, or optional features.
-- **Artifact:** versioned specification for occupancy/episode genesis, local accepted operations,
-  ordering, atomicity, no-op/rejection/admitted-failure, complete base effects/receipts, and one typed
-  extension interface declaring operation tags, read/write sets, work formula, disposition slots,
-  state-domain ownership, and composition conflicts. It does not fill nonce, fee, governance,
-  validator, asset, or program policy slots.
-- **Gate:** executable/formal base vectors give every base byte sequence and context one result or
-  one rejection; extension-slot collision, undeclared state access, ambiguity, omitted-lane,
-  partial-write, wrong-version, and powered semantic mutants fail. Profile-specific semantics remain
-  locked until `TRANSITION-SPEC-1` resolves every active slot.
+- **Artifact:** [`TRANSITION_SPEC_D1.md`](TRANSITION_SPEC_D1.md), portable Rust implementation
+  `crates/research/src/transition_spec.rs` (`BaseTransitionSpecD1`, `ExtensionSlotDescriptorV1`,
+  `ExtensionInterfaceRegistryV1`, `BaseTransitionBatchV1`, `BaseTransitionReceiptV1`, atomic
+  `execute_base_transition_bytes`), independent stdlib Python vectors
+  (`tools/transition_spec_d1_vectors.py`), and integration suite (`tests/transition_spec_d1.rs`).
+  Nonce, fee, governance, validator, asset, and program policy slots remain explicitly unfilled.
+- **Gate:** executable base vectors give every base byte sequence one atomic result or rejection
+  with zero partial writes; extension-slot op/disposition/domain collisions, undeclared state
+  access, base-tag hijacking, zero work, wrong version, and omitted disposition lanes fail closed
+  in both Rust and Python (`bbmutate.py transition_spec`: 19/19 sites KILLED). Receipt:
+  `origin/main` commit `58cefcb9e9b4ae24cb90861571489560266d6b23` (tree
+  `2166e50bcce90d14ea80abec8b2190dd9ba6b93c`, PR #14 CI runs `44978821303` and `44978824816`,
+  10/10 jobs green). Profile-specific semantics remain locked until `TRANSITION-SPEC-1` resolves
+  every active slot.
 - **Non-claim:** a base contract is not a profile transition specification, implementation,
   refinement proof, root publication, or consensus rule.
 
@@ -585,7 +590,7 @@ a checker error.
 
 ### `COMMIT-1` — authenticated local state
 
-- **Status:** `PS-020:COMMIT-1@base=LOCKED`.
+- **Status:** `PS-020:COMMIT-1@base=READY`.
 - **Depends on:** `LEDGER-1`, `TRANSITION-SPEC-D1`, `COMMIT-R1`, `STORAGE-1`, `CODEC-1` at every
   activated commitment schema; each domain also requires a frozen numeric commitment-limit profile.
 - **Motive:** support independently verifiable occupancy, absence, active-episode, and provenance
@@ -609,16 +614,23 @@ a checker error.
 
 ### `REFINE-1` — Rust/model correspondence
 
-- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=READY`, `PS-023:REFINE-1@accounting=LOCKED`, `PS-024:REFINE-1@commitment=LOCKED`, `PS-025:REFINE-1@vm=LOCKED`.
+- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=LOCKED`, `PS-024:REFINE-1@commitment=LOCKED`, `PS-025:REFINE-1@vm=LOCKED`.
 - **Depends on:** `WORLD-0`.
 - **Motive:** connect abstract world theorems to the actual chunked implementation.
-- **Artifact:** independently checked refinement or exhaustive/symbolic correspondence for
-  coordinate splitting, bit indexing, bedrock, edits, iteration, and eventually root updates. PD-01
-  through PD-03 add the exact implemented surface only to the accounting, commitment, or VM
-  refinement phase respectively.
+- **Artifact:** [`REFINE_1_WORLD.md`](REFINE_1_WORLD.md) pairs the `--trust=0` Lean 4 capsules
+  (`World.lean`, `ChunkRefinement.lean` 27 theorems, `OctreeRefinement.lean` 54 theorems) with the
+  Rust correspondence suite `tests/world_refinement_correspondence.rs` (named abstraction function
+  `alpha_world`, exhaustive 4,096-index local bijection, `13^3 = 2,197` signed boundary/extrema
+  chunk-splitting checks, base/step edit/eviction/bedrock/`flush_octree` simulation, and powered
+  truncated-division and bedrock-drop controls). PD-01 through PD-03 add the exact implemented
+  surface only to the accounting, commitment, or VM refinement phase respectively.
 - **Gate:** named abstraction function plus base/step proof or a precisely bounded exhaustive
   procedure with powered negative controls; no silent appeal from a finite sample to all `i64³`.
-- **Non-claim:** a model theorem without the abstraction/refinement link does not certify Rust.
+  The `REFINE-1@world` receipt is `origin/main` commit `58cefcb9e9b4ae24cb90861571489560266d6b23`
+  (tree `2166e50bcce90d14ea80abec8b2190dd9ba6b93c`, PR #14 CI runs `44978821303` and `44978824816`,
+  10/10 jobs green).
+- **Non-claim:** a model theorem without full compiler verification does not certify compiled Rust
+  machine code across all `2^192` coordinates.
 
 ## Identity and multiplayer branch
 
@@ -1271,15 +1283,18 @@ is invalid input, not a third collision row.
 
 ### `THREAT-D0` — pre-profile adversary and claim envelope
 
-- **Status:** `PS-066:THREAT-D0@base=READY`.
+- **Status:** `PS-066:THREAT-D0@base=BOUNDED`.
 - **Depends on:** implemented `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, plus bounded `PROOF-0`
   claim discipline.
 - **Motive:** enumerate attacker powers, public properties, parameter slots, and loss conditions
   before crypto, consensus, or genesis choices narrow the candidate.
-- **Artifact:** versioned threat taxonomy and candidate quantitative ranges for corruption, network,
-  eclipse, key compromise, denial of service, censorship, supply-chain, bridge/oracle, bootstrap,
-  and operational powers, including the measurements still required. `COST-1` supplies a measurement
-  methodology and later facts; it is not a falsely completed prerequisite for drafting the envelope.
+- **Artifact:** [`THREAT_D0_ENVELOPE.md`](THREAT_D0_ENVELOPE.md) enumerates all 11 pre-profile
+  attacker-power classes (corruption, network/eclipse, key compromise, primitive break, parser/DoS,
+  state growth, censorship, data availability, supply-chain, bootstrap/upgrade, and local
+  host/display/bridge boundaries), mapping each to protected properties, assumption slots, loss
+  conditions, candidate mitigations, and explicitly `OPEN (UNQUANTIFIED)` measurement slots.
+  `COST-1` supplies a measurement methodology and later facts; it is not a falsely completed
+  prerequisite for drafting the envelope.
 - **Gate:** every proposed property has an attacker action, assumption slot, loss condition, and
   candidate mitigation; unquantified entries remain visibly open and cannot support profile status.
 - **Non-claim:** an envelope is not the profile's measured adversary model or a security proof.
@@ -1578,19 +1593,23 @@ is invalid input, not a third collision row.
 
 ### `RELEASE-R1` — candidate-build reproducibility
 
-- **Status:** `PS-086:RELEASE-R1@base=READY`, `PS-087:RELEASE-R1@framework=READY`, `PS-088:RELEASE-R1@candidate=LOCKED`.
+- **Status:** `PS-086:RELEASE-R1@base=READY`, `PS-087:RELEASE-R1@framework=BOUNDED`, `PS-088:RELEASE-R1@candidate=LOCKED`.
 - **Depends on:** None.
 - **Motive:** stop an unreviewed compiler, dependency, feature set, binary, or genesis configuration
   from inheriting candidate source-level evidence.
-- **Artifact:** dependency lock/policy, pinned toolchain, reproducible independent builds, SBOM or
-  equivalent manifest, feature/config/genesis/candidate-profile binding, candidate artifact digest,
-  and vulnerability response. Candidate attestations are labeled candidate, not admitted-release
-  authority. The reusable framework uses only pinned external Rust/tool/proof inputs. PD-04 and PD-05
-  make the candidate phase consume that framework and the exact candidate profile without turning
-  either prerequisite into a base edge.
+- **Artifact:** [`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md),
+  [`release-r1-framework-manifest-v1.json`](release-r1-framework-manifest-v1.json), and
+  `tools/release_repro_framework.py` pin the Rust toolchain (`1.96.0`), exact `=` direct dependency
+  pins, deterministic `Cargo.lock` SBOM digest (212 packages), Lean 4 toolchain and source-manifest
+  hashes, committed WebAssembly embedded parity, and vulnerability-response procedure strictly as a
+  `CANDIDATE-FRAMEWORK-ONLY` attestation. PD-04 and PD-05 make the candidate phase consume that
+  framework and the exact candidate profile without turning either prerequisite into a base edge.
 - **Gate:** independent builders reproduce the declared artifact or an explicitly explained
   platform-scoped equivalent; mismatched source, dependency, feature, config, or binary rejects the
-  candidate artifact identity.
+  candidate artifact identity (`tools/release_repro_framework.py` 5/5 powered negative controls on
+  `origin/main` commit `58cefcb9e9b4ae24cb90861571489560266d6b23`, tree
+  `2166e50bcce90d14ea80abec8b2190dd9ba6b93c`, PR #14 CI runs `44978821303` and `44978824816`,
+  10/10 jobs green).
 - **Non-claim:** reproducibility proves candidate artifact correspondence, not admission, release
   authorization, signature custody, or absence of source/toolchain vulnerabilities.
 
@@ -1749,18 +1768,15 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
-| 1 | `PS-014:TRANSITION-SPEC-D1@base=READY` |
-| 2 | `PS-016:VERKLE-R1@base=READY` |
-| 3 | `PS-017:VERKLE-R1@feasibility=READY` |
+| 1 | `PS-016:VERKLE-R1@base=READY` |
+| 2 | `PS-017:VERKLE-R1@feasibility=READY` |
+| 3 | `PS-020:COMMIT-1@base=READY` |
 | 4 | `PS-021:REFINE-1@base=READY` |
-| 5 | `PS-022:REFINE-1@world=READY` |
-| 6 | `PS-044:LANGUAGE-R1@base=READY` |
-| 7 | `PS-052:SCALE-2@base=READY` |
-| 8 | `PS-062:COST-1@base=READY` |
-| 9 | `PS-066:THREAT-D0@base=READY` |
-| 10 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 11 | `PS-086:RELEASE-R1@base=READY` |
-| 12 | `PS-087:RELEASE-R1@framework=READY` |
+| 5 | `PS-044:LANGUAGE-R1@base=READY` |
+| 6 | `PS-052:SCALE-2@base=READY` |
+| 7 | `PS-062:COST-1@base=READY` |
+| 8 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 9 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1793,7 +1809,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `12` |
+| `ready_frontier_count_u32` | `9` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
