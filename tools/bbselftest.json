@@ -457,6 +457,7 @@
             ],
             "proofs_include": [
                 "chunkrefinement",
+                "octreerefinement",
                 "world"
             ],
             "mutation_sites": 0

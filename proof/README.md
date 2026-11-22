@@ -31,9 +31,23 @@ the results do not establish executable edit semantics.
 signed coordinates and `(ChunkCoord, localIndex)` under Euclidean division by
 16 (`div_euclid`/`rem_euclid`), `i64` chunk-coordinate range bounds, depth-1
 octant parent/child division, linear `0..4096` local voxel flattening, and a
-negative control showing truncated division (`tdiv`/`tmod`) breaks `-1`. It
-proves coordinate-mapping arithmetic only, not a full chunked `HashMap`
-simulation refinement.
+negative control showing truncated division (`tdiv`/`tmod`) breaks `-1`.
+
+`BitblockProof.OctreeRefinement` extends `ChunkRefinement` to a sparse chunk-map
+model (`ChunkWorld` with unique chunk keys, empty-chunk eviction, and bedrock
+immutability) and an 8-level octree summary pyramid (`octreeMaxDepth = 8`). It
+proves lookup and full edit-replay simulation refinement against
+`BitblockProof.World`, equivalence between iterative `div_euclid(2)`
+(`World::flush_octree`) and direct `div_euclid(2^d)` (`World::update_octree_ancestors`)
+for all signed coordinates and depths, AABB `Bounds` join-semilattice
+monotonicity (`mergeBounds`), zero false-empty octant pruning, positive
+occupancy and 8-bit `childMask` bounds, conservative AABB enclosure of all
+descendant voxels, general downward-monotone culling soundness (frustum/ray/sweep
+pruning cannot drop an occupied voxel), depth-8 root coverage, and a negative
+control showing truncated division (`tdiv`) breaks octree partitioning at `-1`.
+It remains an abstract Lean model over mathematical `Int` and finite lists, not
+a proof over Rust's `HashMap` implementation, `i64` overflow, or `f64` camera
+arithmetic.
 
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
