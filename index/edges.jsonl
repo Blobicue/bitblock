@@ -1477,6 +1477,11 @@
 {"from": "doc:docs/PROTOCOL.md#presentationoutput-v1-raw-output-color-and-mixed-replay", "kind": "documents", "to": "module:presentation_output_v2"}
 {"from": "doc:docs/PROTOCOL.md#tick-outcome-sidecar-checkpoint", "kind": "documents", "to": "module:tick"}
 {"from": "doc:docs/PROTOCOL.md#typed-coordinate-history-journal-checkpoint", "kind": "documents", "to": "module:history_store"}
+{"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:coordinate_episode"}
+{"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:history_store"}
+{"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:journal"}
+{"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:local_bounds"}
+{"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:storage"}
 {"from": "proof:proof/BitblockProof/ChunkRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/OctreeRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/World.lean", "kind": "proves", "to": "module:world"}

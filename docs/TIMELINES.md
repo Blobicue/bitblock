@@ -3,9 +3,10 @@
 This repository is **timeline 2**: a fork of the bitblock working tree as it
 stood on 2026-08-26, before the project had any version control. The fork
 point is the `inherited-state` tag — genesis commit `992996d`, the tree copied
-verbatim from `C:/Users/Owen/bitblock` (build artifacts aside). The original
-directory continues as timeline 1, unversioned, and is not touched by this
-repository's work.
+verbatim from `C:/Users/Owen/bitblock` (build artifacts aside). At the fork
+point that original directory had no Git metadata; later coordination recorded
+it as a separate unrelated Git root with no merge or ancestry authority here,
+and `tools/mirror_timeline1.py` is retired and refuses to execute (see below).
 
 ## What enforcement exists
 

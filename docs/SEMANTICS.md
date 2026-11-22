@@ -156,6 +156,14 @@ refines the Lean model, that camera floats are exact over all `i64` coordinates,
 physical monitor emitted the raster, or that Bitblock has Proof-of-History, Proof-of-Stake,
 consensus, currency, or Layer 1 status.
 
+The opt-in research trunk additionally implements `LOCAL-BOUNDS-1` (`crates/research/src/local_bounds.rs`),
+`STORAGE-1` (`crates/research/src/storage.rs`, `crates/research/src/journal.rs`, `crates/research/src/history_store.rs`),
+and `LEDGER-1` (`crates/research/src/coordinate_episode.rs`: `OccupancyEpisodeLedger` and crash-safe
+`DurableOccupancyLedger` with exact mutable occupancy-episode bijection, globally fresh episode
+identifiers, retained burn provenance, bounded exclusive backup/restore, and bounded continuation
+pruning). These remain local unsigned durability and provenance primitives, not external custody,
+ownership, currency, or consensus.
+
 ## Semantic learnings carried forward
 
 1. **A coordinate space is not automatically a game world.** The first useful primitive is a

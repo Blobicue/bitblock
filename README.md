@@ -27,11 +27,11 @@ any claim it makes can be checked against the source that produced it. It report
 what the tree cannot state about itself: which modules are load-bearing (`protocol`
 is reached by 36 of 38; `world` by 27), whether every protocol object has an independent
 Python vector reconstruction (75 of 75 schemas covered, 0 uncovered), and public symbol
-documentation coverage (1,333 of 1,333 public symbols documented with `///`). All three
+documentation coverage (1,372 of 1,372 public symbols documented with `///`). All three
 are derived rather than authored. Running `python tools/bbgraph.py html` compiles a
 zero-server, self-contained interactive browser dashboard at `target/bitblock_graph.html`
-with a live BM25 query trace, 10-stratum DAG map, 4-tier blast-radius simulator, symbol
-and caller explorer, 74-schema coverage matrix, and audit gates. [`AGENTS.md`](AGENTS.md)
+with a live BM25 query trace, 11-stratum DAG map, 4-tier blast-radius simulator, symbol
+and caller explorer, 75-schema coverage matrix, and audit gates. [`AGENTS.md`](AGENTS.md)
 documents the index, its three gates, and its limits.
 
 #### Quick start and prerequisites

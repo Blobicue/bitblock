@@ -1007,26 +1007,34 @@ lookup/core, exact purpose, policy, predicate, attained status, exact
 `AcceptedParentAuthorityConsumerRefV1`, and one
 `ConsensusNativeParentAuthorityCertificateRefV1`. Before live use,
 `ResolveConsensusNativeParentAuthorityCertificatePolicyV1` derives the required certificate
-position, codec/crypto/consensus/availability policies, bounds, status, and equivocation/liveness
-rules from the verified parent profile and a certificate-independent
-`ParentAuthorityCertificateConsumerContextV1` derived before any historical ref or final consumer
-ID. The resolver also fixes the rule that selects the last complete consensus state immediately
+position, codec/crypto/consensus/availability policies, bounds, status, equivocation/liveness
+rules, and immutable `ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1` from the verified parent
+profile and a certificate-independent `ParentAuthorityCertificateConsumerContextV1` derived before
+any historical ref or final consumer ID. Admission requires that immutable history-start rule to
+begin at profile activation / the earliest relevant occurrence for the profile or bind an
+authenticated lossless predecessor closure (equality alone cannot admit an arbitrarily advanced
+start). The resolver also fixes the rule that selects the last complete consensus state immediately
 preceding admission; the required certificate position and parent consensus history derive the
-concrete `ConsensusNativeParentAuthorityEvidenceCutoffV1`, which consensus authenticates. A
-certificate candidate cannot choose its cutoff, occurrence root, position, or range policy. The
-parent consensus state maintains one authenticated
+concrete `ConsensusNativeParentAuthorityEvidenceCutoffV1`, which binds that same
+`ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1` and is authenticated by consensus. A
+certificate candidate cannot choose its history start, cutoff, occurrence root, position, or range
+policy. The parent consensus state maintains one authenticated
 ordered occurrence universe. Each accepted wrapper is inserted atomically under
 `ConsensusNativeAcceptedRecordOccurrenceIndexKeyV1`, including its exact
 `ConsensusNativeAcceptedRecordOccurrencePositionV1`, and
 `ConsensusNativeAcceptedRecordOccurrenceReceiptV1` binds that position and the exact bounded outer
 bytes. `ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1` authenticates the cutoff,
-universe root, entry count, and state inclusion.
+profile-derived history start, universe root, entry count, and state inclusion.
 
 A certificate becomes consumable only through
-`ConsensusNativeParentAuthorityCertificateAdmissionV1`. Its
+`ConsensusNativeParentAuthorityCertificateAdmissionV1`. Before range verification,
+`VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1` must prove exact byte
+equality across the resolver, cutoff, and scope `ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`
+values so a later-start internally valid suffix rejects before it can hide an earlier conflict. Its
 `CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1` supplies the exact
-`ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1`—lookup, core, inclusive consensus-history
-start, and `ConsensusNativeParentAuthorityEvidenceCutoffPositionV1`—the range-derived
+`ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1`—lookup, core, exact
+`ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`, and
+`ConsensusNativeParentAuthorityEvidenceCutoffPositionV1`—the range-derived
 `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1`, and
 `ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1`. Authenticated lower-
 boundary exclusion, gap-free range, and upper-boundary exclusion prove that every relevant
@@ -1395,7 +1403,8 @@ relative to an exact typed root.
     `CommitmentOperationalLimitsDescriptorV1` before any remote proof format or durable authority
     profile is admitted?
 13. After the separately declared feasibility, cryptographic, dependency, cost, and migration gates
-    exist, does any later profile admit a Verkle construction? The first hash-tree profile is
-    already explicitly deferred and supplies no answer to that later decision.
+    exist, does any later profile admit a Verkle construction? Verkle is already explicitly deferred
+    from the first hash-tree profile comparison (leaving the `COMMIT-R1` Patricia versus sparse-Merkle
+    baseline assay open) and supplies no answer to that later decision.
 
 None of these choices is silently answered by this plan.
