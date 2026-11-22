@@ -272,6 +272,24 @@
     ]
    },
    {
+    "item": "GENESIS_D1_BOOTSTRAP_POLICY_SCHEMA",
+    "modules": [
+     "genesis_d1"
+    ]
+   },
+   {
+    "item": "GENESIS_D1_LAUNCH_STATE_SCHEMA",
+    "modules": [
+     "genesis_d1"
+    ]
+   },
+   {
+    "item": "GENESIS_D1_PACKAGE_SCHEMA",
+    "modules": [
+     "genesis_d1"
+    ]
+   },
+   {
     "item": "GcMarkSnapshot",
     "modules": [
      "commit_state"
@@ -335,6 +353,18 @@
     "item": "MAX_COORDINATE_EPISODES",
     "modules": [
      "coordinate_episode"
+    ]
+   },
+   {
+    "item": "MAX_GENESIS_ACTORS",
+    "modules": [
+     "genesis_d1"
+    ]
+   },
+   {
+    "item": "MAX_GENESIS_VALIDATORS",
+    "modules": [
+     "genesis_d1"
     ]
    },
    {
@@ -788,6 +818,12 @@
     ]
    },
    {
+    "item": "pre_id_digests",
+    "modules": [
+     "genesis_d1"
+    ]
+   },
+   {
     "item": "prepare_capture_artifact",
     "modules": [
      "display_store"
@@ -860,7 +896,7 @@
     ]
    }
   ],
-  "pub_items": 1328,
+  "pub_items": 1345,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -884,7 +920,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 47416,
+   "code_lines": 48153,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1065,7 +1101,7 @@
    ]
   },
   "test": {
-   "code_lines": 26819,
+   "code_lines": 26878,
    "duplicated_lines": 341,
    "regions": [
     {
