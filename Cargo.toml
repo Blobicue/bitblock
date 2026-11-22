@@ -80,3 +80,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "rule_1_visual_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "language_r1_visual_probe"
+required-features = ["protocol-research"]

@@ -222,6 +222,16 @@
   ]
  },
  {
+  "id": "sub:genesis-d1",
+  "members": [
+   "module:profile_bootstrap"
+  ],
+  "name": "genesis-d1",
+  "terms": [
+   "genesis"
+  ]
+ },
+ {
   "id": "sub:governance-d1",
   "members": [
    "module:consensus_gov_d1"
@@ -291,6 +301,16 @@
   "name": "ladderlang",
   "terms": [
    "ladderlang"
+  ]
+ },
+ {
+  "id": "sub:language-r1",
+  "members": [
+   "module:language_r1"
+  ],
+  "name": "language-r1",
+  "terms": [
+   "language"
   ]
  },
  {
@@ -469,6 +489,27 @@
    "artifact",
    "output",
    "presentation"
+  ]
+ },
+ {
+  "id": "sub:profile-scope-d0",
+  "members": [
+   "module:profile_bootstrap"
+  ],
+  "name": "profile-scope-d0",
+  "terms": [
+   "profile",
+   "scope"
+  ]
+ },
+ {
+  "id": "sub:protocol-id-1",
+  "members": [
+   "module:profile_bootstrap"
+  ],
+  "name": "protocol-id-1",
+  "terms": [
+   "protocol"
   ]
  },
  {
