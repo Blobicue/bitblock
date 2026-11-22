@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "94eb847c32df8f682121d20a75751210195301e87a59378615cdcb4135d5cdb8"
+EXPECTED_STATUS_DIGEST = "7c39b80133f885da4f73e177f6a78a12aee7863e62eb3b0d477d13236326f6ab"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "aa2c50677d3bfc55ee97b826a1e7a95b4897b872843857222f6fdd863ee910a2"
+    "fb1bfad786ae3802f18cec644155efbc4cbeebc63ddc681d875bf57386aff53c"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 7 | `PS-086:RELEASE-R1@base=READY` |\n",
+        "| 6 | `PS-086:RELEASE-R1@base=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 7 | `PS-086:RELEASE-R1@base=READY` |",
-        "| 7 | `PS-086:RELEASE-R1@base=READY` |\n"
-        "| 8 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 6 | `PS-086:RELEASE-R1@base=READY` |",
+        "| 6 | `PS-086:RELEASE-R1@base=READY` |\n"
+        "| 7 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:

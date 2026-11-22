@@ -10,12 +10,13 @@ semantic history.
   HEAD SHA here). The earlier `Gaia-0-0-1-1` remote, `codex/*` branches, and `chem/emergent-scale-2026-10`
   / `chem/render-scale-2026-11` waves are merged history preserved below.
 - Current milestone: the complete local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`,
-  `STORAGE-1`, `LEDGER-1`, `COMMIT-1`) is `IMPLEMENTED` alongside bounded contracts/assays/proofs
-  (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `VERKLE-R1@feasibility`, `CODEC-1`, `REFINE-1@world`,
-  `REFINE-1@accounting`, `REFINE-1@commitment`, `THREAT-D0`, `RELEASE-R1@framework`, `SCALE-1`,
-  `COST-1@budget` + `COMMIT-1` measurements), the `chem/render-scale-2026-11` SIMD128
-  worker/octree/delta-render stack is merged on `main`, and the Loop 11 planning reconciliation
-  aligns the mutable planning docs and powered checker controls.
+  `STORAGE-1`, `LEDGER-1`, `COMMIT-1`) plus `SCALE-2` (chunk-relative queries, hierarchical Hi-Z
+  culling, ephemeral sub-pixel LOD, and bounded spatial cache) are `IMPLEMENTED` alongside bounded
+  contracts/assays/proofs (`TRANSITION-SPEC-D1`, `COMMIT-R1`, `VERKLE-R1@feasibility`, `CODEC-1`,
+  `REFINE-1@world`, `REFINE-1@accounting`, `REFINE-1@commitment`, `THREAT-D0`,
+  `RELEASE-R1@framework`, `SCALE-1`, `COST-1@budget` + `COMMIT-1` measurements), the
+  `chem/render-scale-2026-11` SIMD128 worker/octree/delta-render stack is merged on `main`, and the
+  Loop 11 planning reconciliation aligns the mutable planning docs and powered checker controls.
 - Agent onboarding / knowledge graph: `docs/AGENT_ONBOARDING.md`. It explains bbgraph `index/`
   for protocol, metrics, and gates, and GitNexus `.gitnexus/` (local only; MCP repo `bitblock`) for symbols, calls,
   flows, and blast radius.
@@ -653,10 +654,11 @@ artifact, gate, and non-claim.
    [`COST_1_COMMIT_1_MEASUREMENTS.md`](COST_1_COMMIT_1_MEASUREMENTS.md).
 5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-6. `SCALE-2@base` is now `READY` following the pinned `SCALE-1` measurements and failure brackets
-   in [`SCALE_1_ASSAY.md`](SCALE_1_ASSAY.md) (58,809 visible surface bits misses 8.33 ms; 149,787
-   misses 16.67 ms). Implement chunk-relative queries and exact-parity hierarchical LOD strictly
-   outside authenticated state; no “near-infinite performance” claim is licensed.
+6. `SCALE-2@base` is now `IMPLEMENTED` ([`SCALE_2_RECEIPT.md`](SCALE_2_RECEIPT.md) /
+   [`scale-2-measurement-v1.json`](scale-2-measurement-v1.json)), closing both `SCALE-1` failure
+   brackets (`HollowShell_58809`: `3.459 ms`, `HollowShell_149787`: `5.577 ms`, exact `±10^17` &
+   `i64::MIN`/`MAX` chunk-relative precision, bounded `SpatialRenderCache`, and ephemeral sub-pixel
+   LOD strictly outside `world_tag`; no “near-infinite performance” claim is licensed).
 7. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
    then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
    recorded disqualification of the examined Aethor TSH/PDH constructions and IterHash; do not
