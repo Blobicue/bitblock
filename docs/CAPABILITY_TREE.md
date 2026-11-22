@@ -1289,8 +1289,9 @@ is invalid input, not a third collision row.
   commitment updates, proof verification, bandwidth, database writes, retained history, recovery,
   and idle overhead; [`COST_1_COMMIT_1_MEASUREMENTS.md`](COST_1_COMMIT_1_MEASUREMENTS.md) and
   [`cost-1-commit-1-v1.json`](cost-1-commit-1-v1.json) (`examples/commit_1_cost_probe.rs`, PR #20
-  commit `2ee1e0c874a6849b67d14997cb35bc23e651b93c`) extend the budget with research-gated
-  `COMMIT-1` measurements and powered proof-cap controls.
+  commit `2ee1e0c874a6849b67d14997cb35bc23e651b93c` per-file baseline and PR #24 commit
+  `b9d11c57c225db10fb835bf181530d15e12bb4a8` batched `nodes/nodes.pack` measurement) extend the
+  budget with research-gated `COMMIT-1` measurements and powered proof-cap controls.
 - **Gate:** every reported number identifies build, workload, machine where relevant, deterministic
   counters where possible, distribution/failure point, and powered control; budgets are fixed before
   optimizing against them.
