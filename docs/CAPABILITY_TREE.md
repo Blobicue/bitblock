@@ -84,9 +84,9 @@ candidate to choose its own authority.
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
-| PS-044 | LANGUAGE-R1 | base | READY |
+| PS-044 | LANGUAGE-R1 | base | BOUNDED |
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
-| PS-046 | VM-D1 | base | LOCKED |
+| PS-046 | VM-D1 | base | READY |
 | PS-047 | VM-1 | base | LOCKED |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
 | PS-049 | EMERGENCE-R1 | base | READY |
@@ -107,7 +107,7 @@ candidate to choose its own authority.
 | PS-064 | CODEC-1 | base | BOUNDED |
 | PS-065 | EXECUTOR-1 | base | LOCKED |
 | PS-066 | THREAT-D0 | base | BOUNDED |
-| PS-067 | THREAT-1 | base | LOCKED |
+| PS-067 | THREAT-1 | base | READY |
 | PS-068 | CRYPTO-D1 | base | BOUNDED |
 | PS-069 | CRYPTO-D1 | primitive-selection | BOUNDED |
 | PS-070 | CRYPTO-1 | base | LOCKED |
@@ -117,7 +117,7 @@ candidate to choose its own authority.
 | PS-074 | BOUNDS-1 | base | LOCKED |
 | PS-075 | GOVERNANCE-D1 | base | BOUNDED |
 | PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
-| PS-077 | PROFILE-SCOPE-D0 | base | READY |
+| PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
 | PS-078 | GENESIS-D1 | base | LOCKED |
 | PS-079 | PROFILE-D1 | base | LOCKED |
 | PS-080 | TRANSITION-SPEC-1 | base | LOCKED |
@@ -998,12 +998,17 @@ is invalid input, not a third collision row.
 
 ### `LANGUAGE-R1` — exact spatial grammar research
 
-- **Status:** `PS-044:LANGUAGE-R1@base=READY`, `PS-045:LANGUAGE-R1@grammar-choice=BOUNDED`.
+- **Status:** `PS-044:LANGUAGE-R1@base=BOUNDED`, `PS-045:LANGUAGE-R1@grammar-choice=BOUNDED`.
 - **Depends on:** `WORLD-0`, `PROOF-0` claim discipline.
 - **Motive:** let arrangements of bits denote symbols and instructions without visual ambiguity.
-- **Artifact:** [`LANGUAGE_R1_DECISION.md`](LANGUAGE_R1_DECISION.md) selects strict `+X/+Y/+Z`
-  framed 3D regions with typed fail-closed parse errors and opt-in local VM execution first (not
-  v1 consensus code); dual-language parser implementation remains queued for `LANGUAGE-R1@base`.
+- **Artifact:** [`LANGUAGE_R1_DECISION.md`](LANGUAGE_R1_DECISION.md) and
+  [`LANGUAGE_R1_RECEIPT.md`](LANGUAGE_R1_RECEIPT.md) (PR #30 commit
+  `9e6780c4ddb0c2cf47440412634afad0690d66ab`, `crates/research/src/language_r1.rs`,
+  `tools/language_r1_vectors.py`, `tests/wave3_bootstrap_and_language_r1.rs`, and
+  `examples/language_r1_visual_probe.rs`) implement dual-language Rust + stdlib Python parsers for
+  strict `+X/+Y/+Z` framed 3D voxel regions anchored by a chiral `(4, 3, 2)` L-fiducial with
+  typed fail-closed errors, 47-way rotation/reflection rejection, overlap/spacer/delimiter checks,
+  and visually verified `801×801` PNG snapshots.
 - **Gate:** independent parsers agree over valid/invalid corpora; rotations, translations,
   reflections, overlaps, missing delimiters, and visually similar but coordinate-distinct patterns
   have explicit results.
@@ -1011,7 +1016,7 @@ is invalid input, not a third collision row.
 
 ### `VM-D1` — frozen visual-machine semantics
 
-- **Status:** `PS-046:VM-D1@base=LOCKED`.
+- **Status:** `PS-046:VM-D1@base=READY`.
 - **Depends on:** `LANGUAGE-R1`, `RULE-1`, `ACCOUNT-1`, `TRANSITION-SPEC-D1`.
 - **Motive:** define the instruction and work surface before either the bounds checker or interpreter
   is asked to validate it.
@@ -1371,7 +1376,7 @@ is invalid input, not a third collision row.
 
 ### `THREAT-1` — quantitative adversary model
 
-- **Status:** `PS-067:THREAT-1@base=LOCKED`.
+- **Status:** `PS-067:THREAT-1@base=READY`.
 - **Depends on:** `THREAT-D0`, `PROFILE-SCOPE-D0`, measured `COST-1` facts.
 - **Motive:** make “secure” falsifiable against declared attacker powers and time horizons.
 - **Artifact:** static/adaptive corruption, network scheduling/partition/eclipsing, validator weight,
@@ -1475,16 +1480,19 @@ is invalid input, not a third collision row.
 
 ### `PROFILE-SCOPE-D0` — pre-ID feature and configuration scope
 
-- **Status:** `PS-077:PROFILE-SCOPE-D0@base=READY`.
+- **Status:** `PS-077:PROFILE-SCOPE-D0@base=BOUNDED`.
 - **Depends on:** `TRANSITION-SPEC-D1`, `IDENTITY-D1`, `CONSENSUS-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`,
   `COMMIT-R1`, `CODEC-1`, `COST-1`; target-profile conditional design prerequisites are CE-01–CE-03
   and CE-41.
 - **Motive:** give bounds and genesis an exact, non-self-referential target before any derived chain,
   genesis, or profile identifier exists.
-- **Artifact:** canonical pre-ID scope containing activated operations/schemas, the ordered active-or-
-  inactive domain registry and `required_domain_set`, roles, suite and consensus/governance choices,
-  initial logical state descriptors, proposed numeric limits, optional features, and stage×gate-
-  subclaim applicability with named predicate tokens—explicitly excluding all derived IDs.
+- **Artifact:** [`PROFILE_SCOPE_D0_RECEIPT.md`](PROFILE_SCOPE_D0_RECEIPT.md) (PR #30 commit
+  `9e6780c4ddb0c2cf47440412634afad0690d66ab`, `crates/research/src/profile_bootstrap.rs`,
+  `tools/profile_bootstrap_vectors.py`, and `tests/wave3_bootstrap_and_language_r1.rs`) implements
+  canonical `ProfileScopeV1` (`bitblock/profile-scope-d0/scope/v1`) binding all Wave 1 pre-ID
+  descriptors, `DomainRegistryV1`, proposed numeric limits, and canonical `PE-01..PE-10` closed
+  predicates (excluding `always` and all derived IDs), alongside pre-verified `ChainGenesisPayloadV1`
+  and `AcceptedProposalCoreV1` wire codecs while keeping `GENESIS-D1` and `PROTOCOL-ID-1` locked.
 - **Gate:** independent encoding and closure expansion produce one scope digest; every field owner is
   named; every inactive domain uses its canonical sentinel; no `genesis_id`, `profile_id`, candidate-
   selected authority, missing operation, unknown feature, omitted domain, or unregistered predicate
@@ -1843,11 +1851,11 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-044:LANGUAGE-R1@base=READY` |
+| 3 | `PS-046:VM-D1@base=READY` |
 | 4 | `PS-049:EMERGENCE-R1@base=READY` |
 | 5 | `PS-062:COST-1@base=READY` |
-| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 7 | `PS-077:PROFILE-SCOPE-D0@base=READY` |
+| 6 | `PS-067:THREAT-1@base=READY` |
+| 7 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 8 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`

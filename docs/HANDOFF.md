@@ -675,8 +675,11 @@ artifact, gate, and non-claim.
 8. `RULE-1@base` is now `IMPLEMENTED` ([`RULE_1_RECEIPT.md`](RULE_1_RECEIPT.md): opt-in synchronous
    3D Moore-neighborhood Life `B5/S45`, permanent bedrock `1`, fail-closed frontier caps, 48-way
    octahedral symmetry, independent Python stepper parity, `History` replay parity, and visually
-   verified multi-tick PNG snapshots), unlocking `EMERGENCE-R1@base=READY`. `LANGUAGE-R1`
-   (`+X/+Y/+Z` framed 3D regions, local VM first) and `PROFILE-SCOPE-D0` are queued in Wave 3.
+   verified multi-tick PNG snapshots), unlocking `EMERGENCE-R1@base=READY`. Wave 3 receipts
+   [`PROFILE_SCOPE_D0_RECEIPT.md`](PROFILE_SCOPE_D0_RECEIPT.md) and
+   [`LANGUAGE_R1_RECEIPT.md`](LANGUAGE_R1_RECEIPT.md) promote `PROFILE-SCOPE-D0@base` and
+   `LANGUAGE-R1@base` to `BOUNDED`, unlocking `THREAT-1@base=READY` and `VM-D1@base=READY` while
+   keeping `GENESIS-D1`, `PROTOCOL-ID-1`, and `BOUNDS-1` honestly `LOCKED`.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
