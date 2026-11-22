@@ -17,6 +17,7 @@ pub use bitblock_core::{
 };
 
 pub mod asset_d1;
+pub mod bounds_1;
 pub mod commit_r1;
 pub mod commit_state;
 pub mod consensus_gov_d1;

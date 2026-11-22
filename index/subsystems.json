@@ -21,6 +21,16 @@
   ]
  },
  {
+  "id": "sub:bounds-1",
+  "members": [
+   "module:bounds_1"
+  ],
+  "name": "bounds-1",
+  "terms": [
+   "bounds"
+  ]
+ },
+ {
   "id": "sub:commit-1",
   "members": [
    "module:commit_state"
