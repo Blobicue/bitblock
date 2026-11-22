@@ -50,10 +50,10 @@ candidate to choose its own authority.
 | PS-007 | PROOF-0 | base | BOUNDED |
 | PS-008 | DOC-0 | base | IMPLEMENTED |
 | PS-009 | ACCOUNT-1 | base | IMPLEMENTED |
-| PS-010 | LOCAL-BOUNDS-1 | base | LOCKED |
-| PS-011 | STORAGE-1 | base | LOCKED |
+| PS-010 | LOCAL-BOUNDS-1 | base | IMPLEMENTED |
+| PS-011 | STORAGE-1 | base | IMPLEMENTED |
 | PS-012 | STORAGE-1 | research-journals | BOUNDED |
-| PS-013 | LEDGER-1 | base | LOCKED |
+| PS-013 | LEDGER-1 | base | IMPLEMENTED |
 | PS-014 | TRANSITION-SPEC-D1 | base | LOCKED |
 | PS-015 | COMMIT-R1 | base | READY |
 | PS-016 | VERKLE-R1 | base | READY |
@@ -451,50 +451,68 @@ a checker error.
 
 ### `LOCAL-BOUNDS-1` — local record and recovery limits
 
-- **Status:** `PS-010:LOCAL-BOUNDS-1@base=LOCKED`.
+- **Status:** `PS-010:LOCAL-BOUNDS-1@base=IMPLEMENTED`.
 - **Depends on:** `ACCOUNT-1`, measured `COST-1` facts for the local storage profile.
 - **Motive:** prevent local durability from depending on unnamed record, history, recovery, or disk
   limits while avoiding a dependency on the later network profile.
 - **Artifact:** numeric limits for canonical tick/ledger record bytes, records per commit, staged
   writes, retained local history, restart scan work, backup/restore work, and local pruning batches,
-  with checked preallocation arithmetic and a versioned local-storage profile.
+  with checked preallocation arithmetic and a versioned local-storage profile (`crates/research/src/local_bounds.rs`,
+  `bitblock/local-bounds-profile/v1`, independent Python vector suite `tools/local_bounds_vectors.py`,
+  and ABI-17 WASM export `bitblock_research_local_bounds`).
 - **Gate:** worst-shaped valid local records and recovery histories fit the predeclared envelope;
   over-limit carriers reject before allocation or mutation; the limits are fixed before fault tests.
+  The implementation receipt is `origin/main` commit `0d086e05381b89557b29f76db5751aa1324d9348`
+  (tree `a2bf91fb1f8339acba54987331af8449b6f591b0`, PR #10 CI runs `44971957215` and `44971953283`,
+  10/10 jobs green across Windows/Linux Rust, `wasm32` `+simd128` V8 parity, Python vectors,
+  generated index, and Lean proof capsules).
 - **Non-claim:** local bounds do not cover remote peers, consensus messages, programs, economic
   sufficiency, or production capacity.
 
 ### `STORAGE-1` — crash-safe local publication substrate
 
-- **Status:** `PS-011:STORAGE-1@base=LOCKED`, `PS-012:STORAGE-1@research-journals=BOUNDED`.
+- **Status:** `PS-011:STORAGE-1@base=IMPLEMENTED`, `PS-012:STORAGE-1@research-journals=BOUNDED`.
 - **Depends on:** `ACCOUNT-1`, `LOCAL-BOUNDS-1`.
 - **Motive:** make later ledger heads and authenticated nodes recover together instead of treating
   in-memory success as durable state.
-- **Artifact:** versioned append/record envelopes, exclusive-writer rule, atomic or recoverably
-  ordered head publication, checksummed data, fsync policy, rollback detection, retained failure
-  evidence, supplied-carrier verification, backup/restore hooks, and bounded pruning entry points.
+- **Artifact:** versioned append/record envelopes (`crates/research/src/storage.rs`), exclusive-writer
+  rule (`crates/research/src/journal.rs`, Windows `share_mode(0)` and Unix `flock(LOCK_EX | LOCK_NB)`
+  with inode check), atomic or recoverably ordered head publication (`append_synced`), checksummed
+  data, fsync policy (`sync_all` + reread), rollback detection (`AnchorPolicy::RequireAncestor`),
+  retained failure evidence (`RecoveryJournal` + `JOURNAL_REJECTED_TAIL_SCHEMA`), supplied-carrier
+  verification (`inspect_bytes` / `inspect_continuation_bytes`), bounded backup/restore hooks
+  (`backup_to` / `restore_from`), and bounded continuation pruning entry points
+  (`export_pruned_continuation` + `HistoryJournal` profile wrappers in `crates/research/src/history_store.rs`).
 - **Gate:** process-death, torn-write, corruption, stale-head, rollback, concurrent-writer, disk-full,
   malformed supplied-carrier, independent-decoder, pruning/GC, and restore assays recover one fully
   verified committed prefix or fail closed without inventing a new head or deleting a pinned one.
+  The implementation receipt is `origin/main` commit `0d086e05381b89557b29f76db5751aa1324d9348`
+  (tree `a2bf91fb1f8339acba54987331af8449b6f591b0`, PR #10 CI runs `44971957215` and `44971953283`,
+  10/10 jobs green); `STORAGE-1@research-journals` remains `BOUNDED` because physical sudden-power
+  hardware testing is outside software CI.
 - **Non-claim:** one-machine durability is not independent custody, network availability,
   Byzantine agreement, or anti-administrator rollback resistance.
 
 ### `LEDGER-1` — durable local occupancy-episode ledger
 
-- **Status:** `PS-013:LEDGER-1@base=LOCKED`.
+- **Status:** `PS-013:LEDGER-1@base=IMPLEMENTED`.
 - **Depends on:** `ACCOUNT-1`, `STORAGE-1`; the current feature-gated coordinate-episode prototype is
   bounded input evidence, not a prerequisite node.
 - **Motive:** establish the exact local meaning of placement-as-mint and deletion-as-burn before
   adding participants or monetary language.
-- **Artifact:** optional authoritative local ledger with crash-safe canonical records for one live
-  episode per mutable occupied coordinate, consuming burns, fresh re-mints, bedrock excluded only
-  from the mutable occupancy-episode map, no-op/rejection results, recovery, and bounded
-  replay/pruning rules. `ASSET-D1` still decides whether origin has a separate locked genesis
-  allocation.
+- **Artifact:** optional authoritative local ledger (`OccupancyEpisodeLedger` and crash-safe
+  `DurableOccupancyLedger` / `DurableLedgerRecovery` in `crates/research/src/coordinate_episode.rs`)
+  with crash-safe canonical records for one live episode per mutable occupied coordinate, consuming
+  burns with retained burn provenance, fresh re-mints, bedrock excluded only from the mutable
+  occupancy-episode map, no-op/rejection results, recovery, and bounded replay/pruning rules.
+  `ASSET-D1` still decides whether origin has a separate locked genesis allocation.
 - **Gate:** domain equality and bijection between mutable occupancy and the active episode map;
   globally fresh episode identifiers never reuse a live or burned identifier; delete/re-mint,
   origin, no-op/rejection, canonical-carrier, independently supplied replay, pruning-retention,
   restart, and torn-write vectors restore one committed head or fail closed; every consumed episode
-  has one burn provenance.
+  has one burn provenance. The implementation receipt is `origin/main` commit
+  `0d086e05381b89557b29f76db5751aa1324d9348` (tree `a2bf91fb1f8339acba54987331af8449b6f591b0`, PR #10
+  CI runs `44971957215` and `44971953283`, 10/10 jobs green).
 - **Non-claim:** provenance and conservation do not create a transferable coin, market value,
   multiplayer authority, rollback resistance against an administrator, or consensus.
 
@@ -1079,7 +1097,10 @@ is invalid input, not a third collision row.
   harness over adversarial proposal, vote, partition, missing-data, set-change, long-range,
   split-wrapper, arrival-permutation, duplicate, and post-acceptance status-upgrade traces. Certificate
   controls total-decode every committed wrapper, require exact component coverage including conflict
-  material, reject duplicate/forked admissions, and distinguish envelope consensus-order chronology
+  material, enforce `VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1` and the
+  admitted safe lower-bound / lossless predecessor-closure invariant (powering both late-valid-suffix
+  and candidate-advanced-rule rejections), reject duplicate/forked admissions, and distinguish
+  envelope consensus-order chronology
   from release/activation signing dependency. Independent historical reconstruction belongs to
   `SYNC-1@replay-authority`; independent multi-process, restart, and
   operational fault evidence belongs to `TESTNET-1`; sampled/model liveness evidence stays bounded
@@ -1479,7 +1500,10 @@ is invalid input, not a third collision row.
   upgrade from silently rewriting authority, supply, bedrock, ownership, or historical verification.
 - **Artifact:** `UPGRADE-1@old-profile-id->new-candidate-id`, a frozen migration specification,
   activation authority/timelock, deterministic
-  bounded migration function, old/new roots over one logical state, dual-profile window if any,
+  bounded migration function, old/new roots over one logical state, explicit consensus-native
+  occurrence-universe owner/handoff (old/new occurrence-index policy, history-start/lossless
+  predecessor closure, receipt preservation or deterministic re-encoding with bridge/equivalence
+  proof, and first new-profile child certificate behavior), dual-profile window if any,
   downgrade rejection, rollback/safe-halt rule, archival historical verifier, and an independent
   migration extension implemented after the migration specification is frozen.
 - **Gate:** old/new-root vectors and full bounded migration replay agree independently; invariant,
@@ -1727,7 +1751,14 @@ helpers, wrapped/negated semantic projections, and operational/merge first-addit
 coordinated correction preserves quoted bytes, parses through the next top-level assignment boundary,
 exact-guards the declared envelope-helper closure, normalizes intra-paragraph semantic claims and
 explicit zero/no/none forms, fails closed on Git inspection errors, checks every addition parent for
-prior path presence, and still requires ancestry to the explicit checked lineage. Audit cardinality
+prior path presence, and still requires ancestry to the explicit checked lineage. The frozen eleventh
+audit then found unquoted lexical token fusion in the exact-schema compactor, HTML-comment and
+inline-Markdown blindness in authority/projection scans, fail-open unsupported count/hex claim
+values, and a local worktree/index split for frozen artifacts. Its coordinated correction lexes
+unquoted schema syntax before compacting, strips HTML comments from structured authority tables and
+normalizes inline Markdown styling before semantic scanning, fails closed on unsupported finding-
+count or Git-object values once a claim head matches, and binds every frozen artifact to the Git
+index. Audit cardinality
 is derived from frozen finding tables. The real compatible graph at the audited inputs and corrected
 descendant is acyclic. These are checker controls, not a capability promotion or protocol-security
 proof.
@@ -1744,9 +1775,9 @@ proof.
 | `conditional_edge_count_u32` | `44` |
 | `total_declared_edge_count_u32` | `363` |
 | `predicate_entailment_count_u32` | `10` |
-| `planning_markdown_count_u32` | `25` |
-| `frozen_text_artifact_count_u32` | `14` |
-| `frozen_markdown_audit_count_u32` | `13` |
+| `planning_markdown_count_u32` | `26` |
+| `frozen_text_artifact_count_u32` | `15` |
+| `frozen_markdown_audit_count_u32` | `14` |
 | `frozen_json_receipt_count_u32` | `1` |
 
 `LEDGER-1`, a token/ownership system, networking, and autonomous rules should not be combined in

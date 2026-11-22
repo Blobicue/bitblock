@@ -58,6 +58,12 @@ TENTH_AUDIT_INPUT_COMMIT = "c6474e97a65fccee6c02ff07ad7a46bb516b7f9b"
 TENTH_AUDIT_INPUT_TREE = "29c72d3a26a72213e399b8846f8b6c24cdaeeed8"
 TENTH_AUDIT_ADDITION_COMMIT = "1f7ec0f2ca094414264f5172a4f07fd18a8dc3f3"
 TENTH_AUDIT_ADDITION_TREE = "462120e5e33b1e45932e3891ce7e5c43b9a35825"
+ELEVENTH_AUDIT = ROOT / "docs" / "DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md"
+ELEVENTH_AUDIT_GIT_BLOB = "fe6578e10320fd954a5d8ac3d5a386634f734388"
+ELEVENTH_AUDIT_INPUT_COMMIT = "3d7164ce3e6a81eec724aff18e0eeaf133e48a10"
+ELEVENTH_AUDIT_INPUT_TREE = "b71509263f77d31e00b735baaa83f71b3d931846"
+ELEVENTH_AUDIT_ADDITION_COMMIT = "e5a8bf78c5231cc1f849626448620dd3933a97de"
+ELEVENTH_AUDIT_ADDITION_TREE = "926f15e952c311cd2c0c0511fabe140d790fd433"
 CHECKED_GIT_REF = "HEAD"
 LAYER1_DESIGN_AUDIT = ROOT / "docs" / "LAYER1_DESIGN_AUDIT.md"
 LAYER1_DESIGN_AUDIT_GIT_BLOB = "124e066b418a61279abf90c1b1b2c2cc0604ef2a"
@@ -78,9 +84,27 @@ FROZEN_TEXT_FILES = (
     EIGHTH_AUDIT,
     NINTH_AUDIT,
     TENTH_AUDIT,
+    ELEVENTH_AUDIT,
     LAYER1_DESIGN_AUDIT,
     DESIGN_RECEIPT,
 )
+EXPECTED_FROZEN_TEXT_BLOBS = {
+    "docs/FUTURE_PLAN_AUDIT.md": FIRST_AUDIT_GIT_BLOB,
+    "docs/FUTURE_PLAN_AUDIT_LOOP2.md": SECOND_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md": DESIGN_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP2.md": SUCCESSOR_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md": THIRD_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP4.md": FOURTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP5.md": FIFTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP6.md": SIXTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP7.md": SEVENTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md": EIGHTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md": NINTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md": TENTH_AUDIT_GIT_BLOB,
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md": ELEVENTH_AUDIT_GIT_BLOB,
+    "docs/LAYER1_DESIGN_AUDIT.md": LAYER1_DESIGN_AUDIT_GIT_BLOB,
+    "docs/design-source-receipt-v1.json": DESIGN_RECEIPT_GIT_BLOB,
+}
 EXPECTED_FROZEN_TEXT_PATHS = frozenset(
     {
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT.md",
@@ -93,6 +117,7 @@ EXPECTED_FROZEN_TEXT_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/LAYER1_DESIGN_AUDIT.md",
@@ -113,6 +138,7 @@ PLANNING_FILES = (
     EIGHTH_AUDIT,
     NINTH_AUDIT,
     TENTH_AUDIT,
+    ELEVENTH_AUDIT,
     CAPABILITY,
     ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md",
     ROOT / "docs" / "FUTURE_PLAN_AUDIT.md",
@@ -143,6 +169,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
         "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md",
+        "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md",
         "docs/FUTURE_PLAN_AUDIT.md",
         "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
         "docs/HANDOFF.md",
@@ -156,7 +183,7 @@ EXPECTED_PLANNING_PATHS = frozenset(
     }
 )
 EXPECTED_PLANNING_INVENTORY_DIGEST = (
-    "1e7281bdf019131fe55513c2cd1b2e944dacaeda2a86af45366e800e44ffd821"
+    "dcabe704b0ba7739a66f89f8892937082417f0b674fd48d54e994b56ea180b20"
 )
 EXPECTED_HANDOFF_READ_ORDER = (
     "docs/HANDOFF.md",
@@ -173,6 +200,7 @@ EXPECTED_HANDOFF_READ_ORDER = (
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md",
     "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md",
+    "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md",
     "docs/FUTURE_PLAN_AUDIT_LOOP2.md",
     "docs/FUTURE_PLAN_AUDIT.md",
     "docs/SEMANTICS.md",
@@ -241,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "8589f2ed468a9819ee2f243f15020182eb8d497dda3a977f09f6fc65fee87430"
+EXPECTED_STATUS_DIGEST = "86ed75dfeaf118426e3a2730b0197d4c98eb461d0d8b5f2a0a107e1aeac52181"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "445228bdadd37f15e72df4ec268a8c75a9f6f220666a7437f07ebce1393dbde9"
+    "29e5f932e7992405efd1cb26ec263e72e799cbfdd802528032590a04afdba1db"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -1400,12 +1428,15 @@ def _schema_assignment_bounds(text: str, schema_name: str) -> tuple[int, int]:
 
 
 def _compact_schema_whitespace(text: str, label: str) -> str:
-    """Remove layout whitespace while preserving every quoted literal character."""
+    """Remove layout whitespace between complete tokens while preserving quoted literals (UG-05)."""
 
     compact: list[str] = []
     quote: str | None = None
     escaped = False
-    for character in text:
+    index = 0
+    length = len(text)
+    while index < length:
+        character = text[index]
         if quote is not None:
             compact.append(character)
             if escaped:
@@ -1414,12 +1445,45 @@ def _compact_schema_whitespace(text: str, label: str) -> str:
                 escaped = True
             elif character == quote:
                 quote = None
+            index += 1
             continue
         if character in {'"', "'"}:
             quote = character
             compact.append(character)
-        elif not character.isspace():
-            compact.append(character)
+            index += 1
+            continue
+        if character.isspace():
+            prev_index = index - 1
+            next_index = index
+            while next_index < length and text[next_index].isspace():
+                next_index += 1
+            if prev_index >= 0 and next_index < length:
+                prev_char = text[prev_index]
+                next_char = text[next_index]
+                if (prev_char.isalnum() or prev_char == "_") and (
+                    next_char.isalnum() or next_char == "_"
+                ):
+                    word_start = prev_index
+                    while word_start >= 0 and (
+                        text[word_start].isalnum() or text[word_start] == "_"
+                    ):
+                        word_start -= 1
+                    prev_word = text[word_start + 1 : prev_index + 1]
+                    if prev_word != "match":
+                        raise PlanningError(
+                            f"{label}: unquoted lexical token split across whitespace "
+                            f"between {prev_word!r} and {text[next_index : next_index + 24]!r}"
+                        )
+                if (prev_char == "=" and next_char == ">") or (
+                    prev_char == "." and next_char == "."
+                ):
+                    raise PlanningError(
+                        f"{label}: unquoted multi-character operator split across whitespace"
+                    )
+            index = next_index
+            continue
+        compact.append(character)
+        index += 1
     if quote is not None:
         raise PlanningError(f"{label}: unterminated quoted literal")
     return "".join(compact)
@@ -1681,6 +1745,44 @@ def check_loop10_envelope_helper_closure(text: str) -> None:
     _check_loop10_envelope_helper_transitive_closure(text)
 
 
+def _strip_markdown_html_comments(text: str) -> str:
+    """Strip HTML comments outside fenced code blocks so commented tables cannot pass (UG-06)."""
+
+    out_lines: list[str] = []
+    in_fence = False
+    in_comment = False
+    for raw_line in text.splitlines():
+        if raw_line.startswith("```"):
+            in_fence = not in_fence
+            out_lines.append(raw_line)
+            continue
+        if in_fence:
+            out_lines.append(raw_line)
+            continue
+        line = raw_line
+        result: list[str] = []
+        pos = 0
+        while pos < len(line):
+            if in_comment:
+                close = line.find("-->", pos)
+                if close == -1:
+                    pos = len(line)
+                else:
+                    in_comment = False
+                    pos = close + 3
+            else:
+                start = line.find("<!--", pos)
+                if start == -1:
+                    result.append(line[pos:])
+                    pos = len(line)
+                else:
+                    result.append(line[pos:start])
+                    in_comment = True
+                    pos = start + 4
+        out_lines.append("".join(result))
+    return "\n".join(out_lines)
+
+
 def _parse_named_two_column_table(
     text: str,
     heading: str,
@@ -1689,7 +1791,7 @@ def _parse_named_two_column_table(
     row_pattern: re.Pattern[str],
     label: str,
 ) -> tuple[tuple[str, str], ...]:
-    lines = text.splitlines()
+    lines = _strip_markdown_html_comments(text).splitlines()
     headings = [index for index, line in enumerate(lines) if line == heading]
     if len(headings) != 1:
         raise PlanningError(f"{label}: expected exactly one {heading} heading")
@@ -1920,7 +2022,7 @@ def parse_phase_statuses(
     statuses: list[PhaseStatus] = []
     seen_ids: set[str] = set()
     seen_tuples: set[tuple[str, str]] = set()
-    for number, line in enumerate(text.splitlines(), 1):
+    for number, line in enumerate(_strip_markdown_html_comments(text).splitlines(), 1):
         if not line.startswith("| PS-"):
             continue
         match = PHASE_STATUS_ROW.match(line)
@@ -2682,6 +2784,7 @@ def check_audit_provenance_projection(
         "Loop8ProvenanceV1": (EIGHTH_AUDIT, "EG", "Loop 8 audit"),
         "Loop9ProvenanceV1": (NINTH_AUDIT, "NG", "Loop 9 audit"),
         "Loop10ProvenanceV1": (TENTH_AUDIT, "TG", "Loop 10 audit"),
+        "Loop11ProvenanceV1": (ELEVENTH_AUDIT, "UG", "Loop 11 audit"),
     }
     if schema_name not in audit_count_sources:
         raise PlanningError(f"unknown audit provenance schema {schema_name}")
@@ -3187,6 +3290,26 @@ def _duplicate_projection_compiled_specs():
                 TENTH_AUDIT_GIT_BLOB,
             ),
         ),
+        "Loop11ProvenanceV1": (
+            (
+                "design_research_distillation_audit_loop11.md",
+                "loop 11",
+                "eleventh audit",
+                "loop11provenancev1",
+            ),
+            len(
+                _parse_frozen_audit_finding_ids(
+                    ELEVENTH_AUDIT.read_bytes(), prefix="UG", label="Loop 11 audit"
+                )
+            ),
+            (
+                ELEVENTH_AUDIT_INPUT_COMMIT,
+                ELEVENTH_AUDIT_INPUT_TREE,
+                ELEVENTH_AUDIT_ADDITION_COMMIT,
+                ELEVENTH_AUDIT_ADDITION_TREE,
+                ELEVENTH_AUDIT_GIT_BLOB,
+            ),
+        ),
     }
     object_tokens = []
     marker_specs = []
@@ -3330,13 +3453,43 @@ def _duplicate_projection_compiled_specs():
     )
 
 
+_UNSUPPORTED_FINDING_COUNT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:"
+    r"a\s+baker['’]s\s+dozen|baker['’]s\s+dozen|dozen|score|"
+    r"twenty-(?:three|four|five|six|seven|eight|nine)|"
+    r"thirty(?:-[a-z]+)?|forty(?:-[a-z]+)?|fifty(?:-[a-z]+)?|"
+    r"sixty(?:-[a-z]+)?|seventy(?:-[a-z]+)?|eighty(?:-[a-z]+)?|"
+    r"ninety(?:-[a-z]+)?|hundred|thousand|"
+    r"[\u0660-\u0669\uFF10-\uFF19]+"
+    r")(?:[\s_-]+[A-Za-z0-9_-]+){0,3}[\s_-]+(?:findings?|gaps?)(?![A-Za-z0-9_])",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_HEX_OBJECT_FIELD_RE = re.compile(
+    r"(?:audited[ _-]+input[ _-]+(?:commit|tree)|addition[ _-]+(?:commit|tree)|"
+    r"first[ _-]+addition[ _-]+commit|audit(?:[ _-]+git)?[ _-]+blob)"
+    r"[^.\n]{0,60}(?<![0-9a-f])([0-9a-f]{4,6}|[0-9a-f]{41,})(?![0-9a-f])",
+    re.IGNORECASE,
+)
+
+
+def _normalize_markdown_inline_text(raw: str) -> str:
+    """Normalize ordinary inline Markdown styling/entities to rendered text (UG-06)."""
+
+    text = raw.replace("&nbsp;", " ").replace("&#160;", " ")
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"__([^_]+)__", r"\1", text)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    text = text.replace("`", "")
+    return re.sub(r"[ \t\r\n]+", " ", text).strip()
+
+
 @functools.lru_cache(maxsize=4096)
 def _scan_single_paragraph_projection(raw_paragraph: str) -> tuple[str | None, str | None]:
     _, _, marker_specs, count_pattern, direct_successor_finding_claim_pattern = (
         _duplicate_projection_compiled_specs()
     )
     prose_patterns = _summary_prose_count_patterns()
-    paragraph = re.sub(r"[ \t\r\n]+", " ", raw_paragraph).strip()
+    paragraph = _normalize_markdown_inline_text(raw_paragraph)
     lowered = paragraph.lower()
     marker_err: str | None = None
     prose_err: str | None = None
@@ -3421,6 +3574,22 @@ def _scan_single_paragraph_projection(raw_paragraph: str) -> tuple[str | None, s
             marker_err = (
                 f"abbreviated Git object claim for {schema_name} is disallowed: "
                 f"{abbreviated_claim.group(1)}"
+            )
+            break
+
+        unsupported_count = _UNSUPPORTED_FINDING_COUNT_RE.search(paragraph)
+        if unsupported_count is not None:
+            marker_err = (
+                f"unsupported finding-count claim syntax for {schema_name} is disallowed: "
+                f"{unsupported_count.group(0)}"
+            )
+            break
+
+        unsupported_hex = _UNSUPPORTED_HEX_OBJECT_FIELD_RE.search(paragraph)
+        if unsupported_hex is not None:
+            marker_err = (
+                f"unsupported Git object length claim for {schema_name} is disallowed: "
+                f"{unsupported_hex.group(1)}"
             )
             break
 
@@ -3797,6 +3966,86 @@ def check_frozen_tenth_audit(data: bytes) -> None:
         )
 
 
+def check_frozen_eleventh_audit(data: bytes) -> None:
+    header = f"blob {len(data)}\0".encode("ascii")
+    actual = hashlib.sha1(header + data).hexdigest()
+    if actual != ELEVENTH_AUDIT_GIT_BLOB:
+        raise PlanningError(
+            "docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md changed after its frozen "
+            f"first addition: expected Git blob {ELEVENTH_AUDIT_GIT_BLOB}, got {actual}"
+        )
+
+
+def git_index_blob_map(paths: tuple[Path, ...]) -> dict[str, str]:
+    """Read exact Git-index blob hashes for frozen artifacts (UG-08)."""
+
+    relative_paths = tuple(repository_relative_path(path) for path in paths)
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--stage", "-z", "--", *relative_paths],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", b"").decode("utf-8", errors="replace").strip()
+        raise PlanningError(f"cannot inspect Git index for frozen artifacts: {detail or error}") from error
+    mapping: dict[str, str] = {}
+    for raw_entry in result.stdout.split(b"\0"):
+        if not raw_entry:
+            continue
+        meta, _, path_bytes = raw_entry.partition(b"\t")
+        parts = meta.decode("ascii", errors="replace").split()
+        if len(parts) < 2 or not path_bytes:
+            raise PlanningError(f"malformed git ls-files --stage entry: {raw_entry!r}")
+        mapping[path_bytes.decode("utf-8")] = parts[1]
+    return mapping
+
+
+def check_frozen_git_index_blobs(index_blobs: dict[str, str]) -> None:
+    """Require every frozen artifact to stay indexed with its exact frozen Git blob (UG-08)."""
+
+    for rel_path, expected_blob in sorted(EXPECTED_FROZEN_TEXT_BLOBS.items()):
+        actual_blob = index_blobs.get(rel_path)
+        if actual_blob is None:
+            raise PlanningError(
+                f"frozen artifact {rel_path} is missing from the Git index (staged deletion or untracked)"
+            )
+        if actual_blob != expected_blob:
+            raise PlanningError(
+                f"frozen artifact {rel_path} Git-index blob mismatch: "
+                f"expected {expected_blob}, got {actual_blob}"
+            )
+
+
+def check_ug01_history_start_propagation(
+    authenticated_state_text: str,
+    distillation_text: str,
+    capability_text: str,
+) -> None:
+    """Guard UG-01/UG-02 propagation of profile-derived history-start equality into derivative docs."""
+
+    required_tokens = (
+        "ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1",
+        "VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1",
+        "lossless predecessor closure",
+    )
+    for label, text in (
+        ("AUTHENTICATED_STATE_PLAN.md", authenticated_state_text),
+        ("DESIGN_RESEARCH_DISTILLATION.md", distillation_text),
+    ):
+        for token in required_tokens:
+            if token not in text:
+                raise PlanningError(
+                    f"{label}: missing Loop 11 UG-01/UG-02 history-start propagation token: {token}"
+                )
+    if "VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1" not in capability_text:
+        raise PlanningError(
+            "CAPABILITY_TREE.md: CONSENSUS-1 gate missing VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1"
+        )
+
+
 def _parse_frozen_audit_finding_ids(
     data: bytes,
     *,
@@ -4140,6 +4389,29 @@ def check_tenth_audit_addition_identity(
     )
 
 
+def check_eleventh_audit_addition_identity(
+    *,
+    checked_ref: str = CHECKED_GIT_REF,
+    ancestor_probe: Callable[[str, str], bool] = _git_is_ancestor,
+    parent_resolver: Callable[[str], tuple[str, ...]] = _git_commit_parents,
+    parent_path_probe: Callable[[str, str], bool] = _git_tree_path_exists,
+) -> dict[str, str]:
+    return _check_audit_addition_identity(
+        label="Loop 11 audit",
+        path=ELEVENTH_AUDIT,
+        input_commit=ELEVENTH_AUDIT_INPUT_COMMIT,
+        input_tree=ELEVENTH_AUDIT_INPUT_TREE,
+        addition_commit=ELEVENTH_AUDIT_ADDITION_COMMIT,
+        addition_tree=ELEVENTH_AUDIT_ADDITION_TREE,
+        addition_blob=ELEVENTH_AUDIT_GIT_BLOB,
+        finding_prefix="UG",
+        checked_ref=checked_ref,
+        ancestor_probe=ancestor_probe,
+        parent_resolver=parent_resolver,
+        parent_path_probe=parent_path_probe,
+    )
+
+
 def check_frozen_layer1_design_audit(data: bytes) -> None:
     header = f"blob {len(data)}\0".encode("ascii")
     actual = hashlib.sha1(header + data).hexdigest()
@@ -4447,6 +4719,14 @@ def expect_frozen_ninth_audit_failure(label: str, data: bytes) -> None:
 def expect_frozen_tenth_audit_failure(label: str, data: bytes) -> None:
     try:
         check_frozen_tenth_audit(data)
+    except PlanningError:
+        return
+    raise PlanningError(f"negative control did not fail: {label}")
+
+
+def expect_frozen_eleventh_audit_failure(label: str, data: bytes) -> None:
+    try:
+        check_frozen_eleventh_audit(data)
     except PlanningError:
         return
     raise PlanningError(f"negative control did not fail: {label}")
@@ -4853,6 +5133,7 @@ def run_self_tests(
     eighth_audit_bytes: bytes,
     ninth_audit_bytes: bytes,
     tenth_audit_bytes: bytes,
+    eleventh_audit_bytes: bytes,
     layer1_design_audit_bytes: bytes,
     design_receipt_bytes: bytes,
     design_text: str,
@@ -4860,11 +5141,13 @@ def run_self_tests(
     design_receipt: dict[str, object],
     tracked_paths: frozenset[Path],
     frozen_eol_policy: dict[str, dict[str, str]],
+    frozen_index_blobs: dict[str, str],
     planning_summary: dict[str, int],
     loop7_provenance: dict[str, str],
     loop8_provenance: dict[str, str],
     loop9_provenance: dict[str, str],
     loop10_provenance: dict[str, str],
+    loop11_provenance: dict[str, str],
     projection_texts: dict[str, str],
 ) -> None:
     def mutate_manifest_fragment(
@@ -5059,12 +5342,57 @@ def run_self_tests(
         "frozen tenth audit mutation",
         tenth_audit_bytes + b"\nnegative-control",
     )
+    expect_frozen_eleventh_audit_failure(
+        "frozen eleventh audit mutation",
+        eleventh_audit_bytes + b"\nnegative-control",
+    )
+
+    # UG-08 powered control: staged deletion of docs/design-source-receipt-v1.json from Git index
+    # must fail closed even when worktree bytes remain intact.
+    deleted_receipt_index = dict(frozen_index_blobs)
+    deleted_receipt_index.pop("docs/design-source-receipt-v1.json", None)
+    try:
+        check_frozen_git_index_blobs(deleted_receipt_index)
+    except PlanningError as error:
+        if "missing from the Git index" not in str(error):
+            raise PlanningError(
+                f"UG-08 negative control failed by wrong mechanism: {error}"
+            ) from error
+    else:
+        raise PlanningError("UG-08 negative control did not fail: staged receipt deletion")
+
+    # UG-05 powered control: unquoted whitespace inside identifier must reject.
+    try:
+        _compact_schema_whitespace("EnvelopeOwnerProfileContextV1(profile_ transition_context)", "UG-05")
+    except PlanningError as error:
+        if "unquoted lexical token split" not in str(error):
+            raise PlanningError(
+                f"UG-05 negative control failed by wrong mechanism: {error}"
+            ) from error
+    else:
+        raise PlanningError("UG-05 negative control did not fail: identifier token split")
+
+    # UG-06 powered control: HTML-commented phase-status table must reject.
+    commented_ps = text.replace(
+        "| PS-001 | WORLD-0 | base | IMPLEMENTED |",
+        "<!-- | PS-001 | WORLD-0 | base | IMPLEMENTED | -->",
+        1,
+    )
+    if commented_ps == text:
+        raise PlanningError("self-test fixture drift: UG-06 commented PS-001")
+    expect_phase_status_failure(
+        "UG-06 HTML-commented phase-status row",
+        commented_ps,
+        parse_capability(text),
+        expected_message="expected exactly one base phase-status tuple, got 0",
+    )
 
     for audit_label, audit_bytes, prefix, omitted_id in (
         ("Loop 7 audit", seventh_audit_bytes, "LG", "LG-04"),
         ("Loop 8 audit", eighth_audit_bytes, "EG", "EG-03"),
         ("Loop 9 audit", ninth_audit_bytes, "NG", "NG-05"),
         ("Loop 10 audit", tenth_audit_bytes, "TG", "TG-06"),
+        ("Loop 11 audit", eleventh_audit_bytes, "UG", "UG-07"),
     ):
         rows = audit_bytes.splitlines(keepends=True)
         omitted = [row for row in rows if not row.startswith(f"| {omitted_id} |".encode())]
@@ -6279,6 +6607,7 @@ def run_self_tests(
             ("Loop8ProvenanceV1", loop8_provenance),
             ("Loop9ProvenanceV1", loop9_provenance),
             ("Loop10ProvenanceV1", loop10_provenance),
+            ("Loop11ProvenanceV1", loop11_provenance),
         )
     )
     compact_projection_texts["docs/CAPABILITY_TREE.md"] = "\n".join(
@@ -6287,11 +6616,45 @@ def run_self_tests(
     )
     check_no_duplicate_exact_projections(compact_projection_texts, planning_summary)
 
+    # UG-06 & UG-07 powered controls: inline Markdown emphasis, unsupported count words, and 6-hex
+    # object claims must fail closed.
+    for ug_label, ug_sentence, ug_expected in (
+        (
+            "UG-06 bold marker finding count",
+            "Loop **10** found 13 material findings.",
+            "exact finding count for Loop10ProvenanceV1",
+        ),
+        (
+            "UG-07 baker's dozen finding count",
+            "Loop 10 found a baker's dozen material findings.",
+            "unsupported finding-count claim syntax for Loop10ProvenanceV1",
+        ),
+        (
+            "UG-07 thirty finding count",
+            "Loop 10 found thirty material findings.",
+            "unsupported finding-count claim syntax for Loop10ProvenanceV1",
+        ),
+        (
+            "UG-07 6-hex object claim",
+            "Loop 10 addition commit 1f7ec0 is listed here.",
+            "unsupported Git object length claim for Loop10ProvenanceV1",
+        ),
+    ):
+        ug_texts = dict(compact_projection_texts)
+        ug_texts["README.md"] += f"\n\n{ug_sentence}\n"
+        expect_duplicate_projection_failure(
+            ug_label,
+            ug_texts,
+            planning_summary,
+            expected_message=ug_expected,
+        )
+
     for schema_name, provenance in (
         ("Loop7ProvenanceV1", loop7_provenance),
         ("Loop8ProvenanceV1", loop8_provenance),
         ("Loop9ProvenanceV1", loop9_provenance),
         ("Loop10ProvenanceV1", loop10_provenance),
+        ("Loop11ProvenanceV1", loop11_provenance),
     ):
         for field, value in provenance.items():
             mutated_value = (
@@ -6361,6 +6724,7 @@ def run_self_tests(
         ("Loop8ProvenanceV1", loop8_provenance),
         ("Loop9ProvenanceV1", loop9_provenance),
         ("Loop10ProvenanceV1", loop10_provenance),
+        ("Loop11ProvenanceV1", loop11_provenance),
     ):
         for field in PROVENANCE_FIELD_ORDER[:-1]:
             object_id = provenance[field]
@@ -7202,7 +7566,7 @@ def run_self_tests(
     check_no_duplicate_exact_projections(benign_protocol_counts, planning_summary)
 
     handoff_omission = re.sub(
-        r"^25\. `docs/TIMELINES\.md`(?:\n|$)",
+        r"^26\. `docs/TIMELINES\.md`(?:\n|$)",
         "",
         handoff_text,
         count=1,
@@ -7218,8 +7582,8 @@ def run_self_tests(
     )
 
     handoff_insertion = re.sub(
-        r"^(25\. `docs/TIMELINES\.md`)$",
-        r"\1\n26. `Cargo.toml`",
+        r"^(26\. `docs/TIMELINES\.md`)$",
+        r"\1\n27. `Cargo.toml`",
         handoff_text,
         count=1,
         flags=re.MULTILINE,
@@ -7234,8 +7598,8 @@ def run_self_tests(
     )
 
     handoff_duplicate = handoff_text.replace(
-        "25. `docs/TIMELINES.md`",
-        "25. `docs/PROTOCOL.md`",
+        "26. `docs/TIMELINES.md`",
+        "26. `docs/PROTOCOL.md`",
         1,
     )
     if handoff_duplicate == handoff_text:
@@ -7280,8 +7644,8 @@ def run_self_tests(
     )
 
     handoff_description = handoff_text.replace(
-        "25. `docs/TIMELINES.md`",
-        "25. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
+        "26. `docs/TIMELINES.md`",
+        "26. `docs/TIMELINES.md` (prose must not impersonate structured metadata)",
         1,
     )
     if handoff_description == handoff_text:
@@ -7294,8 +7658,8 @@ def run_self_tests(
     )
 
     handoff_outside = handoff_text.replace(
-        "25. `docs/TIMELINES.md`",
-        "25. `../outside-read-order-negative-control.md`",
+        "26. `docs/TIMELINES.md`",
+        "26. `../outside-read-order-negative-control.md`",
         1,
     )
     if handoff_outside == handoff_text:
@@ -7308,8 +7672,8 @@ def run_self_tests(
     )
 
     handoff_untracked = handoff_text.replace(
-        "25. `docs/TIMELINES.md`",
-        "25. `docs/untracked-read-order-negative-control.md`",
+        "26. `docs/TIMELINES.md`",
+        "26. `docs/untracked-read-order-negative-control.md`",
         1,
     )
     if handoff_untracked == handoff_text:
@@ -8468,6 +8832,8 @@ def main() -> int:
     check_planning_inventory(PLANNING_FILES)
     frozen_eol_policy = git_effective_eol_policy(FROZEN_TEXT_FILES)
     check_frozen_text_eol_policy(frozen_eol_policy)
+    frozen_index_blobs = git_index_blob_map(FROZEN_TEXT_FILES)
+    check_frozen_git_index_blobs(frozen_index_blobs)
     capability_text = CAPABILITY.read_text(encoding="utf-8")
     nodes = parse_capability(capability_text)
     phase_statuses = parse_phase_statuses(capability_text, nodes)
@@ -8527,10 +8893,14 @@ def main() -> int:
     tenth_audit_bytes = TENTH_AUDIT.read_bytes()
     check_frozen_tenth_audit(tenth_audit_bytes)
     loop10_provenance = check_tenth_audit_addition_identity()
+    eleventh_audit_bytes = ELEVENTH_AUDIT.read_bytes()
+    check_frozen_eleventh_audit(eleventh_audit_bytes)
+    loop11_provenance = check_eleventh_audit_addition_identity()
     check_audit_provenance_projection(handoff_text, "Loop7ProvenanceV1", loop7_provenance)
     check_audit_provenance_projection(handoff_text, "Loop8ProvenanceV1", loop8_provenance)
     check_audit_provenance_projection(handoff_text, "Loop9ProvenanceV1", loop9_provenance)
     check_audit_provenance_projection(handoff_text, "Loop10ProvenanceV1", loop10_provenance)
+    check_audit_provenance_projection(handoff_text, "Loop11ProvenanceV1", loop11_provenance)
     layer1_design_audit_bytes = LAYER1_DESIGN_AUDIT.read_bytes()
     check_frozen_layer1_design_audit(layer1_design_audit_bytes)
     design_receipt_bytes = DESIGN_RECEIPT.read_bytes()
@@ -8539,6 +8909,12 @@ def main() -> int:
     check_audited_distillation_receipt(design_receipt)
     design_text = DESIGN_DISTILLATION.read_text(encoding="utf-8")
     check_design_source_receipt(design_text, design_receipt)
+    authenticated_state_text = (ROOT / "docs" / "AUTHENTICATED_STATE_PLAN.md").read_text(
+        encoding="utf-8"
+    )
+    check_ug01_history_start_propagation(
+        authenticated_state_text, design_text, capability_text
+    )
     layer1_design_paper_text = (ROOT / "docs" / "LAYER1_DESIGN_PAPER.md").read_text(
         encoding="utf-8"
     )
@@ -8579,6 +8955,7 @@ def main() -> int:
             eighth_audit_bytes,
             ninth_audit_bytes,
             tenth_audit_bytes,
+            eleventh_audit_bytes,
             layer1_design_audit_bytes,
             design_receipt_bytes,
             design_text,
@@ -8586,11 +8963,13 @@ def main() -> int:
             design_receipt,
             tracked_paths,
             frozen_eol_policy,
+            frozen_index_blobs,
             planning_summary,
             loop7_provenance,
             loop8_provenance,
             loop9_provenance,
             loop10_provenance,
+            loop11_provenance,
             projection_texts,
         )
 

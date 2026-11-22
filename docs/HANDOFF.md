@@ -4,12 +4,15 @@ This is the short operational handoff for continuing Bitblock. It is intentional
 the transcript audit: use it to orient quickly, then use the linked documents for the full
 semantic history.
 
-## Current line of work (2026-10-29), read before the history below
+## Current line of work (2026-11-21), read before the history below
 
-- Active remote and branch: `Blobicue/bitblock`, branch `chem/emergent-scale-2026-10` (see branch tip;
-  do not pin a SHA here). The `Gaia-0-0-1-1` remote and `main` branch described below are history. They are kept unchanged.
-- Current work is the chem emergent-scale wave: `docs/BITBLOCK_SCALE_EMERGENT.md` §5w–§5y (coreward gravity,
-  σ_h driver study, bigger scale + gas planet). Self-playtest at http://127.0.0.1:8765/play.html before Desktop.
+- Active remote and branch: `Blobicue/bitblock`, branch `main` (see branch tip; do not pin a moving
+  HEAD SHA here). The earlier `Gaia-0-0-1-1` remote, `codex/*` branches, and `chem/emergent-scale-2026-10`
+  / `chem/render-scale-2026-11` waves are merged history preserved below.
+- Current milestone: the local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`,
+  `LEDGER-1`) is `IMPLEMENTED` under `PS-009`..`PS-013`, the `chem/render-scale-2026-11` SIMD128
+  worker/octree/delta-render stack is merged on `main`, and the Loop 11 planning reconciliation
+  aligns the mutable planning docs and powered checker controls.
 - Agent onboarding / knowledge graph: `docs/AGENT_ONBOARDING.md`. It explains bbgraph `index/`
   for protocol, metrics, and gates, and GitNexus `.gitnexus/` (local only; MCP repo `bitblock`) for symbols, calls,
   flows, and blast radius.
@@ -53,8 +56,8 @@ semantic history.
   `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP3.md`. It freezes the complete successor sweep over
   `54926f5`, eight new findings, and audit blob
   `fbee935d27617f47f913617ca2d8e19aba618c6e`.
-- `b23ddc95e5075c35d0dbf918b89f353fcdd40ddd` is the coordinated correction for TG-01 through
-  TG-08. It binds the post-ID launch anchor, deterministic migration envelope/body, verifier work
+- `b23ddc95e5075c35d0dbf918b89f353fcdd40ddd` is the coordinated correction for Loop3/TG-01 through
+  Loop3/TG-08. It binds the post-ID launch anchor, deterministic migration envelope/body, verifier work
   ordering, candidate-bound Verkle/current-scope evidence, and cross-platform planning provenance.
   Its Git tree is `3de2d45aa20b08318f1a1af4d93308daccf1f55e`. The narrow planning self-test and staged whitespace
   check passed; broad Rust, Python-vector, headless, Lean, network, performance, and display suites
@@ -132,13 +135,20 @@ semantic history.
   semantic projections, first-addition operational/merge failure, implementation/proposal wording,
   convergence, chronology, and current-paper review provenance.
 
-- The paper-owned TG-01 through TG-03, checker-owned TG-04 through TG-08, and cross-document TG-09
-  through TG-12 corrections are now projected below. Their proposed-only and narrow-test boundaries
-  remain explicit; no break witness is silently promoted into runtime or security evidence.
+- The paper-owned Loop10/TG-01 through Loop10/TG-03, checker-owned Loop10/TG-04 through Loop10/TG-08,
+  and cross-document Loop10/TG-09 through Loop10/TG-12 corrections are projected below. Their
+  proposed-only and narrow-test boundaries remain explicit; no break witness is silently promoted
+  into runtime or security evidence.
 
-- The user initially stopped the process at Loop 10 after its frozen record was pushed, then later
-  lifted that cap and authorized the coordinated correction plus renewed successor sweeps. No Loop 11
-  audit or zero-gap convergence result exists yet, and broad tests remain gated.
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md` is identified only through the canonical
+  `Loop11ProvenanceV1` projection below. Its UG-01 through UG-14 coordinated reconciliation propagates
+  the profile-derived history-start equality and safe lower-bound invariant, names the cross-profile
+  occurrence-universe owner/handoff, records `ACCOUNT-1` closure, closes lexical token fusion /
+  HTML-comment & emphasis blindness / fail-open unsupported claim values / frozen Git-index checks in
+  the planning checker, qualifies `Loop3/TG-*` vs `Loop10/TG-*`, corrects the deferred Verkle wording,
+  labels historical pre-split test counts, and distinguishes routine automatic GitHub Actions CI from
+  an attributed Layer-1 convergence/release pass. It remains proposed-protocol, planning, and checker
+  work; no Layer 1 network execution exists in Rust.
 
 - `docs/FUTURE_PLAN_AUDIT_LOOP2.md` predates the design distillation. Its 16-finding closure and
   validation boundary do not audit `694650f` or the later correction.
@@ -210,6 +220,17 @@ semantic history.
 | `audit_git_blob` | `eb730338c6ec00c0285cc3ee7d8245f2c1ea2ebe` |
 | `material_finding_count_u32` | `12` |
 
+### Loop11ProvenanceV1
+
+| Provenance field | Canonical value |
+| --- | --- |
+| `audited_input_commit` | `3d7164ce3e6a81eec724aff18e0eeaf133e48a10` |
+| `audited_input_tree` | `b71509263f77d31e00b735baaa83f71b3d931846` |
+| `addition_commit` | `e5a8bf78c5231cc1f849626448620dd3933a97de` |
+| `addition_tree` | `926f15e952c311cd2c0c0511fabe140d790fd433` |
+| `audit_git_blob` | `fe6578e10320fd954a5d8ac3d5a386634f734388` |
+| `material_finding_count_u32` | `14` |
+
 Start from a fresh clone or an existing checkout with:
 
 ```powershell
@@ -234,17 +255,18 @@ Read in this order:
 12. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP8.md`
 13. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP9.md`
 14. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`
-15. `docs/FUTURE_PLAN_AUDIT_LOOP2.md`
-16. `docs/FUTURE_PLAN_AUDIT.md`
-17. `docs/SEMANTICS.md`
-18. `docs/TRANSCRIPT_AUDIT.md`
-19. `docs/AUTHENTICATED_STATE_PLAN.md`
-20. `docs/LAYER1_DESIGN_PAPER.md`
-21. `docs/LAYER1_DESIGN_AUDIT.md`
-22. `README.md`
-23. `docs/AUDIT_HISTORY.md`
-24. `docs/PROTOCOL.md`
-25. `docs/TIMELINES.md`
+15. `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md`
+16. `docs/FUTURE_PLAN_AUDIT_LOOP2.md`
+17. `docs/FUTURE_PLAN_AUDIT.md`
+18. `docs/SEMANTICS.md`
+19. `docs/TRANSCRIPT_AUDIT.md`
+20. `docs/AUTHENTICATED_STATE_PLAN.md`
+21. `docs/LAYER1_DESIGN_PAPER.md`
+22. `docs/LAYER1_DESIGN_AUDIT.md`
+23. `README.md`
+24. `docs/AUDIT_HISTORY.md`
+25. `docs/PROTOCOL.md`
+26. `docs/TIMELINES.md`
 
 `AGENTS.md` describes the generated index over this tree. Rather than
 reading the tree, query it:
@@ -492,10 +514,16 @@ self-verified. Neither path produces physical display evidence.
   exact-schema, provenance-projection, ancestry, and powered-control findings plus the unchanged
   finite-lens convergence rule.
 
-- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`: exact identity and TG-set cardinality in
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP10.md`: exact identity and Loop10/TG-set cardinality in
   `Loop10ProvenanceV1`; frozen lower-bound, historical-signing, consumer-context, parser/helper,
   semantic-projection, ancestry/topology, implementation-wording, convergence, chronology, and
   review-provenance findings plus the unchanged finite-lens convergence rule.
+
+- `docs/DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md`: exact identity and UG-set cardinality in
+  `Loop11ProvenanceV1`; frozen history-start propagation, admitted lower-bound safety, `ACCOUNT-1`
+  coordination, cross-profile occurrence-universe handoff, lexical token-fusion, Markdown context,
+  fail-open claim value, frozen Git-index, convergence attribution, current-paper identity, retired
+  mirror topology, verification inventory, `TG` namespace collision, and deferred-Verkle findings.
 
 - `docs/LAYER1_DESIGN_AUDIT.md`: canonical corrected checkpoint-0.3 reading copy, frozen at current
   blob `124e066b418a61279abf90c1b1b2c2cc0604ef2a` from the fifth-successor correction onward; Git
@@ -576,38 +604,34 @@ The candidate labels in `docs/DESIGN_RESEARCH_DISTILLATION.md` are research note
 nodes; promote one only through an explicit later capability-tree decision with dependencies,
 artifact, gate, and non-claim.
 
-1. Finish the convergence protocol first: pin this tenth-audit correction, run another complete
-   independent read-only sweep, and freeze either its new findings or a result with zero new
-   material gaps and zero falsely closed material residuals. Only a frozen zero-gap result opens the
-   broad Rust, Python-vector, headless, Lean, and release-path test pass requested by the user. It
-   still cannot replace physical display review.
-2. The preferred next semantic implementation node is `ACCOUNT-1`: reconcile submitted, admitted,
-   executed, rejected, no-op, camera/control, edit-miss/overlap, and idle action/result lanes. This
-   precedes durable episodes, signed actors, and executable rules.
-3. After `ACCOUNT-1`, freeze `LOCAL-BOUNDS-1` before `STORAGE-1`; do not make local durability wait
-   on a circular future network profile. `LEDGER-1` and `TRANSITION-SPEC-D1` follow their exact
-   dependency fields.
-4. `COMMIT-R1` can proceed as a research-only checkpoint: freeze the common key/node/proof/resource
-   profiles and compare fixed-key binary Patricia with a 192-level sparse Merkle tree. Do not hook
-   either into `World`, history publication, receipts, rendering, or collision until the shared
-   assay passes and `LEDGER-1` exists.
-5. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
+1. Maintain the truthful verification boundary (`UG-09`): routine GitHub Actions CI (`rust (windows-latest)`,
+   `rust (ubuntu-latest)` + `wasm32` `+simd128` V8 parity, `python vector tools`, `generated index`,
+   `lean proof capsule`) executes on every push/PR and is recorded as automatic CI evidence, while
+   attribution of a complete Layer-1 convergence/release evidence pass remains gated on a frozen
+   zero-gap successor sweep and cannot replace physical display or external custody review.
+2. The local authority trunk (`ACCOUNT-1`, `LOCAL-BOUNDS-1`, `STORAGE-1`, `LEDGER-1`) is now
+   `IMPLEMENTED` (with `STORAGE-1@research-journals` kept `BOUNDED` and `COST-1@budget` `BOUNDED`).
+   Next trunk checkpoints are closing `CODEC-1` + `COMMIT-R1` selection before unlocking
+   `TRANSITION-SPEC-D1` and `COMMIT-1`.
+3. `COMMIT-R1` can proceed to a recorded decision: freeze the common key/node/proof/resource
+   profiles and compare fixed-key binary Patricia with a 192-level sparse Merkle tree (and arity-8
+   `SparseOctreeV1` assay evidence). Do not hook a candidate into live `World`, history publication,
+   receipts, rendering, or collision until the shared assay passes and `TRANSITION-SPEC-D1` exists.
+4. `VERKLE-R1` is separate feasibility work. It must freeze its vector-commitment scheme, curve or
    field, generator/setup and transcript rules, 192-bit embedding, independent proof corpus,
    end-to-end cost/TCB, and migration policy before a prototype can challenge the hash baseline.
    Proof-size intuition alone cannot select it or delay `COMMIT-R1`.
-6. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
+5. Resolve the open startup choice: adjacent spawn at distance `1.0` versus exact one-pixel
    startup. If changed, update the constructor path, vectors, controls, and docs together.
-7. Run `SCALE-1`/`COST-1` measurements before designing a hierarchical chunk/LOD path.
-   The present below-saturation renderer traverses on bits; no “near-infinite performance” claim
-   is licensed yet.
-8. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
+6. Expand `SCALE-1`/`COST-1` measurements on the merged octree-pruned renderer (`SCALE-2` parity
+   work) before making wider scale claims; no “near-infinite performance” claim is licensed.
+7. Locate the user's intended balanced-trit hashing implementation under `HASH-SOURCE-R1`; only
    then open `HASH-R1` to define and test its exact input/output and security contract. Preserve the
-   recorded disqualification of the examined
-   Aethor TSH/PDH constructions and IterHash; do not conflate them with a different missing design.
-9. Only after `ACCOUNT-1`, consider `RULE-1`: one finite opt-in local transformation rule with a
-   named neighborhood, ordering, resource bound, and deterministic
-   `(initial state, accepted tape, rule version)` replay. Do not combine it with asset or network
-   authority.
+   recorded disqualification of the examined Aethor TSH/PDH constructions and IterHash; do not
+   conflate them with a different missing design.
+8. Decide `RULE-1` (`OPEN-DECISION`): one finite opt-in local transformation rule with a named
+   neighborhood, ordering, resource bound, and deterministic `(initial state, accepted tape, rule
+   version)` replay. Do not combine it with asset or network authority.
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
@@ -634,8 +658,8 @@ git show --check --format=fuller ea9294ba08b5e4bd339f82894ecb761461f5af13
 ```
 
 The exact inputs and first-addition identities for the current successor audits are in their
-canonical `Loop7ProvenanceV1`, `Loop8ProvenanceV1`, `Loop9ProvenanceV1`, and
-`Loop10ProvenanceV1` tables; earlier frozen
+canonical `Loop7ProvenanceV1`, `Loop8ProvenanceV1`, `Loop9ProvenanceV1`, `Loop10ProvenanceV1`, and
+`Loop11ProvenanceV1` tables; earlier frozen
 audits retain their own identities. The
 stable whitespace receipts for the complete second and third corrections are:
 

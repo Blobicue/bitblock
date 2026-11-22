@@ -374,24 +374,30 @@ height. Each envelope, release, or activation use actually consumed by that sequ
 `HistoricalAcceptedParentAuthorityUseWitnessSetV1`, binding the unique parent lookup/core, purpose,
 policy, predicate, attained status, exact `AcceptedParentAuthorityConsumerRefV1`, and one
 `ConsensusNativeParentAuthorityCertificateRefV1`. The parent-profile-derived resolver fixes the
-required consensus position and all certificate, consensus, availability, bounds, and
-equivocation/liveness rules from a certificate-independent
-`ParentAuthorityCertificateConsumerContextV1` derived before any historical ref or final consumer
-ID. The resolver fixes the rule for selecting the last complete consensus state before admission;
-the required certificate position and parent consensus history derive the concrete
-`ConsensusNativeParentAuthorityEvidenceCutoffV1`, which consensus authenticates. The parent
+required consensus position, immutable `ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`, and
+all certificate, consensus, availability, bounds, and equivocation/liveness rules from a
+certificate-independent `ParentAuthorityCertificateConsumerContextV1` derived before any historical
+ref or final consumer ID. Admission requires that history start to begin at profile activation / the
+earliest relevant occurrence or bind an authenticated lossless predecessor closure. The resolver
+fixes the rule for selecting the last complete consensus state before admission; the required
+certificate position and parent consensus history derive the concrete
+`ConsensusNativeParentAuthorityEvidenceCutoffV1`, binding that same
+`ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`, which consensus authenticates. The parent
 consensus state atomically inserts every
 accepted wrapper into an authenticated ordered occurrence universe under its lookup, unique core,
 and `ConsensusNativeAcceptedRecordOccurrencePositionV1`;
 `ConsensusNativeAcceptedRecordOccurrenceReceiptV1` binds that live position and the exact bounded
 outer bytes. `ConsensusNativeParentAuthorityEvidenceCutoffConsensusProofV1` authenticates the
-cutoff, universe root, entry count, and state inclusion rather than allowing a certificate candidate
-to choose them.
+cutoff, profile-derived history start, universe root, entry count, and state inclusion rather than
+allowing a certificate candidate to choose them.
 
-A certificate is consumable only after its authorization and exact evidence commitment carry
-`CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1`. That result binds the exact
-`ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1`—lookup, core, inclusive consensus-history
-start, and `ConsensusNativeParentAuthorityEvidenceCutoffPositionV1`—the range-derived
+A certificate is consumable only after `VerifiedConsensusNativeAcceptedRecordOccurrenceHistoryStartEqualityV1`
+proves exact byte equality across the resolver, cutoff, and scope history-start values (rejecting
+any later-start internally valid suffix before range acceptance) and its authorization and exact
+evidence commitment carry `CompleteConsensusNativeAcceptedRecordOccurrenceUniverseV1`. That result
+binds the exact `ConsensusNativeAcceptedRecordOccurrenceUniverseScopeV1`—lookup, core, exact
+`ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`, and
+`ConsensusNativeParentAuthorityEvidenceCutoffPositionV1`—the range-derived
 `ConsensusNativeAcceptedRecordOccurrenceReceiptSetV1`, and
 `ConsensusNativeAcceptedRecordOccurrenceUniverseRangeCompletenessProofV1`; authenticated lower-
 boundary exclusion, gap-free range, and upper-boundary exclusion prove that no relevant pre-cutoff

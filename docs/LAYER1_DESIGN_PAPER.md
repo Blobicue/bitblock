@@ -2674,10 +2674,22 @@ policy/codec/hash/signature scheme and credential set, consensus rule, availabil
 acceptance status, accepted-record occurrence index/root and range-proof schemes, exact evidence
 cutoff rule, bounds, equivocation/liveness disposition, and exact
 `ConsensusNativeAcceptedRecordOccurrenceHistoryStartV1`. That history start is derived solely from
-the admitted parent profile, its occurrence-index policy, and its immutable history-start rule. Its
+the admitted parent profile, its occurrence-index policy, and its immutable history-start rule.
+Profile admission MUST enforce the safe lower-bound invariant: the immutable rule MUST start at
+profile activation / the earliest occurrence that can affect a certificate under the profile, or
+bind an authenticated lossless predecessor-universe closure proving equivalence across all prior
+relevant occurrences; a candidate whose admitted rule advances the start without lossless closure
+MUST reject even when resolver, cutoff, and scope agree. Its
 inclusive position is fixed before certificate-candidate processing and cannot advance per purpose,
 core, consumer, or certificate; a future pruning or accumulator scheme would require a new admitted
-rule proving lossless equivalence to this range. The required cutoff is the last complete consensus
+rule proving lossless equivalence to this range. Across an in-place profile transition (`UPGRADE-1`
+and `SuccessorActivationBundleV1`), the consensus-native occurrence universe retains an explicit
+typed owner and transition relation: the old profile owns occurrence receipts and universe roots
+through migration-block acceptance, and the successor bundle binds old/new occurrence-index policy,
+history-start/lossless predecessor closure, receipt preservation or deterministic re-encoding with a
+bridge/equivalence proof, activation ordering, and the exact first new-profile child certificate
+handoff so conforming verifiers never diverge on cross-profile parent authority. The required cutoff
+is the last complete consensus
 state immediately preceding certificate admission in the profile's total order. That order includes
 an intra-consensus-position ordinal, so a wrapper accepted earlier in the same height, round, or view
 is pre-cutoff and a wrapper ordered after the certificate is not. The cutoff/root is derived from the

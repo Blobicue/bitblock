@@ -3036,25 +3036,28 @@ observation reports `capture_outcome=Match`, `capture_stage=Complete`, zero
 mismatches, and an unchanged before/after route. Those facts remain one local
 OS desktop-raster sample, not scanout or light evidence.
 
-The current verifier checkpoint passed `cargo fmt --all`, 316 default
+The historical pre-workspace-split verifier checkpoint (retained for historical reference only;
+current live test and vector inventories are owned by `tools/bbverify.py` and the generated `index/`)
+passed `cargo fmt --all`, 316 default
 all-target tests (275 library, 40 application, one integration), 344 all-feature
 all-target tests (295 library, 48 application, one integration), and strict
 default/all-feature Clippy. All sixteen independent Python vector programs
-passed; the metric registry audit remained 1,112 exact definitions; and
+at that checkpoint passed; the metric registry audit remained 1,112 exact definitions; and
 `lake build` completed six proof jobs. The release Windows research CLI also
 cleanly replayed the retained F5 carrier above, while a different syntactically
 valid storage-record tag emitted `status=missing-required-ancestor` and exited
 nonzero.
 
-### Final verification and release artifacts
+### Historical pre-split verification and release artifacts
 
-The final all-target default pass runs 314 tests (273 library, 40 application,
-and one direct CLI integration test). The all-feature pass runs 341 tests (293
-library, 47 application, and the same integration test). Both feature sets pass
-strict Clippy; formatting is clean. All sixteen independent Python vector
-programs pass, including 15/15 malformed InteractionTape controls. The exact
-metric audit remains 1,112 definitions with no unresolved or malformed rows,
-and `lake build` completes all 6 proof jobs.
+That historical pre-workspace-split all-target default pass ran 314 tests (273 library, 40 application,
+and one direct CLI integration test), and its all-feature pass ran 341 tests (293
+library, 47 application, and the same integration test), with strict Clippy, clean formatting,
+sixteen independent Python vector programs (including 15/15 malformed InteractionTape controls),
+1,112 metric definitions, and 6 Lean proof jobs. For current repository counts across the split
+workspace (`bitblock-core`, `bitblock-research`, `bitblock-wasm`, `bitblock`), 37 independent
+Python vector suites, and both Lean 4 capsules under `--trust=0`, run `python3 tools/bbverify.py full`
+and `python3 tools/bbgraph.py stats`.
 
 Optimized InteractionTape parsing passes all 12 release interaction tests, and
 the optimized tape-to-fixed-tick equivalence test passes separately. The direct

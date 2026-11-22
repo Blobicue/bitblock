@@ -302,10 +302,11 @@ multiplayer. Observers remain local camera state rather than consensus entities.
 User intent: make every missing assumption and security layer explicit enough that the design could
 eventually support a scoped Layer 1 claim.
 
-Current truth: `LAYER1_DESIGN_PAPER.md` checkpoint 0.3 defines a proposed state machine, identity,
-transaction, root, consensus, availability, economic, upgrade, operational, and verification-gate
-inventory. It deliberately distinguishes implemented, bounded, proposed, open, and not-claimed
-surfaces. This is **documentation**, not Layer 1 implementation or security coverage.
+Historical checkpoint-0.3 truth: `LAYER1_DESIGN_PAPER.md` at pinned historical checkpoint 0.3
+defined a proposed state machine, identity, transaction, root, consensus, availability, economic,
+upgrade, operational, and verification-gate inventory; the mutable file is now its current proposed
+descendant (see item 36 below). Both deliberately distinguish implemented, bounded, proposed, open,
+and not-claimed surfaces. This is **documentation**, not Layer 1 implementation or security coverage.
 
 Layer 1 is one future branch of Bitblock rather than the definition of the project. The original
 binary-world, observation, scale, emergence, and visual-language motives remain independently
@@ -787,6 +788,29 @@ level boundaries, exact-guards the transitive envelope-helper closure, normalize
 claims including explicit zero/no/none forms, and makes first-addition proof fail closed on Git errors
 and inspect every parent before separately checking current-lineage ancestry. These are finite subject
 controls; their narrow receipts do not become broad implementation or security evidence.
+
+### 38. Eleventh bounded successor sweep, Loop-11 reconciliation, and local authority trunk advancement
+
+User intent: reconcile the frozen eleventh planning audit across all mutable planning documents and
+powered checker controls, and advance the local authority trunk (`LOCAL-BOUNDS-1`, `STORAGE-1`,
+`LEDGER-1`) cleanly once every gate obligation passes on `main`.
+
+Current truth: the eleventh sweep is frozen in
+[`DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md`](DESIGN_RESEARCH_DISTILLATION_AUDIT_LOOP11.md), with
+its exact input, first-addition identity, and finding cardinality carried only by `Loop11ProvenanceV1`
+in [`HANDOFF.md`](HANDOFF.md). Its coordinated reconciliation propagates profile-derived history-start
+equality and the admitted safe lower-bound invariant, names the cross-profile occurrence-universe
+owner and handoff rule, closes unquoted lexical token fusion, HTML-comment and inline-Markdown
+authority/projection blindness, fail-open unsupported claim values, and frozen Git-index checks in
+`tools/check_planning_docs.py`, qualifies `Loop3/TG-*` versus `Loop10/TG-*`, corrects the deferred
+Verkle wording, labels historical pre-split verification counts, and records the retired timeline-1
+mirror boundary. Routine GitHub Actions CI (`rust (windows-latest)`, `rust (ubuntu-latest)` + `wasm32`
+V8 parity, `python vector tools`, `generated index`, `lean proof capsule`) executes on every push and
+PR; attribution of a complete Layer-1 convergence/release evidence pass remains separately gated on
+frozen convergence and never substitutes for physical display, remote custody, or network security
+evidence. Separately on the verified runtime trunk, `LOCAL-BOUNDS-1`, `STORAGE-1`, and `LEDGER-1`
+advanced to `IMPLEMENTED` in [`CAPABILITY_TREE.md`](CAPABILITY_TREE.md) from their exact merged `main`
+receipt while keeping `STORAGE-1@research-journals` `BOUNDED` and `RULE-1` `OPEN-DECISION`.
 
 ## Semantic lessons that should survive future checkpoints
 
