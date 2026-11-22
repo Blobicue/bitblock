@@ -79,7 +79,7 @@ candidate to choose its own authority.
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
 | PS-038 | ASSET-1 | base | LOCKED |
-| PS-039 | RESOURCE-1 | base | READY |
+| PS-039 | RESOURCE-1 | base | BOUNDED |
 | PS-040 | ECONOMIC-STATE-1 | base | LOCKED |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
@@ -932,14 +932,20 @@ is invalid input, not a third collision row.
 
 ### `RESOURCE-1` — fees, rent, and economic resource policy
 
-- **Status:** `PS-039:RESOURCE-1@base=READY`.
+- **Status:** `PS-039:RESOURCE-1@base=BOUNDED`.
 - **Depends on:** `BOUNDS-1`, `PROFILE-SCOPE-D0`; target-profile economic charging adds the
   conditional design edge CE-14, while a non-economic profile may choose deterministic quotas.
 - **Motive:** prevent the huge coordinate space and proof/history creation from becoming an
   unpaid obligation or denial-of-service surface.
-- **Artifact:** deterministic pricing or quota policy for signatures, codecs, execution, proof
-  bytes, writes, witnesses, retained history, and recovery; explicit payer, denomination,
-  price-update, failure charging, state-rent/deposit/expiry, and partition semantics if used.
+- **Artifact:** [`RESOURCE_1_RECEIPT.md`](RESOURCE_1_RECEIPT.md) and
+  [`resource-1-simulation-v1.json`](resource-1-simulation-v1.json) (PR #38 commit
+  `438f08e0b09f6ba40e829d46b25c9083b830475f`, `crates/research/src/resource_1.rs`,
+  `tools/resource_1_vectors.py`, `tests/wave7_resource_1.rs`, and
+  `examples/resource_1_economics_probe.rs`) freeze `ResourcePolicyV1` (`BOUNDS-1`-calibrated gas
+  weights, unified integer EIP-1559 controller `±12.5%`/block around `50M` target / `100M` cap,
+  100% burned base fees even on admitted failures, strictly capped optional proposer tip, and
+  `ASSET-D1` refundable per-voxel deposits with zero forced rent expiry and bedrock excluded) plus
+  conservation-checked `BlockResourceSettlementV1`.
 - **Gate:** charges or quotas cover the measured `BOUNDS-1` resource model under the declared
   assumptions; expiry preserves bedrock and atomic world/episode/supply invariants; prices and
   limits are never changed merely to pass a workload.
@@ -1868,12 +1874,11 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-039:RESOURCE-1@base=READY` |
-| 4 | `PS-047:VM-1@base=READY` |
-| 5 | `PS-062:COST-1@base=READY` |
-| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 7 | `PS-078:GENESIS-D1@base=READY` |
-| 8 | `PS-086:RELEASE-R1@base=READY` |
+| 3 | `PS-047:VM-1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 6 | `PS-078:GENESIS-D1@base=READY` |
+| 7 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1906,7 +1911,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `8` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

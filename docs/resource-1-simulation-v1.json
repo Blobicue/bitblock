@@ -1,0 +1,36 @@
+{
+  "schema": "bitblock/resource-1-simulation-receipt/v1",
+  "merged_main_commit": "438f08e0b09f6ba40e829d46b25c9083b830475f",
+  "merged_main_tree": "0da6006765b4696db9131a487a7a6a178b71b4a0",
+  "merged_main_parent": "f07f32fc6d87c72352d17769540564ba5e70a354",
+  "pr_number": 38,
+  "ci_run_ids": [45083510072, 45083513605],
+  "resource_policy_tag": "#bb.policy.sha256.6yvp73mvdkouoxk2xiolnj33lbxucxta5ikhjcwnvd267tzfrfyq",
+  "golden_settlement_tag": "#bb.receipt.sha256.5n46g22vwa6oby2idk57kterg5sra3rx6y5xrf4hbjkaqgm6b7fa",
+  "target_block_gas": 50000000,
+  "max_block_gas": 100000000,
+  "base_fee_change_denominator": 8,
+  "deposit_per_occupied_block": 1000000,
+  "component_ceilings_gas": {
+    "ed25519_2048": 71680000,
+    "state_writes_4096": 49152000,
+    "block_bytes_2m": 33554432,
+    "occupancy_ops_16384": 32768000,
+    "proof_bytes_768k": 25165824
+  },
+  "eip1559_64_block_summary": {
+    "initial_base_fee": 100,
+    "peak_after_24_full_blocks": 1630,
+    "plateau_blocks_25_to_32_at_50pct": 1630,
+    "final_after_32_quiet_blocks_at_10pct": 60
+  },
+  "spam_attack_16_block_summary": {
+    "writes_per_block": 4000,
+    "block_gas_used": 60206080,
+    "final_base_fee": 136,
+    "cumulative_burned_base_fees": 112043514880,
+    "cumulative_locked_refundable_deposits": 64000000000,
+    "cumulative_capped_proposer_tips": 4816486400,
+    "exact_conservation_verified": true
+  }
+}
