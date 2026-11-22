@@ -147,12 +147,14 @@ timing/topology/configuration observations, RGB challenge carriers, and a verifi
 representation bridge. Each surface keeps unavailable and unbound states explicit.
 
 The Lean capsules prove bounded statements about the abstract coordinate world, edit/replay
-rules, Euclidean chunk/index coordinate bijections (`ChunkRefinement`), and quoted-byte
-representation formulas. The LadderLang transition capsule checks a separate finite target under
-its pinned reducer. These capsules do not yet prove that the chunked Rust `HashMap`/octree
-implementation refines the abstract world, that camera floats are exact over all `i64`
-coordinates, that a physical monitor emitted the raster, or that Bitblock has Proof-of-History,
-Proof-of-Stake, consensus, currency, or Layer 1 status.
+rules, Euclidean chunk/index coordinate bijections (`ChunkRefinement`), sparse chunk-map
+simulation refinement and 8-level octree occupancy/AABB/culling soundness (`OctreeRefinement`),
+and quoted-byte representation formulas. The LadderLang transition capsule checks a separate
+finite target under its pinned reducer. These capsules are abstract mathematical models over
+unbounded `Int` and finite lists; they do not prove that the Rust `HashMap`/octree code
+refines the Lean model, that camera floats are exact over all `i64` coordinates, that a
+physical monitor emitted the raster, or that Bitblock has Proof-of-History, Proof-of-Stake,
+consensus, currency, or Layer 1 status.
 
 ## Semantic learnings carried forward
 

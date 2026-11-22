@@ -1475,6 +1475,7 @@
 {"from": "doc:docs/PROTOCOL.md#tick-outcome-sidecar-checkpoint", "kind": "documents", "to": "module:tick"}
 {"from": "doc:docs/PROTOCOL.md#typed-coordinate-history-journal-checkpoint", "kind": "documents", "to": "module:history_store"}
 {"from": "proof:proof/BitblockProof/ChunkRefinement.lean", "kind": "proves", "to": "module:world"}
+{"from": "proof:proof/BitblockProof/OctreeRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/World.lean", "kind": "proves", "to": "module:world"}
 {"from": "module:chem", "kind": "tests_with", "to": "module:history"}
 {"from": "module:coordinate_episode", "kind": "tests_with", "to": "module:program"}

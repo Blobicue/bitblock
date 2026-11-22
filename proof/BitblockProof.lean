@@ -2,3 +2,4 @@ import BitblockProof.World
 import BitblockProof.MintBurn
 import BitblockProof.QuotedByteCost
 import BitblockProof.ChunkRefinement
+import BitblockProof.OctreeRefinement
