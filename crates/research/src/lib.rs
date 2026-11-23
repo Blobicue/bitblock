@@ -61,6 +61,7 @@ pub mod scale_assay;
 pub mod sequencer_1;
 pub mod sequential;
 pub mod storage;
+pub mod sync_1;
 pub mod threat_1;
 pub mod transition_spec;
 pub mod transition_spec_1;

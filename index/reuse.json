@@ -542,6 +542,12 @@
     ]
    },
    {
+    "item": "LoopbackBootstrapBundleV1",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
     "item": "MAX_AUTHORITY_REF_BYTES",
     "modules": [
      "protocol_id_1"
@@ -575,6 +581,12 @@
     "item": "MAX_GENESIS_VALIDATORS",
     "modules": [
      "genesis_d1"
+    ]
+   },
+   {
+    "item": "MAX_OPAQUE_BLOB_BYTES",
+    "modules": [
+     "sync_1"
     ]
    },
    {
@@ -824,6 +836,18 @@
     ]
    },
    {
+    "item": "PeerEntryV1",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
+    "item": "PeerStatusV1",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
     "item": "PendingRecoveryV1",
     "modules": [
      "identity_1"
@@ -959,6 +983,30 @@
     "item": "STORAGE_RECORD_SCHEMA",
     "modules": [
      "storage"
+    ]
+   },
+   {
+    "item": "SYNC_1_CHECKPOINT_MANIFEST_SCHEMA",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
+    "item": "SYNC_1_RECOVERY_RECEIPT_SCHEMA",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
+    "item": "SYNC_1_VERSION",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
+    "item": "SYNC_WIRE_MAGIC",
+    "modules": [
+     "sync_1"
     ]
    },
    {
@@ -1184,9 +1232,27 @@
     ]
    },
    {
+    "item": "ban_peer",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
     "item": "bridge_policy_tag",
     "modules": [
      "ladder_bridge"
+    ]
+   },
+   {
+    "item": "build_checkpoint",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
+    "item": "build_from_payload",
+    "modules": [
+     "sync_1"
     ]
    },
    {
@@ -1226,6 +1292,12 @@
     ]
    },
    {
+    "item": "charge_peer_request",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
     "item": "check_conservation",
     "modules": [
      "economic_state_1"
@@ -1259,6 +1331,18 @@
     "item": "compute_batch_body_digest",
     "modules": [
      "sequencer_1"
+    ]
+   },
+   {
+    "item": "compute_checkpoint_chunk_digest",
+    "modules": [
+     "sync_1"
+    ]
+   },
+   {
+    "item": "compute_opaque_blob_digest",
+    "modules": [
+     "sync_1"
     ]
    },
    {
@@ -1325,6 +1409,12 @@
     "item": "from_event_tag",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "healthy_peer_ids",
+    "modules": [
+     "sync_1"
     ]
    },
    {
@@ -1406,12 +1496,6 @@
     ]
    },
    {
-    "item": "receipt_merkle_leaf_digest",
-    "modules": [
-     "sequencer_1"
-    ]
-   },
-   {
     "item": "reconstruction_artifact_digest",
     "modules": [
      "genesis_root_parity_1"
@@ -1480,19 +1564,7 @@
     ]
    },
    {
-    "item": "verify_against_root",
-    "modules": [
-     "sequencer_1"
-    ]
-   },
-   {
     "item": "verify_internal_consistency",
-    "modules": [
-     "sequencer_1"
-    ]
-   },
-   {
-    "item": "verify_signature",
     "modules": [
      "sequencer_1"
     ]
@@ -1510,7 +1582,7 @@
     ]
    }
   ],
-  "pub_items": 1752,
+  "pub_items": 1805,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1534,7 +1606,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 64672,
+   "code_lines": 65886,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1715,7 +1787,7 @@
    ]
   },
   "test": {
-   "code_lines": 28466,
+   "code_lines": 28587,
    "duplicated_lines": 341,
    "regions": [
     {
