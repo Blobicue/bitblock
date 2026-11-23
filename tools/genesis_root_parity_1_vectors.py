@@ -253,7 +253,7 @@ def rebuild_devnet_parity_path4() -> dict[str, object]:
         LAUNCH_PREDS,
         LAUNCH_CAPS,
     )
-    _, profile_id, _ = seal_bound(cand_b)
+    _, profile_id, bound_bytes = seal_bound(cand_b)
 
     bands = build_bands(False)
     spec_b = (
@@ -366,6 +366,22 @@ def rebuild_devnet_parity_path4() -> dict[str, object]:
         "parity_record_id": parity_record_id.hex(),
         "app_root": app_root.hex(),
         "exec_root": exec_root.hex(),
+        "raw": {
+            "genesis_id": genesis_id,
+            "profile_id": profile_id,
+            "scope_d": scope_d,
+            "commit_dom_reg_d": commit_dom_reg_d,
+            "spec_dig": spec_dig,
+            "exec_root_ref": exec_root_ref,
+            "genesis_history_root": genesis_history_root,
+            "parity_record_id_bytes": parity_record_id,
+            "scope_bytes": bytes(scope_b),
+            "pkg_bytes": pkg_bytes,
+            "bound_bytes": bound_bytes,
+            "spec_bytes": spec_b,
+            "comp_bytes": comp_bytes,
+            "rec_bytes": rec_bytes,
+        },
     }
 
 

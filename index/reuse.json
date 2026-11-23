@@ -993,12 +993,6 @@
     ]
    },
    {
-    "item": "ProfileDomainSlotV1",
-    "modules": [
-     "profile_d1"
-    ]
-   },
-   {
     "item": "ProjectedRootsV1",
     "modules": [
      "commit_state"
@@ -1248,12 +1242,6 @@
     "item": "SpatialRenderCacheStats",
     "modules": [
      "render"
-    ]
-   },
-   {
-    "item": "StageGateSubclaimV1",
-    "modules": [
-     "profile_d1"
     ]
    },
    {
@@ -1909,7 +1897,7 @@
     ]
    }
   ],
-  "pub_items": 2020,
+  "pub_items": 2046,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1933,7 +1921,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 74518,
+   "code_lines": 75767,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2114,7 +2102,7 @@
    ]
   },
   "test": {
-   "code_lines": 28913,
+   "code_lines": 28969,
    "duplicated_lines": 341,
    "regions": [
     {
