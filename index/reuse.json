@@ -1016,6 +1016,24 @@
     ]
    },
    {
+    "item": "UPGRADE_FRAMEWORK_1_AUDIT_SCHEMA",
+    "modules": [
+     "upgrade_framework_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_FRAMEWORK_1_POLICY_SCHEMA",
+    "modules": [
+     "upgrade_framework_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_FRAMEWORK_1_VERSION",
+    "modules": [
+     "upgrade_framework_1"
+    ]
+   },
+   {
     "item": "UnavailableTopologyFacts",
     "modules": [
      "output_topology"
@@ -1067,6 +1085,12 @@
     "item": "VerkleTreeShapeMetricsV1",
     "modules": [
      "verkle_feasibility"
+    ]
+   },
+   {
+    "item": "VersionLifecycleModeV1",
+    "modules": [
+     "upgrade_framework_1"
     ]
    },
    {
@@ -1353,7 +1377,7 @@
     ]
    }
   ],
-  "pub_items": 1634,
+  "pub_items": 1657,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1377,7 +1401,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 59811,
+   "code_lines": 60487,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1558,7 +1582,7 @@
    ]
   },
   "test": {
-   "code_lines": 28214,
+   "code_lines": 28293,
    "duplicated_lines": 341,
    "regions": [
     {
