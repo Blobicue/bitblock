@@ -690,13 +690,16 @@ artifact, gate, and non-claim.
    [`PROTOCOL_ID_1_RECEIPT.md`](PROTOCOL_ID_1_RECEIPT.md),
    [`VM_1_RECEIPT.md`](VM_1_RECEIPT.md) /
    [`vm-1-benchmark-v1.json`](vm-1-benchmark-v1.json),
-   [`REFINE_1_VM.md`](REFINE_1_VM.md), and
+   [`REFINE_1_VM.md`](REFINE_1_VM.md),
    [`CRYPTO_1_RECEIPT.md`](CRYPTO_1_RECEIPT.md) /
-   [`crypto-1-audit-v1.json`](crypto-1-audit-v1.json)) promote `PROFILE-SCOPE-D0`, `LANGUAGE-R1`,
-   `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`, `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`,
-   `CRYPTO-1`, `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4 `REFINE-1` phases across 172
-   `--trust=0` Lean 4 theorems) to `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking
-   `IDENTITY-1@base=READY` (leaving 6 `READY` frontier entries with `program-active` and
+   [`crypto-1-audit-v1.json`](crypto-1-audit-v1.json), and
+   [`PROFILE_D1_RECEIPT.md`](PROFILE_D1_RECEIPT.md) /
+   [`profile-d1-manifest-v1.json`](profile-d1-manifest-v1.json)) promote `PROFILE-SCOPE-D0`,
+   `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`, `RESOURCE-1`, `GENESIS-D1`,
+   `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `REFINE-1@vm`, and `REFINE-1@base` (completing all
+   4/4 `REFINE-1` phases across 172 `--trust=0` Lean 4 theorems) to `BOUNDED` and `VM-1` to
+   `IMPLEMENTED`, unlocking `IDENTITY-1@base=READY`, `TRANSITION-SPEC-1@base=READY`, and
+   `RELEASE-R1@candidate=READY` (leaving 7 `READY` frontier entries with `program-active` and
    `verkle-selected` kept explicitly inactive at launch genesis).
 
 Useful entry points (run from the repository root; these commands are not a substitute for

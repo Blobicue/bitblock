@@ -1,0 +1,27 @@
+{
+  "schema": "bitblock/profile-d1/manifest-receipt/v1",
+  "merged_commit": "7a710fc26abf100c6e4e3f8ddb33058227127f84",
+  "merged_tree": "dbabdefaa94519ad0fb1fb5483825ae5ec70569a",
+  "merged_parent": "9f5f6415aa58581aef1aa86130931a6967f217e3",
+  "pr_number": 50,
+  "ci_runs": [
+    45098940698,
+    45098944665
+  ],
+  "launch_cand_tag": "#bb.policy.sha256.r4ldc6k33p7evc4zg67ksajcpr6dxeiwuazimy6pxhwgaepepaoq",
+  "launch_bound_tag": "#bb.receipt.sha256.24biozgdf4dc7n4z5llunavtkegk433r5qfh4plknnjgtvw4naoq",
+  "succ_cand_tag": "#bb.policy.sha256.q3sxi64vigpwbcm2yhh4jgtwm7dfxvsva7k4phdjsswbeqeje6ha",
+  "succ_bound_tag": "#bb.receipt.sha256.6sik5vhte62uajm53n43axcz3lylfpiindawhjvried475wxxxka",
+  "genesis_id_short": "4bac9bfad840",
+  "launch_profile_id_short": "8f1631795bdb",
+  "successor_profile_id_short": "86e5747b9541",
+  "launch_predicates": 7,
+  "successor_predicates": 9,
+  "launch_active_domains": 6,
+  "launch_inactive_domains": 2,
+  "successor_active_domains": 7,
+  "successor_inactive_domains": 1,
+  "subclaim_rows_count": 7,
+  "bbmutate_profile_d1_sites_killed": 8,
+  "bbmutate_profile_d1_sites_total": 8
+}

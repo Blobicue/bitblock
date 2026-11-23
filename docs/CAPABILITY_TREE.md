@@ -119,8 +119,8 @@ candidate to choose its own authority.
 | PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
 | PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
 | PS-078 | GENESIS-D1 | base | BOUNDED |
-| PS-079 | PROFILE-D1 | base | READY |
-| PS-080 | TRANSITION-SPEC-1 | base | LOCKED |
+| PS-079 | PROFILE-D1 | base | BOUNDED |
+| PS-080 | TRANSITION-SPEC-1 | base | READY |
 | PS-081 | GOVERNANCE-1 | base | LOCKED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | LOCKED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
@@ -128,7 +128,7 @@ candidate to choose its own authority.
 | PS-085 | SIGNER-OPS-1 | base | LOCKED |
 | PS-086 | RELEASE-R1 | base | READY |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
-| PS-088 | RELEASE-R1 | candidate | LOCKED |
+| PS-088 | RELEASE-R1 | candidate | READY |
 | PS-089 | RELEASE-1 | base | LOCKED |
 | PS-090 | RELEASE-1 | admitted | LOCKED |
 | PS-091 | CHAIN-LAUNCH-1 | base | LOCKED |
@@ -1575,7 +1575,7 @@ is invalid input, not a third collision row.
 
 ### `PROFILE-D1` — ID-bound candidate activated-feature manifest
 
-- **Status:** `PS-079:PROFILE-D1@base=READY`.
+- **Status:** `PS-079:PROFILE-D1@base=BOUNDED`.
 - **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`; target-profile CE-43 always
   binds the exact current candidate-scope instance, and the candidate names rather than implements
   optional features.
@@ -1586,7 +1586,8 @@ is invalid input, not a third collision row.
   parameters/limits/suites and
   root/domain schema plus commitment-profile identifiers,
   the ordered active-or-inactive domain registry and `required_domain_set`, transitive prerequisites,
-  and a stage×gate-subclaim matrix. Candidate bytes exclude their own `profile_id`; that identifier
+  and a stage×gate-subclaim matrix (pinned in [`PROFILE_D1_RECEIPT.md`](PROFILE_D1_RECEIPT.md) and
+  [`profile-d1-manifest-v1.json`](profile-d1-manifest-v1.json)). Candidate bytes exclude their own `profile_id`; that identifier
   is derived afterward from a domain-separated digest.
 - **Gate:** independent codec/parser parity, non-circular identifier graph, no unknown/duplicate
   activation, canonical ordering, and deterministic closure expansion. An initial candidate's
@@ -1603,7 +1604,7 @@ is invalid input, not a third collision row.
 
 ### `TRANSITION-SPEC-1` — exact candidate-profile transition specification
 
-- **Status:** `PS-080:TRANSITION-SPEC-1@base=LOCKED`.
+- **Status:** `PS-080:TRANSITION-SPEC-1@base=READY`.
 - **Depends on:** `TRANSITION-SPEC-D1`, `PROFILE-D1`, `BOUNDS-1`, `IDENTITY-D1`, `CONSENSUS-D1`,
   `GOVERNANCE-D1`, `CODEC-1`; target-profile conditional design/policy inputs are CE-10–CE-13.
 - **Motive:** resolve the base extension interface into one exact operation/state/work contract before
@@ -1727,7 +1728,7 @@ is invalid input, not a third collision row.
 
 ### `RELEASE-R1` — candidate-build reproducibility
 
-- **Status:** `PS-086:RELEASE-R1@base=READY`, `PS-087:RELEASE-R1@framework=BOUNDED`, `PS-088:RELEASE-R1@candidate=LOCKED`.
+- **Status:** `PS-086:RELEASE-R1@base=READY`, `PS-087:RELEASE-R1@framework=BOUNDED`, `PS-088:RELEASE-R1@candidate=READY`.
 - **Depends on:** None.
 - **Motive:** stop an unreviewed compiler, dependency, feature set, binary, or genesis configuration
   from inheriting candidate source-level evidence.
@@ -1906,8 +1907,9 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 2 | `PS-028:IDENTITY-1@base=READY` |
 | 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 5 | `PS-079:PROFILE-D1@base=READY` |
+| 5 | `PS-080:TRANSITION-SPEC-1@base=READY` |
 | 6 | `PS-086:RELEASE-R1@base=READY` |
+| 7 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1940,7 +1942,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `6` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
