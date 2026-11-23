@@ -98,7 +98,7 @@ candidate to choose its own authority.
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | BOUNDED |
 | PS-056 | CONSENSUS-1 | base | BOUNDED |
 | PS-057 | CLIENT-1 | base | BOUNDED |
-| PS-058 | TESTNET-1 | base | LOCKED |
+| PS-058 | TESTNET-1 | base | READY |
 | PS-059 | L1-CANDIDATE | base | LOCKED |
 | PS-060 | L1-PRODUCTION | base | LOCKED |
 | PS-061 | VALUE-1 | base | LOCKED |
@@ -131,7 +131,7 @@ candidate to choose its own authority.
 | PS-088 | RELEASE-R1 | candidate | BOUNDED |
 | PS-089 | RELEASE-1 | base | BOUNDED |
 | PS-090 | RELEASE-1 | admitted | BOUNDED |
-| PS-091 | CHAIN-LAUNCH-1 | base | READY |
+| PS-091 | CHAIN-LAUNCH-1 | base | BOUNDED |
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
@@ -1321,7 +1321,7 @@ is invalid input, not a third collision row.
 
 ### `TESTNET-1` — replicated adversarial testnet
 
-- **Status:** `PS-058:TESTNET-1@base=LOCKED`.
+- **Status:** `PS-058:TESTNET-1@base=READY`.
 - **Depends on:** `CLIENT-1`, `PROFILE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
   `GENESIS-ROOT-PARITY-1`,
   `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `CHAIN-LAUNCH-1`, `GOVERNANCE-1`, `CRYPTO-1`,
@@ -1869,7 +1869,7 @@ is invalid input, not a third collision row.
 
 ### `CHAIN-LAUNCH-1` — complete authorized launch closure
 
-- **Status:** `PS-091:CHAIN-LAUNCH-1@base=READY`.
+- **Status:** `PS-091:CHAIN-LAUNCH-1@base=BOUNDED`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`,
   `TRANSITION-SPEC-1`, `PROFILE-1`, `EXECUTION-ROOT-1`, `GENESIS-ROOT-PARITY-1`, `RELEASE-1`,
   `IDENTITY-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`, `CRYPTO-1`, `CODEC-1`.
@@ -1887,7 +1887,14 @@ is invalid input, not a third collision row.
   `GenesisRootParityRecordV1` and initial typed execution-root reference, `RELEASE-1` record and ID,
   `ChainLaunchManifestV1` and ID, and detached `ChainLaunchAuthorizationV1` with the exact launch
   policy, credentials, scheme, and verifier selected before the candidate. Content-address-only
-  entries and retrieval locators are not members of this carrier.
+  entries and retrieval locators are not members of this carrier. Bounded implementation, receipt,
+  manifest, Lean 4 formal proof capsule, and independent pure-Python verifier live in
+  [`CHAIN_LAUNCH_1_RECEIPT.md`](CHAIN_LAUNCH_1_RECEIPT.md),
+  [`chain-launch-1-manifest-v1.json`](chain-launch-1-manifest-v1.json),
+  [`crates/research/src/chain_launch_1.rs`](../crates/research/src/chain_launch_1.rs),
+  [`proof/BitblockProof/LaunchClosureRefinement.lean`](../proof/BitblockProof/LaunchClosureRefinement.lean),
+  [`tools/chain_launch_1_vectors.py`](../tools/chain_launch_1_vectors.py), and
+  [`tests/wave30_chain_launch_1.rs`](../tests/wave30_chain_launch_1.rs).
 - **Gate:** two independent implementations bounded-decode the package, reject unknown, duplicate,
   omitted, over-limit, unavailable, or type-substituted entries, and hash-check every embedded
   preimage. The seven explicit artifacts are the scope, registry, candidate, transition
@@ -2008,10 +2015,10 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-062:COST-1@base=READY` |
-| 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 5 | `PS-083:UPGRADE-1@base=READY` |
-| 6 | `PS-091:CHAIN-LAUNCH-1@base=READY` |
+| 3 | `PS-058:TESTNET-1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 6 | `PS-083:UPGRADE-1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
