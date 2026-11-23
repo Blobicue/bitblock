@@ -95,7 +95,7 @@ candidate to choose its own authority.
 | PS-052 | SCALE-2 | base | IMPLEMENTED |
 | PS-053 | CONSENSUS-D1 | base | BOUNDED |
 | PS-054 | CONSENSUS-D1 | mechanism-choice | BOUNDED |
-| PS-055 | VALIDATOR-SCHEDULE-1 | base | LOCKED |
+| PS-055 | VALIDATOR-SCHEDULE-1 | base | READY |
 | PS-056 | CONSENSUS-1 | base | LOCKED |
 | PS-057 | CLIENT-1 | base | LOCKED |
 | PS-058 | TESTNET-1 | base | LOCKED |
@@ -121,7 +121,7 @@ candidate to choose its own authority.
 | PS-078 | GENESIS-D1 | base | BOUNDED |
 | PS-079 | PROFILE-D1 | base | BOUNDED |
 | PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
-| PS-081 | GOVERNANCE-1 | base | READY |
+| PS-081 | GOVERNANCE-1 | base | BOUNDED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | LOCKED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | LOCKED |
@@ -1207,7 +1207,7 @@ is invalid input, not a third collision row.
 
 ### `VALIDATOR-SCHEDULE-1` — deterministic validator schedule state and root
 
-- **Status:** `PS-055:VALIDATOR-SCHEDULE-1@base=LOCKED`.
+- **Status:** `PS-055:VALIDATOR-SCHEDULE-1@base=READY`.
 - **Depends on:** `CONSENSUS-D1`, `GOVERNANCE-1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
   `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`; stake-weighted consensus adds
   the target-profile conditional producer edge CE-15.
@@ -1637,13 +1637,19 @@ is invalid input, not a third collision row.
 
 ### `GOVERNANCE-1` — implemented governance and emergency transitions
 
-- **Status:** `PS-081:GOVERNANCE-1@base=READY`.
+- **Status:** `PS-081:GOVERNANCE-1@base=BOUNDED`.
 - **Depends on:** `GOVERNANCE-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
   `TRANSITION-SPEC-1`, `CODEC-1`, `BOUNDS-1`.
 - **Motive:** turn pre-genesis authority bytes into deterministic, authenticated state transitions
   instead of operator convention.
-- **Artifact:** governance and emergency transactions/system transitions, canonical receipts,
-  parameter/governance-root updates, timelocks, conflict/expiry rules, safe-halt and restart paths.
+- **Artifact:** [`GOVERNANCE_1_RECEIPT.md`](GOVERNANCE_1_RECEIPT.md) (PR #60 commit
+  `35b26afd0f0abe8416a22edd009ce25f8e077be1`, `crates/research/src/governance_1.rs`,
+  `tools/governance_1_vectors.py`, `tests/wave14c_governance_1.rs`, and
+  `examples/governance_1_timelock_probe.rs`) implements authenticated `GovernanceStateRootV1`
+  (`DomainIdV1::GovernanceState`) and `GovernanceTransitionReceiptV1` with `> 2/3` bonded-stake
+  21-epoch timelocked proposals, conflict/replay/expiry/stale-set/compromised-key refusal,
+  auto-expiring `<= 3`-epoch pause-only Emergency Council with mandatory anti-DoS cooldown,
+  automatic proven-fault Safe-Halt, and stake-only Safe-Halt restart without history rewrite.
 - **Gate:** unauthorized, replayed, conflicting, rushed, censored, stale-set, compromised-key,
   rollback, emergency-overreach, and restart vectors match the frozen schema and preserve history,
   supply, and root invariants.
@@ -1921,9 +1927,9 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-040:ECONOMIC-STATE-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-081:GOVERNANCE-1@base=READY` |
+| 4 | `PS-055:VALIDATOR-SCHEDULE-1@base=READY` |
+| 5 | `PS-062:COST-1@base=READY` |
+| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 7 | `PS-086:RELEASE-R1@base=READY` |
 | 8 | `PS-088:RELEASE-R1@candidate=READY` |
 
