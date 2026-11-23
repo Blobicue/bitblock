@@ -771,6 +771,17 @@
   ]
  },
  {
+  "id": "sub:upgrade-framework-1",
+  "members": [
+   "module:upgrade_framework_1"
+  ],
+  "name": "upgrade-framework-1",
+  "terms": [
+   "framework",
+   "upgrade"
+  ]
+ },
+ {
   "id": "sub:validator-econ-d1",
   "members": [
    "module:asset_d1"
