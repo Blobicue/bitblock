@@ -52,6 +52,7 @@ pub mod storage;
 pub mod threat_1;
 pub mod transition_spec;
 pub mod verkle_feasibility;
+pub mod vm_1;
 pub mod vm_d1;
 #[cfg(windows)]
 pub mod windows_timing;
