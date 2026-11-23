@@ -67,7 +67,7 @@ candidate to choose its own authority.
 | PS-024 | REFINE-1 | commitment | BOUNDED |
 | PS-025 | REFINE-1 | vm | LOCKED |
 | PS-026 | IDENTITY-D1 | base | BOUNDED |
-| PS-027 | PROTOCOL-ID-1 | base | READY |
+| PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
 | PS-028 | IDENTITY-1 | base | LOCKED |
 | PS-029 | AUTH-COMMIT-1 | base | LOCKED |
 | PS-030 | EXECUTION-ROOT-1 | base | LOCKED |
@@ -110,7 +110,7 @@ candidate to choose its own authority.
 | PS-067 | THREAT-1 | base | BOUNDED |
 | PS-068 | CRYPTO-D1 | base | BOUNDED |
 | PS-069 | CRYPTO-D1 | primitive-selection | BOUNDED |
-| PS-070 | CRYPTO-1 | base | LOCKED |
+| PS-070 | CRYPTO-1 | base | READY |
 | PS-071 | HASH-SOURCE-R1 | base | READY |
 | PS-072 | HASH-SOURCE-R1 | candidate | NOT-STARTED |
 | PS-073 | HASH-R1 | base | LOCKED |
@@ -119,7 +119,7 @@ candidate to choose its own authority.
 | PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
 | PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
 | PS-078 | GENESIS-D1 | base | BOUNDED |
-| PS-079 | PROFILE-D1 | base | LOCKED |
+| PS-079 | PROFILE-D1 | base | READY |
 | PS-080 | TRANSITION-SPEC-1 | base | LOCKED |
 | PS-081 | GOVERNANCE-1 | base | LOCKED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | LOCKED |
@@ -691,18 +691,20 @@ a checker error.
 
 ### `PROTOCOL-ID-1` — genesis and non-circular identifier graph
 
-- **Status:** `PS-027:PROTOCOL-ID-1@base=READY`.
+- **Status:** `PS-027:PROTOCOL-ID-1@base=BOUNDED`.
 - **Depends on:** `GENESIS-D1`, `IDENTITY-D1`, `CODEC-1`, `COMMIT-R1` root/profile definitions.
 - **Motive:** give signatures, transactions, receipts, roots, and later votes one chain/world
   context without objects hashing themselves or candidates selecting their own authority.
-- **Artifact:** immutable pre-ID genesis payload from `GENESIS-D1` and derived `genesis_id`;
-  chain/world/version domains;
-  pre-genesis authorization descriptor encoding; acyclic transaction, body, context, proposal,
-  block, receipt, effect, availability, and consensus-evidence identifier graph; one signature-free
-  `AcceptedProposalCoreV1` separated from its bounded, typed `AcceptedProposalCredentialSetV1` and
-  `AcceptedEvidenceSetV1`; atomic same-wrapper consensus-entailed availability dependencies;
-  explicit system transition subjects; and the protocol-frozen `ProfileIdHashV1` trust anchor with
-  named profile-owned and protocol-identity compromise boundaries.
+- **Artifact:** [`PROTOCOL_ID_1_RECEIPT.md`](PROTOCOL_ID_1_RECEIPT.md) (PR #42 commit
+  `c1402c644762a10a50c58bd9a5a7f2e58d87e530`, `crates/research/src/protocol_id_1.rs`,
+  `tools/protocol_id_1_vectors.py`, `tests/wave8c_protocol_id_1.rs`, and
+  `examples/protocol_id_1_audit_probe.rs`) freeze the exact 9-field signature-free
+  `CanonicalAcceptedProposalCoreV1` (`AcceptedProposalCoreFieldManifestV1`, excluding all 8
+  forbidden credential/evidence fields), credential-normalizing `AcceptedProposalWrapperV1` with
+  atomic same-wrapper availability dependencies (`AtomicAvailabilityIndexV1`), exact two-row
+  `TwoRowParentCollisionAuditV1` (`ProtocolIdentityHashCompromiseV1` vs
+  `ProfileOwnedAuthorityBindingCompromiseV1`, rejecting invalid reconstructions as non-row-3
+  `InvalidLookupReconstruction`), and the 12-node, 17-edge non-circular identifier DAG.
 - **Gate:** dependency-graph cycle check plus cross-domain, self-reference, field-omission,
   duplicate-field, alternate-body, wrong-parent, and wrong-version mutation corpus. Every
   authority-relevant byte reaches exactly the intended identifier authenticated by its signature. Two
@@ -1422,7 +1424,7 @@ is invalid input, not a third collision row.
 
 ### `CRYPTO-1` — cryptographic and key lifecycle
 
-- **Status:** `PS-070:CRYPTO-1@base=LOCKED`.
+- **Status:** `PS-070:CRYPTO-1@base=READY`.
 - **Depends on:** `CRYPTO-D1`, `IDENTITY-D1`, `PROTOCOL-ID-1`.
 - **Motive:** turn selected primitive/key bytes into operated, role-separated actor and validator
   credentials while keeping custody and migration requirements visible.
@@ -1549,7 +1551,7 @@ is invalid input, not a third collision row.
 
 ### `PROFILE-D1` — ID-bound candidate activated-feature manifest
 
-- **Status:** `PS-079:PROFILE-D1@base=LOCKED`.
+- **Status:** `PS-079:PROFILE-D1@base=READY`.
 - **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`; target-profile CE-43 always
   binds the exact current candidate-scope instance, and the candidate names rather than implements
   optional features.
@@ -1878,11 +1880,12 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-027:PROTOCOL-ID-1@base=READY` |
-| 4 | `PS-047:VM-1@base=READY` |
-| 5 | `PS-062:COST-1@base=READY` |
+| 3 | `PS-047:VM-1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-070:CRYPTO-1@base=READY` |
 | 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 7 | `PS-086:RELEASE-R1@base=READY` |
+| 7 | `PS-079:PROFILE-D1@base=READY` |
+| 8 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1915,7 +1918,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
