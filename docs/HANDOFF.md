@@ -712,15 +712,18 @@ artifact, gate, and non-claim.
    [`CONSENSUS_1_RECEIPT.md`](CONSENSUS_1_RECEIPT.md),
    [`SYNC_1_REPLAY_AUTHORITY_RECEIPT.md`](SYNC_1_REPLAY_AUTHORITY_RECEIPT.md),
    [`CLIENT_1_RECEIPT.md`](CLIENT_1_RECEIPT.md),
-   [`VALIDATOR_ECON_1_RECEIPT.md`](VALIDATOR_ECON_1_RECEIPT.md), and
-   [`SIGNER_OPS_1_RECEIPT.md`](SIGNER_OPS_1_RECEIPT.md)) promote
+   [`VALIDATOR_ECON_1_RECEIPT.md`](VALIDATOR_ECON_1_RECEIPT.md),
+   [`SIGNER_OPS_1_RECEIPT.md`](SIGNER_OPS_1_RECEIPT.md), and
+   [`RELEASE_R1_CANDIDATE_RECEIPT.md`](RELEASE_R1_CANDIDATE_RECEIPT.md) /
+   [`release-r1-candidate-manifest-v1.json`](release-r1-candidate-manifest-v1.json)) promote
    `PROFILE-SCOPE-D0`, `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`,
    `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`,
    `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`, `ASSET-1`, `GOVERNANCE-1`, `ECONOMIC-STATE-1`,
    `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `UPGRADE-FRAMEWORK-1`,
    `GENESIS-ROOT-PARITY-1`, `MULTI-1`, `SEQUENCER-1`, `SYNC-1@base`, `CONSENSUS-1@base`,
    `SYNC-1@replay-authority` (`PD-06`), `CLIENT-1@base`, `VALIDATOR-ECON-1@base`,
-   `SIGNER-OPS-1@base`, `REFINE-1@vm`, and
+   `SIGNER-OPS-1@base`, `RELEASE-R1@candidate` (`PD-04` + `PD-05`), `RELEASE-R1@base`,
+   `REFINE-1@vm`, and
    `REFINE-1@base` (completing all 4/4 `REFINE-1` phases plus `ConsensusSafety.lean` across 198
    `--trust=0` Lean 4 theorems,
    all Waves 13–15 launch state producers, dual-language independent execution, L1 §5 two-layer
@@ -731,11 +734,13 @@ artifact, gate, and non-claim.
    BFT finality + live parent-authority certificate admission, independent historical
    replay-authority certificate reconstruction, proof-bound 6-state client finality & reorg
    rollback, receipt-exact consensus-to-economic incentive correspondence + 7-vector
-   adversarial simulation, and role-separated validator signer safety with 7/7 operational drills)
+   adversarial simulation, role-separated validator signer safety with 7/7 operational drills, and
+   `PROFILE-D1`-bound isolated dual-target clean-build candidate reproducibility)
    to `BOUNDED` and
    `VM-1` to `IMPLEMENTED`, leaving **`PROFILE-1@base=READY`** (checkpoint eligibility only;
-   conditional closure admission stays un-admitted until the powered admission checker lands),
-   `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY`
+   conditional closure admission stays un-admitted until the powered admission checker lands; all
+   prerequisites ahead of `PROFILE-1 -> RELEASE-1 -> CHAIN-LAUNCH-1 -> TESTNET-1` are clear) and
+   `PROGRAM-STATE-1@base=READY`
    (while `UPGRADE-1`, `RELEASE-1`, `CHAIN-LAUNCH-1`, and `TESTNET-1` stay locked on
    their remaining admission/release prerequisites, with `program-active` and `verkle-selected`
    kept explicitly inactive at launch genesis).

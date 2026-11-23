@@ -1,0 +1,85 @@
+{
+  "format": "bitblock-release-r1-candidate-manifest-v1",
+  "authority_label": "CANDIDATE-NOT-ADMITTED (BOUNDED; admitted_release_authority=false, platform_scoped_only=true)",
+  "receipt_finalized_utc": "2026-11-23T14:55:39Z",
+  "runtime_subject": {
+    "remote_ref": "refs/heads/main",
+    "commit": "b3f3ba2253339d906f637440c6608537096fac45",
+    "tree": "e92e51cdc62a697e1b6c5f3b0b589f88c54fc5d1",
+    "parent": "6d029f273d9defa839a7080c9ae5bf70170e1127",
+    "pr_number": 90,
+    "ci_runs": [
+      "45197131990",
+      "45197144949"
+    ]
+  },
+  "golden_tags": {
+    "candidate_build_inputs_schema": "bitblock/release-r1/candidate-build-inputs/v1",
+    "candidate_build_inputs_wire_len": 363,
+    "candidate_build_inputs_tag": "#bb.policy.sha256.2wlogxgqgwzblmcwtpgvmai2h3s5vagoagxgywtjqmzcwxioryaq",
+    "candidate_build_receipt_schema": "bitblock/release-r1/candidate-build-receipt/v1",
+    "candidate_build_receipt_wire_len": 217,
+    "candidate_build_receipt_tag": "#bb.receipt.sha256.zyk4zg44x3q46h36xnnpghcklfndgulmx7pmuspm3d546vcblnfa"
+  },
+  "pd04_framework_pins": {
+    "framework_manifest_sha256": "feec1255b6dc45abda2b17ee97e4bd5ecc448d6795f38de5d7897d0478c38d08",
+    "rust_toolchain_channel": "1.96.0",
+    "rust_toolchain_profile": "minimal",
+    "rust_toolchain_sha256": "0d7b2f6589d3a2d9ea22b782a107ddafc0da08bdca08e3524b0cf4db12c12da9",
+    "lean_toolchain": "leanprover/lean4:v4.33.0",
+    "lean_toolchain_sha256": "302cd63c54178885b89e669f33b38f12f4dd7ae7e5cac537b3203e3768d8fb2b",
+    "cargo_lock_package_count": 220,
+    "direct_pin_count": 11,
+    "cargo_lock_sha256": "4d5b8b9d9932e863c468df0d0db5381a9400b29c358e77a10da999a83a88657e",
+    "sbom_sha256": "aaaf322ba8019d810e0853e74798d6ca494a3838eb5b27a7136930c3b8a8a23b",
+    "committed_wasm_sha256": "9a960528c12464b3c5e9f45e091c5f6e38748b98786037c4377dffd09af53d2e"
+  },
+  "isolated_dual_clean_build_reproducibility": {
+    "builders": [
+      "target/repro_a",
+      "target/repro_b"
+    ],
+    "native_linux_aarch64_elf": {
+      "command": "RUSTFLAGS=\"--remap-path-prefix=$PWD=/bitblock --remap-path-prefix=$HOME/.cargo=/cargo\" cargo build --release --locked --bin bitblock",
+      "builder_a_sha256": "292b8f420f41d181ba818971c49ac0cb640c0ca853339c4b592f3bd410b8249d",
+      "builder_b_sha256": "292b8f420f41d181ba818971c49ac0cb640c0ca853339c4b592f3bd410b8249d",
+      "byte_len": 3219304,
+      "bit_identical": true,
+      "platform_scoped_only": true
+    },
+    "wasm32_simd128": {
+      "command": "RUSTFLAGS=\"-C target-feature=+simd128 --remap-path-prefix=$PWD=/bitblock --remap-path-prefix=$HOME/.cargo=/cargo\" CARGO_PROFILE_RELEASE_PANIC=abort cargo build --release --locked --target wasm32-unknown-unknown -p bitblock-wasm",
+      "builder_a_sha256": "b24d8f37cd13d2c7e64a3a9f9edd050e15d4fc1613c973adf92a46469e0c615a",
+      "builder_b_sha256": "b24d8f37cd13d2c7e64a3a9f9edd050e15d4fc1613c973adf92a46469e0c615a",
+      "byte_len": 1831176,
+      "bit_identical": true,
+      "node_v8_parity_abi": 17,
+      "node_v8_parity_constants": "39/39",
+      "node_v8_parity_check_groups": 37,
+      "node_v8_parity_ms": 644
+    }
+  },
+  "probe_timings_us": {
+    "pd05_dual_builder_verify_us": 13.94,
+    "canonical_encode_decode_tag_us": 3.18,
+    "divergence_and_non_admission_reject_us": 11.95
+  },
+  "mutation_and_schema_gates": {
+    "bbmutate_release_r1_killed": 7,
+    "bbmutate_release_r1_total": 7,
+    "vectored_schemas_total": 180,
+    "unvectored_schemas": 0,
+    "admitted_release_authority": false,
+    "platform_scoped_only": true
+  },
+  "powered_negative_controls": [
+    "mutated_source_tree_digest_moves_candidate_tag",
+    "mutated_feature_profile_and_build_config_move_candidate_tag",
+    "wrong_profile_d1_binding_rejected_fail_closed",
+    "wrong_pd04_framework_manifest_rejected_fail_closed",
+    "single_builder_and_duplicate_builder_id_rejected_fail_closed",
+    "divergent_builder_artifact_hash_rejected_fail_closed",
+    "wire_tampered_admitted_release_authority_true_rejected_fail_closed",
+    "wire_tampered_platform_scoped_only_false_rejected_fail_closed"
+  ]
+}
