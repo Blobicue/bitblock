@@ -68,8 +68,8 @@ candidate to choose its own authority.
 | PS-025 | REFINE-1 | vm | BOUNDED |
 | PS-026 | IDENTITY-D1 | base | BOUNDED |
 | PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
-| PS-028 | IDENTITY-1 | base | READY |
-| PS-029 | AUTH-COMMIT-1 | base | LOCKED |
+| PS-028 | IDENTITY-1 | base | BOUNDED |
+| PS-029 | AUTH-COMMIT-1 | base | READY |
 | PS-030 | EXECUTION-ROOT-1 | base | LOCKED |
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | LOCKED |
 | PS-032 | MULTI-1 | base | LOCKED |
@@ -769,12 +769,13 @@ is invalid input, not a third collision row.
 
 ### `IDENTITY-1` — actor identity and authorization
 
-- **Status:** `PS-028:IDENTITY-1@base=READY`.
+- **Status:** `PS-028:IDENTITY-1@base=BOUNDED`.
 - **Depends on:** `IDENTITY-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`.
 - **Motive:** distinguish who requested an action from which camera submitted it.
 - **Artifact:** non-circular canonical signing preimage; chain/genesis/world/version binding;
   canonical keys; nonces; permissions; delegation; rotation, revocation, and recovery; separate
-  actor and validator credential domains.
+  actor and validator credential domains (pinned in
+  [`IDENTITY_1_RECEIPT.md`](IDENTITY_1_RECEIPT.md)).
 - **Gate:** mutation, replay, cross-chain, cross-world, wrong-suite, duplicate-key, invalid-key,
   stale-nonce, rotation, and recovery vectors all have deterministic dispositions.
 - **Non-claim:** a public key proves key control, not one unique human, legal ownership, or
@@ -782,7 +783,7 @@ is invalid input, not a third collision row.
 
 ### `AUTH-COMMIT-1` — authenticated authorization and nonce state
 
-- **Status:** `PS-029:AUTH-COMMIT-1@base=LOCKED`.
+- **Status:** `PS-029:AUTH-COMMIT-1@base=READY`.
 - **Depends on:** `IDENTITY-1`, implemented `COMMIT-1`, `CODEC-1` at the authorization/nonce schemas.
 - **Motive:** let a verifier prove which descriptor and nonce state governed an admitted action
   without making identity a circular prerequisite of occupancy-root design.
@@ -1904,7 +1905,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-028:IDENTITY-1@base=READY` |
+| 2 | `PS-029:AUTH-COMMIT-1@base=READY` |
 | 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 5 | `PS-080:TRANSITION-SPEC-1@base=READY` |
