@@ -136,3 +136,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "asset_1_conservation_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "governance_1_timelock_probe"
+required-features = ["protocol-research"]

@@ -386,9 +386,33 @@
     ]
    },
    {
+    "item": "GOVERNANCE_1_RECEIPT_SCHEMA",
+    "modules": [
+     "governance_1"
+    ]
+   },
+   {
+    "item": "GOVERNANCE_1_STATE_ROOT_SCHEMA",
+    "modules": [
+     "governance_1"
+    ]
+   },
+   {
     "item": "GcMarkSnapshot",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "Governance1Error",
+    "modules": [
+     "governance_1"
+    ]
+   },
+   {
+    "item": "GovernanceActionKindV1",
+    "modules": [
+     "governance_1"
     ]
    },
    {
@@ -677,6 +701,12 @@
     "item": "ProjectedRootsV1",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "ProposalStatusV1",
+    "modules": [
+     "governance_1"
     ]
    },
    {
@@ -970,7 +1000,8 @@
    {
     "item": "canonical_sha256",
     "modules": [
-     "asset_1"
+     "asset_1",
+     "governance_1"
     ]
    },
    {
@@ -1079,12 +1110,6 @@
     "item": "matches_preimage",
     "modules": [
      "identity_1"
-    ]
-   },
-   {
-    "item": "meets_strict_supermajority",
-    "modules": [
-     "consensus_gov_d1"
     ]
    },
    {
@@ -1197,7 +1222,7 @@
     ]
    }
   ],
-  "pub_items": 1499,
+  "pub_items": 1528,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1221,7 +1246,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 54702,
+   "code_lines": 55674,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1402,7 +1427,7 @@
    ]
   },
   "test": {
-   "code_lines": 27468,
+   "code_lines": 27619,
    "duplicated_lines": 341,
    "regions": [
     {

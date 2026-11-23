@@ -284,6 +284,16 @@
   ]
  },
  {
+  "id": "sub:governance-1",
+  "members": [
+   "module:governance_1"
+  ],
+  "name": "governance-1",
+  "terms": [
+   "governance"
+  ]
+ },
+ {
   "id": "sub:governance-d1",
   "members": [
    "module:consensus_gov_d1"

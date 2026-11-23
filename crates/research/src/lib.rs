@@ -30,6 +30,7 @@ pub mod display_artifact;
 pub mod display_store;
 pub mod emergence_r1;
 pub mod genesis_d1;
+pub mod governance_1;
 pub mod history_store;
 pub mod identity_1;
 pub mod identity_d1;
