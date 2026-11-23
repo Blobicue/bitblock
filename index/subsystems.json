@@ -244,6 +244,7 @@
  {
   "id": "sub:genesis-d1",
   "members": [
+   "module:genesis_d1",
    "module:profile_bootstrap"
   ],
   "name": "genesis-d1",
