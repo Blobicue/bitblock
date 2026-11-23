@@ -2,18 +2,6 @@
  "dead": {
   "module_private_candidates": [
    {
-    "item": "ACTOR_A_SEED",
-    "modules": [
-     "multi_1"
-    ]
-   },
-   {
-    "item": "ALL",
-    "modules": [
-     "execution_root_1"
-    ]
-   },
-   {
     "item": "ASSET_1_RECEIPT_SCHEMA",
     "modules": [
      "asset_1"
@@ -65,6 +53,24 @@
     "item": "BlockResourceSettlementV1",
     "modules": [
      "resource_1"
+    ]
+   },
+   {
+    "item": "CLIENT_1_STATE_VIEW_SCHEMA",
+    "modules": [
+     "client_1"
+    ]
+   },
+   {
+    "item": "CLIENT_1_TX_LIFECYCLE_SCHEMA",
+    "modules": [
+     "client_1"
+    ]
+   },
+   {
+    "item": "CLIENT_1_VERSION",
+    "modules": [
+     "client_1"
     ]
    },
    {
@@ -161,6 +167,24 @@
     "item": "CanonicalReplayAuthorityFixtureV1",
     "modules": [
      "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "ClientProvisionalBranchV1",
+    "modules": [
+     "client_1"
+    ]
+   },
+   {
+    "item": "ClientTrustAnchorV1",
+    "modules": [
+     "client_1"
+    ]
+   },
+   {
+    "item": "ClientTxRecordV1",
+    "modules": [
+     "client_1"
     ]
    },
    {
@@ -1317,6 +1341,12 @@
     ]
    },
    {
+    "item": "active_schedule",
+    "modules": [
+     "client_1"
+    ]
+   },
+   {
     "item": "all_referenced_keys",
     "modules": [
      "identity_1"
@@ -1629,12 +1659,6 @@
     ]
    },
    {
-    "item": "register_epoch_schedule",
-    "modules": [
-     "consensus_1"
-    ]
-   },
-   {
     "item": "required_domains",
     "modules": [
      "commit_state"
@@ -1725,7 +1749,7 @@
     ]
    }
   ],
-  "pub_items": 1905,
+  "pub_items": 1938,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1749,7 +1773,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 70724,
+   "code_lines": 71728,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1930,7 +1954,7 @@
    ]
   },
   "test": {
-   "code_lines": 28693,
+   "code_lines": 28752,
    "duplicated_lines": 341,
    "regions": [
     {

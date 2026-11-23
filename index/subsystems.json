@@ -52,6 +52,16 @@
   ]
  },
  {
+  "id": "sub:client-1",
+  "members": [
+   "module:client_1"
+  ],
+  "name": "client-1",
+  "terms": [
+   "client"
+  ]
+ },
+ {
   "id": "sub:commit-1",
   "members": [
    "module:commit_state"
