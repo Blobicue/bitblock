@@ -125,7 +125,7 @@ candidate to choose its own authority.
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | BOUNDED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | READY |
-| PS-085 | SIGNER-OPS-1 | base | READY |
+| PS-085 | SIGNER-OPS-1 | base | BOUNDED |
 | PS-086 | RELEASE-R1 | base | READY |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
 | PS-088 | RELEASE-R1 | candidate | READY |
@@ -1797,12 +1797,16 @@ is invalid input, not a third collision row.
 
 ### `SIGNER-OPS-1` — validator signer safety
 
-- **Status:** `PS-085:SIGNER-OPS-1@base=READY`.
+- **Status:** `PS-085:SIGNER-OPS-1@base=BOUNDED`.
 - **Depends on:** `IDENTITY-1`, selected `CONSENSUS-1` credentials, and `CRYPTO-1`.
 - **Motive:** keep restart, failover, and backup from creating equivocation even when the protocol
   rules are correct.
-- **Artifact:** role-separated signer boundary, monotonic anti-double-sign state, key ceremony,
-  backup/restore and failover procedures, compromise/revocation path, and auditable signing policy.
+- **Artifact:** [`SIGNER_OPS_1_RECEIPT.md`](SIGNER_OPS_1_RECEIPT.md) (PR #88 commit
+  `8189ef19be0c64967f8f2eb580bbaacf26016566`, `crates/research/src/signer_ops_1.rs`,
+  `tools/signer_ops_1_vectors.py`, `tests/wave26_signer_ops_1.rs`, and
+  `examples/signer_ops_1_drill_probe.rs`): role-separated signer boundary, monotonic
+  anti-double-sign state, key ceremony, backup/restore and failover procedures,
+  compromise/revocation path, and auditable signing policy.
 - **Gate:** crash, stale backup, concurrent replica, rollback, failover, compromise, and disaster
   recovery drills cannot emit conflicting authorized messages or silently regress signer state.
 - **Non-claim:** secure signer operation does not establish validator honesty, quorum safety, or
@@ -1990,9 +1994,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 5 | `PS-084:PROFILE-1@base=READY` |
-| 6 | `PS-085:SIGNER-OPS-1@base=READY` |
-| 7 | `PS-086:RELEASE-R1@base=READY` |
-| 8 | `PS-088:RELEASE-R1@candidate=READY` |
+| 6 | `PS-086:RELEASE-R1@base=READY` |
+| 7 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2025,7 +2028,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `8` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
