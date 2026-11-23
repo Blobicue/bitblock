@@ -81,7 +81,7 @@ candidate to choose its own authority.
 | PS-038 | ASSET-1 | base | BOUNDED |
 | PS-039 | RESOURCE-1 | base | BOUNDED |
 | PS-040 | ECONOMIC-STATE-1 | base | BOUNDED |
-| PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
+| PS-041 | VALIDATOR-ECON-1 | base | READY |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
 | PS-044 | LANGUAGE-R1 | base | BOUNDED |
@@ -96,8 +96,8 @@ candidate to choose its own authority.
 | PS-053 | CONSENSUS-D1 | base | BOUNDED |
 | PS-054 | CONSENSUS-D1 | mechanism-choice | BOUNDED |
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | BOUNDED |
-| PS-056 | CONSENSUS-1 | base | READY |
-| PS-057 | CLIENT-1 | base | LOCKED |
+| PS-056 | CONSENSUS-1 | base | BOUNDED |
+| PS-057 | CLIENT-1 | base | READY |
 | PS-058 | TESTNET-1 | base | LOCKED |
 | PS-059 | L1-CANDIDATE | base | LOCKED |
 | PS-060 | L1-PRODUCTION | base | LOCKED |
@@ -125,7 +125,7 @@ candidate to choose its own authority.
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | BOUNDED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | LOCKED |
-| PS-085 | SIGNER-OPS-1 | base | LOCKED |
+| PS-085 | SIGNER-OPS-1 | base | READY |
 | PS-086 | RELEASE-R1 | base | READY |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
 | PS-088 | RELEASE-R1 | candidate | READY |
@@ -135,7 +135,7 @@ candidate to choose its own authority.
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
-| PS-095 | SYNC-1 | replay-authority | LOCKED |
+| PS-095 | SYNC-1 | replay-authority | READY |
 
 ## Structured phase-dependency manifest
 
@@ -891,7 +891,7 @@ is invalid input, not a third collision row.
 
 ### `SYNC-1` — peer synchronization, availability, and recovery
 
-- **Status:** `PS-034:SYNC-1@base=BOUNDED`, `PS-095:SYNC-1@replay-authority=LOCKED`.
+- **Status:** `PS-034:SYNC-1@base=BOUNDED`, `PS-095:SYNC-1@replay-authority=READY`.
 - **Depends on:** `SEQUENCER-1`, `STORAGE-1`, and the applicable `BOUNDS-1` limits.
 - **Motive:** make required bodies, witnesses, and accepted state recoverable from more than one
   process.
@@ -1024,7 +1024,7 @@ is invalid input, not a third collision row.
 
 ### `VALIDATOR-ECON-1` — consensus incentives
 
-- **Status:** `PS-041:VALIDATOR-ECON-1@base=LOCKED`.
+- **Status:** `PS-041:VALIDATOR-ECON-1@base=READY`.
 - **Depends on:** `CONSENSUS-1`, `VALIDATOR-ECON-D1`, `ECONOMIC-STATE-1`, `EXECUTION-ROOT-1`,
   `THREAT-1`; only activated profiles that use economic validator incentives require this node.
 - **Motive:** align validator behavior only after “validator” has an exact protocol meaning.
@@ -1258,11 +1258,15 @@ is invalid input, not a third collision row.
 
 ### `CONSENSUS-1` — select and specify one consensus profile
 
-- **Status:** `PS-056:CONSENSUS-1@base=READY`.
+- **Status:** `PS-056:CONSENSUS-1@base=BOUNDED`.
 - **Depends on:** `CONSENSUS-D1`, `SYNC-1`, `PROTOCOL-ID-1`, `THREAT-1`, `CRYPTO-1`, `BOUNDS-1`,
   `VALIDATOR-SCHEDULE-1`, `EXECUTION-ROOT-1`.
 - **Motive:** replace sequencer trust with an explicit replicated ordering and state-root rule.
-- **Artifact:** implementation and evidence for the selected quantitative adversary/network model;
+- **Artifact:** [`CONSENSUS_1_RECEIPT.md`](CONSENSUS_1_RECEIPT.md) (PR #80 commit
+  `4ccbe564e218d21b93f55727233284b1a62569e4`, `crates/research/src/consensus_1.rs`,
+  `proof/BitblockProof/ConsensusSafety.lean`, `tools/consensus_1_vectors.py`,
+  `tests/wave22_consensus_1.rs`, and `examples/consensus_1_bft_probe.rs`):
+  implementation and evidence for the selected quantitative adversary/network model;
   proposal/vote/certificate domains; fork-choice or deterministic-finality rule; exact consumption of
   committed validator-schedule transitions; data-before-vote; confirmation/finality status; and safe-
   halt and recovery rules. This node also owns live
@@ -1288,7 +1292,7 @@ is invalid input, not a third collision row.
 
 ### `CLIENT-1` — proof-bound provisional and accepted client state
 
-- **Status:** `PS-057:CLIENT-1@base=LOCKED`.
+- **Status:** `PS-057:CLIENT-1@base=READY`.
 - **Depends on:** `CONSENSUS-1`, `EXECUTION-ROOT-1`, and receipt-inclusion commitments from
   `PROTOCOL-ID-1`.
 - **Motive:** stop wallets and observers from presenting a sequencer acknowledgement, candidate
@@ -1781,7 +1785,7 @@ is invalid input, not a third collision row.
 
 ### `SIGNER-OPS-1` — validator signer safety
 
-- **Status:** `PS-085:SIGNER-OPS-1@base=LOCKED`.
+- **Status:** `PS-085:SIGNER-OPS-1@base=READY`.
 - **Depends on:** `IDENTITY-1`, selected `CONSENSUS-1` credentials, and `CRYPTO-1`.
 - **Motive:** keep restart, failover, and backup from creating equivocation even when the protocol
   rules are correct.
@@ -1970,12 +1974,15 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-056:CONSENSUS-1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-086:RELEASE-R1@base=READY` |
-| 7 | `PS-088:RELEASE-R1@candidate=READY` |
+| 2 | `PS-041:VALIDATOR-ECON-1@base=READY` |
+| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 4 | `PS-057:CLIENT-1@base=READY` |
+| 5 | `PS-062:COST-1@base=READY` |
+| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 7 | `PS-085:SIGNER-OPS-1@base=READY` |
+| 8 | `PS-086:RELEASE-R1@base=READY` |
+| 9 | `PS-088:RELEASE-R1@candidate=READY` |
+| 10 | `PS-095:SYNC-1@replay-authority=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2008,7 +2015,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `10` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
