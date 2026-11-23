@@ -638,6 +638,28 @@
   ]
  },
  {
+  "id": "sub:profile-1",
+  "members": [
+   "module:profile_1"
+  ],
+  "name": "profile-1",
+  "terms": [
+   "profile"
+  ]
+ },
+ {
+  "id": "sub:profile-admission-manifest",
+  "members": [
+   "module:profile_1"
+  ],
+  "name": "profile-admission-manifest",
+  "terms": [
+   "admission",
+   "manifest",
+   "profile"
+  ]
+ },
+ {
   "id": "sub:profile-d1",
   "members": [
    "module:profile_d1"

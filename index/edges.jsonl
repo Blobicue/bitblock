@@ -1341,6 +1341,8 @@
 {"from": "module:presentation_output", "kind": "declares", "to": "schema:bitblock/presentation-output-test/v1"}
 {"from": "module:presentation_output_v2", "kind": "declares", "to": "schema:bitblock/presentation-output-artifact/v2"}
 {"from": "module:presentation_output_v2", "kind": "declares", "to": "schema:bitblock/presentation-output-v2-test/v1"}
+{"from": "module:profile_1", "kind": "declares", "to": "schema:bitblock/profile-1/evidence-closure/v1"}
+{"from": "module:profile_1", "kind": "declares", "to": "schema:bitblock/profile-admission-manifest/v1"}
 {"from": "module:profile_bootstrap", "kind": "declares", "to": "schema:bitblock/genesis-d1/chain-genesis-payload/v1"}
 {"from": "module:profile_bootstrap", "kind": "declares", "to": "schema:bitblock/profile-scope-d0/scope/v1"}
 {"from": "module:profile_bootstrap", "kind": "declares", "to": "schema:bitblock/protocol-id-1/accepted-proposal-core/v1"}
@@ -1674,6 +1676,11 @@
 {"from": "module:presentation_output_v2", "kind": "depends_on", "to": "module:presentation_output"}
 {"from": "module:presentation_output_v2", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:presentation_output_v2", "kind": "depends_on", "to": "module:storage"}
+{"from": "module:profile_1", "kind": "depends_on", "to": "module:genesis_d1"}
+{"from": "module:profile_1", "kind": "depends_on", "to": "module:genesis_root_parity_1"}
+{"from": "module:profile_1", "kind": "depends_on", "to": "module:profile_d1"}
+{"from": "module:profile_1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:profile_1", "kind": "depends_on", "to": "module:transition_spec_1"}
 {"from": "module:profile_bootstrap", "kind": "depends_on", "to": "module:asset_d1"}
 {"from": "module:profile_bootstrap", "kind": "depends_on", "to": "module:commit_state"}
 {"from": "module:profile_bootstrap", "kind": "depends_on", "to": "module:consensus_gov_d1"}
@@ -2040,6 +2047,8 @@
 {"from": "example:examples/language_r1_visual_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/multi_1_race_probe.rs", "kind": "uses", "to": "module:multi_1"}
 {"from": "example:examples/policy_tag_alloc_probe.rs", "kind": "uses", "to": "module:sidebar"}
+{"from": "example:examples/profile_1_admission_probe.rs", "kind": "uses", "to": "module:genesis_root_parity_1"}
+{"from": "example:examples/profile_1_admission_probe.rs", "kind": "uses", "to": "module:profile_1"}
 {"from": "example:examples/profile_d1_manifest_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:examples/profile_d1_manifest_probe.rs", "kind": "uses", "to": "module:profile_d1"}
 {"from": "example:examples/profile_d1_manifest_probe.rs", "kind": "uses", "to": "module:protocol"}
@@ -2361,6 +2370,10 @@
 {"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:signer_ops_1"}
 {"from": "example:tests/wave27_release_r1.rs", "kind": "uses", "to": "module:consensus_1"}
 {"from": "example:tests/wave27_release_r1.rs", "kind": "uses", "to": "module:release_r1"}
+{"from": "example:tests/wave28_profile_1.rs", "kind": "uses", "to": "module:genesis_root_parity_1"}
+{"from": "example:tests/wave28_profile_1.rs", "kind": "uses", "to": "module:profile_1"}
+{"from": "example:tests/wave28_profile_1.rs", "kind": "uses", "to": "module:profile_d1"}
+{"from": "example:tests/wave28_profile_1.rs", "kind": "uses", "to": "module:transition_spec_1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2629,6 +2642,8 @@
 {"from": "tool:presentation_output_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:presentation_output_vectors", "kind": "vectors", "to": "schema:bitblock/presentation-output-artifact/v1"}
 {"from": "tool:presentation_output_vectors", "kind": "vectors", "to": "schema:bitblock/presentation-output-artifact/v2"}
+{"from": "tool:profile_1_vectors", "kind": "vectors", "to": "schema:bitblock/profile-1/evidence-closure/v1"}
+{"from": "tool:profile_1_vectors", "kind": "vectors", "to": "schema:bitblock/profile-admission-manifest/v1"}
 {"from": "tool:profile_bootstrap_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/suite-descriptor/v1"}
 {"from": "tool:profile_bootstrap_vectors", "kind": "vectors", "to": "schema:bitblock/genesis-d1/chain-genesis-payload/v1"}
 {"from": "tool:profile_bootstrap_vectors", "kind": "vectors", "to": "schema:bitblock/profile-scope-d0/scope/v1"}

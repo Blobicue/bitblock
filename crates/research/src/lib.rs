@@ -53,6 +53,7 @@ pub mod physical_sensor;
 pub mod presentation;
 pub mod presentation_output;
 pub mod presentation_output_v2;
+pub mod profile_1;
 pub mod profile_bootstrap;
 pub mod profile_d1;
 pub mod protocol_id_1;
