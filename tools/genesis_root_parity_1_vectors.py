@@ -253,7 +253,8 @@ def rebuild_devnet_parity_path4() -> dict[str, object]:
         LAUNCH_PREDS,
         LAUNCH_CAPS,
     )
-    _, profile_id, bound_bytes = seal_bound(cand_b)
+    _, profile_id, _ = seal_bound(cand_b)
+    bound_bytes = struct.pack(">I", len(cand_b)) + cand_b + profile_id
 
     bands = build_bands(False)
     spec_b = (

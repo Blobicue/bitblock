@@ -7,3 +7,4 @@ import BitblockProof.AccountingRefinement
 import BitblockProof.CommitmentRefinement
 import BitblockProof.VmRefinement
 import BitblockProof.ConsensusSafety
+import BitblockProof.LaunchClosureRefinement

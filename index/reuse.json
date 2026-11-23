@@ -62,6 +62,36 @@
     ]
    },
    {
+    "item": "CHAIN_LAUNCH_1_AUTH_SCHEMA",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "CHAIN_LAUNCH_1_BUNDLE_SCHEMA",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "CHAIN_LAUNCH_1_MANIFEST_SCHEMA",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "CHAIN_LAUNCH_1_PACKAGE_SCHEMA",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "CHAIN_LAUNCH_1_VERSION",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
     "item": "CLIENT_1_STATE_VIEW_SCHEMA",
     "modules": [
      "client_1"
@@ -167,6 +197,12 @@
     "item": "CameraBasis",
     "modules": [
      "camera"
+    ]
+   },
+   {
+    "item": "CanonicalDevnetLaunchBuildV1",
+    "modules": [
+     "chain_launch_1"
     ]
    },
    {
@@ -368,6 +404,12 @@
     ]
    },
    {
+    "item": "EMBEDDED_PREIMAGE_CARRIER_MODE_V1",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
     "item": "ENTRY_LEN",
     "modules": [
      "validator_schedule_1"
@@ -386,12 +428,6 @@
     ]
    },
    {
-    "item": "EXECUTION_ROOT_1_COMPOSITION_SCHEMA",
-    "modules": [
-     "execution_root_1"
-    ]
-   },
-   {
     "item": "EXECUTION_ROOT_1_REGISTRY_SCHEMA",
     "modules": [
      "execution_root_1"
@@ -407,6 +443,24 @@
     "item": "EXECUTOR_1_RECEIPT_SCHEMA",
     "modules": [
      "executor_1"
+    ]
+   },
+   {
+    "item": "EXPLICIT_LAUNCH_ARTIFACT_COUNT",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "EXTERNAL_GENESIS_OUTGOING_REF_COUNT",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "EXTERNAL_GENESIS_ROOT_COUNT",
+    "modules": [
+     "chain_launch_1"
     ]
    },
    {
@@ -437,6 +491,12 @@
     "item": "ExecutorStepOutcomeV1",
     "modules": [
      "executor_1"
+    ]
+   },
+   {
+    "item": "ExternalGenesisToInternalDependencyRefV1",
+    "modules": [
+     "chain_launch_1"
     ]
    },
    {
@@ -483,12 +543,6 @@
    },
    {
     "item": "GENESIS_D1_LAUNCH_STATE_SCHEMA",
-    "modules": [
-     "genesis_d1"
-    ]
-   },
-   {
-    "item": "GENESIS_D1_PACKAGE_SCHEMA",
     "modules": [
      "genesis_d1"
     ]
@@ -624,6 +678,18 @@
     "item": "LOCAL_REPLAY_EVIDENCE_SCHEMA",
     "modules": [
      "replay_evidence"
+    ]
+   },
+   {
+    "item": "LaunchClosureExternalGenesisDependencyNodeV1",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
+    "item": "LaunchClosureInternalDependencyNodeV1",
+    "modules": [
+     "chain_launch_1"
     ]
    },
    {
@@ -993,6 +1059,12 @@
     ]
    },
    {
+    "item": "PreflightBundleSummaryV1",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
     "item": "PreparedTick",
     "modules": [
      "history"
@@ -1008,18 +1080,6 @@
     "item": "ProposalStatusV1",
     "modules": [
      "governance_1"
-    ]
-   },
-   {
-    "item": "RELEASE_R1_BUILD_INPUTS_SCHEMA",
-    "modules": [
-     "release_r1"
-    ]
-   },
-   {
-    "item": "RELEASE_R1_CANDIDATE_RECEIPT_SCHEMA",
-    "modules": [
-     "release_r1"
     ]
    },
    {
@@ -1263,6 +1323,12 @@
     ]
    },
    {
+    "item": "SupplementaryLaunchArtifactV1",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
     "item": "SweepHit",
     "modules": [
      "render"
@@ -1395,6 +1461,12 @@
     ]
    },
    {
+    "item": "VerifiedChainLaunchOutcomeV1",
+    "modules": [
+     "chain_launch_1"
+    ]
+   },
+   {
     "item": "VerifiedInMemoryHistory",
     "modules": [
      "history_store"
@@ -1464,6 +1536,12 @@
     "item": "append_publication_body_before_root",
     "modules": [
      "sequencer_1"
+    ]
+   },
+   {
+    "item": "auth_payload_digest",
+    "modules": [
+     "chain_launch_1"
     ]
    },
    {
@@ -1602,6 +1680,12 @@
     "item": "compute_typed_node_hash",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "decode_canonical_with_preflight",
+    "modules": [
+     "chain_launch_1"
     ]
    },
    {
@@ -1900,7 +1984,7 @@
     ]
    }
   ],
-  "pub_items": 2070,
+  "pub_items": 2104,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1924,7 +2008,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 76793,
+   "code_lines": 78899,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2105,7 +2189,7 @@
    ]
   },
   "test": {
-   "code_lines": 29045,
+   "code_lines": 29096,
    "duplicated_lines": 341,
    "regions": [
     {
