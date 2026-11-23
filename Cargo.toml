@@ -128,3 +128,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "transition_spec_1_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "auth_commit_1_probe"
+required-features = ["protocol-research"]

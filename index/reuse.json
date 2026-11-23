@@ -2,6 +2,18 @@
  "dead": {
   "module_private_candidates": [
    {
+    "item": "AUTH_COMMIT_1_PROOF_SCHEMA",
+    "modules": [
+     "auth_commit_1"
+    ]
+   },
+   {
+    "item": "AUTH_COMMIT_1_ROOTS_SCHEMA",
+    "modules": [
+     "auth_commit_1"
+    ]
+   },
+   {
     "item": "BRIDGE_POLICY_SCHEMA",
     "modules": [
      "ladder_bridge"
@@ -200,6 +212,18 @@
     ]
    },
    {
+    "item": "DOMAIN_KEY_BITS",
+    "modules": [
+     "auth_commit_1"
+    ]
+   },
+   {
+    "item": "DOMAIN_KEY_BYTES",
+    "modules": [
+     "auth_commit_1"
+    ]
+   },
+   {
     "item": "DOMAIN_MASK_ASSET_RESOURCE",
     "modules": [
      "transition_spec_1"
@@ -245,6 +269,12 @@
     "item": "DisplayArtifactRecoveryJournal",
     "modules": [
      "display_store"
+    ]
+   },
+   {
+    "item": "DomainProofStepV1",
+    "modules": [
+     "auth_commit_1"
     ]
    },
    {
@@ -968,6 +998,12 @@
     ]
    },
    {
+    "item": "empty_domain_root",
+    "modules": [
+     "auth_commit_1"
+    ]
+   },
+   {
     "item": "end_iteration",
     "modules": [
      "sequential"
@@ -1137,7 +1173,7 @@
     ]
    }
   ],
-  "pub_items": 1462,
+  "pub_items": 1483,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1161,7 +1197,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 52840,
+   "code_lines": 53976,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1342,7 +1378,7 @@
    ]
   },
   "test": {
-   "code_lines": 27332,
+   "code_lines": 27372,
    "duplicated_lines": 341,
    "regions": [
     {
