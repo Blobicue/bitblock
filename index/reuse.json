@@ -308,6 +308,18 @@
     ]
    },
    {
+    "item": "ECONOMIC_STATE_1_RECEIPT_SCHEMA",
+    "modules": [
+     "economic_state_1"
+    ]
+   },
+   {
+    "item": "ECONOMIC_STATE_1_ROOT_SCHEMA",
+    "modules": [
+     "economic_state_1"
+    ]
+   },
+   {
     "item": "EVENT_KEY_BITS",
     "modules": [
      "commit_state"
@@ -317,6 +329,18 @@
     "item": "EVENT_KEY_BYTES",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "EconomicActionKindV1",
+    "modules": [
+     "economic_state_1"
+    ]
+   },
+   {
+    "item": "EconomicState1Error",
+    "modules": [
+     "economic_state_1"
     ]
    },
    {
@@ -569,6 +593,12 @@
     "item": "MAX_SIZE_QUERY_CYCLES",
     "modules": [
      "windows_topology"
+    ]
+   },
+   {
+    "item": "MAX_UNBONDING_ENTRIES_PER_VALIDATOR",
+    "modules": [
+     "economic_state_1"
     ]
    },
    {
@@ -914,6 +944,12 @@
     ]
    },
    {
+    "item": "UnbondingEntryV1",
+    "modules": [
+     "economic_state_1"
+    ]
+   },
+   {
     "item": "VM_1_STEP_TRACE_SCHEMA",
     "modules": [
      "vm_1"
@@ -1001,6 +1037,7 @@
     "item": "canonical_sha256",
     "modules": [
      "asset_1",
+     "economic_state_1",
      "governance_1"
     ]
    },
@@ -1014,6 +1051,12 @@
     "item": "changed_rows",
     "modules": [
      "render"
+    ]
+   },
+   {
+    "item": "check_conservation",
+    "modules": [
+     "economic_state_1"
     ]
    },
    {
@@ -1222,7 +1265,7 @@
     ]
    }
   ],
-  "pub_items": 1528,
+  "pub_items": 1549,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1246,7 +1289,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 55674,
+   "code_lines": 56616,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1427,7 +1470,7 @@
    ]
   },
   "test": {
-   "code_lines": 27619,
+   "code_lines": 27700,
    "duplicated_lines": 341,
    "regions": [
     {

@@ -140,3 +140,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "governance_1_timelock_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "economic_state_1_probe"
+required-features = ["protocol-research"]
