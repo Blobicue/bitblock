@@ -208,13 +208,15 @@ CLIPPY = ["cargo", "clippy", "--workspace", "--all-targets", "-q"]
 # integration tests in tests/wave14c_governance_1.rs.
 # 764 -> 765 / 822 -> 825: one Wave 15A unit test in economic_state_1.rs plus two protocol-research
 # integration tests in tests/wave15a_economic_state_1.rs.
+# 765 -> 766 / 825 -> 828: one Wave 15C unit test in validator_schedule_1.rs plus two protocol-research
+# integration tests in tests/wave15c_validator_schedule_1.rs.
 WINDOWS_ONLY_TESTS = {
     "quick": 29,  # 654 on Windows - 625 on Linux
     "full": 38,   # 665 on Windows - 627 on Linux
 }
 EXPECTED_TESTS = {
     t: (count if sys.platform == "win32" else count - WINDOWS_ONLY_TESTS[t])
-    for t, count in {"quick": 765, "full": 825}.items()
+    for t, count in {"quick": 766, "full": 828}.items()
 }
 RESULT_LINE = re.compile(r"^test result: ok\. (\d+) passed", re.M)
 # Clippy gets its own target directory so it does not queue behind the test
