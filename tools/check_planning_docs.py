@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "9fe0406b52aaecf40bb11d08b9c10b917d981395c06257f70c4bd06b68e0c2a5"
+EXPECTED_STATUS_DIGEST = "d460102cb118c76b8c55b351ac0355ba54a9af90bb1444682fef71397e0f472d"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "57e0097ee20bfd4138e8b0dd30f7b4590a1c3e313274ed15bddf326612e58374"
+    "635124386b14e83245968cbae2ee771ff76e11522ab420e0eed3eb2572fe56c3"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,7 +7779,7 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-021:REFINE-1@base=READY` |",
+        "| 2 | `PS-062:COST-1@base=READY` |",
         "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 8 | `PS-086:RELEASE-R1@base=READY` |\n",
+        "| 6 | `PS-086:RELEASE-R1@base=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 8 | `PS-086:RELEASE-R1@base=READY` |",
-        "| 8 | `PS-086:RELEASE-R1@base=READY` |\n"
-        "| 9 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 6 | `PS-086:RELEASE-R1@base=READY` |",
+        "| 6 | `PS-086:RELEASE-R1@base=READY` |\n"
+        "| 7 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-021:REFINE-1@base=READY` |",
+        "| 1 | `PS-062:COST-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-021:REFINE-1@base=READY` |",
+        "| 2 | `PS-062:COST-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
