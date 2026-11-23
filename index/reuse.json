@@ -524,6 +524,18 @@
     ]
    },
    {
+    "item": "PROFILE_D1_BOUND_PROFILE_SCHEMA",
+    "modules": [
+     "profile_d1"
+    ]
+   },
+   {
+    "item": "PROFILE_D1_CANDIDATE_MANIFEST_SCHEMA",
+    "modules": [
+     "profile_d1"
+    ]
+   },
+   {
     "item": "PROTOCOL_ID_1_COLLISION_AUDIT_SCHEMA",
     "modules": [
      "protocol_id_1"
@@ -551,6 +563,12 @@
     "item": "PreparedTick",
     "modules": [
      "history"
+    ]
+   },
+   {
+    "item": "ProfileDomainSlotV1",
+    "modules": [
+     "profile_d1"
     ]
    },
    {
@@ -677,6 +695,12 @@
     "item": "SpatialRenderCacheStats",
     "modules": [
      "render"
+    ]
+   },
+   {
+    "item": "StageGateSubclaimV1",
+    "modules": [
+     "profile_d1"
     ]
    },
    {
@@ -934,7 +958,8 @@
    {
     "item": "pre_id_digests",
     "modules": [
-     "genesis_d1"
+     "genesis_d1",
+     "profile_d1"
     ]
    },
    {
@@ -1016,7 +1041,7 @@
     ]
    }
   ],
-  "pub_items": 1406,
+  "pub_items": 1418,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1040,7 +1065,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 50170,
+   "code_lines": 50929,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1221,7 +1246,7 @@
    ]
   },
   "test": {
-   "code_lines": 27097,
+   "code_lines": 27127,
    "duplicated_lines": 341,
    "regions": [
     {

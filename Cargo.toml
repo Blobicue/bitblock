@@ -116,3 +116,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "crypto_1_lifecycle_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "profile_d1_manifest_probe"
+required-features = ["protocol-research"]

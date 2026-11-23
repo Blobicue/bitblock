@@ -523,6 +523,16 @@
   ]
  },
  {
+  "id": "sub:profile-d1",
+  "members": [
+   "module:profile_d1"
+  ],
+  "name": "profile-d1",
+  "terms": [
+   "profile"
+  ]
+ },
+ {
   "id": "sub:profile-scope-d0",
   "members": [
    "module:profile_bootstrap"
