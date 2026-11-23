@@ -108,3 +108,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "protocol_id_1_audit_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "vm_1_visual_probe"
+required-features = ["protocol-research"]

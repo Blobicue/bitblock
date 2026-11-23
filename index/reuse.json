@@ -20,12 +20,6 @@
     ]
    },
    {
-    "item": "BoundsViolationV1",
-    "modules": [
-     "bounds_1"
-    ]
-   },
-   {
     "item": "COMMIT_R1_ASSAY_REPORT_SCHEMA",
     "modules": [
      "commit_r1"
@@ -716,6 +710,18 @@
     ]
    },
    {
+    "item": "VM_1_STEP_TRACE_SCHEMA",
+    "modules": [
+     "vm_1"
+    ]
+   },
+   {
+    "item": "VM_1_TICK_RECEIPT_SCHEMA",
+    "modules": [
+     "vm_1"
+    ]
+   },
+   {
     "item": "ValueCodecIdV1",
     "modules": [
      "commit_state"
@@ -743,6 +749,24 @@
     "item": "VmInvocationOutcomeV1",
     "modules": [
      "vm_d1"
+    ]
+   },
+   {
+    "item": "VmProgramExecutionEntryV1",
+    "modules": [
+     "vm_1"
+    ]
+   },
+   {
+    "item": "VmTickExecutionReceiptV1",
+    "modules": [
+     "vm_1"
+    ]
+   },
+   {
+    "item": "VmTraceStepV1",
+    "modules": [
+     "vm_1"
     ]
    },
    {
@@ -950,7 +974,7 @@
     ]
    }
   ],
-  "pub_items": 1370,
+  "pub_items": 1382,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -974,7 +998,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 48799,
+   "code_lines": 49351,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1155,7 +1179,7 @@
    ]
   },
   "test": {
-   "code_lines": 26955,
+   "code_lines": 27021,
    "duplicated_lines": 341,
    "regions": [
     {

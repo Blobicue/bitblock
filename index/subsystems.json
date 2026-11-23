@@ -688,6 +688,14 @@
   ]
  },
  {
+  "id": "sub:vm-1",
+  "members": [
+   "module:vm_1"
+  ],
+  "name": "vm-1",
+  "terms": []
+ },
+ {
   "id": "sub:vm-d1",
   "members": [
    "module:vm_d1"
