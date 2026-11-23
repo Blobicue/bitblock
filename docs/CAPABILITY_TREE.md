@@ -72,8 +72,8 @@ candidate to choose its own authority.
 | PS-029 | AUTH-COMMIT-1 | base | BOUNDED |
 | PS-030 | EXECUTION-ROOT-1 | base | BOUNDED |
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | BOUNDED |
-| PS-032 | MULTI-1 | base | READY |
-| PS-033 | SEQUENCER-1 | base | LOCKED |
+| PS-032 | MULTI-1 | base | BOUNDED |
+| PS-033 | SEQUENCER-1 | base | READY |
 | PS-034 | SYNC-1 | base | LOCKED |
 | PS-035 | ASSET-D1 | base | BOUNDED |
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
@@ -853,11 +853,16 @@ is invalid input, not a third collision row.
 
 ### `MULTI-1` — deterministic multi-actor harness
 
-- **Status:** `PS-032:MULTI-1@base=READY`.
+- **Status:** `PS-032:MULTI-1@base=BOUNDED`.
 - **Depends on:** `AUTH-COMMIT-1`, `TRANSITION-SPEC-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
   `GENESIS-ROOT-PARITY-1`.
 - **Motive:** expose ordering, authorization, and same-coordinate conflicts at the cheapest scale.
-- **Artifact:** two or more signed action streams folded by one in-process deterministic executor.
+- **Artifact:** [`MULTI_1_RECEIPT.md`](MULTI_1_RECEIPT.md) (PR #74 commit
+  `d76b4942e382697d89c340da1535475e51c4f863`), `crates/research/src/multi_1.rs`,
+  `tools/multi_1_vectors.py`, `tests/wave19_multi_1.rs`, and `examples/multi_1_race_probe.rs`
+  folding signed 3-actor delegated streams (`Actor A -> Delegate C -> Actor B`) in canonical total
+  order `(priority_tip DESC, principal_actor_id ASC, nonce ASC, envelope_digest ASC)` through
+  `PrimaryLaunchExecutorV1` and 11-slot `ExecutionRootCompositionV1`.
 - **Gate:** permutations of races, stale anchors, duplicate nonces, delegated rights, no-ops,
   admitted failures, and re-mints produce one specified result or one specified rejection across
   independent runs.
@@ -866,7 +871,7 @@ is invalid input, not a third collision row.
 
 ### `SEQUENCER-1` — accountable centralized multiplayer
 
-- **Status:** `PS-033:SEQUENCER-1@base=LOCKED`.
+- **Status:** `PS-033:SEQUENCER-1@base=READY`.
 - **Depends on:** `MULTI-1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`, `EXECUTOR-1`,
   `EXECUTION-ROOT-1`, and durable `STORAGE-1` publication.
 - **Motive:** let remote participants share one signed, replayable world before consensus is added.
@@ -1956,7 +1961,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-032:MULTI-1@base=READY` |
+| 2 | `PS-033:SEQUENCER-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |

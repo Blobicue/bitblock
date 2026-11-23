@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "c5e03d0bd07521f8cf7b867da12e3f538cd5f6acf27838f3596d1d070210e99f"
+EXPECTED_STATUS_DIGEST = "8b97abdbae88abb74dc453110a906825ed6abc110c16006b3995f088246f8cd8"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "6b331b7062511e8e1141e65933a83b8c5aef3051be539766eb0d5ca19e19476d"
+    "d965c70a3c4a8fab7e60b360fdbb2f885da56b6e9bdd220be83cbab3e9459d0d"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-032:MULTI-1@base=READY` |",
+        "| 1 | `PS-033:SEQUENCER-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-032:MULTI-1@base=READY` |",
+        "| 2 | `PS-033:SEQUENCER-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
