@@ -73,8 +73,8 @@ candidate to choose its own authority.
 | PS-030 | EXECUTION-ROOT-1 | base | BOUNDED |
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | BOUNDED |
 | PS-032 | MULTI-1 | base | BOUNDED |
-| PS-033 | SEQUENCER-1 | base | READY |
-| PS-034 | SYNC-1 | base | LOCKED |
+| PS-033 | SEQUENCER-1 | base | BOUNDED |
+| PS-034 | SYNC-1 | base | READY |
 | PS-035 | ASSET-D1 | base | BOUNDED |
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
@@ -871,12 +871,18 @@ is invalid input, not a third collision row.
 
 ### `SEQUENCER-1` — accountable centralized multiplayer
 
-- **Status:** `PS-033:SEQUENCER-1@base=READY`.
+- **Status:** `PS-033:SEQUENCER-1@base=BOUNDED`.
 - **Depends on:** `MULTI-1`, `PROTOCOL-ID-1`, `CODEC-1`, `BOUNDS-1`, `EXECUTOR-1`,
   `EXECUTION-ROOT-1`, and durable `STORAGE-1` publication.
 - **Motive:** let remote participants share one signed, replayable world before consensus is added.
-- **Artifact:** bounded wire messages; authenticated admission; canonical batch order; append-only
-  bodies/receipts; atomic state-root publication; independently replaying clients.
+- **Artifact:** [`SEQUENCER_1_RECEIPT.md`](SEQUENCER_1_RECEIPT.md) (PR #76 commit
+  `54464675750c06302a987df6467844c68a632076`), `crates/research/src/sequencer_1.rs`,
+  `tools/sequencer_1_vectors.py`, `tests/wave20_sequencer_1.rs`, and
+  `examples/sequencer_1_replay_probe.rs` providing `BOUNDS-1`-preflighted `BBSEQ1` framing,
+  Ed25519-signed batch headers bound to `PROTOCOL-ID-1` proposal cores and `O(log n)` receipt
+  Merkle roots, atomic body-before-root publication over frozen `STORAGE-1` `Journal`, native
+  loopback TCP resync, and independently replaying clients with withheld-body refusal and
+  equivocation detection.
 - **Gate:** malicious-input, restart, duplicate, race, withheld-body, receipt-inclusion, and client
   resynchronization tests; every accepted batch reproduces the published root in an independent
   executor.
@@ -885,7 +891,7 @@ is invalid input, not a third collision row.
 
 ### `SYNC-1` — peer synchronization, availability, and recovery
 
-- **Status:** `PS-034:SYNC-1@base=LOCKED`, `PS-095:SYNC-1@replay-authority=LOCKED`.
+- **Status:** `PS-034:SYNC-1@base=READY`, `PS-095:SYNC-1@replay-authority=LOCKED`.
 - **Depends on:** `SEQUENCER-1`, `STORAGE-1`, and the applicable `BOUNDS-1` limits.
 - **Motive:** make required bodies, witnesses, and accepted state recoverable from more than one
   process.
@@ -1961,7 +1967,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-033:SEQUENCER-1@base=READY` |
+| 2 | `PS-034:SYNC-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
