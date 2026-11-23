@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "ecd238d22bba3b3044fc58f5fb8f8fdaf1ecc14216d0e2f64f6fba79fea65332"
+EXPECTED_STATUS_DIGEST = "2a85c865452d80942610269b705d1fc40a7e2301527c3e407ccdc95455e5773b"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "4d1b05c00a5d878a598e5ad5a7e0a966352cea2d1fd683be3824e45e5aab629c"
+    "a97b6ef540dfaf4300d6cfb09a7ba34c9ec6b93fed2bf9419e30b25d34e90ae5"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-030:EXECUTION-ROOT-1@base=READY` |",
+        "| 1 | `PS-031:GENESIS-ROOT-PARITY-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-030:EXECUTION-ROOT-1@base=READY` |",
+        "| 2 | `PS-031:GENESIS-ROOT-PARITY-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )

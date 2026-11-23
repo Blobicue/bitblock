@@ -70,8 +70,8 @@ candidate to choose its own authority.
 | PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
 | PS-028 | IDENTITY-1 | base | BOUNDED |
 | PS-029 | AUTH-COMMIT-1 | base | BOUNDED |
-| PS-030 | EXECUTION-ROOT-1 | base | READY |
-| PS-031 | GENESIS-ROOT-PARITY-1 | base | LOCKED |
+| PS-030 | EXECUTION-ROOT-1 | base | BOUNDED |
+| PS-031 | GENESIS-ROOT-PARITY-1 | base | READY |
 | PS-032 | MULTI-1 | base | LOCKED |
 | PS-033 | SEQUENCER-1 | base | LOCKED |
 | PS-034 | SYNC-1 | base | LOCKED |
@@ -804,17 +804,21 @@ is invalid input, not a third collision row.
 
 ### `EXECUTION-ROOT-1` — complete execution-state commitment
 
-- **Status:** `PS-030:EXECUTION-ROOT-1@base=READY`.
+- **Status:** `PS-030:EXECUTION-ROOT-1@base=BOUNDED`.
 - **Depends on:** `TRANSITION-SPEC-1`, `COMMIT-1`, `AUTH-COMMIT-1`, `EXECUTOR-1`, `PROTOCOL-ID-1`,
   `PROFILE-D1`, `CODEC-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated domain producers are
   the target-profile conditional prerequisites in CE-19–CE-21.
 - **Motive:** ensure no parameter, governance, validator-schedule, authorization, asset, or
   application state can affect execution while remaining outside the accepted root.
-- **Artifact:** a typed application/execution-root composer over the exact profile domain registry:
-  base world, episode, authorization, nonce, parameter/governance, and validator-schedule roots plus
-  every activated optional asset, program, or economic root. It binds `required_domain_set`, the
-  canonical inactive-domain sentinels, `AuthenticatedRootRefV1`, `CommitmentSetV1`, and header/root
-  correspondence without reimplementing any domain producer.
+- **Artifact:** [`EXECUTION_ROOT_1_RECEIPT.md`](EXECUTION_ROOT_1_RECEIPT.md) (PR #68 commit
+  `6f66ea4652841f2c06b16fb73870ae049b1a2cef`, `crates/research/src/execution_root_1.rs`,
+  `tools/execution_root_1_vectors.py`, `tests/wave17a_execution_root_1.rs`, and
+  `examples/execution_root_1_composer_probe.rs`) implements the L1 §5 two-layer 11-slot
+  `ExecutionDomainRegistryV1` and `ExecutionRootCompositionV1` composer (`application_root` over
+  slots `1..=6` with typed `InactiveDomainSentinelV1` for `ProgramState` -> `execution_state_root`
+  over slots `7..=11` -> external-context `ExecutionRootRefV1` and non-interchangeable
+  `AuthenticatedRootRefV1`), leaving `commit_state.rs` untouched and enforcing all 10 adversarial
+  gate controls without reimplementing any domain producer.
 - **Gate:** every domain passes independent codec, rebuild/update/proof/malformed/persistence parity;
   typed roots are non-interchangeable; full-state recomposition matches the executor after every
   transition/recovery; omission, an empty/zero/stale substitute for an inactive sentinel, an active
@@ -825,7 +829,7 @@ is invalid input, not a third collision row.
 
 ### `GENESIS-ROOT-PARITY-1` — logical-genesis to typed-root parity
 
-- **Status:** `PS-031:GENESIS-ROOT-PARITY-1@base=LOCKED`.
+- **Status:** `PS-031:GENESIS-ROOT-PARITY-1@base=READY`.
 - **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`, `COMMIT-1`, `AUTH-COMMIT-1`,
   `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `CODEC-1`; activated
   launch-domain implementations are the launch-profile conditional prerequisites in CE-22–CE-24.
@@ -1942,7 +1946,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-030:EXECUTION-ROOT-1@base=READY` |
+| 2 | `PS-031:GENESIS-ROOT-PARITY-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
