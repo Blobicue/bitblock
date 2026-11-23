@@ -220,6 +220,17 @@
   ]
  },
  {
+  "id": "sub:economic-state-1",
+  "members": [
+   "module:economic_state_1"
+  ],
+  "name": "economic-state-1",
+  "terms": [
+   "economic",
+   "state"
+  ]
+ },
+ {
   "id": "sub:edit",
   "members": [
    "module:program"

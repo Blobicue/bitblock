@@ -1255,6 +1255,8 @@
 {"from": "module:display_artifact", "kind": "declares", "to": "schema:bitblock/display-capture-artifact/v1"}
 {"from": "module:display_store", "kind": "declares", "to": "schema:bitblock/display-artifact-test/v1"}
 {"from": "module:display_store", "kind": "declares", "to": "schema:bitblock/wrong-display-artifact/v1"}
+{"from": "module:economic_state_1", "kind": "declares", "to": "schema:bitblock/economic-state-1/economic-receipt/v1"}
+{"from": "module:economic_state_1", "kind": "declares", "to": "schema:bitblock/economic-state-1/economic-root/v1"}
 {"from": "module:emergence_r1", "kind": "declares", "to": "schema:bitblock/emergence-r1/assay-report/v1"}
 {"from": "module:emergence_r1", "kind": "declares", "to": "schema:bitblock/emergence-r1/corpus-spec/v1"}
 {"from": "module:frame", "kind": "declares", "to": "schema:bitblock/frame-input/v1"}
@@ -1444,6 +1446,10 @@
 {"from": "module:display_store", "kind": "depends_on", "to": "module:presentation_output_v2"}
 {"from": "module:display_store", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:display_store", "kind": "depends_on", "to": "module:storage"}
+{"from": "module:economic_state_1", "kind": "depends_on", "to": "module:asset_d1"}
+{"from": "module:economic_state_1", "kind": "depends_on", "to": "module:auth_commit_1"}
+{"from": "module:economic_state_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:economic_state_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:emergence_r1", "kind": "depends_on", "to": "module:commit_r1"}
 {"from": "module:emergence_r1", "kind": "depends_on", "to": "module:history"}
 {"from": "module:emergence_r1", "kind": "depends_on", "to": "module:protocol"}
@@ -1774,6 +1780,9 @@
 {"from": "example:examples/compositor_buffer_probe.rs", "kind": "uses", "to": "module:sidebar"}
 {"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_1"}
 {"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:examples/economic_state_1_probe.rs", "kind": "uses", "to": "module:asset_d1"}
+{"from": "example:examples/economic_state_1_probe.rs", "kind": "uses", "to": "module:economic_state_1"}
+{"from": "example:examples/economic_state_1_probe.rs", "kind": "uses", "to": "module:identity_d1"}
 {"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:emergence_r1"}
 {"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:render"}
@@ -1993,6 +2002,10 @@
 {"from": "example:tests/wave14c_governance_1.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:tests/wave14c_governance_1.rs", "kind": "uses", "to": "module:governance_1"}
 {"from": "example:tests/wave14c_governance_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave15a_economic_state_1.rs", "kind": "uses", "to": "module:asset_d1"}
+{"from": "example:tests/wave15a_economic_state_1.rs", "kind": "uses", "to": "module:auth_commit_1"}
+{"from": "example:tests/wave15a_economic_state_1.rs", "kind": "uses", "to": "module:economic_state_1"}
+{"from": "example:tests/wave15a_economic_state_1.rs", "kind": "uses", "to": "module:identity_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2141,6 +2154,8 @@
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/display-test/v1"}
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/frame-receipt/v2"}
 {"from": "tool:display_receipt_v2_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
+{"from": "tool:economic_state_1_vectors", "kind": "vectors", "to": "schema:bitblock/economic-state-1/economic-receipt/v1"}
+{"from": "tool:economic_state_1_vectors", "kind": "vectors", "to": "schema:bitblock/economic-state-1/economic-root/v1"}
 {"from": "tool:edit_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:edit_vectors", "kind": "vectors", "to": "schema:bitblock/edit/op-u8-i64-be/v1"}
 {"from": "tool:emergence_r1_vectors", "kind": "vectors", "to": "schema:bitblock/emergence-r1/assay-report/v1"}
