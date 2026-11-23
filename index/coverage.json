@@ -1,6 +1,6 @@
 {
  "docs": 255,
- "examples": 48,
+ "examples": 50,
  "gates": {
   "metric_accounting": true,
   "module_accounting": true,
@@ -14,16 +14,16 @@
   "world": 284
  },
  "metrics_claimed_by_doc": 1112,
- "modules": 57,
+ "modules": 58,
  "modules_by_gate": {
   "binary": 1,
   "default": 14,
-  "protocol-research": 39,
+  "protocol-research": 40,
   "windows": 3
  },
  "modules_undocumented": [],
  "proofs": 13,
- "schemas": 138,
+ "schemas": 140,
  "schemas_fixtures": 23,
  "schemas_tool_local": [
   "bitblock/history-mode/open-local/v2",
@@ -35,8 +35,8 @@
   "bitblock/reference-renderer/analytic-six-face/v1"
  ],
  "schemas_uncovered": [],
- "schemas_vectored": 138,
- "source_lines": 89316,
- "tests": 538,
- "tools": 62
+ "schemas_vectored": 140,
+ "source_lines": 90248,
+ "tests": 539,
+ "tools": 63
 }
