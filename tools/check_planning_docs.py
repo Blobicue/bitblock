@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "d460102cb118c76b8c55b351ac0355ba54a9af90bb1444682fef71397e0f472d"
+EXPECTED_STATUS_DIGEST = "cb56f8c3b6e2eec8ce765538f074c6147fa02d6905795dca0d33cdab521ae651"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "635124386b14e83245968cbae2ee771ff76e11522ab420e0eed3eb2572fe56c3"
+    "b9e4309496e3ebea85b6261d625f72763a4459861113ece3dbff6128c2be24ca"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,7 +7779,7 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-062:COST-1@base=READY` |",
+        "| 2 | `PS-028:IDENTITY-1@base=READY` |",
         "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-062:COST-1@base=READY` |",
+        "| 1 | `PS-028:IDENTITY-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-062:COST-1@base=READY` |",
+        "| 2 | `PS-028:IDENTITY-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )

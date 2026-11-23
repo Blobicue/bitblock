@@ -1,0 +1,28 @@
+{
+  "schema": "bitblock/crypto-1/audit-receipt/v1",
+  "merged_commit": "c19542aab190e185cea11bf1cd54333bc40bd86d",
+  "merged_tree": "b55b78a0df83bf734966ca460be3ddf320766aad",
+  "merged_parent": "ca26b37bf1e4d5d2a4bb5a99a5e6d0cec75f90ec",
+  "pr_number": 48,
+  "ci_runs": [
+    45096374508,
+    45096378966
+  ],
+  "rot_record_tag": "#bb.receipt.sha256.3dyl5u2pyn7r4svpu5p7sxnny7qgv3hqui3edgasuwfiiwjzvkcq",
+  "custody_env_tag": "#bb.receipt.sha256.lc3kdko2lsupgbqwysbcsoyadi3z62p4pde3ch5ioldg3hqriumq",
+  "migration_policy_tag": "#bb.policy.sha256.3r2uumuzxwfdhct2e6xniiatblaj555mjjgxpy4dtdy4tvmup6oq",
+  "cross_role_accepted": 9,
+  "cross_role_rejected": 72,
+  "custody_tamper_caught": 136,
+  "custody_tamper_total": 136,
+  "batch_64_p50_ms": 2.105,
+  "batch_512_p50_ms": 16.821,
+  "batch_2048_p50_ms": 67.354,
+  "batch_2048_max_ms": 68.540,
+  "blame_1337_ms": 43.506,
+  "blame_index": 1337,
+  "blame_reason": "ed25519_verify_failed",
+  "custody_restore_ms": 0.497,
+  "bbmutate_crypto_1_sites_killed": 16,
+  "bbmutate_crypto_1_sites_total": 16
+}
