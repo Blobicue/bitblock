@@ -126,9 +126,9 @@ candidate to choose its own authority.
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | READY |
 | PS-085 | SIGNER-OPS-1 | base | BOUNDED |
-| PS-086 | RELEASE-R1 | base | READY |
+| PS-086 | RELEASE-R1 | base | BOUNDED |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
-| PS-088 | RELEASE-R1 | candidate | READY |
+| PS-088 | RELEASE-R1 | candidate | BOUNDED |
 | PS-089 | RELEASE-1 | base | LOCKED |
 | PS-090 | RELEASE-1 | admitted | LOCKED |
 | PS-091 | CHAIN-LAUNCH-1 | base | LOCKED |
@@ -1814,22 +1814,32 @@ is invalid input, not a third collision row.
 
 ### `RELEASE-R1` — candidate-build reproducibility
 
-- **Status:** `PS-086:RELEASE-R1@base=READY`, `PS-087:RELEASE-R1@framework=BOUNDED`, `PS-088:RELEASE-R1@candidate=READY`.
+- **Status:** `PS-086:RELEASE-R1@base=BOUNDED`, `PS-087:RELEASE-R1@framework=BOUNDED`, `PS-088:RELEASE-R1@candidate=BOUNDED`.
 - **Depends on:** None.
 - **Motive:** stop an unreviewed compiler, dependency, feature set, binary, or genesis configuration
   from inheriting candidate source-level evidence.
 - **Artifact:** [`RELEASE_R1_FRAMEWORK.md`](RELEASE_R1_FRAMEWORK.md),
-  [`release-r1-framework-manifest-v1.json`](release-r1-framework-manifest-v1.json), and
-  `tools/release_repro_framework.py` pin the Rust toolchain (`1.96.0`), exact `=` direct dependency
-  pins, deterministic `Cargo.lock` SBOM digest (212 packages), Lean 4 toolchain and source-manifest
-  hashes, committed WebAssembly embedded parity, and vulnerability-response procedure strictly as a
-  `CANDIDATE-FRAMEWORK-ONLY` attestation. PD-04 and PD-05 make the candidate phase consume that
-  framework and the exact candidate profile without turning either prerequisite into a base edge.
+  [`release-r1-framework-manifest-v1.json`](release-r1-framework-manifest-v1.json),
+  `tools/release_repro_framework.py`, [`RELEASE_R1_CANDIDATE_RECEIPT.md`](RELEASE_R1_CANDIDATE_RECEIPT.md),
+  [`release-r1-candidate-manifest-v1.json`](release-r1-candidate-manifest-v1.json),
+  `crates/research/src/release_r1.rs`, `tools/release_r1_vectors.py`,
+  `tests/wave27_release_r1.rs`, and `examples/release_r1_repro_probe.rs` pin the Rust toolchain
+  (`1.96.0`), exact `=` direct dependency pins, deterministic `Cargo.lock` SBOM digest (212
+  packages at `58cefcb`; 220 packages / 11 exact pins at `b3f3ba2`), Lean 4 toolchain and
+  source-manifest hashes, committed WebAssembly embedded parity, vulnerability-response procedure,
+  and `PROFILE-D1`-bound dual-builder candidate reproducibility verification strictly as a
+  `CANDIDATE-NOT-ADMITTED` (`admitted_release_authority = false`, `platform_scoped_only = true`)
+  attestation. PD-04 and PD-05 make the candidate phase consume that framework and the exact
+  candidate profile without turning either prerequisite into a base edge.
 - **Gate:** independent builders reproduce the declared artifact or an explicitly explained
   platform-scoped equivalent; mismatched source, dependency, feature, config, or binary rejects the
   candidate artifact identity (`tools/release_repro_framework.py` 5/5 powered negative controls on
   `origin/main` commit `58cefcb9e9b4ae24cb90861571489560266d6b23`, tree
   `2166e50bcce90d14ea80abec8b2190dd9ba6b93c`, PR #14 CI runs `44978821303` and `44978824816`,
+  10/10 jobs green; `crates/research/src/release_r1.rs` 8/8 mutation/divergence/non-admission
+  controls + isolated dual-target clean-build bit-exact `linux-aarch64-elf` & `wasm32` `+simd128`
+  V8 parity on `origin/main` commit `b3f3ba2253339d906f637440c6608537096fac45`, tree
+  `e92e51cdc62a697e1b6c5f3b0b589f88c54fc5d1`, PR #90 CI runs `45197131990` and `45197144949`,
   10/10 jobs green).
 - **Non-claim:** reproducibility proves candidate artifact correspondence, not admission, release
   authorization, signature custody, or absence of source/toolchain vulnerabilities.
@@ -1994,8 +2004,6 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 5 | `PS-084:PROFILE-1@base=READY` |
-| 6 | `PS-086:RELEASE-R1@base=READY` |
-| 7 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2028,7 +2036,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `5` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
