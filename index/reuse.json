@@ -26,6 +26,12 @@
     ]
    },
    {
+    "item": "AdversarialScenarioOutcomeV1",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
     "item": "Asset1Error",
     "modules": [
      "asset_1"
@@ -1251,6 +1257,24 @@
     ]
    },
    {
+    "item": "VALIDATOR_ECON_1_ADAPTER_RECEIPT_SCHEMA",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
+    "item": "VALIDATOR_ECON_1_ADVERSARIAL_ASSAY_SCHEMA",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
+    "item": "VALIDATOR_ECON_1_VERSION",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
     "item": "VALIDATOR_SCHEDULE_1_EPOCH_SCHEMA",
     "modules": [
      "validator_schedule_1"
@@ -1326,12 +1350,6 @@
     "item": "VmTraceStepV1",
     "modules": [
      "vm_1"
-    ]
-   },
-   {
-    "item": "VoteEquivocationEvidenceV1",
-    "modules": [
-     "consensus_1"
     ]
    },
    {
@@ -1461,6 +1479,12 @@
     ]
    },
    {
+    "item": "compute_assay_transcript_digest",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
     "item": "compute_checkpoint_chunk_digest",
     "modules": [
      "sync_1"
@@ -1509,6 +1533,12 @@
     ]
    },
    {
+    "item": "economic_receipt_sha256",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
     "item": "empty_domain_root",
     "modules": [
      "auth_commit_1"
@@ -1524,6 +1554,12 @@
     "item": "entry_id",
     "modules": [
      "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "equivocation_evidence_digest",
+    "modules": [
+     "validator_econ_1"
     ]
    },
    {
@@ -1560,6 +1596,12 @@
     "item": "hmac_sha256",
     "modules": [
      "crypto_1"
+    ]
+   },
+   {
+    "item": "inactivity_evidence_digest",
+    "modules": [
+     "validator_econ_1"
     ]
    },
    {
@@ -1689,6 +1731,12 @@
     ]
    },
    {
+    "item": "safety_attack_burn_floor",
+    "modules": [
+     "validator_econ_1"
+    ]
+   },
+   {
     "item": "sign_doc_digest",
     "modules": [
      "consensus_1",
@@ -1749,7 +1797,7 @@
     ]
    }
   ],
-  "pub_items": 1938,
+  "pub_items": 1962,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1773,7 +1821,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 71728,
+   "code_lines": 72699,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1954,7 +2002,7 @@
    ]
   },
   "test": {
-   "code_lines": 28752,
+   "code_lines": 28809,
    "duplicated_lines": 341,
    "regions": [
     {
