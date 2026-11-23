@@ -1376,6 +1376,8 @@
 {"from": "module:sidebar", "kind": "declares", "to": "schema:bitblock/sidebar/composite-policy/v1"}
 {"from": "module:sidebar", "kind": "declares", "to": "schema:bitblock/sidebar/metric-snapshot/v1"}
 {"from": "module:sidebar", "kind": "declares", "to": "schema:bitblock/sidebar/raster-policy/v1"}
+{"from": "module:signer_ops_1", "kind": "declares", "to": "schema:bitblock/signer-ops-1/audit-receipt/v1"}
+{"from": "module:signer_ops_1", "kind": "declares", "to": "schema:bitblock/signer-ops-1/signing-policy/v1"}
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/storage-record/envelope/v1"}
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/test-object/v1"}
 {"from": "module:sync_1", "kind": "declares", "to": "schema:bitblock/sync-1/checkpoint-manifest/v1"}
@@ -1725,6 +1727,12 @@
 {"from": "module:sidebar", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:sidebar", "kind": "depends_on", "to": "module:render"}
 {"from": "module:sidebar", "kind": "depends_on", "to": "module:world"}
+{"from": "module:signer_ops_1", "kind": "depends_on", "to": "module:consensus_1"}
+{"from": "module:signer_ops_1", "kind": "depends_on", "to": "module:crypto_1"}
+{"from": "module:signer_ops_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:signer_ops_1", "kind": "depends_on", "to": "module:executor_1"}
+{"from": "module:signer_ops_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:signer_ops_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:storage", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:sync_1", "kind": "depends_on", "to": "module:auth_commit_1"}
 {"from": "module:sync_1", "kind": "depends_on", "to": "module:bounds_1"}
@@ -2072,6 +2080,11 @@
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:sidebar"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:examples/signer_ops_1_drill_probe.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:examples/signer_ops_1_drill_probe.rs", "kind": "uses", "to": "module:crypto_1"}
+{"from": "example:examples/signer_ops_1_drill_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:examples/signer_ops_1_drill_probe.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:examples/signer_ops_1_drill_probe.rs", "kind": "uses", "to": "module:signer_ops_1"}
 {"from": "example:examples/sync_1_cluster_probe.rs", "kind": "uses", "to": "module:multi_1"}
 {"from": "example:examples/sync_1_cluster_probe.rs", "kind": "uses", "to": "module:sequencer_1"}
 {"from": "example:examples/sync_1_cluster_probe.rs", "kind": "uses", "to": "module:sync_1"}
@@ -2334,6 +2347,11 @@
 {"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:identity_d1"}
 {"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:validator_econ_1"}
 {"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:crypto_1"}
+{"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:signer_ops_1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2658,6 +2676,8 @@
 {"from": "tool:sidebar_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:sidebar_vectors", "kind": "vectors", "to": "schema:bitblock/sidebar/composite-policy/v1"}
 {"from": "tool:sidebar_vectors", "kind": "vectors", "to": "schema:bitblock/sidebar/raster-policy/v1"}
+{"from": "tool:signer_ops_1_vectors", "kind": "vectors", "to": "schema:bitblock/signer-ops-1/audit-receipt/v1"}
+{"from": "tool:signer_ops_1_vectors", "kind": "vectors", "to": "schema:bitblock/signer-ops-1/signing-policy/v1"}
 {"from": "tool:storage_record_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:storage_record_vectors", "kind": "vectors", "to": "schema:bitblock/edit/op-u8-i64-be/v1"}
 {"from": "tool:storage_record_vectors", "kind": "vectors", "to": "schema:bitblock/storage-record/envelope/v1"}

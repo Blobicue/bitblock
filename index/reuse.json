@@ -422,6 +422,12 @@
     ]
    },
    {
+    "item": "ExclusiveSignerLockV1",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "ExecutorStepOutcomeV1",
     "modules": [
      "executor_1"
@@ -705,6 +711,12 @@
     ]
    },
    {
+    "item": "MAX_REMOTE_SIGNER_FRAME_BYTES",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "MAX_SENSOR_CHALLENGE_POINTS",
     "modules": [
      "physical_sensor"
@@ -873,6 +885,12 @@
     ]
    },
    {
+    "item": "PAYLOAD_LEN",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "PHYSICAL_SENSOR_OBSERVATION_SCHEMA",
     "modules": [
      "physical_sensor"
@@ -939,6 +957,12 @@
     ]
    },
    {
+    "item": "PersistedWatermarkStateV1",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "PreparedTick",
     "modules": [
      "history"
@@ -960,6 +984,12 @@
     "item": "ProposalStatusV1",
     "modules": [
      "governance_1"
+    ]
+   },
+   {
+    "item": "REMOTE_SIGNER_MAGIC",
+    "modules": [
+     "signer_ops_1"
     ]
    },
    {
@@ -1080,6 +1110,24 @@
     "item": "SEQUENTIAL_STEP_SCHEMA",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "SIGNER_OPS_1_AUDIT_RECEIPT_SCHEMA",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
+    "item": "SIGNER_OPS_1_POLICY_SCHEMA",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
+    "item": "SIGNER_OPS_1_VERSION",
+    "modules": [
+     "signer_ops_1"
     ]
    },
    {
@@ -1515,6 +1563,12 @@
     ]
    },
    {
+    "item": "decode_payload",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "decode_range_request",
     "modules": [
      "sequencer_1"
@@ -1542,6 +1596,12 @@
     "item": "empty_domain_root",
     "modules": [
      "auth_commit_1"
+    ]
+   },
+   {
+    "item": "encode_frame",
+    "modules": [
+     "signer_ops_1"
     ]
    },
    {
@@ -1584,6 +1644,12 @@
     "item": "from_event_tag",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "from_persisted_state",
+    "modules": [
+     "signer_ops_1"
     ]
    },
    {
@@ -1737,6 +1803,12 @@
     ]
    },
    {
+    "item": "sign_consensus_vote",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "sign_doc_digest",
     "modules": [
      "consensus_1",
@@ -1759,14 +1831,6 @@
     ]
    },
    {
-    "item": "unsigned_payload_digest",
-    "modules": [
-     "consensus_1",
-     "multi_1",
-     "sequencer_1"
-    ]
-   },
-   {
     "item": "validate_domain_kv",
     "modules": [
      "commit_state"
@@ -1785,6 +1849,12 @@
     ]
    },
    {
+    "item": "wire_sha256",
+    "modules": [
+     "signer_ops_1"
+    ]
+   },
+   {
     "item": "world_bound_payload_digest",
     "modules": [
      "identity_1"
@@ -1797,7 +1867,7 @@
     ]
    }
   ],
-  "pub_items": 1962,
+  "pub_items": 2000,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1821,7 +1891,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 72699,
+   "code_lines": 74014,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2002,7 +2072,7 @@
    ]
   },
   "test": {
-   "code_lines": 28809,
+   "code_lines": 28881,
    "duplicated_lines": 341,
    "regions": [
     {

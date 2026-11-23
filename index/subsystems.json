@@ -769,6 +769,17 @@
   ]
  },
  {
+  "id": "sub:signer-ops-1",
+  "members": [
+   "module:signer_ops_1"
+  ],
+  "name": "signer-ops-1",
+  "terms": [
+   "ops",
+   "signer"
+  ]
+ },
+ {
   "id": "sub:storage-record",
   "members": [
    "module:storage"
