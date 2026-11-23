@@ -88,7 +88,7 @@ candidate to choose its own authority.
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
 | PS-046 | VM-D1 | base | BOUNDED |
 | PS-047 | VM-1 | base | IMPLEMENTED |
-| PS-048 | PROGRAM-STATE-1 | base | LOCKED |
+| PS-048 | PROGRAM-STATE-1 | base | READY |
 | PS-049 | EMERGENCE-R1 | base | BOUNDED |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
 | PS-051 | SCALE-1 | base | BOUNDED |
@@ -120,7 +120,7 @@ candidate to choose its own authority.
 | PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
 | PS-078 | GENESIS-D1 | base | BOUNDED |
 | PS-079 | PROFILE-D1 | base | BOUNDED |
-| PS-080 | TRANSITION-SPEC-1 | base | READY |
+| PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
 | PS-081 | GOVERNANCE-1 | base | LOCKED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | LOCKED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
@@ -1073,7 +1073,7 @@ is invalid input, not a third collision row.
 
 ### `PROGRAM-STATE-1` — deterministic code and program-state commitments
 
-- **Status:** `PS-048:PROGRAM-STATE-1@base=LOCKED`.
+- **Status:** `PS-048:PROGRAM-STATE-1@base=READY`.
 - **Depends on:** `VM-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
 - **Motive:** produce canonical code/program state and roots before the execution-root composer or
   shared-authority layer consumes them.
@@ -1605,7 +1605,7 @@ is invalid input, not a third collision row.
 
 ### `TRANSITION-SPEC-1` — exact candidate-profile transition specification
 
-- **Status:** `PS-080:TRANSITION-SPEC-1@base=READY`.
+- **Status:** `PS-080:TRANSITION-SPEC-1@base=BOUNDED`.
 - **Depends on:** `TRANSITION-SPEC-D1`, `PROFILE-D1`, `BOUNDS-1`, `IDENTITY-D1`, `CONSENSUS-D1`,
   `GOVERNANCE-D1`, `CODEC-1`; target-profile conditional design/policy inputs are CE-10–CE-13.
 - **Motive:** resolve the base extension interface into one exact operation/state/work contract before
@@ -1613,7 +1613,8 @@ is invalid input, not a third collision row.
 - **Artifact:** profile-ID-bound total transition specification covering operation tags, preconditions,
   authorization/nonces, ordering/conflicts, read/write domains, work/charging, dispositions, atomic
   effects/receipts, governance and validator-schedule slots, active optional extensions, and explicit
-  rejection of inactive or unknown extensions.
+  rejection of inactive or unknown extensions (pinned in
+  [`TRANSITION_SPEC_1_RECEIPT.md`](TRANSITION_SPEC_1_RECEIPT.md)).
 - **Gate:** independent executable/formal vectors give every bounded byte sequence and context one
   result or one rejection; the resolved operation/domain/predicate closure equals `PROFILE-D1`, every
   active slot has one owner, no inactive slot is reachable, and collision, omitted-effect, partial-
@@ -1906,9 +1907,9 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-029:AUTH-COMMIT-1@base=READY` |
-| 3 | `PS-062:COST-1@base=READY` |
-| 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 5 | `PS-080:TRANSITION-SPEC-1@base=READY` |
+| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 6 | `PS-086:RELEASE-R1@base=READY` |
 | 7 | `PS-088:RELEASE-R1@candidate=READY` |
 
