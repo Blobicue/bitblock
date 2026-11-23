@@ -74,7 +74,7 @@ candidate to choose its own authority.
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | BOUNDED |
 | PS-032 | MULTI-1 | base | BOUNDED |
 | PS-033 | SEQUENCER-1 | base | BOUNDED |
-| PS-034 | SYNC-1 | base | READY |
+| PS-034 | SYNC-1 | base | BOUNDED |
 | PS-035 | ASSET-D1 | base | BOUNDED |
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
@@ -96,7 +96,7 @@ candidate to choose its own authority.
 | PS-053 | CONSENSUS-D1 | base | BOUNDED |
 | PS-054 | CONSENSUS-D1 | mechanism-choice | BOUNDED |
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | BOUNDED |
-| PS-056 | CONSENSUS-1 | base | LOCKED |
+| PS-056 | CONSENSUS-1 | base | READY |
 | PS-057 | CLIENT-1 | base | LOCKED |
 | PS-058 | TESTNET-1 | base | LOCKED |
 | PS-059 | L1-CANDIDATE | base | LOCKED |
@@ -891,11 +891,14 @@ is invalid input, not a third collision row.
 
 ### `SYNC-1` — peer synchronization, availability, and recovery
 
-- **Status:** `PS-034:SYNC-1@base=READY`, `PS-095:SYNC-1@replay-authority=LOCKED`.
+- **Status:** `PS-034:SYNC-1@base=BOUNDED`, `PS-095:SYNC-1@replay-authority=LOCKED`.
 - **Depends on:** `SEQUENCER-1`, `STORAGE-1`, and the applicable `BOUNDS-1` limits.
 - **Motive:** make required bodies, witnesses, and accepted state recoverable from more than one
   process.
-- **Artifact:** the base phase supplies role-separated full verifier, archive, light client, and non-
+- **Artifact:** [`SYNC_1_BASE_RECEIPT.md`](SYNC_1_BASE_RECEIPT.md) (PR #78 commit
+  `b1485f57507d202359ea73acd485b19b23d353d8`, `crates/research/src/sync_1.rs`,
+  `tools/sync_1_vectors.py`, `tests/wave21_sync_1.rs`, and `examples/sync_1_cluster_probe.rs`):
+  the base phase supplies role-separated full verifier, archive, light client, and non-
   authority RPC paths; peer discovery; bounded parsing/backpressure; block/body/witness retrieval;
   checkpoint/genesis bootstrap; pruning and recovery policy. It transports and retains opaque bounded
   authority-certificate and occurrence bytes but does not admit or interpret a consensus-native
@@ -1255,7 +1258,7 @@ is invalid input, not a third collision row.
 
 ### `CONSENSUS-1` — select and specify one consensus profile
 
-- **Status:** `PS-056:CONSENSUS-1@base=LOCKED`.
+- **Status:** `PS-056:CONSENSUS-1@base=READY`.
 - **Depends on:** `CONSENSUS-D1`, `SYNC-1`, `PROTOCOL-ID-1`, `THREAT-1`, `CRYPTO-1`, `BOUNDS-1`,
   `VALIDATOR-SCHEDULE-1`, `EXECUTION-ROOT-1`.
 - **Motive:** replace sequencer trust with an explicit replicated ordering and state-root rule.
@@ -1967,8 +1970,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-034:SYNC-1@base=READY` |
-| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 3 | `PS-056:CONSENSUS-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 6 | `PS-086:RELEASE-R1@base=READY` |
