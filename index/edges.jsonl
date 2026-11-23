@@ -1231,6 +1231,8 @@
 {"from": "module:commit_state", "kind": "declares", "to": "schema:bitblock/commit-1/patricia-proof/v1"}
 {"from": "module:commit_state", "kind": "declares", "to": "schema:bitblock/commit-1/proof-policy/v1"}
 {"from": "module:commit_state", "kind": "declares", "to": "schema:bitblock/commit-1/world-root/v1"}
+{"from": "module:consensus_1", "kind": "declares", "to": "schema:bitblock/consensus-1/bft-commit-certificate/v1"}
+{"from": "module:consensus_1", "kind": "declares", "to": "schema:bitblock/consensus-1/parent-authority-certificate/v1"}
 {"from": "module:consensus_gov_d1", "kind": "declares", "to": "schema:bitblock/consensus-d1/policy/v1"}
 {"from": "module:consensus_gov_d1", "kind": "declares", "to": "schema:bitblock/consensus-d1/validator-set-root/v1"}
 {"from": "module:consensus_gov_d1", "kind": "declares", "to": "schema:bitblock/consensus-d1/vote-sign-doc/v1"}
@@ -1431,6 +1433,19 @@
 {"from": "module:commit_state", "kind": "depends_on", "to": "module:program"}
 {"from": "module:commit_state", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:commit_state", "kind": "depends_on", "to": "module:world"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:bounds_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:economic_state_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:execution_root_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:executor_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:governance_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:multi_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:protocol_id_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:sequencer_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:sync_1"}
+{"from": "module:consensus_1", "kind": "depends_on", "to": "module:validator_schedule_1"}
 {"from": "module:consensus_gov_d1", "kind": "depends_on", "to": "module:asset_d1"}
 {"from": "module:consensus_gov_d1", "kind": "depends_on", "to": "module:crypto_d1"}
 {"from": "module:consensus_gov_d1", "kind": "depends_on", "to": "module:identity_d1"}
@@ -1799,6 +1814,7 @@
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:storage"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:commit_r1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:commit_state"}
+{"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:consensus_1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:tick"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:vm_1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:vm_d1"}
@@ -1806,6 +1822,7 @@
 {"from": "proof:proof/BitblockProof/ChunkRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/CommitmentRefinement.lean", "kind": "proves", "to": "module:commit_r1"}
 {"from": "proof:proof/BitblockProof/CommitmentRefinement.lean", "kind": "proves", "to": "module:commit_state"}
+{"from": "proof:proof/BitblockProof/ConsensusSafety.lean", "kind": "proves", "to": "module:consensus_1"}
 {"from": "proof:proof/BitblockProof/OctreeRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/VmRefinement.lean", "kind": "proves", "to": "module:vm_1"}
 {"from": "proof:proof/BitblockProof/VmRefinement.lean", "kind": "proves", "to": "module:vm_d1"}
@@ -1892,6 +1909,7 @@
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:scale_assay"}
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/compositor_buffer_probe.rs", "kind": "uses", "to": "module:sidebar"}
+{"from": "example:examples/consensus_1_bft_probe.rs", "kind": "uses", "to": "module:consensus_1"}
 {"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_1"}
 {"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:examples/economic_state_1_probe.rs", "kind": "uses", "to": "module:asset_d1"}
@@ -2253,6 +2271,9 @@
 {"from": "example:tests/wave21_sync_1.rs", "kind": "uses", "to": "module:sequencer_1"}
 {"from": "example:tests/wave21_sync_1.rs", "kind": "uses", "to": "module:sync_1"}
 {"from": "example:tests/wave21_sync_1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave22_consensus_1.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:tests/wave22_consensus_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave22_consensus_1.rs", "kind": "uses", "to": "module:multi_1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2369,6 +2390,9 @@
 {"from": "tool:composition_timing_vectors", "kind": "vectors", "to": "schema:bitblock/composition-timing-policy/windows-dwm-null-hwnd/v1"}
 {"from": "tool:composition_timing_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:composition_timing_vectors", "kind": "vectors", "to": "schema:bitblock/windows-present-policy/set-dibits-to-device/v1"}
+{"from": "tool:consensus_1_vectors", "kind": "vectors", "to": "schema:bitblock/consensus-1/bft-commit-certificate/v1"}
+{"from": "tool:consensus_1_vectors", "kind": "vectors", "to": "schema:bitblock/consensus-1/parent-authority-certificate/v1"}
+{"from": "tool:consensus_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/suite-descriptor/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/coordinate-episode-derivation-policy/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/coordinate-episode-evidence/v1"}
