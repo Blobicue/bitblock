@@ -705,20 +705,22 @@ artifact, gate, and non-claim.
    [`EXECUTOR_1_RECEIPT.md`](EXECUTOR_1_RECEIPT.md),
    [`EXECUTION_ROOT_1_RECEIPT.md`](EXECUTION_ROOT_1_RECEIPT.md),
    [`UPGRADE_FRAMEWORK_1_RECEIPT.md`](UPGRADE_FRAMEWORK_1_RECEIPT.md),
-   [`GENESIS_ROOT_PARITY_1_RECEIPT.md`](GENESIS_ROOT_PARITY_1_RECEIPT.md), and
-   [`MULTI_1_RECEIPT.md`](MULTI_1_RECEIPT.md)) promote
+   [`GENESIS_ROOT_PARITY_1_RECEIPT.md`](GENESIS_ROOT_PARITY_1_RECEIPT.md),
+   [`MULTI_1_RECEIPT.md`](MULTI_1_RECEIPT.md), and
+   [`SEQUENCER_1_RECEIPT.md`](SEQUENCER_1_RECEIPT.md)) promote
    `PROFILE-SCOPE-D0`, `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`,
    `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`,
    `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`, `ASSET-1`, `GOVERNANCE-1`, `ECONOMIC-STATE-1`,
    `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `UPGRADE-FRAMEWORK-1`,
-   `GENESIS-ROOT-PARITY-1`, `MULTI-1`, `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4
-   `REFINE-1` phases across 172 `--trust=0` Lean 4 theorems, all Waves 13–15 launch state
-   producers, dual-language independent execution, L1 §5 two-layer execution-root composition,
-   version-lifecycle / compromise verification, 4-way preimage-verified logical-genesis to
-   typed-root parity, and deterministic multi-actor signed-stream folding) to `BOUNDED` and `VM-1`
-   to `IMPLEMENTED`, unlocking **`SEQUENCER-1@base=READY`**, `PROGRAM-STATE-1@base=READY`, and
-   `RELEASE-R1@candidate=READY` (while `SYNC-1`, `CONSENSUS-1`, `PROFILE-1`, `UPGRADE-1`, and
-   `CHAIN-LAUNCH-1` stay locked on their remaining sequencing / sync / consensus / admission
+   `GENESIS-ROOT-PARITY-1`, `MULTI-1`, `SEQUENCER-1`, `REFINE-1@vm`, and `REFINE-1@base`
+   (completing all 4/4 `REFINE-1` phases across 172 `--trust=0` Lean 4 theorems, all Waves 13–15
+   launch state producers, dual-language independent execution, L1 §5 two-layer execution-root
+   composition, version-lifecycle / compromise verification, 4-way preimage-verified logical-genesis
+   to typed-root parity, deterministic multi-actor signed-stream folding, and accountable
+   centralized multiplayer publication over `STORAGE-1` and loopback TCP) to `BOUNDED` and `VM-1`
+   to `IMPLEMENTED`, unlocking **`SYNC-1@base=READY`**, `PROGRAM-STATE-1@base=READY`, and
+   `RELEASE-R1@candidate=READY` (while `SYNC-1@replay-authority`, `CONSENSUS-1`, `PROFILE-1`,
+   `UPGRADE-1`, and `CHAIN-LAUNCH-1` stay locked on their remaining sync / consensus / admission
    prerequisites, with `program-active` and `verkle-selected` kept explicitly inactive at launch
    genesis).
 
