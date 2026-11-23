@@ -8,6 +8,12 @@
     ]
    },
    {
+    "item": "BandPredicateGateV1",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
     "item": "BitProbe",
     "modules": [
      "world"
@@ -191,6 +197,36 @@
     "item": "DEFAULT_TARGET_BLOCK_GAS",
     "modules": [
      "resource_1"
+    ]
+   },
+   {
+    "item": "DOMAIN_MASK_ASSET_RESOURCE",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
+    "item": "DOMAIN_MASK_AUTH_NONCE",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
+    "item": "DOMAIN_MASK_GOV_UPGRADE",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
+    "item": "DOMAIN_MASK_PROGRAM_VM",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
+    "item": "DOMAIN_MASK_VALIDATOR_SCHEDULE",
+    "modules": [
+     "transition_spec_1"
     ]
    },
    {
@@ -740,6 +776,24 @@
     ]
    },
    {
+    "item": "TRANSITION_SPEC_1_EVAL_RECEIPT_SCHEMA",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
+    "item": "TRANSITION_SPEC_1_RESOLVED_SCHEMA",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
+    "item": "TRANSITION_SPEC_1_VERSION",
+    "modules": [
+     "transition_spec_1"
+    ]
+   },
+   {
     "item": "ThreatPropertyEntryV1",
     "modules": [
      "threat_1"
@@ -755,6 +809,12 @@
     "item": "TickTransaction",
     "modules": [
      "history"
+    ]
+   },
+   {
+    "item": "TransitionBandSlotV1",
+    "modules": [
+     "transition_spec_1"
     ]
    },
    {
@@ -1077,7 +1137,7 @@
     ]
    }
   ],
-  "pub_items": 1441,
+  "pub_items": 1462,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1101,7 +1161,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 51958,
+   "code_lines": 52840,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1282,7 +1342,7 @@
    ]
   },
   "test": {
-   "code_lines": 27233,
+   "code_lines": 27332,
    "duplicated_lines": 341,
    "regions": [
     {

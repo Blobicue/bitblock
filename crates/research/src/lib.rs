@@ -54,6 +54,7 @@ pub mod sequential;
 pub mod storage;
 pub mod threat_1;
 pub mod transition_spec;
+pub mod transition_spec_1;
 pub mod verkle_feasibility;
 pub mod vm_1;
 pub mod vm_d1;

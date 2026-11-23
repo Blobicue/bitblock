@@ -128,33 +128,33 @@
     ],
     "$counts_comment": "schemas counts PROTOCOL SURFACE only. 23 further schema strings are declared inside a #[cfg(test)] mod and are fixtures; counting them reported 81/50, overstating both the surface and the gap. The boundary is the mod, not the attribute: keying on the first #[cfg(test)] line demoted history.rs GENESIS_SCHEMA and RECEIPT_SCHEMA, both pub, because two test-only use lines sit above them. `bitblock/test-object/v1` is the clearest case -- frame.rs and storage.rs each coined it independently in their own tests, and it had been fusing them into a shared subsystem. schemas_vectored moved 42 -> 44 when journal/rejected-tail/v1 and storage-record/envelope/v1 gained independent Python suites; they were the only two protocol objects with no vector and no literal tag assertion. It moved 44 -> 51 when render_policy_vectors.py, frame_chain_vectors.py, display_receipt_v1_vectors.py and composite_frame_input_vectors.py closed the seven core-crate objects below. Six of the seven already had literal tag assertions in Rust and no second implementation, so those literals were a program agreeing with itself; every one of them reproduced from the Python side unchanged. It then moved again for the research-crate objects, two of them picked up transitively: the headless replay-rules policy names the renderer profile and the crosshair overlay by digest, so reconstructing the rules payload meant reconstructing both from their own constants. The count below is re-derived from the index rather than summed from the two branches, because the transitive pair would be double counted.",
     "counts": {
-        "modules": 59,
-        "schemas": 142,
+        "modules": 60,
+        "schemas": 144,
         "schemas_fixtures": 23,
-        "schemas_vectored": 142,
+        "schemas_vectored": 144,
         "metrics": 1112,
         "metrics_claimed_by_doc": 1112
     },
     "structure": [
         {
             "module": "protocol",
-            "dependents": 57,
-            "note": "The most load-bearing module in the workspace. Gained one dependent when the crate split introduced src/lib.rs as a facade that re-exports it -- a re-export is a real edge. Gained another (30 -> 31) when commit_r1 joined crates/research, (31 -> 32) when local_bounds joined, (32 -> 34) when octree_commit and scale_assay joined, (34 -> 36) when world began caching its v2 fingerprint as a ContentTag (§6e), (36 -> 37) when transition_spec joined, (37 -> 38) when commit_state joined, (38 -> 39) when verkle_feasibility joined, (39 -> 43) when crypto_d1, identity_d1, asset_d1, and consensus_gov_d1 joined, (43 -> 44) when rule_1 joined, (44 -> 46) when profile_bootstrap and language_r1 joined, (46 -> 48) when threat_1 and vm_d1 joined, (48 -> 49) when bounds_1 joined, (49 -> 50) when emergence_r1 joined, (50 -> 51) when resource_1 joined, (51 -> 52) when genesis_d1 joined, (52 -> 53) when protocol_id_1 joined, (53 -> 54) when vm_1 joined, (54 -> 55) when crypto_1 joined, (55 -> 56) when profile_d1 joined, and (56 -> 57) when identity_1 joined crates/research."
+            "dependents": 58,
+            "note": "The most load-bearing module in the workspace. Gained one dependent when the crate split introduced src/lib.rs as a facade that re-exports it -- a re-export is a real edge. Gained another (30 -> 31) when commit_r1 joined crates/research, (31 -> 32) when local_bounds joined, (32 -> 34) when octree_commit and scale_assay joined, (34 -> 36) when world began caching its v2 fingerprint as a ContentTag (§6e), (36 -> 37) when transition_spec joined, (37 -> 38) when commit_state joined, (38 -> 39) when verkle_feasibility joined, (39 -> 43) when crypto_d1, identity_d1, asset_d1, and consensus_gov_d1 joined, (43 -> 44) when rule_1 joined, (44 -> 46) when profile_bootstrap and language_r1 joined, (46 -> 48) when threat_1 and vm_d1 joined, (48 -> 49) when bounds_1 joined, (49 -> 50) when emergence_r1 joined, (50 -> 51) when resource_1 joined, (51 -> 52) when genesis_d1 joined, (52 -> 53) when protocol_id_1 joined, (53 -> 54) when vm_1 joined, (54 -> 55) when crypto_1 joined, (55 -> 56) when profile_d1 joined, (56 -> 57) when identity_1 joined, and (57 -> 58) when transition_spec_1 joined crates/research."
         },
         {
             "module": "world",
-            "dependents": 47,
-            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Gained one dependent (22 -> 23) when commit_r1 imported World for root hashing, (23 -> 24) through local_bounds transitively reaching history_store/storage, (24 -> 26) when octree_commit and scale_assay joined, (26 -> 27) when the chem module joined, (27 -> 28) when transition_spec joined, (28 -> 29) when commit_state joined, (29 -> 30) when verkle_feasibility joined, (30 -> 33) when identity_d1, asset_d1, and consensus_gov_d1 joined, (33 -> 34) when rule_1 joined, (34 -> 36) when profile_bootstrap and language_r1 joined, (36 -> 38) when threat_1 and vm_d1 joined, (38 -> 39) when bounds_1 joined, (39 -> 40) when emergence_r1 joined, (40 -> 41) when resource_1 joined, (41 -> 42) when genesis_d1 joined, (42 -> 43) when protocol_id_1 joined, (43 -> 44) when vm_1 joined, (44 -> 45) when crypto_1 joined, (45 -> 46) when profile_d1 joined, and (46 -> 47) when identity_1 joined crates/research."
+            "dependents": 48,
+            "note": "Two thirds of the crate reaches the world model, most of it through frame and render rather than directly. Gained one dependent (22 -> 23) when commit_r1 imported World for root hashing, (23 -> 24) through local_bounds transitively reaching history_store/storage, (24 -> 26) when octree_commit and scale_assay joined, (26 -> 27) when the chem module joined, (27 -> 28) when transition_spec joined, (28 -> 29) when commit_state joined, (29 -> 30) when verkle_feasibility joined, (30 -> 33) when identity_d1, asset_d1, and consensus_gov_d1 joined, (33 -> 34) when rule_1 joined, (34 -> 36) when profile_bootstrap and language_r1 joined, (36 -> 38) when threat_1 and vm_d1 joined, (38 -> 39) when bounds_1 joined, (39 -> 40) when emergence_r1 joined, (40 -> 41) when resource_1 joined, (41 -> 42) when genesis_d1 joined, (42 -> 43) when protocol_id_1 joined, (43 -> 44) when vm_1 joined, (44 -> 45) when crypto_1 joined, (45 -> 46) when profile_d1 joined, (46 -> 47) when identity_1 joined, and (47 -> 48) when transition_spec_1 joined crates/research."
         },
         {
             "module": "coordinate_episode",
-            "dependents": 11,
-            "note": "Research-only occupancy-episode ledger; reached by transition_spec, commit_state, and transitively by verkle_feasibility, profile_bootstrap, threat_1, bounds_1, resource_1, genesis_d1, protocol_id_1, vm_1, and profile_d1 via commit_state/genesis_d1."
+            "dependents": 12,
+            "note": "Research-only occupancy-episode ledger; reached by transition_spec, commit_state, and transitively by verkle_feasibility, profile_bootstrap, threat_1, bounds_1, resource_1, genesis_d1, protocol_id_1, vm_1, profile_d1, and transition_spec_1."
         },
         {
             "module": "commit_r1",
-            "dependents": 13,
-            "note": "Reached by octree_commit (MortonKeyV1), scale_assay, commit_state (CoordinateKeyV1), verkle_feasibility (VerkleCoordinateKeyV1), emergence_r1 (MortonGapStreamV1), and transitively by profile_bootstrap, threat_1, bounds_1, resource_1, genesis_d1, protocol_id_1, vm_1, and profile_d1 via commit_state/genesis_d1."
+            "dependents": 14,
+            "note": "Reached by octree_commit (MortonKeyV1), scale_assay, commit_state (CoordinateKeyV1), verkle_feasibility (VerkleCoordinateKeyV1), emergence_r1 (MortonGapStreamV1), and transitively by profile_bootstrap, threat_1, bounds_1, resource_1, genesis_d1, protocol_id_1, vm_1, profile_d1, and transition_spec_1."
         },
         {
             "module": "octree_commit",
@@ -468,8 +468,8 @@
         "sig_type_consistency": true,
         "test_fns_match_coverage": true,
         "pub_counts": {
-            "total": 2330,
-            "documented": 2330
+            "total": 2367,
+            "documented": 2367
         },
         "type_checks": [
             {
@@ -551,8 +551,8 @@
             ]
         },
         {
-            "total_mutation_sites": 606,
-            "modules_with_mutation_sites": 50,
+            "total_mutation_sites": 629,
+            "modules_with_mutation_sites": 51,
             "module_sites": {
                 "render": 7,
                 "optimization": 3,

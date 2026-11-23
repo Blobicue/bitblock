@@ -686,6 +686,17 @@
   ]
  },
  {
+  "id": "sub:transition-spec-1",
+  "members": [
+   "module:transition_spec_1"
+  ],
+  "name": "transition-spec-1",
+  "terms": [
+   "spec",
+   "transition"
+  ]
+ },
+ {
   "id": "sub:transition-spec-d1",
   "members": [
    "module:transition_spec"

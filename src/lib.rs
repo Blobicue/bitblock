@@ -14,7 +14,7 @@ pub use bitblock_research::{
     optimization, output_color, output_topology, physical_sensor, presentation,
     presentation_output, presentation_output_v2, profile_bootstrap, profile_d1, protocol_id_1,
     replay_evidence, resource_1, rule_1, scale_assay, sequential, storage, threat_1,
-    transition_spec, verkle_feasibility, vm_1, vm_d1,
+    transition_spec, transition_spec_1, verkle_feasibility, vm_1, vm_d1,
 };
 #[cfg(all(windows, feature = "protocol-research"))]
 pub use bitblock_research::{windows_timing, windows_topology};
