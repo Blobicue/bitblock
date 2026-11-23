@@ -10,9 +10,9 @@ pub use bitblock_core::*;
 pub use bitblock_research::{
     asset_1, asset_d1, auth_commit_1, bounds_1, commit_r1, commit_state, consensus_gov_d1,
     coordinate_episode, crypto_1, crypto_d1, display_artifact, display_store, economic_state_1,
-    emergence_r1, execution_root_1, executor_1, genesis_d1, governance_1, history_store,
-    identity_1, identity_d1, journal, ladder_bridge, language_r1, local_bounds, octree_commit,
-    optimization, output_color, output_topology, physical_sensor, presentation,
+    emergence_r1, execution_root_1, executor_1, genesis_d1, genesis_root_parity_1, governance_1,
+    history_store, identity_1, identity_d1, journal, ladder_bridge, language_r1, local_bounds,
+    octree_commit, optimization, output_color, output_topology, physical_sensor, presentation,
     presentation_output, presentation_output_v2, profile_bootstrap, profile_d1, protocol_id_1,
     replay_evidence, resource_1, rule_1, scale_assay, sequential, storage, threat_1,
     transition_spec, transition_spec_1, upgrade_framework_1, validator_schedule_1,

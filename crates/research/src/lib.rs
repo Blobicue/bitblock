@@ -33,6 +33,7 @@ pub mod emergence_r1;
 pub mod execution_root_1;
 pub mod executor_1;
 pub mod genesis_d1;
+pub mod genesis_root_parity_1;
 pub mod governance_1;
 pub mod history_store;
 pub mod identity_1;

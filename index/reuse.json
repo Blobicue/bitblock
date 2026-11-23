@@ -326,12 +326,6 @@
     ]
    },
    {
-    "item": "EXECUTION_ROOT_1_VERSION",
-    "modules": [
-     "execution_root_1"
-    ]
-   },
-   {
     "item": "EXECUTOR_1_BATCH_SCHEMA",
     "modules": [
      "executor_1"
@@ -339,12 +333,6 @@
    },
    {
     "item": "EXECUTOR_1_RECEIPT_SCHEMA",
-    "modules": [
-     "executor_1"
-    ]
-   },
-   {
-    "item": "EXECUTOR_1_VERSION",
     "modules": [
      "executor_1"
     ]
@@ -428,6 +416,24 @@
     ]
    },
    {
+    "item": "GENESIS_ROOT_PARITY_1_BUNDLE_SCHEMA",
+    "modules": [
+     "genesis_root_parity_1"
+    ]
+   },
+   {
+    "item": "GENESIS_ROOT_PARITY_1_RECORD_SCHEMA",
+    "modules": [
+     "genesis_root_parity_1"
+    ]
+   },
+   {
+    "item": "GENESIS_ROOT_PARITY_1_VERSION",
+    "modules": [
+     "genesis_root_parity_1"
+    ]
+   },
+   {
     "item": "GOVERNANCE_1_RECEIPT_SCHEMA",
     "modules": [
      "governance_1"
@@ -443,6 +449,12 @@
     "item": "GcMarkSnapshot",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "GenesisParityOutcomeV1",
+    "modules": [
+     "genesis_root_parity_1"
     ]
    },
    {
@@ -1280,13 +1292,6 @@
     ]
    },
    {
-    "item": "pre_id_digests",
-    "modules": [
-     "genesis_d1",
-     "profile_d1"
-    ]
-   },
-   {
     "item": "prepare_capture_artifact",
     "modules": [
      "display_store"
@@ -1317,9 +1322,9 @@
     ]
    },
    {
-    "item": "required_domain_set_digest",
+    "item": "reconstruction_artifact_digest",
     "modules": [
-     "execution_root_1"
+     "genesis_root_parity_1"
     ]
    },
    {
@@ -1377,7 +1382,7 @@
     ]
    }
   ],
-  "pub_items": 1657,
+  "pub_items": 1676,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1401,7 +1406,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 60487,
+   "code_lines": 61867,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1582,7 +1587,7 @@
    ]
   },
   "test": {
-   "code_lines": 28293,
+   "code_lines": 28346,
    "duplicated_lines": 341,
    "regions": [
     {
