@@ -70,7 +70,7 @@ candidate to choose its own authority.
 | PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
 | PS-028 | IDENTITY-1 | base | BOUNDED |
 | PS-029 | AUTH-COMMIT-1 | base | BOUNDED |
-| PS-030 | EXECUTION-ROOT-1 | base | LOCKED |
+| PS-030 | EXECUTION-ROOT-1 | base | READY |
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | LOCKED |
 | PS-032 | MULTI-1 | base | LOCKED |
 | PS-033 | SEQUENCER-1 | base | LOCKED |
@@ -105,7 +105,7 @@ candidate to choose its own authority.
 | PS-062 | COST-1 | base | READY |
 | PS-063 | COST-1 | budget | BOUNDED |
 | PS-064 | CODEC-1 | base | BOUNDED |
-| PS-065 | EXECUTOR-1 | base | READY |
+| PS-065 | EXECUTOR-1 | base | BOUNDED |
 | PS-066 | THREAT-D0 | base | BOUNDED |
 | PS-067 | THREAT-1 | base | BOUNDED |
 | PS-068 | CRYPTO-D1 | base | BOUNDED |
@@ -122,7 +122,7 @@ candidate to choose its own authority.
 | PS-079 | PROFILE-D1 | base | BOUNDED |
 | PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
 | PS-081 | GOVERNANCE-1 | base | BOUNDED |
-| PS-082 | UPGRADE-FRAMEWORK-1 | base | LOCKED |
+| PS-082 | UPGRADE-FRAMEWORK-1 | base | READY |
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | LOCKED |
 | PS-085 | SIGNER-OPS-1 | base | LOCKED |
@@ -804,7 +804,7 @@ is invalid input, not a third collision row.
 
 ### `EXECUTION-ROOT-1` — complete execution-state commitment
 
-- **Status:** `PS-030:EXECUTION-ROOT-1@base=LOCKED`.
+- **Status:** `PS-030:EXECUTION-ROOT-1@base=READY`.
 - **Depends on:** `TRANSITION-SPEC-1`, `COMMIT-1`, `AUTH-COMMIT-1`, `EXECUTOR-1`, `PROTOCOL-ID-1`,
   `PROFILE-D1`, `CODEC-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated domain producers are
   the target-profile conditional prerequisites in CE-19–CE-21.
@@ -1396,15 +1396,22 @@ is invalid input, not a third collision row.
 
 ### `EXECUTOR-1` — independent transition executor
 
-- **Status:** `PS-065:EXECUTOR-1@base=READY`.
+- **Status:** `PS-065:EXECUTOR-1@base=BOUNDED`.
 - **Depends on:** `TRANSITION-SPEC-1`, `PROFILE-D1`, `BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`,
   `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated state producers
   are the target-profile conditional prerequisites in CE-16–CE-18.
 - **Motive:** detect a shared implementation bug that same-code replay would reproduce perfectly.
-- **Artifact:** independently implemented executor for the exact resolved profile transition spec,
-  with no shared authority-path code, producing ordered effects, receipts, per-domain updates, and
-  the domain-registry inputs consumed by the root composer. Each later upgrade adds its own
-  independently implemented migration extension under `UPGRADE-1`.
+- **Artifact:** [`EXECUTOR_1_RECEIPT.md`](EXECUTOR_1_RECEIPT.md) (PR #66 commit
+  `fe7873ca16eee3c0ab7adbd97b6b36ab8145e526`, `crates/research/src/executor_1.rs`,
+  `tools/executor_1_vectors.py`, `tests/wave16_executor_1.rs`, and
+  `examples/executor_1_differential_probe.rs`) implements two independent launch-profile executors
+  with zero shared authority-path code (`PrimaryLaunchExecutorV1` in Rust composing `COMMIT-1` and
+  Waves 13–15 domain producers vs clean-room stdlib Python `IndependentPythonExecutorV1`), achieving
+  100% bit-exact agreement across all 10 active launch domains, strict Ed25519 verification,
+  atomic step staging/rollback, fork-context isolation, inactive `Program/VM` (`80..=95`) & unknown
+  (`96..=255`) rejection, `ExecutorDomainSnapshotV1` root-composer inputs, and powered receipt-mutant
+  detection. Each later upgrade adds its own independently implemented migration extension under
+  `UPGRADE-1`.
 - **Gate:** each executor first passes the frozen specification vectors and powered semantic mutants;
   then differential corpora, generated sequences, failure/no-op paths, and fork contexts agree or
   fail at a named boundary per step for the pinned profile. Every activated extension is present,
@@ -1668,7 +1675,7 @@ is invalid input, not a third collision row.
 
 ### `UPGRADE-FRAMEWORK-1` — version lifecycle and migration verifier
 
-- **Status:** `PS-082:UPGRADE-FRAMEWORK-1@base=LOCKED`.
+- **Status:** `PS-082:UPGRADE-FRAMEWORK-1@base=READY`.
 - **Depends on:** `PROTOCOL-ID-1`, `CODEC-1`, `COMMIT-1`, `EXECUTOR-1`, `CRYPTO-1`, `GOVERNANCE-1`,
   `PROFILE-D1`.
 - **Motive:** make genesis activation and later migration distinct while every profile still has an
@@ -1935,12 +1942,13 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-062:COST-1@base=READY` |
-| 4 | `PS-065:EXECUTOR-1@base=READY` |
+| 2 | `PS-030:EXECUTION-ROOT-1@base=READY` |
+| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-086:RELEASE-R1@base=READY` |
-| 7 | `PS-088:RELEASE-R1@candidate=READY` |
+| 6 | `PS-082:UPGRADE-FRAMEWORK-1@base=READY` |
+| 7 | `PS-086:RELEASE-R1@base=READY` |
+| 8 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1973,7 +1981,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
