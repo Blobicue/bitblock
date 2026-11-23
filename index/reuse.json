@@ -44,12 +44,6 @@
     ]
    },
    {
-    "item": "BandPredicateGateV1",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
     "item": "BitProbe",
     "modules": [
      "world"
@@ -248,36 +242,6 @@
     ]
    },
    {
-    "item": "DOMAIN_MASK_ASSET_RESOURCE",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
-    "item": "DOMAIN_MASK_AUTH_NONCE",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
-    "item": "DOMAIN_MASK_GOV_UPGRADE",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
-    "item": "DOMAIN_MASK_PROGRAM_VM",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
-    "item": "DOMAIN_MASK_VALIDATOR_SCHEDULE",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
     "item": "DecodedNodeChildren",
     "modules": [
      "commit_state"
@@ -344,6 +308,24 @@
     ]
    },
    {
+    "item": "EXECUTOR_1_BATCH_SCHEMA",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "EXECUTOR_1_RECEIPT_SCHEMA",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "EXECUTOR_1_VERSION",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
     "item": "EconomicActionKindV1",
     "modules": [
      "economic_state_1"
@@ -359,6 +341,18 @@
     "item": "EmptyRootRuleIdV1",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "ExecutorDomainSnapshotV1",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "ExecutorStepOutcomeV1",
+    "modules": [
+     "executor_1"
     ]
    },
    {
@@ -644,6 +638,72 @@
     ]
    },
    {
+    "item": "OP_ASSET_BURN_REFUND",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_ASSET_MINT_DEPOSIT",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_ASSET_TRANSFER",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_AUTH_COMMIT_TX",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_BASE_DELETE_VOXEL",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_BASE_PLACE_VOXEL",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_ECON_BOND_STAKE",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_ECON_SLASH_EQUIVOCATION",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_GOV_ADVANCE_EPOCH",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_GOV_SAFE_HALT",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
+    "item": "OP_SCHEDULE_EPOCH",
+    "modules": [
+     "executor_1"
+    ]
+   },
+   {
     "item": "OUTPUT_COLOR_OBSERVATION_SCHEMA",
     "modules": [
      "output_color"
@@ -908,12 +968,6 @@
     ]
    },
    {
-    "item": "TRANSITION_SPEC_1_VERSION",
-    "modules": [
-     "transition_spec_1"
-    ]
-   },
-   {
     "item": "ThreatPropertyEntryV1",
     "modules": [
      "threat_1"
@@ -929,12 +983,6 @@
     "item": "TickTransaction",
     "modules": [
      "history"
-    ]
-   },
-   {
-    "item": "TransitionBandSlotV1",
-    "modules": [
-     "transition_spec_1"
     ]
    },
    {
@@ -1281,7 +1329,7 @@
     ]
    }
   ],
-  "pub_items": 1568,
+  "pub_items": 1609,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1305,7 +1353,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 57327,
+   "code_lines": 58771,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1486,7 +1534,7 @@
    ]
   },
   "test": {
-   "code_lines": 27817,
+   "code_lines": 28155,
    "duplicated_lines": 341,
    "regions": [
     {

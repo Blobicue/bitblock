@@ -251,6 +251,16 @@
   ]
  },
  {
+  "id": "sub:executor-1",
+  "members": [
+   "module:executor_1"
+  ],
+  "name": "executor-1",
+  "terms": [
+   "executor"
+  ]
+ },
+ {
   "id": "sub:frame",
   "members": [
    "module:frame"
