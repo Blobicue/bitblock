@@ -68,7 +68,7 @@ candidate to choose its own authority.
 | PS-025 | REFINE-1 | vm | BOUNDED |
 | PS-026 | IDENTITY-D1 | base | BOUNDED |
 | PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
-| PS-028 | IDENTITY-1 | base | LOCKED |
+| PS-028 | IDENTITY-1 | base | READY |
 | PS-029 | AUTH-COMMIT-1 | base | LOCKED |
 | PS-030 | EXECUTION-ROOT-1 | base | LOCKED |
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | LOCKED |
@@ -110,7 +110,7 @@ candidate to choose its own authority.
 | PS-067 | THREAT-1 | base | BOUNDED |
 | PS-068 | CRYPTO-D1 | base | BOUNDED |
 | PS-069 | CRYPTO-D1 | primitive-selection | BOUNDED |
-| PS-070 | CRYPTO-1 | base | READY |
+| PS-070 | CRYPTO-1 | base | BOUNDED |
 | PS-071 | HASH-SOURCE-R1 | base | READY |
 | PS-072 | HASH-SOURCE-R1 | candidate | NOT-STARTED |
 | PS-073 | HASH-R1 | base | LOCKED |
@@ -769,7 +769,7 @@ is invalid input, not a third collision row.
 
 ### `IDENTITY-1` — actor identity and authorization
 
-- **Status:** `PS-028:IDENTITY-1@base=LOCKED`.
+- **Status:** `PS-028:IDENTITY-1@base=READY`.
 - **Depends on:** `IDENTITY-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`.
 - **Motive:** distinguish who requested an action from which camera submitted it.
 - **Artifact:** non-circular canonical signing preimage; chain/genesis/world/version binding;
@@ -1440,15 +1440,23 @@ is invalid input, not a third collision row.
 
 ### `CRYPTO-1` — cryptographic and key lifecycle
 
-- **Status:** `PS-070:CRYPTO-1@base=READY`.
+- **Status:** `PS-070:CRYPTO-1@base=BOUNDED`.
 - **Depends on:** `CRYPTO-D1`, `IDENTITY-D1`, `PROTOCOL-ID-1`.
 - **Motive:** turn selected primitive/key bytes into operated, role-separated actor and validator
   credentials while keeping custody and migration requirements visible.
-- **Artifact:** entropy/generation, custody, role separation, aggregation/batch checks,
-  rotation/revocation/recovery, compromise response, downgrade rules, external review, and explicit
-  old/new-profile requirements for `UPGRADE-1`.
+- **Artifact:** [`CRYPTO_1_RECEIPT.md`](CRYPTO_1_RECEIPT.md) and [`crypto-1-audit-v1.json`](crypto-1-audit-v1.json)
+  pin the portable (`wasm32`-clean, `--features protocol-research`, zero new Cargo dependencies)
+  module `crates/research/src/crypto_1.rs` (`KeyLifecycleRecordV1`, `KeyLifecycleRegistryV1`,
+  `CustodyBackupEnvelopeV1` Encrypt-then-MAC backup/restore, `SuiteMigrationPolicyV1` anti-downgrade
+  `UPGRADE-1` contract, and bounded 2,048-sig batch blame verification), independent Python suite
+  `tools/crypto_1_vectors.py`, CI suite `tests/wave10_crypto_1.rs`, and release probe
+  `examples/crypto_1_lifecycle_probe.rs`.
 - **Gate:** cross-role, aggregation, replay, compromise, backup/restore, rotation/revocation,
-  migration-requirement, downgrade, and operational mutation vectors plus independent review.
+  migration-requirement, downgrade, and operational mutation vectors plus independent review
+  (third-party external cryptographic review and physical HSM custody remain open). Pinned to
+  `origin/main` commit `c19542aab190e185cea11bf1cd54333bc40bd86d` (tree
+  `b55b78a0df83bf734966ca460be3ddf320766aad`, PR #48 CI runs `45096374508` and `45096378966`, 10/10
+  jobs green; `bbmutate crypto_1`: 16/16 sites KILLED).
 - **Non-claim:** a complete key lifecycle does not establish honest actors, human uniqueness,
   consensus safety, or correct execution.
 
@@ -1895,8 +1903,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-062:COST-1@base=READY` |
-| 3 | `PS-070:CRYPTO-1@base=READY` |
+| 2 | `PS-028:IDENTITY-1@base=READY` |
+| 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 5 | `PS-079:PROFILE-D1@base=READY` |
 | 6 | `PS-086:RELEASE-R1@base=READY` |
