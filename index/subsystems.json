@@ -760,6 +760,16 @@
   ]
  },
  {
+  "id": "sub:sync-1",
+  "members": [
+   "module:sync_1"
+  ],
+  "name": "sync-1",
+  "terms": [
+   "sync"
+  ]
+ },
+ {
   "id": "sub:threat-1",
   "members": [
    "module:threat_1"
