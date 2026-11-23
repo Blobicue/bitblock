@@ -196,3 +196,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "signer_ops_1_drill_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "release_r1_repro_probe"
+required-features = ["protocol-research"]

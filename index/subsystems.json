@@ -670,6 +670,16 @@
   ]
  },
  {
+  "id": "sub:release-r1",
+  "members": [
+   "module:release_r1"
+  ],
+  "name": "release-r1",
+  "terms": [
+   "release"
+  ]
+ },
+ {
   "id": "sub:renderer-profile",
   "members": [
    "module:render"
