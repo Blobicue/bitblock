@@ -76,6 +76,41 @@
   ]
  },
  {
+  "id": "sub:chain-launch-1",
+  "members": [
+   "module:chain_launch_1"
+  ],
+  "name": "chain-launch-1",
+  "terms": [
+   "chain",
+   "launch"
+  ]
+ },
+ {
+  "id": "sub:chain-launch-authorization",
+  "members": [
+   "module:chain_launch_1"
+  ],
+  "name": "chain-launch-authorization",
+  "terms": [
+   "authorization",
+   "chain",
+   "launch"
+  ]
+ },
+ {
+  "id": "sub:chain-launch-manifest",
+  "members": [
+   "module:chain_launch_1"
+  ],
+  "name": "chain-launch-manifest",
+  "terms": [
+   "chain",
+   "launch",
+   "manifest"
+  ]
+ },
+ {
   "id": "sub:client-1",
   "members": [
    "module:client_1"
@@ -471,6 +506,18 @@
   "name": "language-r1",
   "terms": [
    "language"
+  ]
+ },
+ {
+  "id": "sub:launch-closure-bundle",
+  "members": [
+   "module:chain_launch_1"
+  ],
+  "name": "launch-closure-bundle",
+  "terms": [
+   "bundle",
+   "closure",
+   "launch"
   ]
  },
  {

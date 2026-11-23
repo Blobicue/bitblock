@@ -111,6 +111,29 @@ and `single_validator_over_one_third_breaks_bft_bound`). It remains an abstract
 mathematical model over Lean `Nat` and finite lists, not a verified compiler
 proof of Rust machine code, Ed25519 cryptography, or network liveness.
 
+`BitblockProof.LaunchClosureRefinement` formalizes the `CHAIN-LAUNCH-1`
+launch-closure bundle equations, combined DAG acyclicity, and genesis rank
+bounds corresponding to `crates/research/src/chain_launch_1.rs`
+(`LaunchClosureBundleV1`, `LaunchClosureExternalGenesisDependencyNodeV1`,
+`LaunchClosureInternalDependencyNodeV1`, `ChainLaunchManifestV1`,
+`ChainLaunchAuthorizationV1`, `ChainLaunchPackageV1`, and
+`preflight_launch_closure_bundle_bytes`). It proves exact `LAYER1_DESIGN_PAPER.md`
+§2 count, edge, and byte-conservation equations (`7 + |S| = |D|`,
+`8 + |S| = |D| + 1`, `complete_edges = i2i + i2e + 2`,
+`total_bytes = sum(E) + sum(S) + external_bytes` for both canonical `|S| = 3`
+and minimal `|S| = 0`), general path acyclicity from strict rank monotonicity
+(`reachable_rank_strict_lt`, `no_self_loop_of_strict_rank`,
+`no_two_cycle_of_strict_rank`), the mandatory external genesis rank lower bound
+(`external_genesis_rank_ge_two`, `external_genesis_rank_nonzero`,
+`candidate_profile_rank_ge_three`), impossibility of reversed
+`ProfileScope -> ExternalGenesis` and `DomainRegistry -> ExternalGenesis` edges,
+non-self-referential release/bundle/manifest/authorization derivation, concrete
+verification of the 27-edge canonical `|S| = 3` DAG, and powered negative
+controls rejecting off-by-one counts, duplicate external roots, double-counted
+embedded registry bytes, and rank-zero genesis. It remains an abstract
+mathematical model over Lean `Nat` and finite lists, not a verified compiler
+proof of Rust machine code, SHA-256 hashing, or Ed25519 cryptography.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own

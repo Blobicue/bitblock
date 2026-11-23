@@ -208,3 +208,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "release_1_signing_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "chain_launch_1_package_probe"
+required-features = ["protocol-research"]
