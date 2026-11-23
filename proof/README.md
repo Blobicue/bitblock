@@ -75,6 +75,21 @@ and non-divergent extension proofs. It remains an abstract model over Lean lists
 and mathematical integers, not a verified compiler proof of Rust SHA-256 hashing
 or machine code.
 
+`BitblockProof.VmRefinement` formalizes the `VM-1` / `VM-D1` bounded deterministic
+spatial interpreter corresponding to `crates/research/src/vm_1.rs` and
+`crates/research/src/vm_d1.rs`. It proves the exact 8-opcode bijection
+(`VmOpcode` <-> `Fin 8`), strictly positive opcode gas bounds, checked signed
+64-bit `Add`/`Sub` overflow trap soundness (with a powered wrapping-addition
+negative control), guaranteed finite termination (`<= prog.length` steps), gas
+monotonicity, `gasUsed <= preExecutionOpGas` and `gasUsed <= gasLimit`,
+stack-depth ceiling (`<= maxDepth`) and `InVmI64` preservation, fail-closed
+atomic rollback soundness on trap (with a powered partial-write-leak negative
+control), bedrock and program-frame write-exclusion preservation, and
+disjoint-write commutation (`applyWrites_comm_of_disjoint`) directly over
+`BitblockProof.World`. It remains an abstract model over Lean integers and
+finite lists, not a verified compiler proof of Rust machine code or shared
+consensus authority.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own

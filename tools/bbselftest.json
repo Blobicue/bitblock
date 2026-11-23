@@ -545,6 +545,12 @@
             ]
         },
         {
+            "module": "vm_1",
+            "proofs_include": [
+                "vmrefinement"
+            ]
+        },
+        {
             "total_mutation_sites": 569,
             "modules_with_mutation_sites": 47,
             "module_sites": {

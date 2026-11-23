@@ -5,3 +5,4 @@ import BitblockProof.ChunkRefinement
 import BitblockProof.OctreeRefinement
 import BitblockProof.AccountingRefinement
 import BitblockProof.CommitmentRefinement
+import BitblockProof.VmRefinement
