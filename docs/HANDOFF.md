@@ -700,17 +700,20 @@ artifact, gate, and non-claim.
    [`AUTH_COMMIT_1_RECEIPT.md`](AUTH_COMMIT_1_RECEIPT.md),
    [`ASSET_1_RECEIPT.md`](ASSET_1_RECEIPT.md),
    [`GOVERNANCE_1_RECEIPT.md`](GOVERNANCE_1_RECEIPT.md),
-   [`ECONOMIC_STATE_1_RECEIPT.md`](ECONOMIC_STATE_1_RECEIPT.md), and
-   [`VALIDATOR_SCHEDULE_1_RECEIPT.md`](VALIDATOR_SCHEDULE_1_RECEIPT.md)) promote
+   [`ECONOMIC_STATE_1_RECEIPT.md`](ECONOMIC_STATE_1_RECEIPT.md),
+   [`VALIDATOR_SCHEDULE_1_RECEIPT.md`](VALIDATOR_SCHEDULE_1_RECEIPT.md), and
+   [`EXECUTOR_1_RECEIPT.md`](EXECUTOR_1_RECEIPT.md)) promote
    `PROFILE-SCOPE-D0`, `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`,
    `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`,
    `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`, `ASSET-1`, `GOVERNANCE-1`, `ECONOMIC-STATE-1`,
-   `VALIDATOR-SCHEDULE-1`, `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4 `REFINE-1`
-   phases across 172 `--trust=0` Lean 4 theorems and all Waves 13–15 launch state producers) to
-   `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking **`EXECUTOR-1@base=READY`**,
-   `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY` (while `EXECUTION-ROOT-1`,
-   `GENESIS-ROOT-PARITY-1`, `UPGRADE-FRAMEWORK-1`, and `CONSENSUS-1` stay locked on `EXECUTOR-1`,
-   with `program-active` and `verkle-selected` kept explicitly inactive at launch genesis).
+   `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4
+   `REFINE-1` phases across 172 `--trust=0` Lean 4 theorems, all Waves 13–15 launch state
+   producers, and dual-language independent execution) to `BOUNDED` and `VM-1` to `IMPLEMENTED`,
+   unlocking **`EXECUTION-ROOT-1@base=READY`**, **`UPGRADE-FRAMEWORK-1@base=READY`**,
+   `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY` (while `GENESIS-ROOT-PARITY-1`,
+   `MULTI-1`, `PROFILE-1`, `UPGRADE-1`, and `CONSENSUS-1` stay locked on their remaining execution-
+   root / parity / consensus prerequisites, with `program-active` and `verkle-selected` kept
+   explicitly inactive at launch genesis).
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
