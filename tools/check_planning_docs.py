@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "a5f2b88abb3ae9d2fc1fd23efce29056d15ac0754a231dae5dfb32772d611b68"
+EXPECTED_STATUS_DIGEST = "d5efdebc34b1a4240a4c55235091a0e3b215bebfddd753da6ceac88b09b6c40e"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "5fcb2ec707a73ca1c4e612126a39a472e408ba041113f7d2c7b424e210f93aa0"
+    "44a96909125505189e7e749537e5617369f909f2c7884867e4ac3792d3e7255e"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,7 +7779,7 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-040:ECONOMIC-STATE-1@base=READY` |",
+        "| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |",
         "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 8 | `PS-088:RELEASE-R1@candidate=READY` |\n",
+        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 8 | `PS-088:RELEASE-R1@candidate=READY` |",
-        "| 8 | `PS-088:RELEASE-R1@candidate=READY` |\n"
-        "| 9 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |",
+        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |\n"
+        "| 8 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-040:ECONOMIC-STATE-1@base=READY` |",
+        "| 1 | `PS-048:PROGRAM-STATE-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-040:ECONOMIC-STATE-1@base=READY` |",
+        "| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
