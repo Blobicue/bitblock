@@ -1317,6 +1317,10 @@
 {"from": "module:profile_bootstrap", "kind": "declares", "to": "schema:bitblock/protocol-id-1/accepted-proposal-core/v1"}
 {"from": "module:program", "kind": "declares", "to": "schema:bitblock/edit/op-u8-i64-be/v1"}
 {"from": "module:protocol", "kind": "declares", "to": "schema:bitblock/content-tag/v1"}
+{"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/exact-proposal-core/v1"}
+{"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/parent-collision-audit/v1"}
+{"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/parent-lookup-preimage/v1"}
+{"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/proposal-wrapper/v1"}
 {"from": "module:render", "kind": "declares", "to": "schema:bitblock/overlay-policy/crosshair/v1"}
 {"from": "module:render", "kind": "declares", "to": "schema:bitblock/reference-renderer-corpus-receipt/v1"}
 {"from": "module:render", "kind": "declares", "to": "schema:bitblock/renderer-profile/host-f64/v1"}
@@ -1509,6 +1513,9 @@
 {"from": "module:profile_bootstrap", "kind": "depends_on", "to": "module:transition_spec"}
 {"from": "module:program", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:program", "kind": "depends_on", "to": "module:world"}
+{"from": "module:protocol_id_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:protocol_id_1", "kind": "depends_on", "to": "module:profile_bootstrap"}
+{"from": "module:protocol_id_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:render", "kind": "depends_on", "to": "module:camera"}
 {"from": "module:render", "kind": "depends_on", "to": "module:frame"}
 {"from": "module:render", "kind": "depends_on", "to": "module:protocol"}
@@ -1711,6 +1718,8 @@
 {"from": "example:examples/language_r1_visual_probe.rs", "kind": "uses", "to": "module:render"}
 {"from": "example:examples/language_r1_visual_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/policy_tag_alloc_probe.rs", "kind": "uses", "to": "module:sidebar"}
+{"from": "example:examples/protocol_id_1_audit_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:examples/protocol_id_1_audit_probe.rs", "kind": "uses", "to": "module:protocol_id_1"}
 {"from": "example:examples/render_phase_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/render_phase_probe.rs", "kind": "uses", "to": "module:frame"}
 {"from": "example:examples/render_phase_probe.rs", "kind": "uses", "to": "module:render"}
@@ -1869,6 +1878,9 @@
 {"from": "example:tests/wave8a_genesis_d1.rs", "kind": "uses", "to": "module:resource_1"}
 {"from": "example:tests/wave8a_genesis_d1.rs", "kind": "uses", "to": "module:threat_1"}
 {"from": "example:tests/wave8a_genesis_d1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave8c_protocol_id_1.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:tests/wave8c_protocol_id_1.rs", "kind": "uses", "to": "module:profile_bootstrap"}
+{"from": "example:tests/wave8c_protocol_id_1.rs", "kind": "uses", "to": "module:protocol_id_1"}
 {"from": "example:tests/world_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/local-vm-bounds/v1"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/protocol-profile/v1"}
@@ -2031,6 +2043,10 @@
 {"from": "tool:profile_bootstrap_vectors", "kind": "vectors", "to": "schema:bitblock/genesis-d1/chain-genesis-payload/v1"}
 {"from": "tool:profile_bootstrap_vectors", "kind": "vectors", "to": "schema:bitblock/profile-scope-d0/scope/v1"}
 {"from": "tool:profile_bootstrap_vectors", "kind": "vectors", "to": "schema:bitblock/protocol-id-1/accepted-proposal-core/v1"}
+{"from": "tool:protocol_id_1_vectors", "kind": "vectors", "to": "schema:bitblock/protocol-id-1/exact-proposal-core/v1"}
+{"from": "tool:protocol_id_1_vectors", "kind": "vectors", "to": "schema:bitblock/protocol-id-1/parent-collision-audit/v1"}
+{"from": "tool:protocol_id_1_vectors", "kind": "vectors", "to": "schema:bitblock/protocol-id-1/parent-lookup-preimage/v1"}
+{"from": "tool:protocol_id_1_vectors", "kind": "vectors", "to": "schema:bitblock/protocol-id-1/proposal-wrapper/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/reference-renderer-corpus-receipt/v1"}

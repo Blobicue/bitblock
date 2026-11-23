@@ -104,3 +104,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "genesis_d1_dag_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "protocol_id_1_audit_probe"
+required-features = ["protocol-research"]
