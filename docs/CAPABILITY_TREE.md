@@ -123,14 +123,14 @@ candidate to choose its own authority.
 | PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
 | PS-081 | GOVERNANCE-1 | base | BOUNDED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | BOUNDED |
-| PS-083 | UPGRADE-1 | base | LOCKED |
-| PS-084 | PROFILE-1 | base | READY |
+| PS-083 | UPGRADE-1 | base | READY |
+| PS-084 | PROFILE-1 | base | BOUNDED |
 | PS-085 | SIGNER-OPS-1 | base | BOUNDED |
 | PS-086 | RELEASE-R1 | base | BOUNDED |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
 | PS-088 | RELEASE-R1 | candidate | BOUNDED |
-| PS-089 | RELEASE-1 | base | LOCKED |
-| PS-090 | RELEASE-1 | admitted | LOCKED |
+| PS-089 | RELEASE-1 | base | READY |
+| PS-090 | RELEASE-1 | admitted | READY |
 | PS-091 | CHAIN-LAUNCH-1 | base | LOCKED |
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
@@ -1749,7 +1749,7 @@ is invalid input, not a third collision row.
 
 ### `UPGRADE-1` — deterministic version migration
 
-- **Status:** `PS-083:UPGRADE-1@base=LOCKED`.
+- **Status:** `PS-083:UPGRADE-1@base=READY`.
 - **Depends on:** `UPGRADE-FRAMEWORK-1`, `EXECUTOR-1`, `GOVERNANCE-1`; target-profile CE-30 and CE-31
   bind the already admitted old-profile instance and distinct new candidate-profile instance
   without reversing their polarity.
@@ -1772,16 +1772,19 @@ is invalid input, not a third collision row.
 
 ### `PROFILE-1` — admitted activated-feature closure
 
-- **Status:** `PS-084:PROFILE-1@base=READY`.
+- **Status:** `PS-084:PROFILE-1@base=BOUNDED`.
 - **Depends on:** `PROFILE-D1`, `TRANSITION-SPEC-1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`,
   `GENESIS-ROOT-PARITY-1`, `GOVERNANCE-1`, `EXECUTION-ROOT-1`; optional exact-version authority and
   implementation prerequisites are target-profile CE-25–CE-29 and CE-42.
 - **Motive:** prevent a testnet or release from inheriting gates for the base profile while quietly
   activating an optional surface whose evidence is missing.
-- **Artifact:** canonical `ProfileAdmissionManifestV1` plus its protocol-frozen
-  `profile_admission_manifest_id`, containing a machine-readable mapping from every activated
-  node/version and domain-registry entry to its artifact, commit, result, assumptions, loss
-  condition, stage×gate-subclaim disposition, and resolved conditional-edge instance.
+- **Artifact:** [`PROFILE_1_RECEIPT.md`](PROFILE_1_RECEIPT.md) (PR #92 commit
+  `32fe68a196e8f239cbfd146669320d718cd095c3`, `crates/research/src/profile_1.rs`,
+  `tools/profile_1_vectors.py`, `tests/wave28_profile_1.rs`, and
+  `examples/profile_1_admission_probe.rs`): canonical `ProfileAdmissionManifestV1` plus its
+  protocol-frozen `profile_admission_manifest_id`, containing a machine-readable mapping from every
+  activated node/version and domain-registry entry to its artifact, commit, result, assumptions,
+  loss condition, stage×gate-subclaim disposition, and resolved conditional-edge instance.
 - **Gate:** the closure walker rejects every missing, unknown, wrong-version, non-passing, stale, or
   mutually incompatible prerequisite, inactive-domain encoding, and unjustified gate exclusion.
   Every conditional predicate is resolved in its declared launch or target context, its realizable
@@ -1846,7 +1849,7 @@ is invalid input, not a third collision row.
 
 ### `RELEASE-1` — admitted-profile signed release
 
-- **Status:** `PS-089:RELEASE-1@base=LOCKED`, `PS-090:RELEASE-1@admitted=LOCKED`.
+- **Status:** `PS-089:RELEASE-1@base=READY`, `PS-090:RELEASE-1@admitted=READY`.
 - **Depends on:** `RELEASE-R1`, `PROFILE-1`, `CRYPTO-1`.
 - **Motive:** ensure the binary distributed to testnet or production is the reproducible candidate
   whose exact profile closure was admitted, not merely a similarly configured build.
@@ -2003,7 +2006,9 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 5 | `PS-084:PROFILE-1@base=READY` |
+| 5 | `PS-083:UPGRADE-1@base=READY` |
+| 6 | `PS-089:RELEASE-1@base=READY` |
+| 7 | `PS-090:RELEASE-1@admitted=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2036,7 +2041,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `5` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
