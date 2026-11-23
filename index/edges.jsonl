@@ -1269,6 +1269,8 @@
 {"from": "module:history", "kind": "declares", "to": "schema:bitblock/world/chunk-merkle-sha256/v2"}
 {"from": "module:history_store", "kind": "declares", "to": "schema:bitblock/history/not-genesis/v1"}
 {"from": "module:history_store", "kind": "declares", "to": "schema:bitblock/history/not-receipt/v1"}
+{"from": "module:identity_1", "kind": "declares", "to": "schema:bitblock/identity-1/actor-auth-state/v1"}
+{"from": "module:identity_1", "kind": "declares", "to": "schema:bitblock/identity-1/authorization-receipt/v1"}
 {"from": "module:identity_d1", "kind": "declares", "to": "schema:bitblock/actor-identity/v1"}
 {"from": "module:identity_d1", "kind": "declares", "to": "schema:bitblock/identity-d1/authorization-descriptor/v1"}
 {"from": "module:identity_d1", "kind": "declares", "to": "schema:bitblock/identity-d1/transaction-body/v1"}
@@ -1452,6 +1454,9 @@
 {"from": "module:history_store", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:storage"}
 {"from": "module:history_store", "kind": "depends_on", "to": "module:world"}
+{"from": "module:identity_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:identity_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:identity_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:identity_d1", "kind": "depends_on", "to": "module:crypto_d1"}
 {"from": "module:identity_d1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:identity_d1", "kind": "depends_on", "to": "module:world"}
@@ -1663,6 +1668,8 @@
 {"from": "module:display_store", "kind": "tests_with", "to": "module:output_topology"}
 {"from": "module:display_store", "kind": "tests_with", "to": "module:presentation"}
 {"from": "module:frame", "kind": "tests_with", "to": "module:render"}
+{"from": "module:identity_1", "kind": "tests_with", "to": "module:history"}
+{"from": "module:identity_1", "kind": "tests_with", "to": "module:world"}
 {"from": "module:ladder_bridge", "kind": "tests_with", "to": "module:world"}
 {"from": "module:main", "kind": "tests_with", "to": "module:output_color"}
 {"from": "module:main", "kind": "tests_with", "to": "module:presentation"}
@@ -1744,6 +1751,12 @@
 {"from": "example:examples/genesis_d1_dag_probe.rs", "kind": "uses", "to": "module:profile_bootstrap"}
 {"from": "example:examples/genesis_d1_dag_probe.rs", "kind": "uses", "to": "module:resource_1"}
 {"from": "example:examples/genesis_d1_dag_probe.rs", "kind": "uses", "to": "module:threat_1"}
+{"from": "example:examples/identity_1_auth_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:examples/identity_1_auth_probe.rs", "kind": "uses", "to": "module:history"}
+{"from": "example:examples/identity_1_auth_probe.rs", "kind": "uses", "to": "module:identity_1"}
+{"from": "example:examples/identity_1_auth_probe.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:examples/identity_1_auth_probe.rs", "kind": "uses", "to": "module:protocol"}
+{"from": "example:examples/identity_1_auth_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/language_r1_visual_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/language_r1_visual_probe.rs", "kind": "uses", "to": "module:language_r1"}
 {"from": "example:examples/language_r1_visual_probe.rs", "kind": "uses", "to": "module:render"}
@@ -1877,6 +1890,12 @@
 {"from": "example:tests/wave11_profile_d1.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:tests/wave11_profile_d1.rs", "kind": "uses", "to": "module:profile_d1"}
 {"from": "example:tests/wave11_profile_d1.rs", "kind": "uses", "to": "module:protocol"}
+{"from": "example:tests/wave12a_identity_1.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:tests/wave12a_identity_1.rs", "kind": "uses", "to": "module:history"}
+{"from": "example:tests/wave12a_identity_1.rs", "kind": "uses", "to": "module:identity_1"}
+{"from": "example:tests/wave12a_identity_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave12a_identity_1.rs", "kind": "uses", "to": "module:protocol"}
+{"from": "example:tests/wave12a_identity_1.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2055,6 +2074,11 @@
 {"from": "tool:history_mode_vectors", "kind": "vectors", "to": "schema:bitblock/history-mode/open-local/v1"}
 {"from": "tool:history_mode_vectors", "kind": "vectors", "to": "schema:bitblock/history-mode/sequential-history/v1"}
 {"from": "tool:history_mode_vectors", "kind": "vectors", "to": "schema:bitblock/sequential-history/function/sha256-chain-v1"}
+{"from": "tool:identity_1_vectors", "kind": "vectors", "to": "schema:bitblock/actor-identity/v1"}
+{"from": "tool:identity_1_vectors", "kind": "vectors", "to": "schema:bitblock/identity-1/actor-auth-state/v1"}
+{"from": "tool:identity_1_vectors", "kind": "vectors", "to": "schema:bitblock/identity-1/authorization-receipt/v1"}
+{"from": "tool:identity_1_vectors", "kind": "vectors", "to": "schema:bitblock/identity-d1/authorization-descriptor/v1"}
+{"from": "tool:identity_1_vectors", "kind": "vectors", "to": "schema:bitblock/identity-d1/transaction-body/v1"}
 {"from": "tool:interaction_tape_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:interaction_tape_vectors", "kind": "vectors", "to": "schema:bitblock/interaction-tape/v1"}
 {"from": "tool:journal_rejected_tail_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}

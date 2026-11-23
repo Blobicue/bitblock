@@ -119,6 +119,11 @@
    "storage",
    "world"
   ],
+  "identity_1": [
+   "crypto_d1",
+   "identity_d1",
+   "protocol"
+  ],
   "identity_d1": [
    "crypto_d1",
    "protocol",
@@ -346,7 +351,7 @@
    "protocol"
   ]
  },
- "edges": 231,
+ "edges": 234,
  "stratum": {
   "asset_d1": 3,
   "bounds_1": 10,
@@ -367,6 +372,7 @@
   "genesis_d1": 12,
   "history": 3,
   "history_store": 4,
+  "identity_1": 3,
   "identity_d1": 2,
   "interaction": 3,
   "journal": 2,
@@ -417,7 +423,7 @@
   "consensus_gov_d1": 8,
   "coordinate_episode": 11,
   "crypto_1": 0,
-  "crypto_d1": 12,
+  "crypto_d1": 13,
   "display": 7,
   "display_artifact": 5,
   "display_store": 1,
@@ -427,7 +433,8 @@
   "genesis_d1": 1,
   "history": 21,
   "history_store": 15,
-  "identity_d1": 11,
+  "identity_1": 0,
+  "identity_d1": 12,
   "interaction": 2,
   "journal": 17,
   "ladder_bridge": 0,
@@ -446,7 +453,7 @@
   "profile_bootstrap": 7,
   "profile_d1": 0,
   "program": 35,
-  "protocol": 56,
+  "protocol": 57,
   "protocol_id_1": 1,
   "render": 4,
   "replay_evidence": 1,
@@ -465,6 +472,6 @@
   "windows_present": 2,
   "windows_timing": 1,
   "windows_topology": 1,
-  "world": 46
+  "world": 47
  }
 }
