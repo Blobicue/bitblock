@@ -135,7 +135,7 @@ candidate to choose its own authority.
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
-| PS-095 | SYNC-1 | replay-authority | READY |
+| PS-095 | SYNC-1 | replay-authority | BOUNDED |
 
 ## Structured phase-dependency manifest
 
@@ -891,13 +891,17 @@ is invalid input, not a third collision row.
 
 ### `SYNC-1` — peer synchronization, availability, and recovery
 
-- **Status:** `PS-034:SYNC-1@base=BOUNDED`, `PS-095:SYNC-1@replay-authority=READY`.
+- **Status:** `PS-034:SYNC-1@base=BOUNDED`, `PS-095:SYNC-1@replay-authority=BOUNDED`.
 - **Depends on:** `SEQUENCER-1`, `STORAGE-1`, and the applicable `BOUNDS-1` limits.
 - **Motive:** make required bodies, witnesses, and accepted state recoverable from more than one
   process.
 - **Artifact:** [`SYNC_1_BASE_RECEIPT.md`](SYNC_1_BASE_RECEIPT.md) (PR #78 commit
   `b1485f57507d202359ea73acd485b19b23d353d8`, `crates/research/src/sync_1.rs`,
-  `tools/sync_1_vectors.py`, `tests/wave21_sync_1.rs`, and `examples/sync_1_cluster_probe.rs`):
+  `tools/sync_1_vectors.py`, `tests/wave21_sync_1.rs`, and `examples/sync_1_cluster_probe.rs`) and
+  [`SYNC_1_REPLAY_AUTHORITY_RECEIPT.md`](SYNC_1_REPLAY_AUTHORITY_RECEIPT.md) (PR #82 commit
+  `96f2118340d2f25d713b2176b563f8817d48cd5d`, `crates/research/src/sync_replay_authority_1.rs`,
+  `tools/sync_replay_authority_1_vectors.py`, `tests/wave23_sync_replay_authority_1.rs`, and
+  `examples/sync_replay_authority_1_probe.rs`):
   the base phase supplies role-separated full verifier, archive, light client, and non-
   authority RPC paths; peer discovery; bounded parsing/backpressure; block/body/witness retrieval;
   checkpoint/genesis bootstrap; pruning and recovery policy. It transports and retains opaque bounded
@@ -1982,7 +1986,6 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 7 | `PS-085:SIGNER-OPS-1@base=READY` |
 | 8 | `PS-086:RELEASE-R1@base=READY` |
 | 9 | `PS-088:RELEASE-R1@candidate=READY` |
-| 10 | `PS-095:SYNC-1@replay-authority=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2015,7 +2018,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `10` |
+| `ready_frontier_count_u32` | `9` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
