@@ -62,6 +62,7 @@ pub mod rule_1;
 pub mod scale_assay;
 pub mod sequencer_1;
 pub mod sequential;
+pub mod signer_ops_1;
 pub mod storage;
 pub mod sync_1;
 pub mod sync_replay_authority_1;
