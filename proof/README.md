@@ -90,6 +90,27 @@ disjoint-write commutation (`applyWrites_comm_of_disjoint`) directly over
 finite lists, not a verified compiler proof of Rust machine code or shared
 consensus authority.
 
+`BitblockProof.ConsensusSafety` formalizes the `CONSENSUS-1` weighted BFT
+safety core corresponding to `crates/research/src/consensus_1.rs`
+(`HotStuffTwoPhaseBftPosV1`, `QuorumCertificateV1`,
+`ConsensusCommitCertificateV1`,
+`AcceptedConsensusNativeParentAuthorityCertificateV1`, and
+`LiveParentAuthorityRegistryV1`). It proves weighted strict `> 2/3` quorum
+intersection under `3 * F < W` (`quorum_intersection_has_honest_validator`),
+data-before-vote obligation (`data_before_vote_from_valid_qc`), same-view QC
+uniqueness (`qc_unique_same_view_phase`, `commit_qc_unique_same_view`),
+cross-view 2-phase HotStuff lock persistence by strong induction
+(`no_prepare_qc_conflicting_after_commit`), full deterministic finality safety
+across arbitrary views (`hotstuff_two_phase_finality_safety`), fail-closed
+unique live parent-authority certificate admission rejecting replay-archive
+inputs, history-start mismatches, late-valid-suffix candidates,
+candidate-advanced rules, and duplicate `(parent_core_id, purpose, pos)` slots,
+plus powered negative controls proving tightness of strict `> 2/3` and `< 1/3`
+bounds (`relaxed_two_thirds_admits_conflicting_quorums_without_honest_overlap`
+and `single_validator_over_one_third_breaks_bft_bound`). It remains an abstract
+mathematical model over Lean `Nat` and finite lists, not a verified compiler
+proof of Rust machine code, Ed25519 cryptography, or network liveness.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own

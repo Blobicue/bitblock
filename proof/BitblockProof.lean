@@ -6,3 +6,4 @@ import BitblockProof.OctreeRefinement
 import BitblockProof.AccountingRefinement
 import BitblockProof.CommitmentRefinement
 import BitblockProof.VmRefinement
+import BitblockProof.ConsensusSafety

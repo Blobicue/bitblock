@@ -104,6 +104,18 @@
     ]
    },
    {
+    "item": "CONSENSUS_1_COMMIT_CERT_SCHEMA",
+    "modules": [
+     "consensus_1"
+    ]
+   },
+   {
+    "item": "CONSENSUS_1_PARENT_AUTH_CERT_SCHEMA",
+    "modules": [
+     "consensus_1"
+    ]
+   },
+   {
     "item": "COORDINATE_EPISODE_DERIVATION_POLICY_SCHEMA",
     "modules": [
      "coordinate_episode"
@@ -155,6 +167,12 @@
     "item": "CompositionLayerV1",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "ConsensusSafeHaltEvidenceV1",
+    "modules": [
+     "consensus_1"
     ]
    },
    {
@@ -472,7 +490,14 @@
    {
     "item": "HEADER_LEN",
     "modules": [
+     "consensus_1",
      "validator_schedule_1"
+    ]
+   },
+   {
+    "item": "HotStuffValidatorNodeV1",
+    "modules": [
+     "consensus_1"
     ]
    },
    {
@@ -539,6 +564,12 @@
     "item": "LOCAL_REPLAY_EVIDENCE_SCHEMA",
     "modules": [
      "replay_evidence"
+    ]
+   },
+   {
+    "item": "LiveAuthorityAdmissionSlotV1",
+    "modules": [
+     "consensus_1"
     ]
    },
    {
@@ -1010,12 +1041,6 @@
     ]
    },
    {
-    "item": "ScheduledValidatorEntryV1",
-    "modules": [
-     "validator_schedule_1"
-    ]
-   },
-   {
     "item": "SensorCodeSpace",
     "modules": [
      "physical_sensor"
@@ -1214,6 +1239,12 @@
     ]
    },
    {
+    "item": "VoteEquivocationEvidenceV1",
+    "modules": [
+     "consensus_1"
+    ]
+   },
+   {
     "item": "WindowsCompositionTimingObservation",
     "modules": [
      "windows_timing"
@@ -1229,6 +1260,12 @@
     "item": "append_publication_body_before_root",
     "modules": [
      "sequencer_1"
+    ]
+   },
+   {
+    "item": "authority_registry_mut",
+    "modules": [
+     "consensus_1"
     ]
    },
    {
@@ -1328,12 +1365,6 @@
     ]
    },
    {
-    "item": "compute_batch_body_digest",
-    "modules": [
-     "sequencer_1"
-    ]
-   },
-   {
     "item": "compute_checkpoint_chunk_digest",
     "modules": [
      "sync_1"
@@ -1343,12 +1374,6 @@
     "item": "compute_opaque_blob_digest",
     "modules": [
      "sync_1"
-    ]
-   },
-   {
-    "item": "compute_receipts_merkle_root",
-    "modules": [
-     "sequencer_1"
     ]
    },
    {
@@ -1502,6 +1527,12 @@
     ]
    },
    {
+    "item": "register_epoch_schedule",
+    "modules": [
+     "consensus_1"
+    ]
+   },
+   {
     "item": "required_domains",
     "modules": [
      "commit_state"
@@ -1532,8 +1563,15 @@
     ]
    },
    {
+    "item": "sign_doc_digest",
+    "modules": [
+     "consensus_1"
+    ]
+   },
+   {
     "item": "signing_preimage",
     "modules": [
+     "consensus_1",
      "multi_1",
      "sequencer_1"
     ]
@@ -1547,6 +1585,7 @@
    {
     "item": "unsigned_payload_digest",
     "modules": [
+     "consensus_1",
      "multi_1",
      "sequencer_1"
     ]
@@ -1582,7 +1621,7 @@
     ]
    }
   ],
-  "pub_items": 1805,
+  "pub_items": 1869,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1606,7 +1645,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 65886,
+   "code_lines": 68597,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1787,7 +1826,7 @@
    ]
   },
   "test": {
-   "code_lines": 28587,
+   "code_lines": 28651,
    "duplicated_lines": 341,
    "regions": [
     {

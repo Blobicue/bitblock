@@ -107,6 +107,16 @@
   ]
  },
  {
+  "id": "sub:consensus-1",
+  "members": [
+   "module:consensus_1"
+  ],
+  "name": "consensus-1",
+  "terms": [
+   "consensus"
+  ]
+ },
+ {
   "id": "sub:consensus-d1",
   "members": [
    "module:consensus_gov_d1"

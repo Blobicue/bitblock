@@ -176,3 +176,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "sync_1_cluster_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "consensus_1_bft_probe"
+required-features = ["protocol-research"]
