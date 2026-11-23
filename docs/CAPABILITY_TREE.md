@@ -69,7 +69,7 @@ candidate to choose its own authority.
 | PS-026 | IDENTITY-D1 | base | BOUNDED |
 | PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
 | PS-028 | IDENTITY-1 | base | BOUNDED |
-| PS-029 | AUTH-COMMIT-1 | base | READY |
+| PS-029 | AUTH-COMMIT-1 | base | BOUNDED |
 | PS-030 | EXECUTION-ROOT-1 | base | LOCKED |
 | PS-031 | GENESIS-ROOT-PARITY-1 | base | LOCKED |
 | PS-032 | MULTI-1 | base | LOCKED |
@@ -78,7 +78,7 @@ candidate to choose its own authority.
 | PS-035 | ASSET-D1 | base | BOUNDED |
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
-| PS-038 | ASSET-1 | base | LOCKED |
+| PS-038 | ASSET-1 | base | READY |
 | PS-039 | RESOURCE-1 | base | BOUNDED |
 | PS-040 | ECONOMIC-STATE-1 | base | LOCKED |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
@@ -121,7 +121,7 @@ candidate to choose its own authority.
 | PS-078 | GENESIS-D1 | base | BOUNDED |
 | PS-079 | PROFILE-D1 | base | BOUNDED |
 | PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
-| PS-081 | GOVERNANCE-1 | base | LOCKED |
+| PS-081 | GOVERNANCE-1 | base | READY |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | LOCKED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | LOCKED |
@@ -783,14 +783,20 @@ is invalid input, not a third collision row.
 
 ### `AUTH-COMMIT-1` — authenticated authorization and nonce state
 
-- **Status:** `PS-029:AUTH-COMMIT-1@base=READY`.
+- **Status:** `PS-029:AUTH-COMMIT-1@base=BOUNDED`.
 - **Depends on:** `IDENTITY-1`, implemented `COMMIT-1`, `CODEC-1` at the authorization/nonce schemas.
 - **Motive:** let a verifier prove which descriptor and nonce state governed an admitted action
   without making identity a circular prerequisite of occupancy-root design.
-- **Artifact:** separately typed `AuthorizationRootV1` and `NonceRootV1`, canonical values and
-  proofs, genesis initialization, atomic updates for rotation/revocation/recovery/nonce effects,
-  and composition into the execution-state root. Actor-key width and both value codecs receive
-  their own domain-profile gates; the 192-bit world comparison is not inherited as evidence.
+- **Artifact:** [`AUTH_COMMIT_1_RECEIPT.md`](AUTH_COMMIT_1_RECEIPT.md) (PR #56 commit
+  `6bac6d5a9c226dbefbbcd17da8770d2b793155a4`, `crates/research/src/auth_commit_1.rs`,
+  `tools/auth_commit_1_vectors.py`, `tests/wave13_auth_commit_1.rs`, and
+  `examples/auth_commit_1_probe.rs`) implements separately typed `AuthorizationRootV1` and
+  `NonceRootV1` over a reusable 256-bit domain-separated Candidate A binary Merkle Patricia Trie
+  (`DomainPatriciaTrieV1`, `DomainIdV1` 1..=7) with canonical inclusion/absence proofs bounded to
+  `<= 256` depth and `<= 12 KiB`, atomic staged rotation/revocation/recovery/nonce commits, full-rebuild
+  parity, and `7/7` cross-domain proof isolation without modifying `COMMIT-1`. Actor-key width and
+  both value codecs receive their own domain-profile gates; the 192-bit world comparison is not
+  inherited as evidence.
 - **Gate:** full-rebuild/incremental parity plus absence, stale-nonce, rotation, recovery,
   cross-domain, and atomic-failure vectors; no occupancy or episode proof verifies as an auth proof.
 - **Non-claim:** an authenticated authorization map does not prove the key holder is one human or
@@ -930,7 +936,7 @@ is invalid input, not a third collision row.
 
 ### `ASSET-1` — ownership and transfer
 
-- **Status:** `PS-038:ASSET-1@base=LOCKED`.
+- **Status:** `PS-038:ASSET-1@base=READY`.
 - **Depends on:** `ASSET-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `COMMIT-1`,
   `TRANSITION-SPEC-1`, `PROFILE-D1`.
 - **Motive:** distinguish occupancy, episode identity, and authority to transfer or edit.
@@ -1624,7 +1630,7 @@ is invalid input, not a third collision row.
 
 ### `GOVERNANCE-1` — implemented governance and emergency transitions
 
-- **Status:** `PS-081:GOVERNANCE-1@base=LOCKED`.
+- **Status:** `PS-081:GOVERNANCE-1@base=READY`.
 - **Depends on:** `GOVERNANCE-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
   `TRANSITION-SPEC-1`, `CODEC-1`, `BOUNDS-1`.
 - **Motive:** turn pre-genesis authority bytes into deterministic, authenticated state transitions
@@ -1906,12 +1912,13 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-029:AUTH-COMMIT-1@base=READY` |
+| 2 | `PS-038:ASSET-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-086:RELEASE-R1@base=READY` |
-| 7 | `PS-088:RELEASE-R1@candidate=READY` |
+| 6 | `PS-081:GOVERNANCE-1@base=READY` |
+| 7 | `PS-086:RELEASE-R1@base=READY` |
+| 8 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1944,7 +1951,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
