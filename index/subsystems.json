@@ -761,6 +761,17 @@
   ]
  },
  {
+  "id": "sub:validator-schedule-1",
+  "members": [
+   "module:validator_schedule_1"
+  ],
+  "name": "validator-schedule-1",
+  "terms": [
+   "schedule",
+   "validator"
+  ]
+ },
+ {
   "id": "sub:verkle-r1",
   "members": [
    "module:verkle_feasibility"

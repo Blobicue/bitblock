@@ -32,6 +32,12 @@
     ]
    },
    {
+    "item": "BFT_HARD_CONCENTRATION_CAP_BPS",
+    "modules": [
+     "validator_schedule_1"
+    ]
+   },
+   {
     "item": "BRIDGE_POLICY_SCHEMA",
     "modules": [
      "ladder_bridge"
@@ -320,6 +326,12 @@
     ]
    },
    {
+    "item": "ENTRY_LEN",
+    "modules": [
+     "validator_schedule_1"
+    ]
+   },
+   {
     "item": "EVENT_KEY_BITS",
     "modules": [
      "commit_state"
@@ -333,12 +345,6 @@
    },
    {
     "item": "EconomicActionKindV1",
-    "modules": [
-     "economic_state_1"
-    ]
-   },
-   {
-    "item": "EconomicState1Error",
     "modules": [
      "economic_state_1"
     ]
@@ -428,15 +434,15 @@
     ]
    },
    {
-    "item": "Governance1Error",
+    "item": "GovernanceActionKindV1",
     "modules": [
      "governance_1"
     ]
    },
    {
-    "item": "GovernanceActionKindV1",
+    "item": "HEADER_LEN",
     "modules": [
-     "governance_1"
+     "validator_schedule_1"
     ]
    },
    {
@@ -836,6 +842,12 @@
     ]
    },
    {
+    "item": "ScheduledValidatorEntryV1",
+    "modules": [
+     "validator_schedule_1"
+    ]
+   },
+   {
     "item": "SensorCodeSpace",
     "modules": [
      "physical_sensor"
@@ -950,6 +962,18 @@
     ]
    },
    {
+    "item": "VALIDATOR_SCHEDULE_1_EPOCH_SCHEMA",
+    "modules": [
+     "validator_schedule_1"
+    ]
+   },
+   {
+    "item": "VALIDATOR_SCHEDULE_1_ROOT_SCHEMA",
+    "modules": [
+     "validator_schedule_1"
+    ]
+   },
+   {
     "item": "VM_1_STEP_TRACE_SCHEMA",
     "modules": [
      "vm_1"
@@ -1031,14 +1055,6 @@
     "item": "canonical_segment_payload_len",
     "modules": [
      "sequential"
-    ]
-   },
-   {
-    "item": "canonical_sha256",
-    "modules": [
-     "asset_1",
-     "economic_state_1",
-     "governance_1"
     ]
    },
    {
@@ -1265,7 +1281,7 @@
     ]
    }
   ],
-  "pub_items": 1549,
+  "pub_items": 1568,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1289,7 +1305,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 56616,
+   "code_lines": 57327,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1470,7 +1486,7 @@
    ]
   },
   "test": {
-   "code_lines": 27700,
+   "code_lines": 27817,
    "duplicated_lines": 341,
    "regions": [
     {
