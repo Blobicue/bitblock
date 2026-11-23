@@ -1392,6 +1392,8 @@
 {"from": "module:transition_spec_1", "kind": "declares", "to": "schema:bitblock/transition-spec-1/spec-eval-receipt/v1"}
 {"from": "module:upgrade_framework_1", "kind": "declares", "to": "schema:bitblock/upgrade-framework-1/lifecycle-policy/v1"}
 {"from": "module:upgrade_framework_1", "kind": "declares", "to": "schema:bitblock/upgrade-framework-1/transition-audit/v1"}
+{"from": "module:validator_econ_1", "kind": "declares", "to": "schema:bitblock/validator-econ-1/adversarial-assay/v1"}
+{"from": "module:validator_econ_1", "kind": "declares", "to": "schema:bitblock/validator-econ-1/consensus-adapter-receipt/v1"}
 {"from": "module:validator_schedule_1", "kind": "declares", "to": "schema:bitblock/validator-schedule-1/epoch-schedule/v1"}
 {"from": "module:validator_schedule_1", "kind": "declares", "to": "schema:bitblock/validator-schedule-1/schedule-root/v1"}
 {"from": "module:verkle_feasibility", "kind": "declares", "to": "schema:bitblock/verkle-r1/coord-key-32b/v1"}
@@ -1761,6 +1763,15 @@
 {"from": "module:upgrade_framework_1", "kind": "depends_on", "to": "module:profile_d1"}
 {"from": "module:upgrade_framework_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:upgrade_framework_1", "kind": "depends_on", "to": "module:protocol_id_1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:asset_d1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:consensus_1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:economic_state_1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:execution_root_1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:executor_1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:validator_schedule_1"}
+{"from": "module:validator_econ_1", "kind": "depends_on", "to": "module:world"}
 {"from": "module:validator_schedule_1", "kind": "depends_on", "to": "module:asset_d1"}
 {"from": "module:validator_schedule_1", "kind": "depends_on", "to": "module:auth_commit_1"}
 {"from": "module:validator_schedule_1", "kind": "depends_on", "to": "module:consensus_gov_d1"}
@@ -2091,6 +2102,9 @@
 {"from": "example:examples/upgrade_framework_1_probe.rs", "kind": "uses", "to": "module:resource_1"}
 {"from": "example:examples/upgrade_framework_1_probe.rs", "kind": "uses", "to": "module:threat_1"}
 {"from": "example:examples/upgrade_framework_1_probe.rs", "kind": "uses", "to": "module:upgrade_framework_1"}
+{"from": "example:examples/validator_econ_1_probe.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:examples/validator_econ_1_probe.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:examples/validator_econ_1_probe.rs", "kind": "uses", "to": "module:validator_econ_1"}
 {"from": "example:examples/validator_schedule_1_probe.rs", "kind": "uses", "to": "module:asset_d1"}
 {"from": "example:examples/validator_schedule_1_probe.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:examples/validator_schedule_1_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2314,6 +2328,12 @@
 {"from": "example:tests/wave24_client_1.rs", "kind": "uses", "to": "module:multi_1"}
 {"from": "example:tests/wave24_client_1.rs", "kind": "uses", "to": "module:sequencer_1"}
 {"from": "example:tests/wave24_client_1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:auth_commit_1"}
+{"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:economic_state_1"}
+{"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:validator_econ_1"}
+{"from": "example:tests/wave25_validator_econ_1.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2661,6 +2681,9 @@
 {"from": "tool:transition_spec_d1_vectors", "kind": "vectors", "to": "schema:bitblock/transition-spec-d1/extension-slot/v1"}
 {"from": "tool:upgrade_framework_1_vectors", "kind": "vectors", "to": "schema:bitblock/upgrade-framework-1/lifecycle-policy/v1"}
 {"from": "tool:upgrade_framework_1_vectors", "kind": "vectors", "to": "schema:bitblock/upgrade-framework-1/transition-audit/v1"}
+{"from": "tool:validator_econ_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/suite-descriptor/v1"}
+{"from": "tool:validator_econ_1_vectors", "kind": "vectors", "to": "schema:bitblock/validator-econ-1/adversarial-assay/v1"}
+{"from": "tool:validator_econ_1_vectors", "kind": "vectors", "to": "schema:bitblock/validator-econ-1/consensus-adapter-receipt/v1"}
 {"from": "tool:validator_schedule_1_vectors", "kind": "vectors", "to": "schema:bitblock/validator-schedule-1/epoch-schedule/v1"}
 {"from": "tool:validator_schedule_1_vectors", "kind": "vectors", "to": "schema:bitblock/validator-schedule-1/schedule-root/v1"}
 {"from": "tool:verkle_feasibility_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}

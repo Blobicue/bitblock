@@ -845,6 +845,17 @@
   ]
  },
  {
+  "id": "sub:validator-econ-1",
+  "members": [
+   "module:validator_econ_1"
+  ],
+  "name": "validator-econ-1",
+  "terms": [
+   "econ",
+   "validator"
+  ]
+ },
+ {
   "id": "sub:validator-econ-d1",
   "members": [
    "module:asset_d1"
