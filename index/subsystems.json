@@ -11,6 +11,30 @@
   ]
  },
  {
+  "id": "sub:admitted-release-core",
+  "members": [
+   "module:release_1"
+  ],
+  "name": "admitted-release-core",
+  "terms": [
+   "admitted",
+   "core",
+   "release"
+  ]
+ },
+ {
+  "id": "sub:admitted-release-record",
+  "members": [
+   "module:release_1"
+  ],
+  "name": "admitted-release-record",
+  "terms": [
+   "admitted",
+   "record",
+   "release"
+  ]
+ },
+ {
   "id": "sub:asset-1",
   "members": [
    "module:asset_1"
@@ -692,6 +716,19 @@
   ]
  },
  {
+  "id": "sub:release-authorization-sign-doc",
+  "members": [
+   "module:release_1"
+  ],
+  "name": "release-authorization-sign-doc",
+  "terms": [
+   "authorization",
+   "doc",
+   "release",
+   "sign"
+  ]
+ },
+ {
   "id": "sub:release-r1",
   "members": [
    "module:release_r1"
@@ -699,6 +736,18 @@
   "name": "release-r1",
   "terms": [
    "release"
+  ]
+ },
+ {
+  "id": "sub:release-sign-doc",
+  "members": [
+   "module:release_1"
+  ],
+  "name": "release-sign-doc",
+  "terms": [
+   "doc",
+   "release",
+   "sign"
   ]
  },
  {

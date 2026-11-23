@@ -204,3 +204,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "profile_1_admission_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "release_1_signing_probe"
+required-features = ["protocol-research"]
