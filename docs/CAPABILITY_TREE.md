@@ -65,7 +65,7 @@ candidate to choose its own authority.
 | PS-022 | REFINE-1 | world | BOUNDED |
 | PS-023 | REFINE-1 | accounting | BOUNDED |
 | PS-024 | REFINE-1 | commitment | BOUNDED |
-| PS-025 | REFINE-1 | vm | LOCKED |
+| PS-025 | REFINE-1 | vm | READY |
 | PS-026 | IDENTITY-D1 | base | BOUNDED |
 | PS-027 | PROTOCOL-ID-1 | base | BOUNDED |
 | PS-028 | IDENTITY-1 | base | LOCKED |
@@ -87,7 +87,7 @@ candidate to choose its own authority.
 | PS-044 | LANGUAGE-R1 | base | BOUNDED |
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
 | PS-046 | VM-D1 | base | BOUNDED |
-| PS-047 | VM-1 | base | READY |
+| PS-047 | VM-1 | base | IMPLEMENTED |
 | PS-048 | PROGRAM-STATE-1 | base | LOCKED |
 | PS-049 | EMERGENCE-R1 | base | BOUNDED |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
@@ -633,7 +633,7 @@ a checker error.
 
 ### `REFINE-1` — Rust/model correspondence
 
-- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=BOUNDED`, `PS-024:REFINE-1@commitment=BOUNDED`, `PS-025:REFINE-1@vm=LOCKED`.
+- **Status:** `PS-021:REFINE-1@base=READY`, `PS-022:REFINE-1@world=BOUNDED`, `PS-023:REFINE-1@accounting=BOUNDED`, `PS-024:REFINE-1@commitment=BOUNDED`, `PS-025:REFINE-1@vm=READY`.
 - **Depends on:** `WORLD-0`.
 - **Motive:** connect abstract world, accounting, and commitment theorems to their actual Rust
   implementations.
@@ -1044,13 +1044,21 @@ is invalid input, not a third collision row.
 
 ### `VM-1` — bounded deterministic interpreter
 
-- **Status:** `PS-047:VM-1@base=READY`.
+- **Status:** `PS-047:VM-1@base=IMPLEMENTED`.
 - **Depends on:** `VM-D1`, `ACCOUNT-1`, `CODEC-1`, and `BOUNDS-1` for the activated language profile.
 - **Motive:** turn exact spatial programs into reproducible state transitions.
-- **Artifact:** bounded interpreter plus an independent reference executor implementing the frozen
-  `VM-D1` semantics, with versioned gas/work, memory, trap, rollback, and commit enforcement.
+- **Artifact:** [`VM_1_RECEIPT.md`](VM_1_RECEIPT.md) and [`vm-1-benchmark-v1.json`](vm-1-benchmark-v1.json)
+  pin the portable (`wasm32`-clean, `--features protocol-research`) bounded spatial interpreter
+  `crates/research/src/vm_1.rs` (`LocalSpatialVmV1`, `VmStepTraceV1`, `VmTickExecutionReceiptV1`,
+  fail-closed `LocalVmBoundsV1::preflight_vm_batch`, atomic rollback across all 7 `VmTrapV1` classes,
+  and exact `History` commit parity), independent pure-Python reference interpreter
+  `tools/vm_1_vectors.py`, differential/adversarial CI suite `tests/wave9a_vm_1.rs`, and 3D visual
+  execution probe `examples/vm_1_visual_probe.rs`.
 - **Gate:** differential and adversarial programs agree per step/root; nontermination and resource
-  exhaustion stop deterministically; renderer/camera mutations cannot affect execution.
+  exhaustion stop deterministically; renderer/camera mutations cannot affect execution. Pinned to
+  `origin/main` commit `4470c5c3df1faa4b658786e6fd4dbfa4f91a7fd6` (tree
+  `6a9ce10200fdf7cdf29125db7f558b493a98121c`, PR #44 CI runs `45090810751` and `45090818732`, 10/10
+  jobs green; `bbmutate vm_1`: 17/17 sites KILLED).
 - **Non-claim:** determinism alone does not make a language safe, useful, decentralized, or
   consensus-authoritative.
 
@@ -1880,7 +1888,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-047:VM-1@base=READY` |
+| 3 | `PS-025:REFINE-1@vm=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-070:CRYPTO-1@base=READY` |
 | 6 | `PS-071:HASH-SOURCE-R1@base=READY` |

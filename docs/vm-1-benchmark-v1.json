@@ -1,0 +1,26 @@
+{
+  "schema": "bitblock/vm-1/benchmark-receipt/v1",
+  "merged_commit": "4470c5c3df1faa4b658786e6fd4dbfa4f91a7fd6",
+  "merged_tree": "6a9ce10200fdf7cdf29125db7f558b493a98121c",
+  "merged_parent": "482e27a118867502a5de29ded1e9d96661a899a0",
+  "pr_number": 44,
+  "ci_runs": [
+    45090810751,
+    45090818732
+  ],
+  "trace_a_tag": "#bb.receipt.sha256.zr6heiln6uepluy6k7h6af3idgwgupnezvrk4ovajdf3t4hqegdq",
+  "tick1_receipt_tag": "#bb.receipt.sha256.vka355inmn2tfu6ebpz73rxtu33c3rrkmfyvh2mvnm7olmeilxkq",
+  "tick2_receipt_tag": "#bb.receipt.sha256.jcytfmhh2nwadjicgufyo7enlbd4tzdlqugvhtrqr75uhlqjoydq",
+  "tick1_gas_used": 115,
+  "tick1_gas_budget": 65536,
+  "tick1_emitted_writes": 8,
+  "tick2_gas_used": 101,
+  "tick2_emitted_writes": 4,
+  "history_parity": true,
+  "bench_runs": 200,
+  "bench_3prog_tick_p50_us": 37.47,
+  "bench_3prog_tick_p95_us": 38.99,
+  "bench_3prog_tick_max_us": 55.09,
+  "bbmutate_vm_1_sites_killed": 17,
+  "bbmutate_vm_1_sites_total": 17
+}
