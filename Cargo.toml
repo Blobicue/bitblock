@@ -160,3 +160,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "upgrade_framework_1_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "genesis_root_parity_1_probe"
+required-features = ["protocol-research"]

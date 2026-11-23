@@ -316,6 +316,18 @@
   ]
  },
  {
+  "id": "sub:genesis-root-parity-1",
+  "members": [
+   "module:genesis_root_parity_1"
+  ],
+  "name": "genesis-root-parity-1",
+  "terms": [
+   "genesis",
+   "parity",
+   "root"
+  ]
+ },
+ {
   "id": "sub:governance-1",
   "members": [
    "module:governance_1"
