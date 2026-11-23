@@ -78,9 +78,9 @@ candidate to choose its own authority.
 | PS-035 | ASSET-D1 | base | BOUNDED |
 | PS-036 | ASSET-D1 | asset-meaning | BOUNDED |
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
-| PS-038 | ASSET-1 | base | READY |
+| PS-038 | ASSET-1 | base | BOUNDED |
 | PS-039 | RESOURCE-1 | base | BOUNDED |
-| PS-040 | ECONOMIC-STATE-1 | base | LOCKED |
+| PS-040 | ECONOMIC-STATE-1 | base | READY |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
@@ -936,12 +936,19 @@ is invalid input, not a third collision row.
 
 ### `ASSET-1` — ownership and transfer
 
-- **Status:** `PS-038:ASSET-1@base=READY`.
+- **Status:** `PS-038:ASSET-1@base=BOUNDED`.
 - **Depends on:** `ASSET-D1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `COMMIT-1`,
   `TRANSITION-SPEC-1`, `PROFILE-D1`.
 - **Motive:** distinguish occupancy, episode identity, and authority to transfer or edit.
-- **Artifact:** chosen account/UTXO/object model; ownership/balance/permission roots; atomic
-  transfer, mint, burn, recovery, and conflict rules; proof-carrying client receipts.
+- **Artifact:** [`ASSET_1_RECEIPT.md`](ASSET_1_RECEIPT.md) (PR #58 commit
+  `25fbbf645940461531d98d3c5f80235441df09f2`, `crates/research/src/asset_1.rs`,
+  `tools/asset_1_vectors.py`, `tests/wave14a_asset_1.rs`, and
+  `examples/asset_1_conservation_probe.rs`) implements separately typed `NativeBalanceRootV1`
+  (`DomainIdV1::NativeBalance`) and `EpisodeOwnershipRootV1` (`DomainIdV1::EpisodeOwnership`) over
+  `DomainPatriciaTrieV1` with atomic transfer-carries-deposit-claim semantics, burn-after-transfer
+  and bedrock exclusion, concurrent-write conflict rollback, `IDENTITY-1`/`AUTH-COMMIT-1`
+  authorization and replay guards, closed supply conservation, and proof-carrying transition
+  receipts (`AssetTransitionReceiptV1`).
 - **Gate:** conservation, authorization, replay, concurrent transfer, burn-after-transfer,
   reorganization, recovery, and root-correspondence vectors pass independently.
 - **Non-claim:** a consistent asset ledger is not yet a cryptocurrency network or safe place for
@@ -971,7 +978,7 @@ is invalid input, not a third collision row.
 
 ### `ECONOMIC-STATE-1` — deterministic stake, reward, and slash state
 
-- **Status:** `PS-040:ECONOMIC-STATE-1@base=LOCKED`.
+- **Status:** `PS-040:ECONOMIC-STATE-1@base=READY`.
 - **Depends on:** `VALIDATOR-ECON-D1`, `ASSET-1`, `RESOURCE-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`,
   `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
 - **Motive:** produce every economic state transition and commitment before execution-root or
@@ -1912,7 +1919,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-038:ASSET-1@base=READY` |
+| 2 | `PS-040:ECONOMIC-STATE-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
