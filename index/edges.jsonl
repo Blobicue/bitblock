@@ -1206,6 +1206,8 @@
 {"from": "doc:docs/metrics/world.md#temporal-world-dynamics", "kind": "cites", "to": "metric:#bb.metric.world.origin-relative-radial-mass-distribution"}
 {"from": "module:asset_d1", "kind": "declares", "to": "schema:bitblock/asset-d1/policy/v1"}
 {"from": "module:asset_d1", "kind": "declares", "to": "schema:bitblock/validator-econ-d1/policy/v1"}
+{"from": "module:auth_commit_1", "kind": "declares", "to": "schema:bitblock/auth-commit-1/auth-nonce-roots/v1"}
+{"from": "module:auth_commit_1", "kind": "declares", "to": "schema:bitblock/auth-commit-1/domain-patricia-proof/v1"}
 {"from": "module:bounds_1", "kind": "declares", "to": "schema:bitblock/bounds-1/local-vm-bounds/v1"}
 {"from": "module:bounds_1", "kind": "declares", "to": "schema:bitblock/bounds-1/protocol-profile/v1"}
 {"from": "module:bounds_1", "kind": "declares", "to": "schema:bitblock/bounds-1/safe-halt-evidence/v1"}
@@ -1377,6 +1379,11 @@
 {"from": "module:asset_d1", "kind": "depends_on", "to": "module:identity_d1"}
 {"from": "module:asset_d1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:asset_d1", "kind": "depends_on", "to": "module:world"}
+{"from": "module:auth_commit_1", "kind": "depends_on", "to": "module:bounds_1"}
+{"from": "module:auth_commit_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:auth_commit_1", "kind": "depends_on", "to": "module:identity_1"}
+{"from": "module:auth_commit_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:auth_commit_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:bounds_1", "kind": "depends_on", "to": "module:language_r1"}
 {"from": "module:bounds_1", "kind": "depends_on", "to": "module:local_bounds"}
 {"from": "module:bounds_1", "kind": "depends_on", "to": "module:protocol"}
@@ -1709,6 +1716,13 @@
 {"from": "module:tick", "kind": "tests_with", "to": "module:world"}
 {"from": "module:transition_spec_1", "kind": "tests_with", "to": "module:asset_d1"}
 {"from": "module:windows_timing", "kind": "tests_with", "to": "module:protocol"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:auth_commit_1"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:commit_state"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:history"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:identity_1"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:examples/auth_commit_1_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/bounds_1_stress_probe.rs", "kind": "uses", "to": "module:bounds_1"}
 {"from": "example:examples/bounds_1_stress_probe.rs", "kind": "uses", "to": "module:commit_r1"}
 {"from": "example:examples/bounds_1_stress_probe.rs", "kind": "uses", "to": "module:commit_state"}
@@ -1930,6 +1944,13 @@
 {"from": "example:tests/wave12c_transition_spec_1.rs", "kind": "uses", "to": "module:resource_1"}
 {"from": "example:tests/wave12c_transition_spec_1.rs", "kind": "uses", "to": "module:threat_1"}
 {"from": "example:tests/wave12c_transition_spec_1.rs", "kind": "uses", "to": "module:transition_spec_1"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:auth_commit_1"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:commit_state"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:history"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:identity_1"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave13_auth_commit_1.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -1995,6 +2016,8 @@
 {"from": "example:tests/wave9a_vm_1.rs", "kind": "uses", "to": "module:vm_d1"}
 {"from": "example:tests/wave9a_vm_1.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/world_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
+{"from": "tool:auth_commit_1_vectors", "kind": "vectors", "to": "schema:bitblock/auth-commit-1/auth-nonce-roots/v1"}
+{"from": "tool:auth_commit_1_vectors", "kind": "vectors", "to": "schema:bitblock/auth-commit-1/domain-patricia-proof/v1"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/local-vm-bounds/v1"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/protocol-profile/v1"}
 {"from": "tool:bounds_1_vectors", "kind": "vectors", "to": "schema:bitblock/bounds-1/safe-halt-evidence/v1"}

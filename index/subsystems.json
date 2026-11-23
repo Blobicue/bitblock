@@ -21,6 +21,17 @@
   ]
  },
  {
+  "id": "sub:auth-commit-1",
+  "members": [
+   "module:auth_commit_1"
+  ],
+  "name": "auth-commit-1",
+  "terms": [
+   "auth",
+   "commit"
+  ]
+ },
+ {
   "id": "sub:bounds-1",
   "members": [
    "module:bounds_1"
