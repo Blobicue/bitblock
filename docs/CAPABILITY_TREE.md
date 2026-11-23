@@ -80,7 +80,7 @@ candidate to choose its own authority.
 | PS-037 | VALIDATOR-ECON-D1 | base | BOUNDED |
 | PS-038 | ASSET-1 | base | BOUNDED |
 | PS-039 | RESOURCE-1 | base | BOUNDED |
-| PS-040 | ECONOMIC-STATE-1 | base | READY |
+| PS-040 | ECONOMIC-STATE-1 | base | BOUNDED |
 | PS-041 | VALIDATOR-ECON-1 | base | LOCKED |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
@@ -978,14 +978,19 @@ is invalid input, not a third collision row.
 
 ### `ECONOMIC-STATE-1` — deterministic stake, reward, and slash state
 
-- **Status:** `PS-040:ECONOMIC-STATE-1@base=READY`.
+- **Status:** `PS-040:ECONOMIC-STATE-1@base=BOUNDED`.
 - **Depends on:** `VALIDATOR-ECON-D1`, `ASSET-1`, `RESOURCE-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`,
   `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
 - **Motive:** produce every economic state transition and commitment before execution-root or
   consensus consumers rely on stake, rewards, or slashing.
-- **Artifact:** independently specified and implemented stake, reward/accrual, issuance, slash,
-  unbonding, withdrawal, and validator-economic state; canonical codecs and separately typed roots;
-  deterministic transition/receipt adapters for the resolved profile.
+- **Artifact:** [`ECONOMIC_STATE_1_RECEIPT.md`](ECONOMIC_STATE_1_RECEIPT.md) (PR #62 commit
+  `685093b438f152942259e94965563f49a964867a`, `crates/research/src/economic_state_1.rs`,
+  `tools/economic_state_1_vectors.py`, `tests/wave15a_economic_state_1.rs`, and
+  `examples/economic_state_1_probe.rs`) implements authenticated `EconomicStateRootV1`
+  (`DomainIdV1::EconomicStake`) and `EconomicTransitionReceiptV1` with `VALIDATOR-ECON-D1` bonded
+  PoS stakes, 21-epoch slashable unbonding queues, 100% slash-to-burn across both active and
+  unbonding stake, permanent equivocation jailing, capped integer-floor pro-rata epoch rewards
+  with zero-leak unissued dust, exact closed accounting, and `eligible_validators()` (`CE-15`).
 - **Gate:** full-rebuild/incremental/root-proof parity and independent execution agree across genesis,
   join/exit, reward, slash, inactivity, fork, restart, recovery, and supply/weight conservation
   vectors; malformed evidence, cross-domain roots, hidden issuance, and partial economic writes
@@ -1925,13 +1930,12 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-040:ECONOMIC-STATE-1@base=READY` |
-| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 4 | `PS-055:VALIDATOR-SCHEDULE-1@base=READY` |
-| 5 | `PS-062:COST-1@base=READY` |
-| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 7 | `PS-086:RELEASE-R1@base=READY` |
-| 8 | `PS-088:RELEASE-R1@candidate=READY` |
+| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 3 | `PS-055:VALIDATOR-SCHEDULE-1@base=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 6 | `PS-086:RELEASE-R1@base=READY` |
+| 7 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1964,7 +1968,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `8` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
