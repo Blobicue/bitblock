@@ -122,7 +122,7 @@ candidate to choose its own authority.
 | PS-079 | PROFILE-D1 | base | BOUNDED |
 | PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
 | PS-081 | GOVERNANCE-1 | base | BOUNDED |
-| PS-082 | UPGRADE-FRAMEWORK-1 | base | READY |
+| PS-082 | UPGRADE-FRAMEWORK-1 | base | BOUNDED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
 | PS-084 | PROFILE-1 | base | LOCKED |
 | PS-085 | SIGNER-OPS-1 | base | LOCKED |
@@ -1679,14 +1679,18 @@ is invalid input, not a third collision row.
 
 ### `UPGRADE-FRAMEWORK-1` — version lifecycle and migration verifier
 
-- **Status:** `PS-082:UPGRADE-FRAMEWORK-1@base=READY`.
+- **Status:** `PS-082:UPGRADE-FRAMEWORK-1@base=BOUNDED`.
 - **Depends on:** `PROTOCOL-ID-1`, `CODEC-1`, `COMMIT-1`, `EXECUTOR-1`, `CRYPTO-1`, `GOVERNANCE-1`,
   `PROFILE-D1`.
 - **Motive:** make genesis activation and later migration distinct while every profile still has an
   explicit version-lifecycle policy.
-- **Artifact:** either an immutable-version policy requiring a new genesis/chain for change, or an
-  in-place-upgrade framework with activation authority, old/new profile roles, bounded migration
-  interface, downgrade rule, historical verifier, interruption/restart, rollback/safe-halt policy.
+- **Artifact:** [`UPGRADE_FRAMEWORK_1_RECEIPT.md`](UPGRADE_FRAMEWORK_1_RECEIPT.md) (PR #70 commit
+  `d283dedaac924065c80f560cb0d7b1c1f8fadb8b`, `crates/research/src/upgrade_framework_1.rs`,
+  `tools/upgrade_framework_1_vectors.py`, `tests/wave17c_upgrade_framework_1.rs`, and
+  `examples/upgrade_framework_1_probe.rs`) implements both an immutable-version policy requiring a
+  new genesis/chain for change and an in-place-upgrade framework with activation authority, old/new
+  profile roles, bounded migration interface, downgrade rule, historical verifier,
+  interruption/restart, rollback/safe-halt policy.
   Preventive in-place migration owns still-sound-but-deprecated profile-selected object-hash,
   signature, proof, credential, codec, VM, and state-layout changes only while one exact last-safe
   parent and every live authority binding remain independently sound. An established live-role
@@ -1950,9 +1954,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-082:UPGRADE-FRAMEWORK-1@base=READY` |
-| 7 | `PS-086:RELEASE-R1@base=READY` |
-| 8 | `PS-088:RELEASE-R1@candidate=READY` |
+| 6 | `PS-086:RELEASE-R1@base=READY` |
+| 7 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -1985,7 +1988,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `8` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
