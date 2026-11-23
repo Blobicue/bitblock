@@ -302,6 +302,12 @@
     ]
    },
    {
+    "item": "DEVNET_TEST_SEEDS",
+    "modules": [
+     "release_1"
+    ]
+   },
+   {
     "item": "DOMAIN_KEY_BITS",
     "modules": [
      "auth_commit_1"
@@ -1044,6 +1050,12 @@
     "item": "RGB_GRADIENT_CHALLENGE_POLICY_SCHEMA",
     "modules": [
      "physical_sensor"
+    ]
+   },
+   {
+    "item": "ReleaseAuthorizationV1",
+    "modules": [
+     "release_1"
     ]
    },
    {
@@ -1846,15 +1858,6 @@
     ]
    },
    {
-    "item": "signing_preimage",
-    "modules": [
-     "consensus_1",
-     "multi_1",
-     "sequencer_1",
-     "sync_replay_authority_1"
-    ]
-   },
-   {
     "item": "smt_present_leaf_hash",
     "modules": [
      "commit_r1"
@@ -1897,7 +1900,7 @@
     ]
    }
   ],
-  "pub_items": 2046,
+  "pub_items": 2070,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1921,7 +1924,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 75767,
+   "code_lines": 76793,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2102,7 +2105,7 @@
    ]
   },
   "test": {
-   "code_lines": 28969,
+   "code_lines": 29045,
    "duplicated_lines": 341,
    "regions": [
     {

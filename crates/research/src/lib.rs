@@ -57,6 +57,7 @@ pub mod profile_1;
 pub mod profile_bootstrap;
 pub mod profile_d1;
 pub mod protocol_id_1;
+pub mod release_1;
 pub mod release_r1;
 pub mod replay_evidence;
 pub mod resource_1;
