@@ -903,6 +903,30 @@
     ]
    },
    {
+    "item": "PINNED_CARGO_LOCK_SHA256",
+    "modules": [
+     "release_r1"
+    ]
+   },
+   {
+    "item": "PINNED_LEAN_TOOLCHAIN_SHA256",
+    "modules": [
+     "release_r1"
+    ]
+   },
+   {
+    "item": "PINNED_RUST_TOOLCHAIN_SHA256",
+    "modules": [
+     "release_r1"
+    ]
+   },
+   {
+    "item": "PINNED_SBOM_SHA256",
+    "modules": [
+     "release_r1"
+    ]
+   },
+   {
     "item": "PROFILE_D1_BOUND_PROFILE_SCHEMA",
     "modules": [
      "profile_d1"
@@ -984,6 +1008,24 @@
     "item": "ProposalStatusV1",
     "modules": [
      "governance_1"
+    ]
+   },
+   {
+    "item": "RELEASE_R1_BUILD_INPUTS_SCHEMA",
+    "modules": [
+     "release_r1"
+    ]
+   },
+   {
+    "item": "RELEASE_R1_CANDIDATE_RECEIPT_SCHEMA",
+    "modules": [
+     "release_r1"
+    ]
+   },
+   {
+    "item": "RELEASE_R1_VERSION",
+    "modules": [
+     "release_r1"
     ]
    },
    {
@@ -1867,7 +1909,7 @@
     ]
    }
   ],
-  "pub_items": 2000,
+  "pub_items": 2020,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1891,7 +1933,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 74014,
+   "code_lines": 74518,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2072,7 +2114,7 @@
    ]
   },
   "test": {
-   "code_lines": 28881,
+   "code_lines": 28913,
    "duplicated_lines": 341,
    "regions": [
     {

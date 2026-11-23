@@ -1352,6 +1352,8 @@
 {"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/parent-collision-audit/v1"}
 {"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/parent-lookup-preimage/v1"}
 {"from": "module:protocol_id_1", "kind": "declares", "to": "schema:bitblock/protocol-id-1/proposal-wrapper/v1"}
+{"from": "module:release_r1", "kind": "declares", "to": "schema:bitblock/release-r1/candidate-build-inputs/v1"}
+{"from": "module:release_r1", "kind": "declares", "to": "schema:bitblock/release-r1/candidate-build-receipt/v1"}
 {"from": "module:render", "kind": "declares", "to": "schema:bitblock/overlay-policy/crosshair/v1"}
 {"from": "module:render", "kind": "declares", "to": "schema:bitblock/reference-renderer-corpus-receipt/v1"}
 {"from": "module:render", "kind": "declares", "to": "schema:bitblock/renderer-profile/host-f64/v1"}
@@ -1688,6 +1690,8 @@
 {"from": "module:protocol_id_1", "kind": "depends_on", "to": "module:crypto_d1"}
 {"from": "module:protocol_id_1", "kind": "depends_on", "to": "module:profile_bootstrap"}
 {"from": "module:protocol_id_1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:release_r1", "kind": "depends_on", "to": "module:profile_d1"}
+{"from": "module:release_r1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:render", "kind": "depends_on", "to": "module:camera"}
 {"from": "module:render", "kind": "depends_on", "to": "module:frame"}
 {"from": "module:render", "kind": "depends_on", "to": "module:protocol"}
@@ -1902,6 +1906,7 @@
 {"from": "module:presentation_output_v2", "kind": "tests_with", "to": "module:frame_v2"}
 {"from": "module:presentation_output_v2", "kind": "tests_with", "to": "module:output_topology"}
 {"from": "module:presentation_output_v2", "kind": "tests_with", "to": "module:presentation"}
+{"from": "module:release_r1", "kind": "tests_with", "to": "module:consensus_1"}
 {"from": "module:resource_1", "kind": "tests_with", "to": "module:local_bounds"}
 {"from": "module:resource_1", "kind": "tests_with", "to": "module:profile_bootstrap"}
 {"from": "module:resource_1", "kind": "tests_with", "to": "module:threat_1"}
@@ -2040,6 +2045,8 @@
 {"from": "example:examples/profile_d1_manifest_probe.rs", "kind": "uses", "to": "module:protocol"}
 {"from": "example:examples/protocol_id_1_audit_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:examples/protocol_id_1_audit_probe.rs", "kind": "uses", "to": "module:protocol_id_1"}
+{"from": "example:examples/release_r1_repro_probe.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:examples/release_r1_repro_probe.rs", "kind": "uses", "to": "module:release_r1"}
 {"from": "example:examples/render_phase_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/render_phase_probe.rs", "kind": "uses", "to": "module:frame"}
 {"from": "example:examples/render_phase_probe.rs", "kind": "uses", "to": "module:render"}
@@ -2352,6 +2359,8 @@
 {"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:identity_d1"}
 {"from": "example:tests/wave26_signer_ops_1.rs", "kind": "uses", "to": "module:signer_ops_1"}
+{"from": "example:tests/wave27_release_r1.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:tests/wave27_release_r1.rs", "kind": "uses", "to": "module:release_r1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2633,6 +2642,8 @@
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/frame/xrgb8888-row-major/v1"}
 {"from": "tool:reference_renderer_vectors", "kind": "vectors", "to": "schema:bitblock/reference-renderer-corpus-receipt/v1"}
+{"from": "tool:release_r1_vectors", "kind": "vectors", "to": "schema:bitblock/release-r1/candidate-build-inputs/v1"}
+{"from": "tool:release_r1_vectors", "kind": "vectors", "to": "schema:bitblock/release-r1/candidate-build-receipt/v1"}
 {"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/overlay-input/v1"}
 {"from": "tool:render_policy_vectors", "kind": "vectors", "to": "schema:bitblock/overlay-policy/crosshair/v1"}
