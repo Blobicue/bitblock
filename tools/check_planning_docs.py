@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "12e09329ed6e554cec118454f9300b4e32dc6c7de64318a05670e87f4ba65e6a"
+EXPECTED_STATUS_DIGEST = "26062e088352f2f1862c0b52dad6ae4c3cdf393cdba479560c0a3f6b5c07c31a"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "29b85bd52b884180a5fe772a2224f033b7282870cde8de2cc2d50d3d88599b86"
+    "beaff8482b9e99cad68b8dd9749806883cc034870cc519413e4b3851331c6a13"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,7 +7779,7 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-029:AUTH-COMMIT-1@base=READY` |",
+        "| 2 | `PS-038:ASSET-1@base=READY` |",
         "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |\n",
+        "| 8 | `PS-088:RELEASE-R1@candidate=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |",
-        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |\n"
-        "| 8 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 8 | `PS-088:RELEASE-R1@candidate=READY` |",
+        "| 8 | `PS-088:RELEASE-R1@candidate=READY` |\n"
+        "| 9 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-029:AUTH-COMMIT-1@base=READY` |",
+        "| 1 | `PS-038:ASSET-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-029:AUTH-COMMIT-1@base=READY` |",
+        "| 2 | `PS-038:ASSET-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )

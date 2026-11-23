@@ -695,16 +695,17 @@ artifact, gate, and non-claim.
    [`crypto-1-audit-v1.json`](crypto-1-audit-v1.json), and
    [`PROFILE_D1_RECEIPT.md`](PROFILE_D1_RECEIPT.md) /
    [`profile-d1-manifest-v1.json`](profile-d1-manifest-v1.json),
-   [`IDENTITY_1_RECEIPT.md`](IDENTITY_1_RECEIPT.md), and
-   [`TRANSITION_SPEC_1_RECEIPT.md`](TRANSITION_SPEC_1_RECEIPT.md)) promote `PROFILE-SCOPE-D0`,
+   [`IDENTITY_1_RECEIPT.md`](IDENTITY_1_RECEIPT.md),
+   [`TRANSITION_SPEC_1_RECEIPT.md`](TRANSITION_SPEC_1_RECEIPT.md), and
+   [`AUTH_COMMIT_1_RECEIPT.md`](AUTH_COMMIT_1_RECEIPT.md)) promote `PROFILE-SCOPE-D0`,
    `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`, `RESOURCE-1`, `GENESIS-D1`,
-   `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`, `TRANSITION-SPEC-1`, `REFINE-1@vm`,
-   and `REFINE-1@base` (completing all 4/4 `REFINE-1` phases across 172 `--trust=0` Lean 4
-   theorems) to `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking `AUTH-COMMIT-1@base=READY`,
-   `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY` (leaving 7 `READY` frontier
-   entries while `EXECUTOR-1`, `GOVERNANCE-1`, `ASSET-1`, and `VALIDATOR-SCHEDULE-1` stay locked on
-   `AUTH-COMMIT-1`, with `program-active` and `verkle-selected` kept explicitly inactive at launch
-   genesis).
+   `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`, `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`,
+   `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4 `REFINE-1` phases across 172 `--trust=0`
+   Lean 4 theorems) to `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking `ASSET-1@base=READY`,
+   `GOVERNANCE-1@base=READY`, `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY`
+   (while `ECONOMIC-STATE-1`, `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, and `EXECUTION-ROOT-1` stay
+   locked on their remaining state-producer prerequisites, with `program-active` and
+   `verkle-selected` kept explicitly inactive at launch genesis).
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
