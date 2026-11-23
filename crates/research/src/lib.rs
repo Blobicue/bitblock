@@ -22,6 +22,7 @@ pub mod commit_r1;
 pub mod commit_state;
 pub mod consensus_gov_d1;
 pub mod coordinate_episode;
+pub mod crypto_1;
 pub mod crypto_d1;
 pub mod display_artifact;
 pub mod display_store;

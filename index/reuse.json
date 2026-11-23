@@ -74,6 +74,24 @@
     ]
    },
    {
+    "item": "CRYPTO_1_CUSTODY_ENVELOPE_SCHEMA",
+    "modules": [
+     "crypto_1"
+    ]
+   },
+   {
+    "item": "CRYPTO_1_KEY_LIFECYCLE_SCHEMA",
+    "modules": [
+     "crypto_1"
+    ]
+   },
+   {
+    "item": "CRYPTO_1_MIGRATION_POLICY_SCHEMA",
+    "modules": [
+     "crypto_1"
+    ]
+   },
+   {
     "item": "CameraBasis",
     "modules": [
      "camera"
@@ -359,6 +377,12 @@
     "item": "MAX_COORDINATE_EPISODES",
     "modules": [
      "coordinate_episode"
+    ]
+   },
+   {
+    "item": "MAX_CUSTODY_KDF_ITERATIONS",
+    "modules": [
+     "crypto_1"
     ]
    },
    {
@@ -866,6 +890,12 @@
     ]
    },
    {
+    "item": "hmac_sha256",
+    "modules": [
+     "crypto_1"
+    ]
+   },
+   {
     "item": "is_occupied",
     "modules": [
      "commit_r1"
@@ -893,6 +923,12 @@
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
+    ]
+   },
+   {
+    "item": "pbkdf2_hmac_sha256_32",
+    "modules": [
+     "crypto_1"
     ]
    },
    {
@@ -972,9 +1008,15 @@
     "modules": [
      "commit_state"
     ]
+   },
+   {
+    "item": "validate_header",
+    "modules": [
+     "crypto_1"
+    ]
    }
   ],
-  "pub_items": 1382,
+  "pub_items": 1406,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -998,7 +1040,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 49351,
+   "code_lines": 50170,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1179,7 +1221,7 @@
    ]
   },
   "test": {
-   "code_lines": 27021,
+   "code_lines": 27097,
    "duplicated_lines": 341,
    "regions": [
     {
