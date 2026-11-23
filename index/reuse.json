@@ -2,6 +2,12 @@
  "dead": {
   "module_private_candidates": [
    {
+    "item": "ALL",
+    "modules": [
+     "execution_root_1"
+    ]
+   },
+   {
     "item": "ASSET_1_RECEIPT_SCHEMA",
     "modules": [
      "asset_1"
@@ -308,6 +314,24 @@
     ]
    },
    {
+    "item": "EXECUTION_ROOT_1_COMPOSITION_SCHEMA",
+    "modules": [
+     "execution_root_1"
+    ]
+   },
+   {
+    "item": "EXECUTION_ROOT_1_REGISTRY_SCHEMA",
+    "modules": [
+     "execution_root_1"
+    ]
+   },
+   {
+    "item": "EXECUTION_ROOT_1_VERSION",
+    "modules": [
+     "execution_root_1"
+    ]
+   },
+   {
     "item": "EXECUTOR_1_BATCH_SCHEMA",
     "modules": [
      "executor_1"
@@ -341,12 +365,6 @@
     "item": "EmptyRootRuleIdV1",
     "modules": [
      "commit_state"
-    ]
-   },
-   {
-    "item": "ExecutorDomainSnapshotV1",
-    "modules": [
-     "executor_1"
     ]
    },
    {
@@ -1275,6 +1293,12 @@
     ]
    },
    {
+    "item": "required_domain_set_digest",
+    "modules": [
+     "execution_root_1"
+    ]
+   },
+   {
     "item": "required_domains",
     "modules": [
      "commit_state"
@@ -1329,7 +1353,7 @@
     ]
    }
   ],
-  "pub_items": 1609,
+  "pub_items": 1634,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1353,7 +1377,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 58771,
+   "code_lines": 59811,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1534,7 +1558,7 @@
    ]
   },
   "test": {
-   "code_lines": 28155,
+   "code_lines": 28214,
    "duplicated_lines": 341,
    "regions": [
     {
