@@ -1,0 +1,74 @@
+{
+  "schema": "bitblock/chain-launch-1/receipt-manifest/v1",
+  "capability_id": "CHAIN-LAUNCH-1",
+  "phase_status": "PS-091:CHAIN-LAUNCH-1@base=BOUNDED",
+  "unlocked_frontier_entry": "PS-058:TESTNET-1@base=READY",
+  "ce_44_qualification": "Base launch-closure checkpoint eligibility only; in-place successor activation remains gated on UPGRADE-1 -> SUCCESSOR-ACTIVATION-1.",
+  "custody_label": "DEVNET-TEST-KEYS-NOT-PRODUCTION-CUSTODY",
+  "provenance": {
+    "pr_number": 96,
+    "merged_commit": "4cfeca3a10f65fd3fc838da73d0b874d83a33670",
+    "merged_tree": "d9419fe4a34d38cb9f371ca1fd59eabc71e10841",
+    "parent_commit": "dc10ad8e392fa067bd1cb223b012a2523ae80144",
+    "ci_run_ids": [
+      45261626964,
+      45261641249
+    ],
+    "ci_jobs_passed": "10/10",
+    "bbmutate_chain_launch_1": "34/34 KILLED (100%)"
+  },
+  "lean4_capsule": {
+    "module": "proof/BitblockProof/LaunchClosureRefinement.lean",
+    "new_theorems_trust_0": 31,
+    "axioms_only": [
+      "propext",
+      "Quot.sound"
+    ],
+    "total_refinement_safety_launch_theorems": 229,
+    "total_theorem_declarations_across_10_modules": 252
+  },
+  "golden_tags": {
+    "bundle_s3": "#bb.receipt.sha256.2cyxfi3goddwndgyfzvjy7y3eofikotdyry4wy7s7wzkubuzjm5a",
+    "manifest_s3": "#bb.policy.sha256.nxam3harptfty3tsbfqz6dtwnt44cgm7zdrd46334v4grcuzuspa",
+    "authorization_s3": "#bb.receipt.sha256.daxw2r45k4zxrw3ypg6iupja7mcfdnyekgxrgsuhhi3gn75s3lua",
+    "package_s3": "#bb.receipt.sha256.2xyk6dukblpqmqfkkovaez7obpgck5j6yki5tqqa3xjcvg5ktgna",
+    "package_s0": "#bb.receipt.sha256.apvfatsiegwvk52s4s25y5ffnhss63flbd5ydehwukrh75yuvcoa"
+  },
+  "equations": {
+    "canonical_s3": {
+      "explicit_artifacts": 7,
+      "supplementary_artifacts": 3,
+      "internal_artifacts": 10,
+      "external_roots": 1,
+      "complete_artifacts": 11,
+      "i2i_edges": 22,
+      "i2e_edges": 3,
+      "e2i_edges": 2,
+      "complete_edges": 27,
+      "internal_preimage_bytes": 5551,
+      "external_preimage_bytes": 1181,
+      "total_preimage_bytes": 6732,
+      "bundle_wire_bytes": 7305,
+      "package_wire_bytes": 9441
+    },
+    "minimal_s0": {
+      "explicit_artifacts": 7,
+      "supplementary_artifacts": 0,
+      "internal_artifacts": 7,
+      "external_roots": 1,
+      "complete_artifacts": 8,
+      "i2i_edges": 13,
+      "i2e_edges": 3,
+      "e2i_edges": 2,
+      "complete_edges": 18,
+      "internal_preimage_bytes": 3751,
+      "external_preimage_bytes": 1181,
+      "total_preimage_bytes": 4932
+    }
+  },
+  "release_timings_us": {
+    "preflight_s3": 0.43,
+    "verify_s3": 556.0,
+    "reject_mutant": 0.03
+  }
+}
