@@ -526,7 +526,8 @@
  {
   "id": "sub:protocol-id-1",
   "members": [
-   "module:profile_bootstrap"
+   "module:profile_bootstrap",
+   "module:protocol_id_1"
   ],
   "name": "protocol-id-1",
   "terms": [

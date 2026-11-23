@@ -350,6 +350,18 @@
     ]
    },
    {
+    "item": "MAX_AUTHORITY_REF_BYTES",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
+    "item": "MAX_AVAILABILITY_PAYLOAD_BYTES",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
     "item": "MAX_COORDINATE_EPISODES",
     "modules": [
      "coordinate_episode"
@@ -386,6 +398,12 @@
     ]
    },
    {
+    "item": "MAX_PROPOSAL_HEADER_BYTES",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
     "item": "MAX_QUERY_MODES",
     "modules": [
      "windows_topology"
@@ -413,6 +431,24 @@
     "item": "MAX_SIZE_QUERY_CYCLES",
     "modules": [
      "windows_topology"
+    ]
+   },
+   {
+    "item": "MAX_WRAPPER_AVAILABILITY_DEPS",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
+    "item": "MAX_WRAPPER_CREDENTIALS",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
+    "item": "MAX_WRAPPER_EVIDENCE",
+    "modules": [
+     "protocol_id_1"
     ]
    },
    {
@@ -467,6 +503,24 @@
     "item": "PHYSICAL_SENSOR_POLICY_SCHEMA",
     "modules": [
      "physical_sensor"
+    ]
+   },
+   {
+    "item": "PROTOCOL_ID_1_COLLISION_AUDIT_SCHEMA",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
+    "item": "PROTOCOL_ID_1_EXACT_CORE_SCHEMA",
+    "modules": [
+     "protocol_id_1"
+    ]
+   },
+   {
+    "item": "PROTOCOL_ID_1_WRAPPER_SCHEMA",
+    "modules": [
+     "protocol_id_1"
     ]
    },
    {
@@ -896,7 +950,7 @@
     ]
    }
   ],
-  "pub_items": 1345,
+  "pub_items": 1370,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -920,7 +974,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 48153,
+   "code_lines": 48799,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1101,7 +1155,7 @@
    ]
   },
   "test": {
-   "code_lines": 26878,
+   "code_lines": 26955,
    "duplicated_lines": 341,
    "regions": [
     {
