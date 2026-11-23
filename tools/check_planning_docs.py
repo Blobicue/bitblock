@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "e2542a5c37e27281cc68d863adb33cba4763ef76b8c539fed5f0e0e67114e532"
+EXPECTED_STATUS_DIGEST = "6fdaa6aa2ea83b271e63ba2f3fb6bb8666d325470fdbf7c834ef14811f73404d"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "2d2de7a1b4368b2b1c55fc18f2bdfeef7c73ab251f75fbfab5ed80cf4785fd60"
+    "2aff5ed94b7cb2c5cc5c5afe23751de47e24b77de9889ead185ea18639525c42"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,8 +7779,8 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |",
-        "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
+        "| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |",
+        "| 3 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
     if frontier_locked == text:
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |\n",
+        "| 10 | `PS-095:SYNC-1@replay-authority=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |",
-        "| 7 | `PS-088:RELEASE-R1@candidate=READY` |\n"
-        "| 8 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 10 | `PS-095:SYNC-1@replay-authority=READY` |",
+        "| 10 | `PS-095:SYNC-1@replay-authority=READY` |\n"
+        "| 11 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-048:PROGRAM-STATE-1@base=READY` |",
+        "| 1 | `PS-041:VALIDATOR-ECON-1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |",
+        "| 2 | `PS-041:VALIDATOR-ECON-1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
