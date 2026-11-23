@@ -1,0 +1,37 @@
+{
+  "schema": "bitblock/genesis-d1-package-receipt/v1",
+  "merged_main_commit": "e563e3d484fc660a1b5a0d4e43c9450c75112521",
+  "merged_main_tree": "0ed82e04083b1d96346b7dd394ef0f78ca594abe",
+  "merged_main_parent": "b11fb99641e33dd453e24c841d2da1b86a35eaaa",
+  "pr_number": 40,
+  "ci_run_ids": [45085689796, 45085694469],
+  "bootstrap_policy_tag": "#bb.policy.sha256.c6rrz6ronxsgc7unwdubse4epp7xobqqu4jkzgnghkpel3ozydta",
+  "vector_launch_state_tag": "#bb.policy.sha256.yzeh72ixpeuu4jyvt3uakqtznxkhmdqbeigcmwl4jlhrsp2dk6va",
+  "vector_genesis_package_tag": "#bb.receipt.sha256.adu7bin3lwr47yecbamuvl6zjiy5qxes46dtvwkm3zfwuzmm3rsq",
+  "devnet_launch_state_tag": "#bb.policy.sha256.jowjx6wyiayipiaypxgmjc2xgynt335d7mrx3qfx2e6pxegyshgq",
+  "devnet_genesis_package_tag": "#bb.receipt.sha256.opfwpshgxba5nu5y4jvuorzlgigbvklier5dymchaauouhvivvgq",
+  "identity_namespace": "bitblock.devnet.v1",
+  "launch_predicates_active": [
+    "asset-active",
+    "economic-charging",
+    "in-place-upgrade",
+    "migration-profile",
+    "stake-consensus",
+    "validator-economics",
+    "validator-rewards"
+  ],
+  "launch_predicates_explicitly_inactive": [
+    "program-active",
+    "post-genesis-program",
+    "verkle-selected"
+  ],
+  "active_domains": 6,
+  "inactive_domains": 2,
+  "validator_count": 4,
+  "validator_shares_bps": [2500, 2500, 2500, 2500],
+  "max_single_validator_bps": 3333,
+  "total_liquid": 200000000000,
+  "total_bonded_stake": 800000000000,
+  "initial_native_supply": 1000000000000,
+  "root_parity_deferred_to": "GENESIS-ROOT-PARITY-1"
+}

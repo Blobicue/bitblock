@@ -67,7 +67,7 @@ candidate to choose its own authority.
 | PS-024 | REFINE-1 | commitment | BOUNDED |
 | PS-025 | REFINE-1 | vm | LOCKED |
 | PS-026 | IDENTITY-D1 | base | BOUNDED |
-| PS-027 | PROTOCOL-ID-1 | base | LOCKED |
+| PS-027 | PROTOCOL-ID-1 | base | READY |
 | PS-028 | IDENTITY-1 | base | LOCKED |
 | PS-029 | AUTH-COMMIT-1 | base | LOCKED |
 | PS-030 | EXECUTION-ROOT-1 | base | LOCKED |
@@ -118,7 +118,7 @@ candidate to choose its own authority.
 | PS-075 | GOVERNANCE-D1 | base | BOUNDED |
 | PS-076 | GOVERNANCE-D1 | authority-choice | BOUNDED |
 | PS-077 | PROFILE-SCOPE-D0 | base | BOUNDED |
-| PS-078 | GENESIS-D1 | base | READY |
+| PS-078 | GENESIS-D1 | base | BOUNDED |
 | PS-079 | PROFILE-D1 | base | LOCKED |
 | PS-080 | TRANSITION-SPEC-1 | base | LOCKED |
 | PS-081 | GOVERNANCE-1 | base | LOCKED |
@@ -691,7 +691,7 @@ a checker error.
 
 ### `PROTOCOL-ID-1` — genesis and non-circular identifier graph
 
-- **Status:** `PS-027:PROTOCOL-ID-1@base=LOCKED`.
+- **Status:** `PS-027:PROTOCOL-ID-1@base=READY`.
 - **Depends on:** `GENESIS-D1`, `IDENTITY-D1`, `CODEC-1`, `COMMIT-R1` root/profile definitions.
 - **Motive:** give signatures, transactions, receipts, roots, and later votes one chain/world
   context without objects hashing themselves or candidates selecting their own authority.
@@ -1525,17 +1525,21 @@ is invalid input, not a third collision row.
 
 ### `GENESIS-D1` — reproducible non-self-referential genesis configuration
 
-- **Status:** `PS-078:GENESIS-D1@base=READY`.
+- **Status:** `PS-078:GENESIS-D1@base=BOUNDED`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `BOUNDS-1`, `CODEC-1`, `COMMIT-R1` profile definitions;
   launch-profile activated logical domains add CE-06–CE-09. Successor target predicates never add
   state to this immutable launch artifact.
 - **Motive:** freeze every initial logical state and authority byte before deriving the identifier
   that later signatures, roots, and profiles bind.
-- **Artifact:** canonical logical genesis payload containing the scope and domain-registry digests,
-  chain/world namespace, initial base state and every active optional-domain descriptor, canonical
-  inactive-domain entries, authorization descriptors, parameter/governance state, validator
-  configuration, suites, and bootstrap/availability policy; it excludes its derived `genesis_id`,
-  profile identifier, and all roots derived from those bytes.
+- **Artifact:** [`GENESIS_D1_RECEIPT.md`](GENESIS_D1_RECEIPT.md) and
+  [`genesis-d1-package-v1.json`](genesis-d1-package-v1.json) (PR #40 commit
+  `e563e3d484fc660a1b5a0d4e43c9450c75112521`, `crates/research/src/genesis_d1.rs`,
+  `tools/genesis_d1_vectors.py`, `tests/wave8a_genesis_d1.rs`, and
+  `examples/genesis_d1_dag_probe.rs`) freeze `BootstrapAvailabilityPolicyV1`,
+  `LaunchGenesisStateV1` (`B_0..Q_0`, validated `BOUNDS-1`/`RESOURCE-1` digests, 7 active launch
+  predicates keeping `program-active` and `verkle-selected` explicitly inactive, 6 active / 2
+  inactive domains, 4 `25%` `< 1/3` devnet validators), and `GenesisPackageV1` while excluding
+  derived `genesis_id`, `profile_id`, and derived state roots.
 - **Gate:** independent codecs reconstruct exactly one logical payload before any ID or root exists;
   every initial logical component and active/inactive domain entry is explicit, and mutation,
   omission, duplicate, alternate-order, unknown-domain, and self-reference tests reject. Root parity
@@ -1874,10 +1878,10 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-021:REFINE-1@base=READY` |
-| 3 | `PS-047:VM-1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-078:GENESIS-D1@base=READY` |
+| 3 | `PS-027:PROTOCOL-ID-1@base=READY` |
+| 4 | `PS-047:VM-1@base=READY` |
+| 5 | `PS-062:COST-1@base=READY` |
+| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 7 | `PS-086:RELEASE-R1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
