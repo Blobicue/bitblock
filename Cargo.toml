@@ -132,3 +132,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "auth_commit_1_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "asset_1_conservation_probe"
+required-features = ["protocol-research"]

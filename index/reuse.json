@@ -2,6 +2,18 @@
  "dead": {
   "module_private_candidates": [
    {
+    "item": "ASSET_1_RECEIPT_SCHEMA",
+    "modules": [
+     "asset_1"
+    ]
+   },
+   {
+    "item": "ASSET_1_ROOTS_SCHEMA",
+    "modules": [
+     "asset_1"
+    ]
+   },
+   {
     "item": "AUTH_COMMIT_1_PROOF_SCHEMA",
     "modules": [
      "auth_commit_1"
@@ -11,6 +23,12 @@
     "item": "AUTH_COMMIT_1_ROOTS_SCHEMA",
     "modules": [
      "auth_commit_1"
+    ]
+   },
+   {
+    "item": "Asset1Error",
+    "modules": [
+     "asset_1"
     ]
    },
    {
@@ -950,6 +968,12 @@
     ]
    },
    {
+    "item": "canonical_sha256",
+    "modules": [
+     "asset_1"
+    ]
+   },
+   {
     "item": "challenge_tag",
     "modules": [
      "physical_sensor"
@@ -1173,7 +1197,7 @@
     ]
    }
   ],
-  "pub_items": 1483,
+  "pub_items": 1499,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1197,7 +1221,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 53976,
+   "code_lines": 54702,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1378,7 +1402,7 @@
    ]
   },
   "test": {
-   "code_lines": 27372,
+   "code_lines": 27468,
    "duplicated_lines": 341,
    "regions": [
     {
