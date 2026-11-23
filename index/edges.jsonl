@@ -1358,6 +1358,8 @@
 {"from": "module:rule_1", "kind": "declares", "to": "schema:bitblock/rule-1/descriptor/v1"}
 {"from": "module:rule_1", "kind": "declares", "to": "schema:bitblock/rule-1/step-receipt/v1"}
 {"from": "module:scale_assay", "kind": "declares", "to": "schema:bitblock/scale-assay/workload-report/v1"}
+{"from": "module:sequencer_1", "kind": "declares", "to": "schema:bitblock/sequencer-1/batch-publication/v1"}
+{"from": "module:sequencer_1", "kind": "declares", "to": "schema:bitblock/sequencer-1/signed-batch-header/v1"}
 {"from": "module:sequential", "kind": "declares", "to": "schema:bitblock/history-mode/open-local-evidence/v1"}
 {"from": "module:sequential", "kind": "declares", "to": "schema:bitblock/history-mode/open-local/v1"}
 {"from": "module:sequential", "kind": "declares", "to": "schema:bitblock/history-mode/sequential-history/v1"}
@@ -1670,6 +1672,15 @@
 {"from": "module:scale_assay", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:scale_assay", "kind": "depends_on", "to": "module:render"}
 {"from": "module:scale_assay", "kind": "depends_on", "to": "module:world"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:bounds_1"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:execution_root_1"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:executor_1"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:journal"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:multi_1"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:protocol_id_1"}
+{"from": "module:sequencer_1", "kind": "depends_on", "to": "module:storage"}
 {"from": "module:sequential", "kind": "depends_on", "to": "module:history"}
 {"from": "module:sequential", "kind": "depends_on", "to": "module:history_store"}
 {"from": "module:sequential", "kind": "depends_on", "to": "module:protocol"}
@@ -1987,6 +1998,8 @@
 {"from": "example:examples/scale_2_probe.rs", "kind": "uses", "to": "module:render"}
 {"from": "example:examples/scale_2_probe.rs", "kind": "uses", "to": "module:scale_assay"}
 {"from": "example:examples/scale_2_probe.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:examples/sequencer_1_replay_probe.rs", "kind": "uses", "to": "module:multi_1"}
+{"from": "example:examples/sequencer_1_replay_probe.rs", "kind": "uses", "to": "module:sequencer_1"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:history"}
 {"from": "example:examples/sidebar_tag_alloc_probe.rs", "kind": "uses", "to": "module:sidebar"}
@@ -2215,6 +2228,11 @@
 {"from": "example:tests/wave19_multi_1.rs", "kind": "uses", "to": "module:identity_d1"}
 {"from": "example:tests/wave19_multi_1.rs", "kind": "uses", "to": "module:multi_1"}
 {"from": "example:tests/wave19_multi_1.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave20_sequencer_1.rs", "kind": "uses", "to": "module:identity_d1"}
+{"from": "example:tests/wave20_sequencer_1.rs", "kind": "uses", "to": "module:journal"}
+{"from": "example:tests/wave20_sequencer_1.rs", "kind": "uses", "to": "module:multi_1"}
+{"from": "example:tests/wave20_sequencer_1.rs", "kind": "uses", "to": "module:sequencer_1"}
+{"from": "example:tests/wave20_sequencer_1.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2519,6 +2537,9 @@
 {"from": "tool:semantic_batch_vectors", "kind": "vectors", "to": "schema:bitblock/history/receipt/v1"}
 {"from": "tool:semantic_batch_vectors", "kind": "vectors", "to": "schema:bitblock/world/chunk-bits-i64-be/v2"}
 {"from": "tool:semantic_batch_vectors", "kind": "vectors", "to": "schema:bitblock/world/chunk-merkle-sha256/v2"}
+{"from": "tool:sequencer_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/suite-descriptor/v1"}
+{"from": "tool:sequencer_1_vectors", "kind": "vectors", "to": "schema:bitblock/sequencer-1/batch-publication/v1"}
+{"from": "tool:sequencer_1_vectors", "kind": "vectors", "to": "schema:bitblock/sequencer-1/signed-batch-header/v1"}
 {"from": "tool:sequential_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:sequential_vectors", "kind": "vectors", "to": "schema:bitblock/history-mode/open-local-evidence/v1"}
 {"from": "tool:sequential_vectors", "kind": "vectors", "to": "schema:bitblock/sequential-history/coordinate-evidence/v1"}

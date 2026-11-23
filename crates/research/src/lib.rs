@@ -58,6 +58,7 @@ pub mod replay_evidence;
 pub mod resource_1;
 pub mod rule_1;
 pub mod scale_assay;
+pub mod sequencer_1;
 pub mod sequential;
 pub mod storage;
 pub mod threat_1;

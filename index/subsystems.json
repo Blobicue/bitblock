@@ -718,6 +718,16 @@
   ]
  },
  {
+  "id": "sub:sequencer-1",
+  "members": [
+   "module:sequencer_1"
+  ],
+  "name": "sequencer-1",
+  "terms": [
+   "sequencer"
+  ]
+ },
+ {
   "id": "sub:sequential-history",
   "members": [
    "module:sequential"
