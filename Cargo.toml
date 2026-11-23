@@ -184,3 +184,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "sync_replay_authority_1_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "client_1_lifecycle_probe"
+required-features = ["protocol-research"]
