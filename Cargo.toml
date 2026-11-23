@@ -152,3 +152,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "executor_1_differential_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "execution_root_1_composer_probe"
+required-features = ["protocol-research"]

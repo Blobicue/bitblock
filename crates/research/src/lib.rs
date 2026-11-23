@@ -30,6 +30,7 @@ pub mod display_artifact;
 pub mod display_store;
 pub mod economic_state_1;
 pub mod emergence_r1;
+pub mod execution_root_1;
 pub mod executor_1;
 pub mod genesis_d1;
 pub mod governance_1;

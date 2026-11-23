@@ -251,6 +251,17 @@
   ]
  },
  {
+  "id": "sub:execution-root-1",
+  "members": [
+   "module:execution_root_1"
+  ],
+  "name": "execution-root-1",
+  "terms": [
+   "execution",
+   "root"
+  ]
+ },
+ {
   "id": "sub:executor-1",
   "members": [
    "module:executor_1"
