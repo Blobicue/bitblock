@@ -180,3 +180,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "consensus_1_bft_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "sync_replay_authority_1_probe"
+required-features = ["protocol-research"]

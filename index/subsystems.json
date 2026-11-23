@@ -772,7 +772,8 @@
  {
   "id": "sub:sync-1",
   "members": [
-   "module:sync_1"
+   "module:sync_1",
+   "module:sync_replay_authority_1"
   ],
   "name": "sync-1",
   "terms": [

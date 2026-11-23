@@ -158,6 +158,12 @@
     ]
    },
    {
+    "item": "CanonicalReplayAuthorityFixtureV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
     "item": "CommitAssayReport",
     "modules": [
      "commit_r1"
@@ -173,6 +179,12 @@
     "item": "ConsensusSafeHaltEvidenceV1",
     "modules": [
      "consensus_1"
+    ]
+   },
+   {
+    "item": "ConsensusToReplayParentAuthorityCommitmentProofV1",
+    "modules": [
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -495,6 +507,12 @@
     ]
    },
    {
+    "item": "HistoricalAcceptedParentAuthorityUseWitnessV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
     "item": "HotStuffValidatorNodeV1",
     "modules": [
      "consensus_1"
@@ -717,6 +735,12 @@
     ]
    },
    {
+    "item": "NormalizedAcceptedAuthorityEntryCoreV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
     "item": "OPEN_LOCAL_EVIDENCE_SCHEMA",
     "modules": [
      "sequential"
@@ -927,6 +951,30 @@
     ]
    },
    {
+    "item": "ReplayEvidencePrefixCompletenessProofV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "ReplayEvidenceRetentionProjectionProofV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "ReplayParentAuthorityStatusProjectionCoreV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "ReplayParentAuthorityStatusProjectionV1",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
     "item": "ReplayedDisplayArtifacts",
     "modules": [
      "display_store"
@@ -1032,6 +1080,24 @@
     "item": "SYNC_1_VERSION",
     "modules": [
      "sync_1"
+    ]
+   },
+   {
+    "item": "SYNC_REPLAY_AUDIT_BUNDLE_SCHEMA",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "SYNC_REPLAY_AUTH_VERSION",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "SYNC_REPLAY_CHECKPOINT_SCHEMA",
+    "modules": [
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -1371,9 +1437,21 @@
     ]
    },
    {
+    "item": "compute_map_digest",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
     "item": "compute_opaque_blob_digest",
     "modules": [
      "sync_1"
+    ]
+   },
+   {
+    "item": "compute_trace_digest",
+    "modules": [
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -1410,6 +1488,12 @@
     "item": "end_iteration",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "entry_id",
+    "modules": [
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -1479,6 +1563,18 @@
     ]
    },
    {
+    "item": "outer_occurrence",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
+    "item": "parent_authority_use",
+    "modules": [
+     "sync_replay_authority_1"
+    ]
+   },
+   {
     "item": "pbkdf2_hmac_sha256_32",
     "modules": [
      "crypto_1"
@@ -1518,6 +1614,12 @@
     "item": "rebuild_projected_tries",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "recompute_view_id",
+    "modules": [
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -1565,7 +1667,8 @@
    {
     "item": "sign_doc_digest",
     "modules": [
-     "consensus_1"
+     "consensus_1",
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -1573,7 +1676,8 @@
     "modules": [
      "consensus_1",
      "multi_1",
-     "sequencer_1"
+     "sequencer_1",
+     "sync_replay_authority_1"
     ]
    },
    {
@@ -1621,7 +1725,7 @@
     ]
    }
   ],
-  "pub_items": 1869,
+  "pub_items": 1905,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1645,7 +1749,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 68597,
+   "code_lines": 70724,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1826,7 +1930,7 @@
    ]
   },
   "test": {
-   "code_lines": 28651,
+   "code_lines": 28693,
    "duplicated_lines": 341,
    "regions": [
     {

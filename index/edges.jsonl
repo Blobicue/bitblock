@@ -1378,6 +1378,8 @@
 {"from": "module:storage", "kind": "declares", "to": "schema:bitblock/test-object/v1"}
 {"from": "module:sync_1", "kind": "declares", "to": "schema:bitblock/sync-1/checkpoint-manifest/v1"}
 {"from": "module:sync_1", "kind": "declares", "to": "schema:bitblock/sync-1/sync-recovery-receipt/v1"}
+{"from": "module:sync_replay_authority_1", "kind": "declares", "to": "schema:bitblock/sync-1/replay-archive-checkpoint/v1"}
+{"from": "module:sync_replay_authority_1", "kind": "declares", "to": "schema:bitblock/sync-1/replay-authority-audit/v1"}
 {"from": "module:threat_1", "kind": "declares", "to": "schema:bitblock/threat-1/adversary-model/v1"}
 {"from": "module:threat_1", "kind": "declares", "to": "schema:bitblock/threat-1/property-claim-map/v1"}
 {"from": "module:tick", "kind": "declares", "to": "schema:bitblock/tick-outcome/v3"}
@@ -1716,6 +1718,12 @@
 {"from": "module:sync_1", "kind": "depends_on", "to": "module:multi_1"}
 {"from": "module:sync_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:sync_1", "kind": "depends_on", "to": "module:sequencer_1"}
+{"from": "module:sync_replay_authority_1", "kind": "depends_on", "to": "module:consensus_1"}
+{"from": "module:sync_replay_authority_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:sync_replay_authority_1", "kind": "depends_on", "to": "module:executor_1"}
+{"from": "module:sync_replay_authority_1", "kind": "depends_on", "to": "module:protocol"}
+{"from": "module:sync_replay_authority_1", "kind": "depends_on", "to": "module:protocol_id_1"}
+{"from": "module:sync_replay_authority_1", "kind": "depends_on", "to": "module:validator_schedule_1"}
 {"from": "module:threat_1", "kind": "depends_on", "to": "module:asset_d1"}
 {"from": "module:threat_1", "kind": "depends_on", "to": "module:consensus_gov_d1"}
 {"from": "module:threat_1", "kind": "depends_on", "to": "module:profile_bootstrap"}
@@ -2035,6 +2043,7 @@
 {"from": "example:examples/sync_1_cluster_probe.rs", "kind": "uses", "to": "module:multi_1"}
 {"from": "example:examples/sync_1_cluster_probe.rs", "kind": "uses", "to": "module:sequencer_1"}
 {"from": "example:examples/sync_1_cluster_probe.rs", "kind": "uses", "to": "module:sync_1"}
+{"from": "example:examples/sync_replay_authority_1_probe.rs", "kind": "uses", "to": "module:sync_replay_authority_1"}
 {"from": "example:examples/transition_spec_1_probe.rs", "kind": "uses", "to": "module:asset_d1"}
 {"from": "example:examples/transition_spec_1_probe.rs", "kind": "uses", "to": "module:bounds_1"}
 {"from": "example:examples/transition_spec_1_probe.rs", "kind": "uses", "to": "module:commit_state"}
@@ -2274,6 +2283,8 @@
 {"from": "example:tests/wave22_consensus_1.rs", "kind": "uses", "to": "module:consensus_1"}
 {"from": "example:tests/wave22_consensus_1.rs", "kind": "uses", "to": "module:identity_d1"}
 {"from": "example:tests/wave22_consensus_1.rs", "kind": "uses", "to": "module:multi_1"}
+{"from": "example:tests/wave23_sync_replay_authority_1.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:tests/wave23_sync_replay_authority_1.rs", "kind": "uses", "to": "module:sync_replay_authority_1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2602,6 +2613,8 @@
 {"from": "tool:sync_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/suite-descriptor/v1"}
 {"from": "tool:sync_1_vectors", "kind": "vectors", "to": "schema:bitblock/sync-1/checkpoint-manifest/v1"}
 {"from": "tool:sync_1_vectors", "kind": "vectors", "to": "schema:bitblock/sync-1/sync-recovery-receipt/v1"}
+{"from": "tool:sync_replay_authority_1_vectors", "kind": "vectors", "to": "schema:bitblock/sync-1/replay-archive-checkpoint/v1"}
+{"from": "tool:sync_replay_authority_1_vectors", "kind": "vectors", "to": "schema:bitblock/sync-1/replay-authority-audit/v1"}
 {"from": "tool:threat_1_and_vm_d1_vectors", "kind": "vectors", "to": "schema:bitblock/threat-1/adversary-model/v1"}
 {"from": "tool:threat_1_and_vm_d1_vectors", "kind": "vectors", "to": "schema:bitblock/threat-1/property-claim-map/v1"}
 {"from": "tool:threat_1_and_vm_d1_vectors", "kind": "vectors", "to": "schema:bitblock/vm-d1/model-step-receipt/v1"}
