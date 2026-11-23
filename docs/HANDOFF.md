@@ -715,8 +715,9 @@ artifact, gate, and non-claim.
    [`VALIDATOR_ECON_1_RECEIPT.md`](VALIDATOR_ECON_1_RECEIPT.md),
    [`SIGNER_OPS_1_RECEIPT.md`](SIGNER_OPS_1_RECEIPT.md),
    [`RELEASE_R1_CANDIDATE_RECEIPT.md`](RELEASE_R1_CANDIDATE_RECEIPT.md) /
-   [`release-r1-candidate-manifest-v1.json`](release-r1-candidate-manifest-v1.json), and
-   [`PROFILE_1_RECEIPT.md`](PROFILE_1_RECEIPT.md)) promote
+   [`release-r1-candidate-manifest-v1.json`](release-r1-candidate-manifest-v1.json),
+   [`PROFILE_1_RECEIPT.md`](PROFILE_1_RECEIPT.md), and
+   [`RELEASE_1_RECEIPT.md`](RELEASE_1_RECEIPT.md)) promote
    `PROFILE-SCOPE-D0`, `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`,
    `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`,
    `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`, `ASSET-1`, `GOVERNANCE-1`, `ECONOMIC-STATE-1`,
@@ -724,7 +725,7 @@ artifact, gate, and non-claim.
    `GENESIS-ROOT-PARITY-1`, `MULTI-1`, `SEQUENCER-1`, `SYNC-1@base`, `CONSENSUS-1@base`,
    `SYNC-1@replay-authority` (`PD-06`), `CLIENT-1@base`, `VALIDATOR-ECON-1@base`,
    `SIGNER-OPS-1@base`, `RELEASE-R1@candidate` (`PD-04` + `PD-05`), `RELEASE-R1@base`,
-   `PROFILE-1@base`, `REFINE-1@vm`, and
+   `PROFILE-1@base`, `RELEASE-1@base`, `RELEASE-1@admitted`, `REFINE-1@vm`, and
    `REFINE-1@base` (completing all 4/4 `REFINE-1` phases plus `ConsensusSafety.lean` across 198
    `--trust=0` Lean 4 theorems,
    all Waves 13–15 launch state producers, dual-language independent execution, L1 §5 two-layer
@@ -736,13 +737,14 @@ artifact, gate, and non-claim.
    replay-authority certificate reconstruction, proof-bound 6-state client finality & reorg
    rollback, receipt-exact consensus-to-economic incentive correspondence + 7-vector
    adversarial simulation, role-separated validator signer safety with 7/7 operational drills,
-   `PROFILE-D1`-bound isolated dual-target clean-build candidate reproducibility, and
-   `PROFILE-1` admitted activated-feature closure for `bitblock.devnet.v1`)
+   `PROFILE-D1`-bound isolated dual-target clean-build candidate reproducibility,
+   `PROFILE-1` admitted activated-feature closure, and `RELEASE-1` 3-of-5 signed admitted release
+   integrity for `bitblock.devnet.v1`)
    to `BOUNDED` and
-   `VM-1` to `IMPLEMENTED`, unlocking **`RELEASE-1@base=READY`**, **`RELEASE-1@admitted=READY`**,
-   and **`UPGRADE-1@base=READY`** alongside `PROGRAM-STATE-1@base=READY`
-   (while `CHAIN-LAUNCH-1`, `TESTNET-1`, `SUCCESSOR-ACTIVATION-1`, and `PROD-OPS-1` stay locked on
-   their remaining release/launch prerequisites, with `program-active` and `verkle-selected`
+   `VM-1` to `IMPLEMENTED`, unlocking **`CHAIN-LAUNCH-1@base=READY`** alongside
+   `UPGRADE-1@base=READY` and `PROGRAM-STATE-1@base=READY`
+   (while `TESTNET-1`, `SUCCESSOR-ACTIVATION-1`, and `PROD-OPS-1` stay locked on
+   their remaining launch/testnet prerequisites, with `program-active` and `verkle-selected`
    kept explicitly inactive at launch genesis).
 
 Useful entry points (run from the repository root; these commands are not a substitute for

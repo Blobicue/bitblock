@@ -129,9 +129,9 @@ candidate to choose its own authority.
 | PS-086 | RELEASE-R1 | base | BOUNDED |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
 | PS-088 | RELEASE-R1 | candidate | BOUNDED |
-| PS-089 | RELEASE-1 | base | READY |
-| PS-090 | RELEASE-1 | admitted | READY |
-| PS-091 | CHAIN-LAUNCH-1 | base | LOCKED |
+| PS-089 | RELEASE-1 | base | BOUNDED |
+| PS-090 | RELEASE-1 | admitted | BOUNDED |
+| PS-091 | CHAIN-LAUNCH-1 | base | READY |
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
@@ -1849,13 +1849,17 @@ is invalid input, not a third collision row.
 
 ### `RELEASE-1` — admitted-profile signed release
 
-- **Status:** `PS-089:RELEASE-1@base=READY`, `PS-090:RELEASE-1@admitted=READY`.
+- **Status:** `PS-089:RELEASE-1@base=BOUNDED`, `PS-090:RELEASE-1@admitted=BOUNDED`.
 - **Depends on:** `RELEASE-R1`, `PROFILE-1`, `CRYPTO-1`.
 - **Motive:** ensure the binary distributed to testnet or production is the reproducible candidate
   whose exact profile closure was admitted, not merely a similarly configured build.
-- **Artifact:** signed release metadata binding source, toolchain/dependency manifest, candidate
-  artifact digest, profile-admission-manifest ID, genesis, features/config, platform artifacts,
-  signer role/suite, and vulnerability/withdrawal status.
+- **Artifact:** [`RELEASE_1_RECEIPT.md`](RELEASE_1_RECEIPT.md) (PR #94 commit
+  `5f682e1f6a046b5c6ec8f16e4c811ecf1000dc1d`, `crates/research/src/release_1.rs`,
+  `tools/release_1_vectors.py`, `tests/wave29_release_1.rs`, and
+  `examples/release_1_signing_probe.rs`): signed release metadata binding source,
+  toolchain/dependency manifest, candidate artifact digest, profile-admission-manifest ID,
+  genesis, features/config, platform artifacts, signer role/suite, and vulnerability/withdrawal
+  status.
 - **Gate:** independent builders reproduce the candidate artifact; the admitted profile closure and
   genesis/root-parity receipt match byte-for-byte; wrong candidate/profile/genesis/platform/suite,
   stale admission, unsigned metadata, unauthorized signer, and signature mutation reject the release
@@ -1865,7 +1869,7 @@ is invalid input, not a third collision row.
 
 ### `CHAIN-LAUNCH-1` — complete authorized launch closure
 
-- **Status:** `PS-091:CHAIN-LAUNCH-1@base=LOCKED`.
+- **Status:** `PS-091:CHAIN-LAUNCH-1@base=READY`.
 - **Depends on:** `PROFILE-SCOPE-D0`, `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`,
   `TRANSITION-SPEC-1`, `PROFILE-1`, `EXECUTION-ROOT-1`, `GENESIS-ROOT-PARITY-1`, `RELEASE-1`,
   `IDENTITY-D1`, `GOVERNANCE-D1`, `CRYPTO-D1`, `CRYPTO-1`, `CODEC-1`.
@@ -2007,8 +2011,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 3 | `PS-062:COST-1@base=READY` |
 | 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 5 | `PS-083:UPGRADE-1@base=READY` |
-| 6 | `PS-089:RELEASE-1@base=READY` |
-| 7 | `PS-090:RELEASE-1@admitted=READY` |
+| 6 | `PS-091:CHAIN-LAUNCH-1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2041,7 +2044,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `6` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
