@@ -81,7 +81,7 @@ candidate to choose its own authority.
 | PS-038 | ASSET-1 | base | BOUNDED |
 | PS-039 | RESOURCE-1 | base | BOUNDED |
 | PS-040 | ECONOMIC-STATE-1 | base | BOUNDED |
-| PS-041 | VALIDATOR-ECON-1 | base | READY |
+| PS-041 | VALIDATOR-ECON-1 | base | BOUNDED |
 | PS-042 | RULE-1 | base | IMPLEMENTED |
 | PS-043 | RULE-1 | rule-choice | BOUNDED |
 | PS-044 | LANGUAGE-R1 | base | BOUNDED |
@@ -124,7 +124,7 @@ candidate to choose its own authority.
 | PS-081 | GOVERNANCE-1 | base | BOUNDED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | BOUNDED |
 | PS-083 | UPGRADE-1 | base | LOCKED |
-| PS-084 | PROFILE-1 | base | LOCKED |
+| PS-084 | PROFILE-1 | base | READY |
 | PS-085 | SIGNER-OPS-1 | base | READY |
 | PS-086 | RELEASE-R1 | base | READY |
 | PS-087 | RELEASE-R1 | framework | BOUNDED |
@@ -1028,13 +1028,17 @@ is invalid input, not a third collision row.
 
 ### `VALIDATOR-ECON-1` — consensus incentives
 
-- **Status:** `PS-041:VALIDATOR-ECON-1@base=READY`.
+- **Status:** `PS-041:VALIDATOR-ECON-1@base=BOUNDED`.
 - **Depends on:** `CONSENSUS-1`, `VALIDATOR-ECON-D1`, `ECONOMIC-STATE-1`, `EXECUTION-ROOT-1`,
   `THREAT-1`; only activated profiles that use economic validator incentives require this node.
 - **Motive:** align validator behavior only after “validator” has an exact protocol meaning.
-- **Artifact:** profile-bound incentive analysis and consensus adapter consuming the already committed
-  economic roots and receipts; issuance/unbonding/slashing correspondence; attack assumptions and
-  monitored loss conditions. It does not produce an execution-root domain.
+- **Artifact:** [`VALIDATOR_ECON_1_RECEIPT.md`](VALIDATOR_ECON_1_RECEIPT.md) (PR #86 commit
+  `7ac86ef897b86f28de8a7abae111ea68994443c0`, `crates/research/src/validator_econ_1.rs`,
+  `tools/validator_econ_1_vectors.py`, `tests/wave25_validator_econ_1.rs`, and
+  `examples/validator_econ_1_probe.rs`): profile-bound incentive analysis and consensus adapter
+  consuming the already committed economic roots and receipts; issuance/unbonding/slashing
+  correspondence; attack assumptions and monitored loss conditions. It does not produce an
+  execution-root domain.
 - **Gate:** safety/liveness arguments and adversarial simulations include bribery, censorship,
   equivocation, griefing, concentration, long-range, and recovery assumptions; every modeled weight,
   reward, and penalty matches an `ECONOMIC-STATE-1` receipt under the accepted execution root.
@@ -1768,7 +1772,7 @@ is invalid input, not a third collision row.
 
 ### `PROFILE-1` — admitted activated-feature closure
 
-- **Status:** `PS-084:PROFILE-1@base=LOCKED`.
+- **Status:** `PS-084:PROFILE-1@base=READY`.
 - **Depends on:** `PROFILE-D1`, `TRANSITION-SPEC-1`, `BOUNDS-1`, `UPGRADE-FRAMEWORK-1`,
   `GENESIS-ROOT-PARITY-1`, `GOVERNANCE-1`, `EXECUTION-ROOT-1`; optional exact-version authority and
   implementation prerequisites are target-profile CE-25–CE-29 and CE-42.
@@ -1982,10 +1986,10 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-041:VALIDATOR-ECON-1@base=READY` |
-| 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
+| 3 | `PS-062:COST-1@base=READY` |
+| 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 5 | `PS-084:PROFILE-1@base=READY` |
 | 6 | `PS-085:SIGNER-OPS-1@base=READY` |
 | 7 | `PS-086:RELEASE-R1@base=READY` |
 | 8 | `PS-088:RELEASE-R1@candidate=READY` |
