@@ -11,6 +11,16 @@
   ]
  },
  {
+  "id": "sub:asset-1",
+  "members": [
+   "module:asset_1"
+  ],
+  "name": "asset-1",
+  "terms": [
+   "asset"
+  ]
+ },
+ {
   "id": "sub:asset-d1",
   "members": [
    "module:asset_d1"
