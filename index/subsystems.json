@@ -132,6 +132,16 @@
   ]
  },
  {
+  "id": "sub:crypto-1",
+  "members": [
+   "module:crypto_1"
+  ],
+  "name": "crypto-1",
+  "terms": [
+   "crypto"
+  ]
+ },
+ {
   "id": "sub:crypto-d1",
   "members": [
    "module:crypto_d1"

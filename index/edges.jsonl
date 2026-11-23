@@ -1233,6 +1233,13 @@
 {"from": "module:consensus_gov_d1", "kind": "declares", "to": "schema:bitblock/governance-d1/policy/v1"}
 {"from": "module:coordinate_episode", "kind": "declares", "to": "schema:bitblock/coordinate-episode-derivation-policy/v1"}
 {"from": "module:coordinate_episode", "kind": "declares", "to": "schema:bitblock/coordinate-episode-evidence/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-backup-envelope/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-ctr/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-enc/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-hkdf-extract/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-mac/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/key-lifecycle-record/v1"}
+{"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/suite-migration-policy/v1"}
 {"from": "module:crypto_d1", "kind": "declares", "to": "schema:bitblock/crypto-d1/key-id/v1"}
 {"from": "module:crypto_d1", "kind": "declares", "to": "schema:bitblock/crypto-d1/signing-preimage/v1"}
 {"from": "module:crypto_d1", "kind": "declares", "to": "schema:bitblock/crypto-d1/suite-descriptor/v1"}
@@ -1392,6 +1399,9 @@
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:program"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:world"}
+{"from": "module:crypto_1", "kind": "depends_on", "to": "module:crypto_d1"}
+{"from": "module:crypto_1", "kind": "depends_on", "to": "module:identity_d1"}
+{"from": "module:crypto_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:crypto_d1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:display", "kind": "depends_on", "to": "module:frame"}
 {"from": "module:display", "kind": "depends_on", "to": "module:frame_v2"}
@@ -1704,6 +1714,8 @@
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:scale_assay"}
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/compositor_buffer_probe.rs", "kind": "uses", "to": "module:sidebar"}
+{"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_1"}
+{"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:emergence_r1"}
 {"from": "example:examples/emergence_r1_visual_probe.rs", "kind": "uses", "to": "module:render"}
@@ -1851,6 +1863,8 @@
 {"from": "example:tests/vm_refinement_correspondence.rs", "kind": "uses", "to": "module:vm_1"}
 {"from": "example:tests/vm_refinement_correspondence.rs", "kind": "uses", "to": "module:vm_d1"}
 {"from": "example:tests/vm_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/wave10_crypto_1.rs", "kind": "uses", "to": "module:crypto_1"}
+{"from": "example:tests/wave10_crypto_1.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -1966,6 +1980,13 @@
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/coordinate-episode-derivation-policy/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/coordinate-episode-evidence/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-backup-envelope/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-ctr/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-enc/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-hkdf-extract/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-mac/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/key-lifecycle-record/v1"}
+{"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/suite-migration-policy/v1"}
 {"from": "tool:crypto_d1_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:crypto_d1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/key-id/v1"}
 {"from": "tool:crypto_d1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-d1/signing-preimage/v1"}
