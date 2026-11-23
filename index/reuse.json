@@ -674,30 +674,6 @@
     ]
    },
    {
-    "item": "Multi1Error",
-    "modules": [
-     "multi_1"
-    ]
-   },
-   {
-    "item": "MultiActorFoldResultV1",
-    "modules": [
-     "multi_1"
-    ]
-   },
-   {
-    "item": "MultiActorHarnessV1",
-    "modules": [
-     "multi_1"
-    ]
-   },
-   {
-    "item": "MultiActorStepOutcomeV1",
-    "modules": [
-     "multi_1"
-    ]
-   },
-   {
     "item": "OPEN_LOCAL_EVIDENCE_SCHEMA",
     "modules": [
      "sequential"
@@ -929,6 +905,18 @@
     "item": "SENSOR_CHALLENGE_SCHEMA",
     "modules": [
      "physical_sensor"
+    ]
+   },
+   {
+    "item": "SEQUENCER_1_BATCH_HEADER_SCHEMA",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
+    "item": "SEQUENCER_1_PUBLICATION_BUNDLE_SCHEMA",
+    "modules": [
+     "sequencer_1"
     ]
    },
    {
@@ -1190,9 +1178,21 @@
     ]
    },
    {
+    "item": "append_publication_body_before_root",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
     "item": "bridge_policy_tag",
     "modules": [
      "ladder_bridge"
+    ]
+   },
+   {
+    "item": "build_sequencer_proposal_core",
+    "modules": [
+     "sequencer_1"
     ]
    },
    {
@@ -1256,9 +1256,27 @@
     ]
    },
    {
+    "item": "compute_batch_body_digest",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
+    "item": "compute_receipts_merkle_root",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
     "item": "compute_typed_node_hash",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "decode_range_request",
+    "modules": [
+     "sequencer_1"
     ]
    },
    {
@@ -1286,12 +1304,6 @@
     ]
    },
    {
-    "item": "envelope_digest",
-    "modules": [
-     "multi_1"
-    ]
-   },
-   {
     "item": "evaluate_trajectory",
     "modules": [
      "emergence_r1"
@@ -1313,12 +1325,6 @@
     "item": "from_event_tag",
     "modules": [
      "commit_state"
-    ]
-   },
-   {
-    "item": "from_fixture",
-    "modules": [
-     "multi_1"
     ]
    },
    {
@@ -1388,9 +1394,21 @@
     ]
    },
    {
+    "item": "read_bounded_frame",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
     "item": "rebuild_projected_tries",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "receipt_merkle_leaf_digest",
+    "modules": [
+     "sequencer_1"
     ]
    },
    {
@@ -1432,7 +1450,8 @@
    {
     "item": "signing_preimage",
     "modules": [
-     "multi_1"
+     "multi_1",
+     "sequencer_1"
     ]
    },
    {
@@ -1444,7 +1463,8 @@
    {
     "item": "unsigned_payload_digest",
     "modules": [
-     "multi_1"
+     "multi_1",
+     "sequencer_1"
     ]
    },
    {
@@ -1460,13 +1480,37 @@
     ]
    },
    {
+    "item": "verify_against_root",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
+    "item": "verify_internal_consistency",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
+    "item": "verify_signature",
+    "modules": [
+     "sequencer_1"
+    ]
+   },
+   {
     "item": "world_bound_payload_digest",
     "modules": [
      "identity_1"
     ]
+   },
+   {
+    "item": "write_bounded_frame",
+    "modules": [
+     "sequencer_1"
+    ]
    }
   ],
-  "pub_items": 1708,
+  "pub_items": 1752,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1490,7 +1534,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 63361,
+   "code_lines": 64672,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1671,7 +1715,7 @@
    ]
   },
   "test": {
-   "code_lines": 28383,
+   "code_lines": 28466,
    "duplicated_lines": 341,
    "regions": [
     {

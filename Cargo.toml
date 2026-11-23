@@ -168,3 +168,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "multi_1_race_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "sequencer_1_replay_probe"
+required-features = ["protocol-research"]
