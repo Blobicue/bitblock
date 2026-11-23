@@ -703,20 +703,22 @@ artifact, gate, and non-claim.
    [`ECONOMIC_STATE_1_RECEIPT.md`](ECONOMIC_STATE_1_RECEIPT.md),
    [`VALIDATOR_SCHEDULE_1_RECEIPT.md`](VALIDATOR_SCHEDULE_1_RECEIPT.md),
    [`EXECUTOR_1_RECEIPT.md`](EXECUTOR_1_RECEIPT.md),
-   [`EXECUTION_ROOT_1_RECEIPT.md`](EXECUTION_ROOT_1_RECEIPT.md), and
-   [`UPGRADE_FRAMEWORK_1_RECEIPT.md`](UPGRADE_FRAMEWORK_1_RECEIPT.md)) promote
+   [`EXECUTION_ROOT_1_RECEIPT.md`](EXECUTION_ROOT_1_RECEIPT.md),
+   [`UPGRADE_FRAMEWORK_1_RECEIPT.md`](UPGRADE_FRAMEWORK_1_RECEIPT.md), and
+   [`GENESIS_ROOT_PARITY_1_RECEIPT.md`](GENESIS_ROOT_PARITY_1_RECEIPT.md)) promote
    `PROFILE-SCOPE-D0`, `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`,
    `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`,
    `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`, `ASSET-1`, `GOVERNANCE-1`, `ECONOMIC-STATE-1`,
    `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `UPGRADE-FRAMEWORK-1`,
-   `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4 `REFINE-1` phases across 172 `--trust=0`
-   Lean 4 theorems, all Waves 13–15 launch state producers, dual-language independent execution,
-   L1 §5 two-layer execution-root composition, and version-lifecycle / compromise verification) to
-   `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking **`GENESIS-ROOT-PARITY-1@base=READY`**,
-   `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY` (while `MULTI-1`, `SEQUENCER-1`,
-   `PROFILE-1`, `UPGRADE-1`, and `CONSENSUS-1` stay locked on their remaining parity / lifecycle /
-   consensus prerequisites, with `program-active` and `verkle-selected` kept explicitly inactive at
-   launch genesis).
+   `GENESIS-ROOT-PARITY-1`, `REFINE-1@vm`, and `REFINE-1@base` (completing all 4/4 `REFINE-1`
+   phases across 172 `--trust=0` Lean 4 theorems, all Waves 13–15 launch state producers,
+   dual-language independent execution, L1 §5 two-layer execution-root composition,
+   version-lifecycle / compromise verification, and 4-way preimage-verified logical-genesis to
+   typed-root parity) to `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking
+   **`MULTI-1@base=READY`**, `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY` (while
+   `SEQUENCER-1`, `SYNC-1`, `CONSENSUS-1`, `PROFILE-1`, `UPGRADE-1`, and `CHAIN-LAUNCH-1` stay
+   locked on their remaining multi-actor / sequencing / consensus / admission prerequisites, with
+   `program-active` and `verkle-selected` kept explicitly inactive at launch genesis).
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):

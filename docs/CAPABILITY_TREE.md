@@ -71,8 +71,8 @@ candidate to choose its own authority.
 | PS-028 | IDENTITY-1 | base | BOUNDED |
 | PS-029 | AUTH-COMMIT-1 | base | BOUNDED |
 | PS-030 | EXECUTION-ROOT-1 | base | BOUNDED |
-| PS-031 | GENESIS-ROOT-PARITY-1 | base | READY |
-| PS-032 | MULTI-1 | base | LOCKED |
+| PS-031 | GENESIS-ROOT-PARITY-1 | base | BOUNDED |
+| PS-032 | MULTI-1 | base | READY |
 | PS-033 | SEQUENCER-1 | base | LOCKED |
 | PS-034 | SYNC-1 | base | LOCKED |
 | PS-035 | ASSET-D1 | base | BOUNDED |
@@ -829,15 +829,21 @@ is invalid input, not a third collision row.
 
 ### `GENESIS-ROOT-PARITY-1` — logical-genesis to typed-root parity
 
-- **Status:** `PS-031:GENESIS-ROOT-PARITY-1@base=READY`.
+- **Status:** `PS-031:GENESIS-ROOT-PARITY-1@base=BOUNDED`.
 - **Depends on:** `GENESIS-D1`, `PROTOCOL-ID-1`, `PROFILE-D1`, `COMMIT-1`, `AUTH-COMMIT-1`,
   `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `CODEC-1`; activated
   launch-domain implementations are the launch-profile conditional prerequisites in CE-22–CE-24.
 - **Motive:** keep pre-ID genesis-byte reproducibility separate from the later claim that every
   implemented typed root reconstructs exactly those logical bytes.
-- **Artifact:** independently decoded logical genesis state, per-domain full rebuilds, the composed
-  execution root, and a parity receipt binding genesis, profile, domain-registry, root-schema, and
-  implementation identifiers.
+- **Artifact:** [`GENESIS_ROOT_PARITY_1_RECEIPT.md`](GENESIS_ROOT_PARITY_1_RECEIPT.md) (PR #72
+  commit `ac4fe8a88896d474cf29e756913d02511fcc5257`, `crates/research/src/genesis_root_parity_1.rs`,
+  `tools/genesis_root_parity_1_vectors.py`, `tests/wave18_genesis_root_parity_1.rs`, and
+  `examples/genesis_root_parity_1_probe.rs`) implements independently decoded `GenesisPackageV1` +
+  `GenesisPreimageBundleV1` verification, 4-way bit-exact per-domain full rebuild / incremental /
+  `EXECUTOR-1` / clean-room Python parity over all 10 active launch domains + inactive
+  `ProgramState` sentinel, composed `ExecutionRootCompositionV1`, and `GenesisRootParityRecordV1`
+  binding genesis, profile, domain-registry, root-schema, and implementation identifiers without
+  modifying `genesis_d1.rs` or `commit_state.rs`.
 - **Gate:** independent decoders reconstruct one logical state; every active typed domain rebuilds
   exactly its declared genesis state and every inactive domain contributes its canonical sentinel;
   full rebuild, initialized incremental state, executor output, and composed root agree. Omitted,
@@ -847,7 +853,7 @@ is invalid input, not a third collision row.
 
 ### `MULTI-1` — deterministic multi-actor harness
 
-- **Status:** `PS-032:MULTI-1@base=LOCKED`.
+- **Status:** `PS-032:MULTI-1@base=READY`.
 - **Depends on:** `AUTH-COMMIT-1`, `TRANSITION-SPEC-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
   `GENESIS-ROOT-PARITY-1`.
 - **Motive:** expose ordering, authorization, and same-coordinate conflicts at the cheapest scale.
@@ -1950,7 +1956,7 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-031:GENESIS-ROOT-PARITY-1@base=READY` |
+| 2 | `PS-032:MULTI-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
