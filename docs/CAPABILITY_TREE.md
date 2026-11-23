@@ -95,7 +95,7 @@ candidate to choose its own authority.
 | PS-052 | SCALE-2 | base | IMPLEMENTED |
 | PS-053 | CONSENSUS-D1 | base | BOUNDED |
 | PS-054 | CONSENSUS-D1 | mechanism-choice | BOUNDED |
-| PS-055 | VALIDATOR-SCHEDULE-1 | base | READY |
+| PS-055 | VALIDATOR-SCHEDULE-1 | base | BOUNDED |
 | PS-056 | CONSENSUS-1 | base | LOCKED |
 | PS-057 | CLIENT-1 | base | LOCKED |
 | PS-058 | TESTNET-1 | base | LOCKED |
@@ -105,7 +105,7 @@ candidate to choose its own authority.
 | PS-062 | COST-1 | base | READY |
 | PS-063 | COST-1 | budget | BOUNDED |
 | PS-064 | CODEC-1 | base | BOUNDED |
-| PS-065 | EXECUTOR-1 | base | LOCKED |
+| PS-065 | EXECUTOR-1 | base | READY |
 | PS-066 | THREAT-D0 | base | BOUNDED |
 | PS-067 | THREAT-1 | base | BOUNDED |
 | PS-068 | CRYPTO-D1 | base | BOUNDED |
@@ -1212,15 +1212,20 @@ is invalid input, not a third collision row.
 
 ### `VALIDATOR-SCHEDULE-1` — deterministic validator schedule state and root
 
-- **Status:** `PS-055:VALIDATOR-SCHEDULE-1@base=READY`.
+- **Status:** `PS-055:VALIDATOR-SCHEDULE-1@base=BOUNDED`.
 - **Depends on:** `CONSENSUS-D1`, `GOVERNANCE-1`, `IDENTITY-1`, `AUTH-COMMIT-1`, `PROTOCOL-ID-1`,
   `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`; stake-weighted consensus adds
   the target-profile conditional producer edge CE-15.
 - **Motive:** make validator membership, weight, epoch, and activation changes ordinary deterministic
   committed state instead of a hidden output of the consensus implementation that later consumes it.
-- **Artifact:** canonical validator descriptors and epochs, join/exit/key-change/weight/activation
-  transitions, separately typed schedule root and receipts, historical lookup, governance adapter,
-  and economic-root input mapping where stake weighting is active.
+- **Artifact:** [`VALIDATOR_SCHEDULE_1_RECEIPT.md`](VALIDATOR_SCHEDULE_1_RECEIPT.md) (PR #64 commit
+  `e61f06135ef526b417f14e2752bca1532b3296c5`, `crates/research/src/validator_schedule_1.rs`,
+  `tools/validator_schedule_1_vectors.py`, `tests/wave15c_validator_schedule_1.rs`, and
+  `examples/validator_schedule_1_probe.rs`) implements authenticated `ValidatorScheduleRootV1`
+  (`DomainIdV1::ValidatorSchedule`) and immutable `EpochValidatorScheduleV1` snapshots with strict
+  2-epoch activation delay (`source_epoch + 2`), `CE-15` economic stake/jail filtering, `4..=128`
+  active bounds, `< 1/3` (`<= 3,333 bps` / `N >= 5` `<= 2,500 bps`) concentration enforcement,
+  delayed key rotations, Safe-Halt refusal, retroactive rewrite blocking, and historical proofs.
 - **Gate:** independent codec/executor and full-rebuild/incremental/proof parity agree across genesis,
   epoch boundaries, simultaneous changes, stale/conflicting governance actions, restart, recovery,
   and stake-root changes; a proposal/vote cannot fabricate or retroactively select its own schedule.
@@ -1391,7 +1396,7 @@ is invalid input, not a third collision row.
 
 ### `EXECUTOR-1` — independent transition executor
 
-- **Status:** `PS-065:EXECUTOR-1@base=LOCKED`.
+- **Status:** `PS-065:EXECUTOR-1@base=READY`.
 - **Depends on:** `TRANSITION-SPEC-1`, `PROFILE-D1`, `BOUNDS-1`, `ACCOUNT-1`, `CODEC-1`, `COMMIT-1`,
   `PROTOCOL-ID-1`, `AUTH-COMMIT-1`, `GOVERNANCE-1`, `VALIDATOR-SCHEDULE-1`; activated state producers
   are the target-profile conditional prerequisites in CE-16–CE-18.
@@ -1931,8 +1936,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-055:VALIDATOR-SCHEDULE-1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
+| 3 | `PS-062:COST-1@base=READY` |
+| 4 | `PS-065:EXECUTOR-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
 | 6 | `PS-086:RELEASE-R1@base=READY` |
 | 7 | `PS-088:RELEASE-R1@candidate=READY` |
