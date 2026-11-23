@@ -294,6 +294,16 @@
   ]
  },
  {
+  "id": "sub:identity-1",
+  "members": [
+   "module:identity_1"
+  ],
+  "name": "identity-1",
+  "terms": [
+   "identity"
+  ]
+ },
+ {
   "id": "sub:identity-d1",
   "members": [
    "module:identity_d1"

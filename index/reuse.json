@@ -308,6 +308,18 @@
     ]
    },
    {
+    "item": "IDENTITY_1_AUTH_RECEIPT_SCHEMA",
+    "modules": [
+     "identity_1"
+    ]
+   },
+   {
+    "item": "IDENTITY_1_AUTH_STATE_SCHEMA",
+    "modules": [
+     "identity_1"
+    ]
+   },
+   {
     "item": "INTERACTION_TAPE_SCHEMA",
     "modules": [
      "interaction"
@@ -557,6 +569,12 @@
     "item": "ParseError",
     "modules": [
      "program"
+    ]
+   },
+   {
+    "item": "PendingRecoveryV1",
+    "modules": [
+     "identity_1"
     ]
    },
    {
@@ -824,6 +842,12 @@
     ]
    },
    {
+    "item": "all_referenced_keys",
+    "modules": [
+     "identity_1"
+    ]
+   },
+   {
     "item": "bridge_policy_tag",
     "modules": [
      "ladder_bridge"
@@ -929,6 +953,12 @@
     "item": "length_squared",
     "modules": [
      "camera"
+    ]
+   },
+   {
+    "item": "matches_preimage",
+    "modules": [
+     "identity_1"
     ]
    },
    {
@@ -1039,9 +1069,15 @@
     "modules": [
      "crypto_1"
     ]
+   },
+   {
+    "item": "world_bound_payload_digest",
+    "modules": [
+     "identity_1"
+    ]
    }
   ],
-  "pub_items": 1418,
+  "pub_items": 1441,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1065,7 +1101,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 50929,
+   "code_lines": 51958,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1246,7 +1282,7 @@
    ]
   },
   "test": {
-   "code_lines": 27127,
+   "code_lines": 27233,
    "duplicated_lines": 341,
    "regions": [
     {

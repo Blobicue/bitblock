@@ -120,3 +120,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "profile_d1_manifest_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "identity_1_auth_probe"
+required-features = ["protocol-research"]
