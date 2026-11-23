@@ -97,7 +97,7 @@ candidate to choose its own authority.
 | PS-054 | CONSENSUS-D1 | mechanism-choice | BOUNDED |
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | BOUNDED |
 | PS-056 | CONSENSUS-1 | base | BOUNDED |
-| PS-057 | CLIENT-1 | base | READY |
+| PS-057 | CLIENT-1 | base | BOUNDED |
 | PS-058 | TESTNET-1 | base | LOCKED |
 | PS-059 | L1-CANDIDATE | base | LOCKED |
 | PS-060 | L1-PRODUCTION | base | LOCKED |
@@ -1296,12 +1296,16 @@ is invalid input, not a third collision row.
 
 ### `CLIENT-1` — proof-bound provisional and accepted client state
 
-- **Status:** `PS-057:CLIENT-1@base=READY`.
+- **Status:** `PS-057:CLIENT-1@base=BOUNDED`.
 - **Depends on:** `CONSENSUS-1`, `EXECUTION-ROOT-1`, and receipt-inclusion commitments from
   `PROTOCOL-ID-1`.
 - **Motive:** stop wallets and observers from presenting a sequencer acknowledgement, candidate
   receipt, confirmed result, and finalized result as the same fact.
-- **Artifact:** typed submitted/admitted/included/confirmed-or-finalized/rejected/replaced states;
+- **Artifact:** [`CLIENT_1_RECEIPT.md`](CLIENT_1_RECEIPT.md) (PR #84 commit
+  `1b7f793f0c655d7421f7318ea3b0cd7225a77075`, `crates/research/src/client_1.rs`,
+  `tools/client_1_vectors.py`, `tests/wave24_client_1.rs`, and
+  `examples/client_1_lifecycle_probe.rs`): typed
+  submitted/admitted/included/confirmed-or-finalized/rejected/replaced states;
   receipt-to-header and state-proof verification; root status; nonce replacement; fork/reorg;
   mint/burn/ownership rollback; expiry and resubmission behavior; light-client trust inputs.
 - **Gate:** pre-testnet model/reference vectors for competing candidates, delayed inclusion,
@@ -1980,12 +1984,11 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-041:VALIDATOR-ECON-1@base=READY` |
 | 3 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 4 | `PS-057:CLIENT-1@base=READY` |
-| 5 | `PS-062:COST-1@base=READY` |
-| 6 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 7 | `PS-085:SIGNER-OPS-1@base=READY` |
-| 8 | `PS-086:RELEASE-R1@base=READY` |
-| 9 | `PS-088:RELEASE-R1@candidate=READY` |
+| 4 | `PS-062:COST-1@base=READY` |
+| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 6 | `PS-085:SIGNER-OPS-1@base=READY` |
+| 7 | `PS-086:RELEASE-R1@base=READY` |
+| 8 | `PS-088:RELEASE-R1@candidate=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2018,7 +2021,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `9` |
+| `ready_frontier_count_u32` | `8` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

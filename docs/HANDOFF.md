@@ -709,14 +709,15 @@ artifact, gate, and non-claim.
    [`MULTI_1_RECEIPT.md`](MULTI_1_RECEIPT.md),
    [`SEQUENCER_1_RECEIPT.md`](SEQUENCER_1_RECEIPT.md),
    [`SYNC_1_BASE_RECEIPT.md`](SYNC_1_BASE_RECEIPT.md),
-   [`CONSENSUS_1_RECEIPT.md`](CONSENSUS_1_RECEIPT.md), and
-   [`SYNC_1_REPLAY_AUTHORITY_RECEIPT.md`](SYNC_1_REPLAY_AUTHORITY_RECEIPT.md)) promote
+   [`CONSENSUS_1_RECEIPT.md`](CONSENSUS_1_RECEIPT.md),
+   [`SYNC_1_REPLAY_AUTHORITY_RECEIPT.md`](SYNC_1_REPLAY_AUTHORITY_RECEIPT.md), and
+   [`CLIENT_1_RECEIPT.md`](CLIENT_1_RECEIPT.md)) promote
    `PROFILE-SCOPE-D0`, `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`,
    `RESOURCE-1`, `GENESIS-D1`, `PROTOCOL-ID-1`, `CRYPTO-1`, `PROFILE-D1`, `IDENTITY-1`,
    `TRANSITION-SPEC-1`, `AUTH-COMMIT-1`, `ASSET-1`, `GOVERNANCE-1`, `ECONOMIC-STATE-1`,
    `VALIDATOR-SCHEDULE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`, `UPGRADE-FRAMEWORK-1`,
    `GENESIS-ROOT-PARITY-1`, `MULTI-1`, `SEQUENCER-1`, `SYNC-1@base`, `CONSENSUS-1@base`,
-   `SYNC-1@replay-authority` (`PD-06`), `REFINE-1@vm`, and
+   `SYNC-1@replay-authority` (`PD-06`), `CLIENT-1@base`, `REFINE-1@vm`, and
    `REFINE-1@base` (completing all 4/4 `REFINE-1` phases plus `ConsensusSafety.lean` across 198
    `--trust=0` Lean 4 theorems,
    all Waves 13–15 launch state producers, dual-language independent execution, L1 §5 two-layer
@@ -724,9 +725,10 @@ artifact, gate, and non-claim.
    logical-genesis to typed-root parity, deterministic multi-actor signed-stream folding,
    accountable centralized multiplayer publication over `STORAGE-1` and loopback TCP, 4-role
    peer synchronization & fault recovery with opaque-only authority retention, HotStuff 2-phase
-   BFT finality + live parent-authority certificate admission, and independent historical
-   replay-authority certificate reconstruction) to `BOUNDED` and
-   `VM-1` to `IMPLEMENTED`, leaving **`CLIENT-1@base=READY`**, **`VALIDATOR-ECON-1@base=READY`**,
+   BFT finality + live parent-authority certificate admission, independent historical
+   replay-authority certificate reconstruction, and proof-bound 6-state client finality & reorg
+   rollback) to `BOUNDED` and
+   `VM-1` to `IMPLEMENTED`, leaving **`VALIDATOR-ECON-1@base=READY`**,
    **`SIGNER-OPS-1@base=READY`**, `PROGRAM-STATE-1@base=READY`, and `RELEASE-R1@candidate=READY`
    (while `PROFILE-1`, `UPGRADE-1`, `RELEASE-1`, `CHAIN-LAUNCH-1`, and `TESTNET-1` stay locked on
    their remaining admission/release prerequisites, with `program-active` and `verkle-selected`
