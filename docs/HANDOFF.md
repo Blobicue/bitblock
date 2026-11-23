@@ -686,12 +686,14 @@ artifact, gate, and non-claim.
    [`RESOURCE_1_RECEIPT.md`](RESOURCE_1_RECEIPT.md) /
    [`resource-1-simulation-v1.json`](resource-1-simulation-v1.json),
    [`GENESIS_D1_RECEIPT.md`](GENESIS_D1_RECEIPT.md) /
-   [`genesis-d1-package-v1.json`](genesis-d1-package-v1.json), and
-   [`PROTOCOL_ID_1_RECEIPT.md`](PROTOCOL_ID_1_RECEIPT.md)) promote `PROFILE-SCOPE-D0`,
-   `LANGUAGE-R1`, `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`, `RESOURCE-1`, `GENESIS-D1`,
-   and `PROTOCOL-ID-1` to `BOUNDED`, unlocking `CRYPTO-1@base=READY` and `PROFILE-D1@base=READY`
-   alongside `VM-1@base=READY` (with `program-active` and `verkle-selected` kept explicitly
-   inactive at launch genesis).
+   [`genesis-d1-package-v1.json`](genesis-d1-package-v1.json),
+   [`PROTOCOL_ID_1_RECEIPT.md`](PROTOCOL_ID_1_RECEIPT.md), and
+   [`VM_1_RECEIPT.md`](VM_1_RECEIPT.md) /
+   [`vm-1-benchmark-v1.json`](vm-1-benchmark-v1.json)) promote `PROFILE-SCOPE-D0`, `LANGUAGE-R1`,
+   `THREAT-1`, `VM-D1`, `BOUNDS-1`, `EMERGENCE-R1`, `RESOURCE-1`, `GENESIS-D1`, and
+   `PROTOCOL-ID-1` to `BOUNDED` and `VM-1` to `IMPLEMENTED`, unlocking `CRYPTO-1@base=READY`,
+   `PROFILE-D1@base=READY`, and `REFINE-1@vm=READY` (with `program-active` and `verkle-selected`
+   kept explicitly inactive at launch genesis).
 
 Useful entry points (run from the repository root; these commands are not a substitute for
 physical display verification):
