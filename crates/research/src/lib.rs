@@ -42,6 +42,7 @@ pub mod journal;
 pub mod ladder_bridge;
 pub mod language_r1;
 pub mod local_bounds;
+pub mod multi_1;
 pub mod octree_commit;
 pub mod optimization;
 pub mod output_color;

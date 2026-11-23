@@ -2,6 +2,12 @@
  "dead": {
   "module_private_candidates": [
    {
+    "item": "ACTOR_A_SEED",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
     "item": "ALL",
     "modules": [
      "execution_root_1"
@@ -650,9 +656,45 @@
     ]
    },
    {
+    "item": "MULTI_1_FOLD_RECEIPT_SCHEMA",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
+    "item": "MULTI_1_STREAM_BUNDLE_SCHEMA",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
     "item": "MetricBinding",
     "modules": [
      "sidebar"
+    ]
+   },
+   {
+    "item": "Multi1Error",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
+    "item": "MultiActorFoldResultV1",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
+    "item": "MultiActorHarnessV1",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
+    "item": "MultiActorStepOutcomeV1",
+    "modules": [
+     "multi_1"
     ]
    },
    {
@@ -1154,9 +1196,21 @@
     ]
    },
    {
+    "item": "canonical_input_set_digest",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
     "item": "canonical_segment_payload_len",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "canonical_sort_key",
+    "modules": [
+     "multi_1"
     ]
    },
    {
@@ -1208,6 +1262,12 @@
     ]
    },
    {
+    "item": "derive_mint_episode_id",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
     "item": "dolly",
     "modules": [
      "camera"
@@ -1223,6 +1283,12 @@
     "item": "end_iteration",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "envelope_digest",
+    "modules": [
+     "multi_1"
     ]
    },
    {
@@ -1247,6 +1313,12 @@
     "item": "from_event_tag",
     "modules": [
      "commit_state"
+    ]
+   },
+   {
+    "item": "from_fixture",
+    "modules": [
+     "multi_1"
     ]
    },
    {
@@ -1358,9 +1430,21 @@
     ]
    },
    {
+    "item": "signing_preimage",
+    "modules": [
+     "multi_1"
+    ]
+   },
+   {
     "item": "smt_present_leaf_hash",
     "modules": [
      "commit_r1"
+    ]
+   },
+   {
+    "item": "unsigned_payload_digest",
+    "modules": [
+     "multi_1"
     ]
    },
    {
@@ -1382,7 +1466,7 @@
     ]
    }
   ],
-  "pub_items": 1676,
+  "pub_items": 1708,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -1406,7 +1490,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 61867,
+   "code_lines": 63361,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -1587,7 +1671,7 @@
    ]
   },
   "test": {
-   "code_lines": 28346,
+   "code_lines": 28383,
    "duplicated_lines": 341,
    "regions": [
     {

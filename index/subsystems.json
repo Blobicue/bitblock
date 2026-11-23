@@ -503,6 +503,16 @@
   ]
  },
  {
+  "id": "sub:multi-1",
+  "members": [
+   "module:multi_1"
+  ],
+  "name": "multi-1",
+  "terms": [
+   "multi"
+  ]
+ },
+ {
   "id": "sub:octree-commit",
   "members": [
    "module:octree_commit"
