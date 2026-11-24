@@ -750,12 +750,14 @@ artifact, gate, and non-claim.
    rollback/safe-halt, archival historical verification, and live `PROFILE-1` successor admission,
    and `SUCCESSOR-ACTIVATION-1` internal-only successor closure bundle, 3-stage acyclic live
    two-purpose parent-authority verification, 3-of-5 Ed25519 activation authorization, and
-   exclusive `DedicatedMigrationBodyV1` availability carrier)
+   exclusive `DedicatedMigrationBodyV1` availability carrier, and `TESTNET-1` 6-OS-process
+   replicated adversarial testnet over loopback TCP with isolated `STORAGE-1` journals,
+   kernel-locked `SIGNER-OPS-1` watermarks, real OS crash/partition/respawn recovery, live `CE-44`
+   `v1 -> v2` switchover, and 200/200 independently vectored protocol schemas)
    to `BOUNDED` and
-   `VM-1` to `IMPLEMENTED`, with **`TESTNET-1@base=READY`** now backed by both authorized launch
-   closure (`CHAIN-LAUNCH-1`) and full `CE-44` in-place successor activation
-   (`UPGRADE-1 -> SUCCESSOR-ACTIVATION-1`) alongside `PROGRAM-STATE-1@base=READY`
-   (while `PROD-OPS-1`, `L1-CANDIDATE`, and `L1-PRODUCTION` stay locked
+   `VM-1` to `IMPLEMENTED`, unlocking **`PROD-OPS-1@base=READY`** (`PS-094`) alongside
+   `PROGRAM-STATE-1@base=READY`, `COST-1@base=READY`, `VERKLE-R1@base=READY`, and
+   `HASH-SOURCE-R1@base=READY` (while `L1-CANDIDATE`, `L1-PRODUCTION`, and `VALUE-1` stay locked
    on their remaining prerequisites, with `program-active` and `verkle-selected`
    kept explicitly inactive at launch genesis).
 
