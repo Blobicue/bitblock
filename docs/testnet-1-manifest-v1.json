@@ -1,0 +1,63 @@
+{
+  "schema": "bitblock/testnet-1/receipt-manifest/v1",
+  "capability_id": "TESTNET-1",
+  "phase_statuses": [
+    "PS-058:TESTNET-1@base=BOUNDED"
+  ],
+  "unlocked_frontier": [
+    "PS-094:PROD-OPS-1@base=READY"
+  ],
+  "ce_44_status": "Live 6-OS-process in-place v1 -> v2 successor activation exercised at height 4 across all 6 processes.",
+  "custody_label": "DEVNET-TEST-KEYS-NOT-PRODUCTION-CUSTODY",
+  "g18_owner": "PROD-OPS-1",
+  "provenance": {
+    "pr_number": 102,
+    "merged_commit": "de0fc44a90ea667cdc8df8ce1f8a1c1e60edf863",
+    "merged_tree": "4db4f1ebc01127025fe6f069997dff61f88d9488",
+    "parent_commit": "f8b05c24e9f62d459b91aa6b9b1d794f62f6964f",
+    "ci_run_ids": [
+      45341374594,
+      45341380984
+    ],
+    "ci_jobs_passed": "10/10",
+    "bbmutate_testnet_1": "22/22 KILLED (100%)",
+    "vectored_schemas_total": "200/200"
+  },
+  "golden_tags": {
+    "cluster_config_v1": "#bb.policy.sha256.rospzqtyzq4vgsd6j6eqjsi6tutvsck7gsj7wpqxerx3jqryc5ja",
+    "coverage_report_v1": "#bb.receipt.sha256.hwsoj2bhgxxyuj5jportmnicjwpxdhvodxi7vktgyctcvkiikt7a"
+  },
+  "wire_bytes": {
+    "cluster_config_v1": 1225,
+    "coverage_report_v1": 499
+  },
+  "fault_lifecycle_coverage": {
+    "passed_controls": 10,
+    "total_controls": 10,
+    "bitmask_u16": 1023,
+    "additional_fail_closed_controls": 8,
+    "os_process_topology": {
+      "validators": 4,
+      "full_verifiers": 1,
+      "archive_recovery_nodes": 1,
+      "respawned_validator_pid_verified": true,
+      "tampered_boot_halt_pid_verified": true
+    }
+  },
+  "release_timings_ms": {
+    "boot_and_v1_finality": 93.63,
+    "fault_kill_partition_respawn": 181.62,
+    "ce_44_v1_to_v2_switchover": 30.87,
+    "post_upgrade_v2_and_archive": 115.18,
+    "total_run": 431.32,
+    "observed_os_pids": [
+      2297837,
+      2297838,
+      2297839,
+      2297841,
+      2297842,
+      2297843
+    ],
+    "observed_restarted_v4_pid": 2297878
+  }
+}

@@ -98,7 +98,7 @@ candidate to choose its own authority.
 | PS-055 | VALIDATOR-SCHEDULE-1 | base | BOUNDED |
 | PS-056 | CONSENSUS-1 | base | BOUNDED |
 | PS-057 | CLIENT-1 | base | BOUNDED |
-| PS-058 | TESTNET-1 | base | READY |
+| PS-058 | TESTNET-1 | base | BOUNDED |
 | PS-059 | L1-CANDIDATE | base | LOCKED |
 | PS-060 | L1-PRODUCTION | base | LOCKED |
 | PS-061 | VALUE-1 | base | LOCKED |
@@ -134,7 +134,7 @@ candidate to choose its own authority.
 | PS-091 | CHAIN-LAUNCH-1 | base | BOUNDED |
 | PS-092 | SUCCESSOR-ACTIVATION-1 | base | BOUNDED |
 | PS-093 | SUCCESSOR-ACTIVATION-1 | activation | BOUNDED |
-| PS-094 | PROD-OPS-1 | base | LOCKED |
+| PS-094 | PROD-OPS-1 | base | READY |
 | PS-095 | SYNC-1 | replay-authority | BOUNDED |
 
 ## Structured phase-dependency manifest
@@ -1321,7 +1321,7 @@ is invalid input, not a third collision row.
 
 ### `TESTNET-1` — replicated adversarial testnet
 
-- **Status:** `PS-058:TESTNET-1@base=READY`.
+- **Status:** `PS-058:TESTNET-1@base=BOUNDED`.
 - **Depends on:** `CLIENT-1`, `PROFILE-1`, `EXECUTOR-1`, `EXECUTION-ROOT-1`,
   `GENESIS-ROOT-PARITY-1`,
   `UPGRADE-FRAMEWORK-1`, `SIGNER-OPS-1`, `RELEASE-1`, `CHAIN-LAUNCH-1`, `GOVERNANCE-1`, `CRYPTO-1`,
@@ -1331,7 +1331,13 @@ is invalid input, not a third collision row.
   verifiers, archive/recovery nodes, fault injector, retained bodies/witnesses/evidence, and public
   coverage results. Every process pins the same launch-manifest and closure-bundle identities. When
   `in-place-upgrade` is active, CE-44 additionally supplies the exact old-to-new successor bundle,
-  target admission, authorization, and availability evidence exercised by every verifier.
+  target admission, authorization, and availability evidence exercised by every verifier. Pinned by
+  [`TESTNET_1_RECEIPT.md`](TESTNET_1_RECEIPT.md) and
+  [`testnet-1-manifest-v1.json`](testnet-1-manifest-v1.json) (PR #102 commit
+  `de0fc44a90ea667cdc8df8ce1f8a1c1e60edf863`, `crates/research/src/testnet_1.rs`, standalone
+  `[[bin]] bitblock-testnet-node` at `examples/bin/testnet_1_node.rs`,
+  `tools/testnet_1_vectors.py`, `tests/wave33_testnet_1.rs`, and
+  `examples/testnet_1_orchestrator_probe.rs`).
 - **Gate:** the admitted stage×gate-subclaim matrix names every owner/artifact/stop condition and has
   no unresolved conditional: `G5.core` and `G15.resource` pass for every profile, each economic
   subclaim passes when its predicate is true, and each active `G19.<feature>` passes while inactive
@@ -2004,7 +2010,7 @@ is invalid input, not a third collision row.
 
 ### `PROD-OPS-1` — production operations and incident safety
 
-- **Status:** `PS-094:PROD-OPS-1@base=LOCKED`.
+- **Status:** `PS-094:PROD-OPS-1@base=READY`.
 - **Depends on:** `TESTNET-1`, `STORAGE-1`, `SIGNER-OPS-1`, `RELEASE-1`, and the safe-halt/recovery
   authority selected by `GOVERNANCE-D1`.
 - **Motive:** preserve the published claim through ordinary failures, attacks, and human operation.
@@ -2028,9 +2034,9 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-058:TESTNET-1@base=READY` |
-| 4 | `PS-062:COST-1@base=READY` |
-| 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 3 | `PS-062:COST-1@base=READY` |
+| 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 5 | `PS-094:PROD-OPS-1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
