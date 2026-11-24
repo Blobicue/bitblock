@@ -16,9 +16,9 @@ pub use bitblock_research::{
     output_topology, physical_sensor, presentation, presentation_output, presentation_output_v2,
     profile_1, profile_bootstrap, profile_d1, protocol_id_1, release_1, release_r1,
     replay_evidence, resource_1, rule_1, scale_assay, sequencer_1, sequential, signer_ops_1,
-    storage, successor_activation_1, sync_1, sync_replay_authority_1, threat_1, transition_spec,
-    transition_spec_1, upgrade_1, upgrade_framework_1, validator_econ_1, validator_schedule_1,
-    verkle_feasibility, vm_1, vm_d1,
+    storage, successor_activation_1, sync_1, sync_replay_authority_1, testnet_1, threat_1,
+    transition_spec, transition_spec_1, upgrade_1, upgrade_framework_1, validator_econ_1,
+    validator_schedule_1, verkle_feasibility, vm_1, vm_d1,
 };
 #[cfg(all(windows, feature = "protocol-research"))]
 pub use bitblock_research::{windows_timing, windows_topology};

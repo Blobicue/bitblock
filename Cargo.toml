@@ -6,6 +6,7 @@ name = "bitblock"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
+default-run = "bitblock"
 
 [features]
 default = []
@@ -219,4 +220,14 @@ required-features = ["protocol-research"]
 
 [[example]]
 name = "successor_activation_1_probe"
+required-features = ["protocol-research"]
+
+[[bin]]
+name = "bitblock-testnet-node"
+path = "examples/bin/testnet_1_node.rs"
+required-features = ["protocol-research"]
+test = false
+
+[[example]]
+name = "testnet_1_orchestrator_probe"
 required-features = ["protocol-research"]
