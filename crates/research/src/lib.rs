@@ -73,6 +73,7 @@ pub mod sync_replay_authority_1;
 pub mod threat_1;
 pub mod transition_spec;
 pub mod transition_spec_1;
+pub mod upgrade_1;
 pub mod upgrade_framework_1;
 pub mod validator_econ_1;
 pub mod validator_schedule_1;

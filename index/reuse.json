@@ -212,6 +212,18 @@
     ]
    },
    {
+    "item": "CanonicalSuccessorCandidateV1",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "CanonicalUpgrade1OutcomeV1",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
     "item": "ClientProvisionalBranchV1",
     "modules": [
      "client_1"
@@ -1113,6 +1125,12 @@
     ]
    },
    {
+    "item": "ReceiptPreservationModeV1",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
     "item": "ReleaseAuthorizationV1",
     "modules": [
      "release_1"
@@ -1383,6 +1401,54 @@
     ]
    },
    {
+    "item": "UPGRADE_1_ACTIVATION_HEIGHT",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_EVIDENCE_MANIFEST_SCHEMA",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_GOV_PARAM_KEY",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_GOV_PARAM_VALUE",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_MIGRATION_SPEC_SCHEMA",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_OCCURRENCE_HANDOFF_SCHEMA",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_REPLAY_RECEIPT_SCHEMA",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
+    "item": "UPGRADE_1_VERSION",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
     "item": "UPGRADE_FRAMEWORK_1_AUDIT_SCHEMA",
     "modules": [
      "upgrade_framework_1"
@@ -1410,6 +1476,12 @@
     "item": "UnbondingEntryV1",
     "modules": [
      "economic_state_1"
+    ]
+   },
+   {
+    "item": "Upgrade1DispositionV1",
+    "modules": [
+     "upgrade_1"
     ]
    },
    {
@@ -1563,6 +1635,12 @@
     ]
    },
    {
+    "item": "build_canonical_devnet_successor_candidate",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
     "item": "build_checkpoint",
     "modules": [
      "sync_1"
@@ -1671,6 +1749,12 @@
     ]
    },
    {
+    "item": "compute_parameter_state_delta_digest",
+    "modules": [
+     "upgrade_1"
+    ]
+   },
+   {
     "item": "compute_trace_digest",
     "modules": [
      "sync_replay_authority_1"
@@ -1698,6 +1782,12 @@
     "item": "decode_range_request",
     "modules": [
      "sequencer_1"
+    ]
+   },
+   {
+    "item": "derive_canonical",
+    "modules": [
+     "upgrade_1"
     ]
    },
    {
@@ -1984,7 +2074,7 @@
     ]
    }
   ],
-  "pub_items": 2104,
+  "pub_items": 2131,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -2008,7 +2098,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 78899,
+   "code_lines": 80273,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2189,7 +2279,7 @@
    ]
   },
   "test": {
-   "code_lines": 29096,
+   "code_lines": 29145,
    "duplicated_lines": 341,
    "regions": [
     {
