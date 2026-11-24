@@ -919,6 +919,54 @@
   ]
  },
  {
+  "id": "sub:successor-activation-1",
+  "members": [
+   "module:successor_activation_1"
+  ],
+  "name": "successor-activation-1",
+  "terms": [
+   "activation",
+   "successor"
+  ]
+ },
+ {
+  "id": "sub:successor-activation-authorization",
+  "members": [
+   "module:successor_activation_1"
+  ],
+  "name": "successor-activation-authorization",
+  "terms": [
+   "activation",
+   "authorization",
+   "successor"
+  ]
+ },
+ {
+  "id": "sub:successor-activation-bundle",
+  "members": [
+   "module:successor_activation_1"
+  ],
+  "name": "successor-activation-bundle",
+  "terms": [
+   "activation",
+   "bundle",
+   "successor"
+  ]
+ },
+ {
+  "id": "sub:successor-activation-sign-doc",
+  "members": [
+   "module:successor_activation_1"
+  ],
+  "name": "successor-activation-sign-doc",
+  "terms": [
+   "activation",
+   "doc",
+   "sign",
+   "successor"
+  ]
+ },
+ {
   "id": "sub:successor-upgrade-evidence-manifest",
   "members": [
    "module:upgrade_1"

@@ -68,6 +68,7 @@ pub mod sequencer_1;
 pub mod sequential;
 pub mod signer_ops_1;
 pub mod storage;
+pub mod successor_activation_1;
 pub mod sync_1;
 pub mod sync_replay_authority_1;
 pub mod threat_1;
