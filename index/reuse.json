@@ -26,6 +26,12 @@
     ]
    },
    {
+    "item": "ActivationAuthorizationV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
     "item": "AdversarialScenarioOutcomeV1",
     "modules": [
      "validator_econ_1"
@@ -200,9 +206,9 @@
     ]
    },
    {
-    "item": "CanonicalDevnetLaunchBuildV1",
+    "item": "CanonicalDevnetSuccessorActivationBuildV1",
     "modules": [
-     "chain_launch_1"
+     "successor_activation_1"
     ]
    },
    {
@@ -213,12 +219,6 @@
    },
    {
     "item": "CanonicalSuccessorCandidateV1",
-    "modules": [
-     "upgrade_1"
-    ]
-   },
-   {
-    "item": "CanonicalUpgrade1OutcomeV1",
     "modules": [
      "upgrade_1"
     ]
@@ -1077,6 +1077,12 @@
     ]
    },
    {
+    "item": "PreflightSuccessorBundleSummaryV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
     "item": "PreparedTick",
     "modules": [
      "history"
@@ -1128,12 +1134,6 @@
     "item": "ReceiptPreservationModeV1",
     "modules": [
      "upgrade_1"
-    ]
-   },
-   {
-    "item": "ReleaseAuthorizationV1",
-    "modules": [
-     "release_1"
     ]
    },
    {
@@ -1269,6 +1269,12 @@
     ]
    },
    {
+    "item": "SUCCESSOR_ACTIVATION_1_VERSION",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
     "item": "SYNC_1_CHECKPOINT_MANIFEST_SCHEMA",
     "modules": [
      "sync_1"
@@ -1341,6 +1347,12 @@
     ]
    },
    {
+    "item": "SuccessorActivationSignDocV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
     "item": "SupplementaryLaunchArtifactV1",
     "modules": [
      "chain_launch_1"
@@ -1395,6 +1407,12 @@
     ]
    },
    {
+    "item": "TrustedActivationAuthorityPolicyV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
     "item": "TxResourceChargeV1",
     "modules": [
      "resource_1"
@@ -1425,9 +1443,9 @@
     ]
    },
    {
-    "item": "UPGRADE_1_MIGRATION_SPEC_SCHEMA",
+    "item": "UPGRADE_1_MERGED_COMMIT_SHA1",
     "modules": [
-     "upgrade_1"
+     "successor_activation_1"
     ]
    },
    {
@@ -1545,6 +1563,36 @@
     ]
    },
    {
+    "item": "VerifiedParentEligibilityV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
+    "item": "VerifiedSuccessorActivationAuthorityContextV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
+    "item": "VerifiedSuccessorActivationOutcomeV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
+    "item": "VerifiedSuccessorPredecessorBaseContextV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
+    "item": "VerifiedSuccessorReleaseAuthorityContextV1",
+    "modules": [
+     "successor_activation_1"
+    ]
+   },
+   {
     "item": "VerkleTreeShapeMetricsV1",
     "modules": [
      "verkle_feasibility"
@@ -1590,12 +1638,6 @@
     "item": "WindowsCompositionTimingObservation",
     "modules": [
      "windows_timing"
-    ]
-   },
-   {
-    "item": "active_schedule",
-    "modules": [
-     "client_1"
     ]
    },
    {
@@ -2074,7 +2116,7 @@
     ]
    }
   ],
-  "pub_items": 2131,
+  "pub_items": 2166,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -2098,7 +2140,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 80273,
+   "code_lines": 82950,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2279,7 +2321,7 @@
    ]
   },
   "test": {
-   "code_lines": 29145,
+   "code_lines": 29208,
    "duplicated_lines": 341,
    "regions": [
     {

@@ -134,6 +134,29 @@ embedded registry bytes, and rank-zero genesis. It remains an abstract
 mathematical model over Lean `Nat` and finite lists, not a verified compiler
 proof of Rust machine code, SHA-256 hashing, or Ed25519 cryptography.
 
+`BitblockProof.SuccessorActivationRefinement` formalizes the
+`SUCCESSOR-ACTIVATION-1` internal-only successor bundle equations, strict-rank
+internal DAG acyclicity, non-serialized 3-stage acyclic authority ordering,
+purpose disjointness, and dedicated migration body exclusivity corresponding to
+`crates/research/src/successor_activation_1.rs` (`SuccessorActivationBundleV1`,
+`SuccessorActivationInternalDependencyNodeV1`, `SuccessorActivationSignDocV1`,
+`ActivationAuthorizationV1`, `DedicatedMigrationBodyV1`,
+`SuccessorActivationCarrierV1`, `VerifiedSuccessorPredecessorBaseContextV1`,
+`VerifiedSuccessorReleaseAuthorityContextV1`, and
+`VerifiedSuccessorActivationAuthorityContextV1`). It proves exact internal-only
+equations (`externalRoots = 0`, `7 + |S_s| = |D_s|`, zero duplicated prior
+launch/genesis/predecessor bytes across both canonical `|S_s| = 3` / `23` edges
+and minimal `|S_s| = 0` / `15` edges), general internal DAG acyclicity from
+strict rank monotonicity (`succ_reachable_rank_lt`, `succ_dag_no_self_loop`,
+`succ_dag_no_two_cycle`), strict ordering `evidence < admission < release`,
+acyclic 3-stage causal ordering preventing activation authority from feeding
+into `SuccessorActivationBundleV1`, strict `ReleaseAuthority ≠ ActivationAuthority`
+purpose disjointness with replay-archive and partial-occurrence exclusion,
+exclusive `DedicatedMigrationBodyV1` enforcement (`0` txs, `0` app subticks,
+`1` migration transition), and powered negative controls. It remains an abstract
+mathematical model over Lean `Nat` and finite lists, not a verified compiler
+proof of Rust machine code, SHA-256 hashing, or Ed25519 cryptography.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own

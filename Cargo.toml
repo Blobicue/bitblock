@@ -216,3 +216,7 @@ required-features = ["protocol-research"]
 [[example]]
 name = "upgrade_1_migration_probe"
 required-features = ["protocol-research"]
+
+[[example]]
+name = "successor_activation_1_probe"
+required-features = ["protocol-research"]
