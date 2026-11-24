@@ -132,8 +132,8 @@ candidate to choose its own authority.
 | PS-089 | RELEASE-1 | base | BOUNDED |
 | PS-090 | RELEASE-1 | admitted | BOUNDED |
 | PS-091 | CHAIN-LAUNCH-1 | base | BOUNDED |
-| PS-092 | SUCCESSOR-ACTIVATION-1 | base | READY |
-| PS-093 | SUCCESSOR-ACTIVATION-1 | activation | READY |
+| PS-092 | SUCCESSOR-ACTIVATION-1 | base | BOUNDED |
+| PS-093 | SUCCESSOR-ACTIVATION-1 | activation | BOUNDED |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
 | PS-095 | SYNC-1 | replay-authority | BOUNDED |
 
@@ -1935,7 +1935,7 @@ is invalid input, not a third collision row.
 
 ### `SUCCESSOR-ACTIVATION-1` — authorized successor-profile closure
 
-- **Status:** `PS-092:SUCCESSOR-ACTIVATION-1@base=READY`, `PS-093:SUCCESSOR-ACTIVATION-1@activation=READY`.
+- **Status:** `PS-092:SUCCESSOR-ACTIVATION-1@base=BOUNDED`, `PS-093:SUCCESSOR-ACTIVATION-1@activation=BOUNDED`.
 - **Depends on:** `CHAIN-LAUNCH-1`, `PROFILE-SCOPE-D0`, `PROFILE-D1`, `TRANSITION-SPEC-1`,
   `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `UPGRADE-1`, `RELEASE-1`, `SYNC-1`, `EXECUTOR-1`,
   `EXECUTION-ROOT-1`, `CONSENSUS-1`, `GOVERNANCE-1`, `CRYPTO-1`, `CODEC-1`, `BOUNDS-1`.
@@ -1968,7 +1968,14 @@ is invalid input, not a third collision row.
   admitted release, every implementation artifact transitively consumed by admission, and the
   concrete `UPGRADE-1` evidence. The migration context and detached activation authorization bind
   both the bundle ID and exact target admission ID. The old profile's envelope availability payload
-  carries the complete bundle before migration execution or activation.
+  carries the complete bundle before migration execution or activation. Bounded implementation,
+  receipt, manifest, Lean 4 formal proof capsule, and independent pure-Python verifier live in
+  [`SUCCESSOR_ACTIVATION_1_RECEIPT.md`](SUCCESSOR_ACTIVATION_1_RECEIPT.md),
+  [`successor-activation-1-manifest-v1.json`](successor-activation-1-manifest-v1.json),
+  [`crates/research/src/successor_activation_1.rs`](../crates/research/src/successor_activation_1.rs),
+  [`proof/BitblockProof/SuccessorActivationRefinement.lean`](../proof/BitblockProof/SuccessorActivationRefinement.lean),
+  [`tools/successor_activation_1_vectors.py`](../tools/successor_activation_1_vectors.py), and
+  [`tests/wave32_successor_activation_1.rs`](../tests/wave32_successor_activation_1.rs).
 - **Gate:** two independent implementations preflight and bounded-decode the old-envelope carrier,
   verify its availability commitment, resolve the predecessor base context, walk the internal DAG
   through the release core, verify the release-purpose certificate and signed admitted release,
@@ -2024,8 +2031,6 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 3 | `PS-058:TESTNET-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-092:SUCCESSOR-ACTIVATION-1@base=READY` |
-| 7 | `PS-093:SUCCESSOR-ACTIVATION-1@activation=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2058,7 +2063,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `7` |
+| `ready_frontier_count_u32` | `5` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
