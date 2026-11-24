@@ -991,6 +991,16 @@
   ]
  },
  {
+  "id": "sub:testnet-1",
+  "members": [
+   "module:testnet_1"
+  ],
+  "name": "testnet-1",
+  "terms": [
+   "testnet"
+  ]
+ },
+ {
   "id": "sub:threat-1",
   "members": [
    "module:threat_1"

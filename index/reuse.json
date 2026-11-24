@@ -206,9 +206,9 @@
     ]
    },
    {
-    "item": "CanonicalDevnetSuccessorActivationBuildV1",
+    "item": "CanonicalDevnetTestnetFixtureV1",
     "modules": [
-     "successor_activation_1"
+     "testnet_1"
     ]
    },
    {
@@ -518,6 +518,66 @@
     ]
    },
    {
+    "item": "FAULT_BIT_ARCHIVAL_HISTORY_PROOF",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_CE44_SWITCHOVER",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_CLEAN_GENESIS_BOOT",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_CRASH_KILL_RECOVERY",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_DOWNGRADE_REJECTION",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_EQUIVOCATION_REFUSAL",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_PARTITION_HEAL",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_POST_UPGRADE_FINALITY",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_PRE_UPGRADE_FINALITY",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "FAULT_BIT_WRONG_ROOT_REORG",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
     "item": "FRAME_INPUT_SCHEMA",
     "modules": [
      "frame"
@@ -711,6 +771,12 @@
     ]
    },
    {
+    "item": "LiveMultiProcessTestnetRunV1",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
     "item": "LoopbackBootstrapBundleV1",
     "modules": [
      "sync_1"
@@ -816,6 +882,12 @@
     "item": "MAX_SIZE_QUERY_CYCLES",
     "modules": [
      "windows_topology"
+    ]
+   },
+   {
+    "item": "MAX_TESTNET_FRAME_BYTES",
+    "modules": [
+     "testnet_1"
     ]
    },
    {
@@ -1365,6 +1437,18 @@
     ]
    },
    {
+    "item": "TESTNET_1_VERSION",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
+    "item": "TESTNET_WIRE_MAGIC",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
     "item": "TINT_LIT_SHIFT",
     "modules": [
      "render"
@@ -1380,6 +1464,12 @@
     "item": "TRANSITION_SPEC_1_RESOLVED_SCHEMA",
     "modules": [
      "transition_spec_1"
+    ]
+   },
+   {
+    "item": "TestnetGateMatrixRowV1",
+    "modules": [
+     "testnet_1"
     ]
    },
    {
@@ -1797,6 +1887,12 @@
     ]
    },
    {
+    "item": "compute_retained_evidence_digest",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
     "item": "compute_trace_digest",
     "modules": [
      "sync_replay_authority_1"
@@ -2080,6 +2176,12 @@
     ]
    },
    {
+    "item": "stop_condition_digest",
+    "modules": [
+     "testnet_1"
+    ]
+   },
+   {
     "item": "validate_domain_kv",
     "modules": [
      "commit_state"
@@ -2116,7 +2218,7 @@
     ]
    }
   ],
-  "pub_items": 2166,
+  "pub_items": 2196,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -2140,7 +2242,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 82950,
+   "code_lines": 84824,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2321,7 +2423,7 @@
    ]
   },
   "test": {
-   "code_lines": 29208,
+   "code_lines": 29238,
    "duplicated_lines": 341,
    "regions": [
     {
