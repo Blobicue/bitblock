@@ -123,7 +123,7 @@ candidate to choose its own authority.
 | PS-080 | TRANSITION-SPEC-1 | base | BOUNDED |
 | PS-081 | GOVERNANCE-1 | base | BOUNDED |
 | PS-082 | UPGRADE-FRAMEWORK-1 | base | BOUNDED |
-| PS-083 | UPGRADE-1 | base | READY |
+| PS-083 | UPGRADE-1 | base | BOUNDED |
 | PS-084 | PROFILE-1 | base | BOUNDED |
 | PS-085 | SIGNER-OPS-1 | base | BOUNDED |
 | PS-086 | RELEASE-R1 | base | BOUNDED |
@@ -132,8 +132,8 @@ candidate to choose its own authority.
 | PS-089 | RELEASE-1 | base | BOUNDED |
 | PS-090 | RELEASE-1 | admitted | BOUNDED |
 | PS-091 | CHAIN-LAUNCH-1 | base | BOUNDED |
-| PS-092 | SUCCESSOR-ACTIVATION-1 | base | LOCKED |
-| PS-093 | SUCCESSOR-ACTIVATION-1 | activation | LOCKED |
+| PS-092 | SUCCESSOR-ACTIVATION-1 | base | READY |
+| PS-093 | SUCCESSOR-ACTIVATION-1 | activation | READY |
 | PS-094 | PROD-OPS-1 | base | LOCKED |
 | PS-095 | SYNC-1 | replay-authority | BOUNDED |
 
@@ -1749,7 +1749,7 @@ is invalid input, not a third collision row.
 
 ### `UPGRADE-1` — deterministic version migration
 
-- **Status:** `PS-083:UPGRADE-1@base=READY`.
+- **Status:** `PS-083:UPGRADE-1@base=BOUNDED`.
 - **Depends on:** `UPGRADE-FRAMEWORK-1`, `EXECUTOR-1`, `GOVERNANCE-1`; target-profile CE-30 and CE-31
   bind the already admitted old-profile instance and distinct new candidate-profile instance
   without reversing their polarity.
@@ -1762,7 +1762,13 @@ is invalid input, not a third collision row.
   predecessor closure, receipt preservation or deterministic re-encoding with bridge/equivalence
   proof, and first new-profile child certificate behavior), dual-profile window if any,
   downgrade rejection, rollback/safe-halt rule, archival historical verifier, and an independent
-  migration extension implemented after the migration specification is frozen.
+  migration extension implemented after the migration specification is frozen. Bounded preventive
+  `v1 -> v2` implementation, receipt, independent pure-Python verifier, and probe live in
+  [`UPGRADE_1_RECEIPT.md`](UPGRADE_1_RECEIPT.md),
+  [`crates/research/src/upgrade_1.rs`](../crates/research/src/upgrade_1.rs),
+  [`tools/upgrade_1_vectors.py`](../tools/upgrade_1_vectors.py),
+  [`tests/wave31_upgrade_1.rs`](../tests/wave31_upgrade_1.rs), and
+  [`examples/upgrade_1_migration_probe.rs`](../examples/upgrade_1_migration_probe.rs).
 - **Gate:** old/new-root vectors and full bounded migration replay agree independently; invariant,
   interruption, restart, unauthorized activation, downgrade, and historical-proof tests pass.
 - **Non-claim:** governance approval or old-root equality alone does not prove migration correctness.
@@ -1929,7 +1935,7 @@ is invalid input, not a third collision row.
 
 ### `SUCCESSOR-ACTIVATION-1` — authorized successor-profile closure
 
-- **Status:** `PS-092:SUCCESSOR-ACTIVATION-1@base=LOCKED`, `PS-093:SUCCESSOR-ACTIVATION-1@activation=LOCKED`.
+- **Status:** `PS-092:SUCCESSOR-ACTIVATION-1@base=READY`, `PS-093:SUCCESSOR-ACTIVATION-1@activation=READY`.
 - **Depends on:** `CHAIN-LAUNCH-1`, `PROFILE-SCOPE-D0`, `PROFILE-D1`, `TRANSITION-SPEC-1`,
   `PROFILE-1`, `UPGRADE-FRAMEWORK-1`, `UPGRADE-1`, `RELEASE-1`, `SYNC-1`, `EXECUTOR-1`,
   `EXECUTION-ROOT-1`, `CONSENSUS-1`, `GOVERNANCE-1`, `CRYPTO-1`, `CODEC-1`, `BOUNDS-1`.
@@ -2018,7 +2024,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | 3 | `PS-058:TESTNET-1@base=READY` |
 | 4 | `PS-062:COST-1@base=READY` |
 | 5 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 6 | `PS-083:UPGRADE-1@base=READY` |
+| 6 | `PS-092:SUCCESSOR-ACTIVATION-1@base=READY` |
+| 7 | `PS-093:SUCCESSOR-ACTIVATION-1@activation=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2051,7 +2058,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `6` |
+| `ready_frontier_count_u32` | `7` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |

@@ -728,7 +728,7 @@ artifact, gate, and non-claim.
    `SYNC-1@replay-authority` (`PD-06`), `CLIENT-1@base`, `VALIDATOR-ECON-1@base`,
    `SIGNER-OPS-1@base`, `RELEASE-R1@candidate` (`PD-04` + `PD-05`), `RELEASE-R1@base`,
    `PROFILE-1@base`, `RELEASE-1@base`, `RELEASE-1@admitted`, `CHAIN-LAUNCH-1@base`,
-   `REFINE-1@vm`, and
+   `UPGRADE-1@base`, `REFINE-1@vm`, and
    `REFINE-1@base` (completing all 4/4 `REFINE-1` phases plus `ConsensusSafety.lean` and
    `LaunchClosureRefinement.lean` across 229 `--trust=0` Lean 4 theorems,
    all Waves 13–15 launch state producers, dual-language independent execution, L1 §5 two-layer
@@ -742,14 +742,16 @@ artifact, gate, and non-claim.
    adversarial simulation, role-separated validator signer safety with 7/7 operational drills,
    `PROFILE-D1`-bound isolated dual-target clean-build candidate reproducibility,
    `PROFILE-1` admitted activated-feature closure, `RELEASE-1` 3-of-5 signed admitted release
-   integrity, and `CHAIN-LAUNCH-1` embedded-only launch-closure bundle, streaming preflight,
-   combined DAG rank enforcement, and 3-of-5 launch authorization for `bitblock.devnet.v1`)
+   integrity, `CHAIN-LAUNCH-1` embedded-only launch-closure bundle, streaming preflight,
+   combined DAG rank enforcement, and 3-of-5 launch authorization for `bitblock.devnet.v1`, and
+   `UPGRADE-1` deterministic preventive `v1 -> v2` migration, occurrence-universe handoff,
+   rollback/safe-halt, archival historical verification, and live `PROFILE-1` successor admission)
    to `BOUNDED` and
-   `VM-1` to `IMPLEMENTED`, unlocking **`TESTNET-1@base=READY`** (base launch-closure checkpoint
-   eligibility only; per `CE-44`, in-place successor activation remains gated on
-   `UPGRADE-1 -> SUCCESSOR-ACTIVATION-1`) alongside
-   `UPGRADE-1@base=READY` and `PROGRAM-STATE-1@base=READY`
-   (while `SUCCESSOR-ACTIVATION-1`, `PROD-OPS-1`, `L1-CANDIDATE`, and `L1-PRODUCTION` stay locked
+   `VM-1` to `IMPLEMENTED`, unlocking **`SUCCESSOR-ACTIVATION-1@base=READY`** and
+   **`SUCCESSOR-ACTIVATION-1@activation=READY`** alongside **`TESTNET-1@base=READY`** (base
+   launch-closure checkpoint eligibility only; per `CE-44`, in-place successor activation remains
+   gated on `SUCCESSOR-ACTIVATION-1`) and `PROGRAM-STATE-1@base=READY`
+   (while `PROD-OPS-1`, `L1-CANDIDATE`, and `L1-PRODUCTION` stay locked
    on their remaining prerequisites, with `program-active` and `verkle-selected`
    kept explicitly inactive at launch genesis).
 
