@@ -919,6 +919,19 @@
   ]
  },
  {
+  "id": "sub:successor-upgrade-evidence-manifest",
+  "members": [
+   "module:upgrade_1"
+  ],
+  "name": "successor-upgrade-evidence-manifest",
+  "terms": [
+   "evidence",
+   "manifest",
+   "successor",
+   "upgrade"
+  ]
+ },
+ {
   "id": "sub:sync-1",
   "members": [
    "module:sync_1",
@@ -970,6 +983,16 @@
   "terms": [
    "spec",
    "transition"
+  ]
+ },
+ {
+  "id": "sub:upgrade-1",
+  "members": [
+   "module:upgrade_1"
+  ],
+  "name": "upgrade-1",
+  "terms": [
+   "upgrade"
   ]
  },
  {
