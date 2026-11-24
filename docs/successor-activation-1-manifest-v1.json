@@ -1,0 +1,63 @@
+{
+  "schema": "bitblock/successor-activation-1/receipt-manifest/v1",
+  "capability_id": "SUCCESSOR-ACTIVATION-1",
+  "phase_statuses": [
+    "PS-092:SUCCESSOR-ACTIVATION-1@base=BOUNDED",
+    "PS-093:SUCCESSOR-ACTIVATION-1@activation=BOUNDED"
+  ],
+  "ce_44_status": "In-place successor activation prerequisite satisfied for TESTNET-1.",
+  "custody_label": "DEVNET-TEST-KEYS-NOT-PRODUCTION-CUSTODY",
+  "provenance": {
+    "pr_number": 100,
+    "merged_commit": "6c7a8f05579804309bb5833a8aaab46b457dfc7c",
+    "merged_tree": "03ba1cb1b15ae8e7a88bd6ede6f1f685b252d0a8",
+    "parent_commit": "343a44d1a0da4d66b6bac644ac5a5f6939730938",
+    "ci_run_ids": [
+      45300580476,
+      45300589929
+    ],
+    "ci_jobs_passed": "10/10",
+    "bbmutate_successor_activation_1": "33/33 KILLED (100%)"
+  },
+  "lean4_capsule": {
+    "module": "proof/BitblockProof/SuccessorActivationRefinement.lean",
+    "new_theorems_trust_0": 33,
+    "axioms_only": [
+      "propext",
+      "Quot.sound"
+    ],
+    "total_refinement_safety_launch_activation_theorems": 262,
+    "total_theorem_declarations_across_11_modules": 285
+  },
+  "golden_tags": {
+    "bundle_s3": "#bb.receipt.sha256.cxa644n2sko6qt6o7duozk233o44gcnnyewn5fmi675sa3xxdowa",
+    "sign_doc_s3": "#bb.policy.sha256.6iyowm3ua37gjffzadytwdxkfuzpczstvicug62kmoevvyjwfamq",
+    "authorization_s3": "#bb.receipt.sha256.75nq5siuuiml4z32d2rspnijjz5vub3rt7nejvmpeks3zdzvfnla",
+    "carrier_s3": "#bb.receipt.sha256.rsp5f3zibybn6kywjbeqjld2i6ccuta6daczhzkwyqacfc22klwq",
+    "carrier_s0": "#bb.receipt.sha256.7jwabo3fyxhattv2hjveqsahguti3sdkc3eyivy6352cnf7hrnda"
+  },
+  "equations": {
+    "canonical_s3": {
+      "external_roots": 0,
+      "explicit_artifacts": 7,
+      "supplementary_artifacts": 3,
+      "internal_artifacts": 10,
+      "internal_edges": 23,
+      "internal_preimage_bytes": 4727,
+      "bundle_wire_bytes": 6495
+    },
+    "minimal_s0": {
+      "external_roots": 0,
+      "explicit_artifacts": 7,
+      "supplementary_artifacts": 0,
+      "internal_artifacts": 7,
+      "internal_edges": 15,
+      "internal_preimage_bytes": 3911
+    }
+  },
+  "release_timings_us": {
+    "preflight_s3": 0.35,
+    "verify_s3": 768.66,
+    "reject_mutant": 0.01
+  }
+}
