@@ -1,0 +1,80 @@
+{
+  "schema": "bitblock/cost-1/platform-receipt-bundle/v1",
+  "capability": "PS-062:COST-1@base",
+  "disposition": "BOUNDED",
+  "subject": {
+    "commit": "66d79dbc017f0751322abb94b67a35b47dc9b175",
+    "tree": "87f06850f95990906201e7e947f4f4ed27429f63",
+    "parent": "3f0838e4489513b8b4dbcb717da7ba5f18431845",
+    "pr": 115,
+    "ciRuns": [45555898162, 45555891444],
+    "ciStatus": "10/10 green",
+    "bbmutateCost1": "25/25 KILLED (100%)",
+    "command": "cargo run --release --quiet --features protocol-research --example cost_1_platform_probe"
+  },
+  "host": {
+    "arch": "aarch64-unknown-linux-gnu",
+    "toolchain": "rust 1.96.0",
+    "isolated": false
+  },
+  "profileTag": "#bb.policy.sha256.2lyhmz5uypgxkhwjmvlho7psyiaoc7glzrhtcx4gyikqqgtohrkq",
+  "budgets": {
+    "maxLightWasmGzipBytes": 256000,
+    "maxPhoneSessionBytes": 1048576,
+    "maxWalletProofBytes": 12288,
+    "maxPurchaseTxWireBytes": 512,
+    "maxReceiptWireBytes": 256,
+    "maxVerifyWalletProofUs": 500,
+    "maxApplyPurchaseSplitUs": 1000,
+    "maxBlockVerifyBudgetMs": 400,
+    "maxAnnualMibAt10Tps": 262144
+  },
+  "observedFixed": {
+    "lightWasmGzipBytes": 149181,
+    "lightWasmRawBytes": 384201,
+    "lightWasmSha256": "a4f8a6da8b8ec7f9ed720ca9e1d3cd823136aa8232b724b2af5125406be7649c",
+    "phoneSessionDoorBytes": 30720,
+    "purchaseTxWireBytes": 367,
+    "receiptWireBytes": 236,
+    "annualMibAt10Tps": 181353
+  },
+  "workloads": [
+    {
+      "accounts": 64,
+      "txBytes": 367,
+      "receiptBytes": 236,
+      "maxInclusionProofBytes": 371,
+      "absenceProofBytes": 277,
+      "annualMibAt10Tps": 181353,
+      "grantP50Us": 151,
+      "purchaseP50Us": 260,
+      "purchaseMaxUs": 297,
+      "verifyP50Us": 4,
+      "verifyMaxUs": 10,
+      "poweredControlsMask": "0x3f",
+      "disposition": "MET",
+      "receiptTag": "#bb.receipt.sha256.2nclfommvfk7nsh7bwloyg3j3a4l5tiar7pnucuaqd5s5lxq666a"
+    },
+    {
+      "accounts": 256,
+      "txBytes": 367,
+      "receiptBytes": 236,
+      "maxInclusionProofBytes": 476,
+      "absenceProofBytes": 342,
+      "annualMibAt10Tps": 181353,
+      "grantP50Us": 211,
+      "purchaseP50Us": 442,
+      "purchaseMaxUs": 553,
+      "verifyP50Us": 2,
+      "verifyMaxUs": 3,
+      "poweredControlsMask": "0x3f",
+      "disposition": "MET",
+      "receiptTag": "#bb.receipt.sha256.72oqwrg2g6k2f4unalqkr4qxj4s6npntuaxrij6quujxz72k4oma"
+    }
+  ],
+  "nonClaims": [
+    "Does not prove universal cheapness or quiet-host Windows x86_64 p99 latency.",
+    "Does not authorize mainnet, real monetary value, PROD-OPS-1, L1-PRODUCTION, or VALUE-1.",
+    "COST-1 repeats whenever future capabilities (e.g., PROGRAM-STATE-1) activate."
+  ]
+}
