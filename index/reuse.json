@@ -50,6 +50,102 @@
     ]
    },
    {
+    "item": "BITS_1_GENESIS_CONFIG_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_IDENTITY_BIND_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_L2_ANCHOR_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_PURCHASE_SPLIT_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_SIMULATED_PAYOUT_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_STATE_RECEIPT_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_TESTNET_GRANT_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_TRANSFER_SCHEMA",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_1_VERSION",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_BPS_DENOMINATOR",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_DEFAULT_CREATOR_SPLIT_BPS",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_DEFAULT_FAUCET_GRANT",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_DEFAULT_MIN_PAYOUT",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_DEFAULT_MIN_PURCHASE",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_DEFAULT_SIGNUP_GRANT",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
+    "item": "BITS_IDENTITY_NAMESPACE",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
     "item": "BRIDGE_POLICY_SCHEMA",
     "modules": [
      "ladder_bridge"
@@ -59,6 +155,12 @@
     "item": "BitProbe",
     "modules": [
      "world"
+    ]
+   },
+   {
+    "item": "BitsWalletProofV1",
+    "modules": [
+     "bits_economy_1"
     ]
    },
    {
@@ -665,13 +767,6 @@
     "item": "GovernanceActionKindV1",
     "modules": [
      "governance_1"
-    ]
-   },
-   {
-    "item": "HEADER_LEN",
-    "modules": [
-     "consensus_1",
-     "validator_schedule_1"
     ]
    },
    {
@@ -1935,6 +2030,12 @@
     ]
    },
    {
+    "item": "derive_system_actor_id",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
     "item": "dolly",
     "modules": [
      "camera"
@@ -1956,6 +2057,12 @@
     "item": "encode_frame",
     "modules": [
      "signer_ops_1"
+    ]
+   },
+   {
+    "item": "encode_unsigned_canonical",
+    "modules": [
+     "bits_economy_1"
     ]
    },
    {
@@ -2049,6 +2156,12 @@
     ]
    },
    {
+    "item": "nonce_of",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
     "item": "open_existing_with_replay_limits",
     "modules": [
      "history_store"
@@ -2127,6 +2240,12 @@
     ]
    },
    {
+    "item": "resolve_address_or_pubkey",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
     "item": "resolve_profile",
     "modules": [
      "commit_state"
@@ -2182,6 +2301,12 @@
     ]
    },
    {
+    "item": "tx_hash",
+    "modules": [
+     "bits_economy_1"
+    ]
+   },
+   {
     "item": "validate_domain_kv",
     "modules": [
      "commit_state"
@@ -2218,7 +2343,7 @@
     ]
    }
   ],
-  "pub_items": 2196,
+  "pub_items": 2253,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -2242,7 +2367,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 84824,
+   "code_lines": 86416,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2423,7 +2548,7 @@
    ]
   },
   "test": {
-   "code_lines": 29238,
+   "code_lines": 29344,
    "duplicated_lines": 341,
    "regions": [
     {
