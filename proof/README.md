@@ -157,6 +157,31 @@ exclusive `DedicatedMigrationBodyV1` enforcement (`0` txs, `0` app subticks,
 mathematical model over Lean `Nat` and finite lists, not a verified compiler
 proof of Rust machine code, SHA-256 hashing, or Ed25519 cryptography.
 
+`BitblockProof.BitsEconomyRefinement` formalizes the `BITS-ECONOMY-1` 6-opcode
+Bits creator-economy state machine (`Transfer`, `PurchaseSplit`, `TestnetGrant`,
+`SimulatedPayout`, `IdentityBind`, `L2Anchor`) corresponding to
+`crates/research/src/bits_economy_1.rs` (`BitsGenesisConfigV1`,
+`BitsTransferV1`, `BitsPurchaseSplitV1`, `BitsTestnetGrantV1`,
+`BitsSimulatedPayoutV1`, `BitsIdentityBindV1`, `BitsL2AnchorV1`,
+`BitsDelegationGrantV1`, `BitsEconomyStateV1`, `compute_purchase_split`,
+`BitsEconomyStateV1::apply_signed_tx`, and
+`BitsEconomyStateV1::register_purchase_delegation`). It proves exact integer
+`80/20` creator/platform split conservation and floor bounds (`0%` transfer tax),
+duplicate-free balance-map closed total-supply conservation across every single
+opcode and arbitrary finite transaction blocks (`applyBitsBlock_preserves_totalSupply`),
+fail-closed atomic rejection rollback (`applyBitsTx_atomic_rollback_on_reject`),
+structural `lab = false` refusal for `TestnetGrant` and `SimulatedPayout`,
+zero balance mutation and strict monotone epochs for `L2Anchor`, Cross-Session
+Amendment 1 `ActorIdV1` balance invariance and automatic delegation revocation
+on key rotation, non-transitive depth-1 delegation cap enforcement
+(`maxBitsPerTx`, `maxBitsTotal`, `expiresAtHeight`, no depth-2 sub-delegation,
+and no delegated transfer or payout), replay-set monotonicity and duplicate
+order/grant/payout rejection, and powered negative controls (unbounded basis
+points, positive transfer tax, out-of-pool runtime minting, and `lab = false`
+signup grants). It remains an abstract mathematical model over Lean `Nat`,
+`Bool`, and finite lists, not a verified compiler proof of Rust machine code,
+SHA-256 hashing, or Ed25519 cryptography.
+
 `LadderLangQuotedByteParity.lean` is deliberately outside the standalone
 Bitblock target. Run it from the separately pinned LadderLang checkout at commit
 `59042265167b8f40700a891d890fde8015bcade9`; it asks LadderLang's own

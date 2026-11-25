@@ -569,6 +569,12 @@
             ]
         },
         {
+            "module": "bits_economy_1",
+            "proofs_include": [
+                "bitseconomyrefinement"
+            ]
+        },
+        {
             "total_mutation_sites": 1211,
             "modules_with_mutation_sites": 76,
             "module_sites": {

@@ -104,18 +104,6 @@
     ]
    },
    {
-    "item": "BITS_BPS_DENOMINATOR",
-    "modules": [
-     "bits_economy_1"
-    ]
-   },
-   {
-    "item": "BITS_DEFAULT_CREATOR_SPLIT_BPS",
-    "modules": [
-     "bits_economy_1"
-    ]
-   },
-   {
     "item": "BITS_DEFAULT_FAUCET_GRANT",
     "modules": [
      "bits_economy_1"
