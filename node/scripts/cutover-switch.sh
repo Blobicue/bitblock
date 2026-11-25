@@ -81,7 +81,7 @@ grep -q "bb-rpc-lb:8645" "$SRC_CADDYFILE" || { echo "ERROR: Caddyfile missing bb
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[cutover-switch][DRY-RUN] mode=$MODE"
   echo "[cutover-switch][DRY-RUN] target_caddyfile=$SRC_CADDYFILE (validated)"
-  echo "[cutover-switch][DRY-RUN] runtime_mount=$RUNTIME_CUTOVER_DIR -> /etc/caddy:ro (zero edits to $RNG_REPO_DIR)"
+  echo "[cutover-switch][DRY-RUN] runtime_mount=$RUNTIME_CUTOVER_DIR -> /etc/caddy-cutover:ro (zero edits to $RNG_REPO_DIR)"
   echo "[cutover-switch][DRY-RUN] cloudflare_dns_changes=0 cloudflared_restarts=0"
   if [[ "$MODE" == "bitblock" ]]; then
     echo "[cutover-switch][DRY-RUN] relayer_action=start bb-relayer, stop rng-testnet-relayer (rng-node-0..3 stay hot)"
@@ -109,17 +109,19 @@ mkdir -p "$RUNTIME_CUTOVER_DIR"
 cp "$SRC_CADDYFILE" "$RUNTIME_CUTOVER_DIR/Caddyfile.tmp.$$"
 mv -f "$RUNTIME_CUTOVER_DIR/Caddyfile.tmp.$$" "$RUNTIME_CUTOVER_DIR/Caddyfile"
 
-# 4. Ensure rng-rpc-lb mounts RUNTIME_CUTOVER_DIR at /etc/caddy:ro (one-time ~0.5s recreate if still on
-#    legacy read-only single-file mount; otherwise zero-drop <50ms `caddy reload` with zero tunnel blip).
+# 4. Ensure rng-rpc-lb mounts RUNTIME_CUTOVER_DIR at /etc/caddy-cutover:ro and runs Caddy against
+#    /etc/caddy-cutover/Caddyfile (avoids Docker Compose appending onto the base /etc/caddy/Caddyfile
+#    single-file mount; one-time ~0.5s recreate, then zero-drop <50ms `caddy reload` forever).
 CURRENT_MOUNT="$(docker inspect rng-rpc-lb --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' 2>/dev/null || true)"
-if [[ "$CURRENT_MOUNT" != *"${RUNTIME_CUTOVER_DIR}:/etc/caddy"* ]]; then
-  echo "[cutover-switch] Arming rng-rpc-lb with directory mount ${RUNTIME_CUTOVER_DIR}:/etc/caddy:ro (one-time recreate, zero cloudflared restart)..."
+if [[ "$CURRENT_MOUNT" != *"${RUNTIME_CUTOVER_DIR}:/etc/caddy-cutover"* ]]; then
+  echo "[cutover-switch] Arming rng-rpc-lb with directory mount ${RUNTIME_CUTOVER_DIR}:/etc/caddy-cutover:ro (one-time recreate, zero cloudflared restart)..."
   TMP_OVERRIDE="$RUNTIME_CUTOVER_DIR/rng-rpc-lb.override.yml"
   cat > "$TMP_OVERRIDE" <<EOF
 services:
   rpc-lb:
+    command: ["caddy", "run", "--config", "/etc/caddy-cutover/Caddyfile", "--adapter", "caddyfile"]
     volumes:
-      - ${RUNTIME_CUTOVER_DIR}:/etc/caddy:ro
+      - ${RUNTIME_CUTOVER_DIR}:/etc/caddy-cutover:ro
 EOF
   RNG_UID="$(id -u)" RNG_GID="$(id -g)" docker compose \
     -p rngcoin-node \
@@ -130,7 +132,7 @@ EOF
   sleep 2
 else
   echo "[cutover-switch] Hot-reloading rng-rpc-lb Caddyfile (<50ms, zero tunnel restart)..."
-  docker exec rng-rpc-lb caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+  docker exec rng-rpc-lb caddy reload --config /etc/caddy-cutover/Caddyfile --adapter caddyfile
 fi
 
 # 5. Single-active relayer orchestration (rng-node-0..3 stay running hot in ALL modes).
