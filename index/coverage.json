@@ -1,6 +1,6 @@
 {
  "docs": 255,
- "examples": 103,
+ "examples": 104,
  "gates": {
   "metric_accounting": true,
   "module_accounting": true,
@@ -22,7 +22,7 @@
   "windows": 3
  },
  "modules_undocumented": [],
- "proofs": 16,
+ "proofs": 17,
  "schemas": 208,
  "schemas_fixtures": 23,
  "schemas_tool_local": [

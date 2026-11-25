@@ -1962,6 +1962,7 @@
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:journal"}
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:local_bounds"}
 {"from": "doc:docs/SEMANTICS.md#history-hashes-and-proofs", "kind": "documents", "to": "module:storage"}
+{"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:bits_economy_1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:chain_launch_1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:commit_r1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:commit_state"}
@@ -1971,6 +1972,7 @@
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:vm_1"}
 {"from": "doc:proof/README.md#bitblock-proof-capsule", "kind": "documents", "to": "module:vm_d1"}
 {"from": "proof:proof/BitblockProof/AccountingRefinement.lean", "kind": "proves", "to": "module:tick"}
+{"from": "proof:proof/BitblockProof/BitsEconomyRefinement.lean", "kind": "proves", "to": "module:bits_economy_1"}
 {"from": "proof:proof/BitblockProof/ChunkRefinement.lean", "kind": "proves", "to": "module:world"}
 {"from": "proof:proof/BitblockProof/CommitmentRefinement.lean", "kind": "proves", "to": "module:commit_r1"}
 {"from": "proof:proof/BitblockProof/CommitmentRefinement.lean", "kind": "proves", "to": "module:commit_state"}
@@ -2277,6 +2279,8 @@
 {"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:program"}
 {"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:tick"}
 {"from": "example:tests/accounting_refinement_correspondence.rs", "kind": "uses", "to": "module:world"}
+{"from": "example:tests/bits_economy_refinement_correspondence.rs", "kind": "uses", "to": "module:bits_economy_1"}
+{"from": "example:tests/bits_economy_refinement_correspondence.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:camera"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:commit_r1"}
 {"from": "example:tests/codec_parity_v1.rs", "kind": "uses", "to": "module:coordinate_episode"}
