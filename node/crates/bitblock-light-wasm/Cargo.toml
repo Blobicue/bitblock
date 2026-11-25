@@ -1,0 +1,18 @@
+[package]
+name = "bitblock-light-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Compact zero-bindgen wasm32 light verifier and canonical Bits transaction encoder."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bitblock-core = { workspace = true }
+bitblock-research = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }

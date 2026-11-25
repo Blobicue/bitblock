@@ -1,4 +1,6 @@
 /target/
+/node/target/
+/node/.runtime/
 proof/.lake/
 proof/ladderlang-transition-v1/.lake/
 __pycache__/
