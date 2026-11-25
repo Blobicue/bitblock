@@ -1,0 +1,12 @@
+.git
+target
+proof
+index
+docs
+node/.runtime
+node/target/*
+!node/target/wasm32-unknown-unknown
+node/target/wasm32-unknown-unknown/*
+!node/target/wasm32-unknown-unknown/release
+node/target/wasm32-unknown-unknown/release/*
+!node/target/wasm32-unknown-unknown/release/bitblock_light_wasm.wasm

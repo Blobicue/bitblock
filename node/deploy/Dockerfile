@@ -6,6 +6,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY src ./src
+COPY examples ./examples
 COPY node/Cargo.toml node/Cargo.lock ./node/
 COPY node/crates ./node/crates
 
