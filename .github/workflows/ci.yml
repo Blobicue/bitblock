@@ -80,6 +80,12 @@ jobs:
         run: |
           node tools/wasm_parity_check.mjs target/wasm-ci/wasm32-unknown-unknown/release/bitblock_wasm.wasm
           node tools/wasm_parity_check.mjs crates/wasm/www/bitblock_wasm.wasm --check-embedded
+      - name: bitblock-light-wasm build, size budget & V8 parity
+        run: |
+          cargo clippy --manifest-path node/Cargo.toml --workspace --all-targets -- -D warnings
+          cargo test --manifest-path node/Cargo.toml --workspace
+          cargo build --manifest-path node/Cargo.toml --release --target wasm32-unknown-unknown -p bitblock-light-wasm
+          node node/tools/light_wasm_parity_check.mjs node/target/wasm32-unknown-unknown/release/bitblock_light_wasm.wasm
 
   python-tools:
     name: python vector tools (ubuntu-latest)

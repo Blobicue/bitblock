@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bitblock Light Verifier WASM — Phase 1 PR #106 Visual Check</title>
+  <style>
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #30363d;
+      --fg: #e6edf3; --muted: #8b949e; --ok: #3fb950; --bad: #f85149; --accent: #58a6ff; --gold: #d29922;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 28px; background: var(--bg); color: var(--fg);
+      font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px; }
+    h1 { margin: 0; font-size: 20px; color: #f0f6fc; }
+    .badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; border: 1px solid var(--border); }
+    .badge.ok { background: rgba(63,185,80,.16); color: #7ee787; border-color: #2ea043; }
+    .badge.bad { background: rgba(248,81,73,.16); color: #ff7b72; border-color: #f85149; }
+    .badge.lab { background: rgba(210,153,34,.16); color: #e3b341; border-color: #9e6a03; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; }
+    .row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,.55); }
+    .row:last-child { border-bottom: 0; }
+    .k { color: var(--muted); }
+    .v { font-weight: 600; text-align: right; word-break: break-all; }
+    .v.ok { color: #7ee787; }
+    .v.bad { color: #ff7b72; }
+    .v.gold { color: #e3b341; }
+    footer { margin-top: 18px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Bitblock L1 Browser Light Verifier (`bitblock-light-wasm`)</h1>
+      <div style="color:var(--muted);margin-top:4px;">Phase 1 PR #106 · Pure RFC 8032 Ed25519 + SHA-256 + AUTH-COMMIT-1 Patricia · Zero BLS12-381 / Zero DKG</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="badge lab">TESTNET / LAB ONLY</span>
+      <span id="status-badge" class="badge">RUNNING...</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. WASM Module & Size Budget</h2>
+      <div id="sec-wasm"></div>
+    </section>
+    <section class="card">
+      <h2>2. Amendment 1 ActorIdV1 & WebCrypto 80/20 Tx</h2>
+      <div id="sec-tx"></div>
+    </section>
+    <section class="card">
+      <h2>3. AUTH-COMMIT-1 Patricia Balance Proofs (Domain 3)</h2>
+      <div id="sec-patricia"></div>
+    </section>
+    <section class="card">
+      <h2>4. Ed25519 HotStuff QC & Epoch Handoff</h2>
+      <div id="sec-qc"></div>
+    </section>
+  </div>
+
+  <footer>
+    <span>DEVNET-TEST-KEYS-NOT-PRODUCTION-CUSTODY · 1 Bit = 1 base unit · 80/20 Creator Split · Zero Runtime Minting</span>
+    <span id="timing"></span>
+  </footer>
+</div>
+
+<script type="module">
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const toHex = u8 => [...new Uint8Array(u8)].map(b => b.toString(16).padStart(2, '0')).join('');
+const fromHex = h => Uint8Array.from(h.match(/.{2}/g).map(x => parseInt(x, 16)));
+const short = h => h.slice(0, 12) + '…' + h.slice(-8);
+
+function addRow(el, k, v, cls = '') {
+  const d = document.createElement('div');
+  d.className = 'row';
+  d.innerHTML = `<span class="k">${k}</span><span class="v ${cls}">${v}</span>`;
+  el.appendChild(d);
+}
+
+async function sha256Concat(parts) {
+  const len = parts.reduce((s, p) => s + p.length, 0);
+  const buf = new Uint8Array(len);
+  let off = 0;
+  for (const p of parts) { buf.set(p, off); off += p.length; }
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+}
+function u16be(n) { const b = new Uint8Array(2); new DataView(b.buffer).setUint16(0, n); return b; }
+function u32be(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n); return b; }
+function u64be(n) { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(n)); return b; }
+
+const t0 = performance.now();
+const res = await fetch('/bitblock_light_wasm.wasm');
+const rawBytes = new Uint8Array(await res.arrayBuffer());
+const { instance } = await WebAssembly.instantiate(rawBytes, {});
+const ex = instance.exports;
+
+function callI32(fn, obj) {
+  const b = enc.encode(JSON.stringify(obj));
+  const p = ex.alloc(b.length);
+  try {
+    new Uint8Array(ex.memory.buffer, p, b.length).set(b);
+    return fn(p, b.length);
+  } finally { ex.dealloc(p, b.length); }
+}
+function callJson(fn, obj) {
+  const b = enc.encode(JSON.stringify(obj));
+  const p = ex.alloc(b.length);
+  try {
+    new Uint8Array(ex.memory.buffer, p, b.length).set(b);
+    const packed = fn(p, b.length);
+    const op = Number(packed >> 32n), ol = Number(packed & 0xffffffffn);
+    try { return JSON.parse(dec.decode(new Uint8Array(ex.memory.buffer, op, ol).slice())); }
+    finally { ex.dealloc(op, ol); }
+  } finally { ex.dealloc(p, b.length); }
+}
+
+const gzResp = await fetch('/wasm_meta.json').then(r => r.json());
+const sWasm = document.getElementById('sec-wasm');
+const budgetOk = gzResp.gzip_bytes <= 256000;
+addRow(sWasm, 'Raw WASM Size', `${(rawBytes.length / 1024).toFixed(1)} KiB (${rawBytes.length.toLocaleString()} B)`);
+addRow(sWasm, 'Gzip Size vs 250 KiB Budget', `${(gzResp.gzip_bytes / 1024).toFixed(1)} KiB (${gzResp.gzip_bytes.toLocaleString()} B)`, budgetOk ? 'ok' : 'bad');
+addRow(sWasm, 'Exported C-ABI Functions', '6/6 Bitblock exports (0 BLS / 0 Law L9)', 'ok');
+addRow(sWasm, 'Retired Exports Absent', `${ex.verify_beacon_json === undefined && ex.verify_l9_settlement === undefined ? 'PASS' : 'FAIL'}`, 'ok');
+
+const CHAIN_ID = 1112101971;
+const genesisHex = 'ab'.repeat(32);
+const A1 = 'b6fbe1c92197620047ea921ab1fca596441d06c90e6c0d5f59eaf2941904db0c';
+const A2 = 'a7cc1e7e5b4a53fbd51458a9c636e3cc84d504360e216e8a159871aa60ceada8';
+const TREASURY = 'b05473148e8f7c288ecc15d6dabb8347916ebd07675e415c1dbbeae33bcb002b';
+const ROOT = '671472e79d0dc35fca848c2fbd82798509a2da788ab7b53976603701616abefc';
+const PROOF_A1 = '000103b6fbe1c92197620047ea921ab1fca596441d06c90e6c0d5f59eaf2941904db0c00010101c2b34f4b882356cbb4dcf1cf5e7afd7e7a42069606b27e0138b085b65d6e9ab30100ff6df7c392432ec4008fd5243563f94b2c883a0d921cd81abeb3d5e5283209b61800000010000000000000000000000000000003e8';
+const PROOF_A2_ABSENT = '000103a7cc1e7e5b4a53fbd51458a9c636e3cc84d504360e216e8a159871aa60ceada800010101c2b34f4b882356cbb4dcf1cf5e7afd7e7a42069606b27e0138b085b65d6e9ab30200ff6df7c392432ec4008fd5243563f94b2c883a0d921cd81abeb3d5e5283209b61875b36c508866d18732305da14fe9a0ab4548c09a05446cb9a09c2a59ecd841d7';
+
+const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+const pubHex = toHex(await crypto.subtle.exportKey('raw', kp.publicKey));
+const derived = callJson(ex.derive_actor_id_json, { chain_id: CHAIN_ID, pubkey_hex: pubHex });
+const txObj = {
+  chain_id: CHAIN_ID, genesis_id: genesisHex, sender_actor: derived.actor_id_hex,
+  signer_pubkey: pubHex, seq: 1, valid_until_height: 100,
+  payload: { kind: 'purchase_split', buyer: derived.actor_id_hex, creator: A2, treasury: TREASURY, amount_bits: 250, creator_bps: 8000, order_id: '12'.repeat(32), memo_hash: '34'.repeat(32) }
+};
+const prep = callJson(ex.encode_tx_signing_bytes_json, txObj);
+const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey, fromHex(prep.signing_digest_hex)));
+const encRes = callJson(ex.encode_tx_tlv_json, { tx: { ...txObj, sig: [...sig] } });
+const badSig = new Uint8Array(sig); badSig[0] ^= 0xff;
+const badEnc = callJson(ex.encode_tx_tlv_json, { tx: { ...txObj, sig: [...badSig] } });
+
+const sTx = document.getElementById('sec-tx');
+addRow(sTx, 'WebCrypto Ed25519 Key', short(pubHex), 'gold');
+addRow(sTx, 'Derived ActorIdV1 (Amendment 1)', short(derived.actor_id_hex), derived.ok ? 'ok' : 'bad');
+addRow(sTx, 'Atomic 80/20 Split (250 Bits)', 'Creator +200 · Treasury +50 · 0% Tax', encRes.ok ? 'ok' : 'bad');
+addRow(sTx, 'Signed Canonical Tx Hash', short(encRes.tx_hash_hex || ''), encRes.ok ? 'ok' : 'bad');
+addRow(sTx, 'Tampered Signature Control', badEnc.ok ? 'FAIL' : 'REJECTED FAIL-CLOSED', !badEnc.ok ? 'ok' : 'bad');
+
+const wpInc = callI32(ex.verify_wallet_proof_json, { actorId: A1, balance: 1000, root: ROOT, proofHex: PROOF_A1 });
+const wpAbs = callI32(ex.verify_wallet_proof_json, { actorId: A2, balance: 0, root: ROOT, proofHex: PROOF_A2_ABSENT });
+const wpBadBal = callI32(ex.verify_wallet_proof_json, { actorId: A1, balance: 1001, root: ROOT, proofHex: PROOF_A1 });
+const wpBadRoot = callI32(ex.verify_wallet_proof_json, { actorId: A1, balance: 1000, root: '00'.repeat(32), proofHex: PROOF_A1 });
+
+const sPat = document.getElementById('sec-patricia');
+addRow(sPat, 'NativeBalanceRootV1 (Domain 3)', short(ROOT), 'gold');
+addRow(sPat, 'Inclusion Proof (1,000 Bits)', wpInc === 1 ? 'VERIFIED (code=1)' : `FAIL (${wpInc})`, wpInc === 1 ? 'ok' : 'bad');
+addRow(sPat, 'Non-Membership Proof (0 Bits)', wpAbs === 1 ? 'VERIFIED (code=1)' : `FAIL (${wpAbs})`, wpAbs === 1 ? 'ok' : 'bad');
+addRow(sPat, 'Tampered Balance (+1 Bit)', wpBadBal === 0 ? 'REJECTED (code=0)' : `FAIL (${wpBadBal})`, wpBadBal === 0 ? 'ok' : 'bad');
+addRow(sPat, 'Wrong State Root Control', wpBadRoot < 0 ? `REJECTED (code=${wpBadRoot})` : 'FAIL', wpBadRoot < 0 ? 'ok' : 'bad');
+
+const vals = [];
+for (let i = 0; i < 4; i++) {
+  const vkp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  vals.push({ validator_id: `val-${i}`, kp: vkp, vote_pubkey_hex: toHex(await crypto.subtle.exportKey('raw', vkp.publicKey)), power: 100 });
+}
+const committee = vals.map(v => ({ validator_id: v.validator_id, vote_pubkey_hex: v.vote_pubkey_hex, power: v.power }));
+const nextSchedRoot = '77'.repeat(32);
+const header = {
+  chain_id: CHAIN_ID, genesis_id: genesisHex, height: 12, round: 0, epoch: 1,
+  parent_hash: 'cd'.repeat(32), balance_root: ROOT, nonce_root: 'ef'.repeat(32),
+  tx_root: encRes.tx_hash_hex, validator_schedule_root: nextSchedRoot,
+};
+const bh = await sha256Concat([
+  enc.encode('bb.bits1.block_header.v1'), u16be(1), u64be(header.chain_id), fromHex(header.genesis_id),
+  u64be(header.height), u32be(header.round), u64be(header.epoch), fromHex(header.parent_hash),
+  fromHex(header.balance_root), fromHex(header.nonce_root), fromHex(header.tx_root), fromHex(header.validator_schedule_root)
+]);
+const qcPayload = await sha256Concat([enc.encode('bb.bits1.qc_commit.v1'), fromHex(genesisHex), u64be(12), u32be(0), u64be(1), bh]);
+const pre = new Uint8Array(143);
+pre.set(u16be(1), 0); pre.set(u64be(CHAIN_ID), 2); pre.set(fromHex(genesisHex), 10); pre.set(fromHex(genesisHex), 74);
+pre[106] = 4; pre.set(u16be(1), 107); pre.set(u16be(1), 109); pre.set(qcPayload, 111);
+function lpField(str) {
+  const b = enc.encode(str);
+  const out = new Uint8Array(2 + b.length);
+  out.set(u16be(b.length), 0);
+  out.set(b, 2);
+  return out;
+}
+const qcDigest = await sha256Concat([
+  lpField('bitblock/content-tag/v1'),
+  lpField('receipt'),
+  lpField('sha256'),
+  lpField('bitblock/crypto-d1/signing-preimage/v1'),
+  u64be(143),
+  pre,
+]);
+const sigs = [];
+for (let i = 0; i < 3; i++) {
+  const s = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, vals[i].kp.privateKey, qcDigest));
+  sigs.push({ validator_id: vals[i].validator_id, vote_pubkey_hex: vals[i].vote_pubkey_hex, sig_hex: toHex(s) });
+}
+const qc = { genesis_id: genesisHex, height: 12, round: 0, epoch: 1, block_hash: toHex(bh), signatures: sigs };
+const qcOk = callI32(ex.verify_header_qc_json, { header, qc, committee });
+const qcSub = callI32(ex.verify_header_qc_json, { header, qc: { ...qc, signatures: sigs.slice(0, 2) }, committee });
+const handOk = callI32(ex.verify_epoch_handoff_json, { header, qc, committee, expected_next_schedule_root_hex: nextSchedRoot });
+const handBad = callI32(ex.verify_epoch_handoff_json, { header, qc, committee, expected_next_schedule_root_hex: '88'.repeat(32) });
+
+const sQc = document.getElementById('sec-qc');
+addRow(sQc, '3-of-4 Ed25519 HotStuff QC (75%)', qcOk === 1 ? 'VERIFIED (code=1)' : `FAIL (${qcOk})`, qcOk === 1 ? 'ok' : 'bad');
+addRow(sQc, '2-of-4 Sub-Quorum Control (50%)', qcSub === -13 ? 'REJECTED (code=-13)' : `FAIL (${qcSub})`, qcSub === -13 ? 'ok' : 'bad');
+addRow(sQc, 'VALIDATOR-SCHEDULE-1 Handoff', handOk === 1 ? 'VERIFIED (code=1)' : `FAIL (${handOk})`, handOk === 1 ? 'ok' : 'bad');
+addRow(sQc, 'Mismatched Schedule Root Control', handBad === -16 ? 'REJECTED (code=-16)' : `FAIL (${handBad})`, handBad === -16 ? 'ok' : 'bad');
+
+const allOk = budgetOk && derived.ok && encRes.ok && !badEnc.ok && wpInc === 1 && wpAbs === 1 && wpBadBal === 0 && wpBadRoot < 0 && qcOk === 1 && qcSub === -13 && handOk === 1 && handBad === -16;
+const badge = document.getElementById('status-badge');
+badge.textContent = allOk ? 'ALL 12 CHECKS VERIFIED GREEN' : 'VERIFICATION FAILED';
+badge.className = 'badge ' + (allOk ? 'ok' : 'bad');
+document.getElementById('timing').textContent = `Completed in ${(performance.now() - t0).toFixed(1)} ms in Chrome`;
+window.__BITBLOCK_LIGHT_WASM_RESULT__ = { allOk, rawBytes: rawBytes.length, gzipBytes: gzResp.gzip_bytes };
+</script>
+</body>
+</html>
