@@ -86,6 +86,8 @@ jobs:
           cargo test --manifest-path node/Cargo.toml --workspace
           cargo build --manifest-path node/Cargo.toml --release --target wasm32-unknown-unknown -p bitblock-light-wasm
           node node/tools/light_wasm_parity_check.mjs node/target/wasm32-unknown-unknown/release/bitblock_light_wasm.wasm
+          cargo build --manifest-path node/Cargo.toml -p bitblock-node
+          node node/scripts/verify-shadow-testnet.mjs
 
   python-tools:
     name: python vector tools (ubuntu-latest)
