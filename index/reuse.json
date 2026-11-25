@@ -1202,6 +1202,54 @@
     ]
    },
    {
+    "item": "PROGRAM_STATE_1_CODE_RECORD_SCHEMA",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_EXEC_OP_TAG",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_EXEC_RECEIPT_SCHEMA",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_MAX_OPCODES",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_MAX_STORAGE_SLOTS",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_ROOTS_SCHEMA",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_STORAGE_WRITE_GAS",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "PROGRAM_STATE_1_VERSION",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
     "item": "PROTOCOL_ID_1_COLLISION_AUDIT_SCHEMA",
     "modules": [
      "protocol_id_1"
@@ -1265,6 +1313,18 @@
     "item": "PreparedTick",
     "modules": [
      "history"
+    ]
+   },
+   {
+    "item": "ProgramInstanceV1",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "ProgramMerkleProofV1",
+    "modules": [
+     "program_state_1"
     ]
    },
    {
@@ -1964,6 +2024,12 @@
     ]
    },
    {
+    "item": "compose_root",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
     "item": "compose_unbound",
     "modules": [
      "sidebar"
@@ -1979,6 +2045,18 @@
     "item": "compute_checkpoint_chunk_digest",
     "modules": [
      "sync_1"
+    ]
+   },
+   {
+    "item": "compute_code_availability_digest",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
+    "item": "compute_code_id",
+    "modules": [
+     "program_state_1"
     ]
    },
    {
@@ -2198,6 +2276,12 @@
     ]
    },
    {
+    "item": "parsed_opcodes",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
     "item": "pbkdf2_hmac_sha256_32",
     "modules": [
      "crypto_1"
@@ -2243,6 +2327,12 @@
     "item": "reconstruction_artifact_digest",
     "modules": [
      "genesis_root_parity_1"
+    ]
+   },
+   {
+    "item": "record_digest",
+    "modules": [
+     "program_state_1"
     ]
    },
    {
@@ -2313,6 +2403,12 @@
     ]
    },
    {
+    "item": "storage_root",
+    "modules": [
+     "program_state_1"
+    ]
+   },
+   {
     "item": "tx_hash",
     "modules": [
      "bits_economy_1"
@@ -2355,7 +2451,7 @@
     ]
    }
   ],
-  "pub_items": 2272,
+  "pub_items": 2304,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -2379,7 +2475,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 86735,
+   "code_lines": 87674,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2560,7 +2656,7 @@
    ]
   },
   "test": {
-   "code_lines": 29387,
+   "code_lines": 29448,
    "duplicated_lines": 341,
    "regions": [
     {

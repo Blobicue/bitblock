@@ -772,6 +772,17 @@
   ]
  },
  {
+  "id": "sub:program-state-1",
+  "members": [
+   "module:program_state_1"
+  ],
+  "name": "program-state-1",
+  "terms": [
+   "program",
+   "state"
+  ]
+ },
+ {
   "id": "sub:protocol-id-1",
   "members": [
    "module:profile_bootstrap",
