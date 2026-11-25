@@ -1,0 +1,126 @@
+# 4-validator localhost-only Bitblock L1 Bits Shadow Testnet (Phase 1).
+#
+# STRICT BOUNDARY:
+# - Testnet / devnet ONLY (`lab: true`, `DEVNET-TEST-KEYS-NOT-PRODUCTION-CUSTODY`).
+# - All host bindings stay strictly on 127.0.0.1 shadow ports (8640 LB, 8645..8648 nodes,
+#   19100..19103 P2P) so this stack never interferes with legacy rngcoin-node (8540/8545..8548).
+# - The optional `named-tunnel` profile is an inert opt-in template ONLY: it does NOT create
+#   or route any Cloudflare Tunnel or DNS record. Tunnel credentials and DNS belong to Owen.
+#
+# Usage:
+#   ./node/deploy/init-docker-testnet.sh
+#   BB_UID=$(id -u) BB_GID=$(id -g) docker compose -f node/deploy/docker-compose.testnet.yml up -d --build
+
+services:
+  node-0:
+    build:
+      context: ../..
+      dockerfile: node/deploy/Dockerfile
+    image: bitblock-node:shadow-testnet
+    container_name: bb-node-0
+    user: "${BB_UID:-1000}:${BB_GID:-1000}"
+    command: ["run", "--config", "/data/node.json", "--password-file", "/data/keystore.pass", "--log-json"]
+    volumes:
+      - ../.runtime/docker-testnet/genesis.json:/data/genesis.json:ro
+      - ../.runtime/docker-testnet/node-0:/data
+    ports:
+      - "127.0.0.1:19100:19100/tcp"
+      - "127.0.0.1:19100:19100/udp"
+      - "127.0.0.1:8645:8645"
+    restart: unless-stopped
+    networks: [bbnet]
+
+  node-1:
+    build:
+      context: ../..
+      dockerfile: node/deploy/Dockerfile
+    image: bitblock-node:shadow-testnet
+    container_name: bb-node-1
+    user: "${BB_UID:-1000}:${BB_GID:-1000}"
+    command: ["run", "--config", "/data/node.json", "--password-file", "/data/keystore.pass", "--log-json"]
+    volumes:
+      - ../.runtime/docker-testnet/genesis.json:/data/genesis.json:ro
+      - ../.runtime/docker-testnet/node-1:/data
+    ports:
+      - "127.0.0.1:19101:19101/tcp"
+      - "127.0.0.1:19101:19101/udp"
+      - "127.0.0.1:8646:8645"
+    restart: unless-stopped
+    networks: [bbnet]
+
+  node-2:
+    build:
+      context: ../..
+      dockerfile: node/deploy/Dockerfile
+    image: bitblock-node:shadow-testnet
+    container_name: bb-node-2
+    user: "${BB_UID:-1000}:${BB_GID:-1000}"
+    command: ["run", "--config", "/data/node.json", "--password-file", "/data/keystore.pass", "--log-json"]
+    volumes:
+      - ../.runtime/docker-testnet/genesis.json:/data/genesis.json:ro
+      - ../.runtime/docker-testnet/node-2:/data
+    ports:
+      - "127.0.0.1:19102:19102/tcp"
+      - "127.0.0.1:19102:19102/udp"
+      - "127.0.0.1:8647:8645"
+    restart: unless-stopped
+    networks: [bbnet]
+
+  node-3:
+    build:
+      context: ../..
+      dockerfile: node/deploy/Dockerfile
+    image: bitblock-node:shadow-testnet
+    container_name: bb-node-3
+    user: "${BB_UID:-1000}:${BB_GID:-1000}"
+    command: ["run", "--config", "/data/node.json", "--password-file", "/data/keystore.pass", "--log-json"]
+    volumes:
+      - ../.runtime/docker-testnet/genesis.json:/data/genesis.json:ro
+      - ../.runtime/docker-testnet/node-3:/data
+    ports:
+      - "127.0.0.1:19103:19103/tcp"
+      - "127.0.0.1:19103:19103/udp"
+      - "127.0.0.1:8648:8645"
+    restart: unless-stopped
+    networks: [bbnet]
+
+  rpc-lb:
+    image: caddy:2-alpine
+    container_name: bb-rpc-lb
+    volumes:
+      - ./Caddyfile.lb:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8640:8645"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8645/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    depends_on:
+      - node-0
+      - node-1
+      - node-2
+      - node-3
+    restart: unless-stopped
+    networks: [bbnet]
+
+  # Inert opt-in template only: requires operator-provisioned credentials and DNS (Owen's hands).
+  # Never enabled by default; does not create or route any tunnel or hostname automatically.
+  named-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: bb-testnet-named-tunnel
+    profiles: ["named-tunnel"]
+    user: "${BB_UID:-1000}:${BB_GID:-1000}"
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
+    volumes:
+      - ../.runtime/cloudflared:/etc/cloudflared:ro
+    depends_on:
+      rpc-lb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [bbnet]
+
+networks:
+  bbnet:
+    driver: bridge

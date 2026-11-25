@@ -309,7 +309,7 @@ pub fn build_qc_commit_preimage(
         protocol_version: BITS_1_VERSION,
         chain_id,
         genesis_id,
-        launch_manifest_id: [0u8; 32],
+        launch_manifest_id: genesis_id,
         profile_id: genesis_id,
         domain_tag: SigningDomainTagV1::ConsensusVote,
         signature_suite: SignatureSuiteIdV1::Ed25519StrictRfc8032V1,

@@ -192,7 +192,7 @@ const bh = await sha256Concat([
 ]);
 const qcPayload = await sha256Concat([enc.encode('bb.bits1.qc_commit.v1'), fromHex(genesisHex), u64be(12), u32be(0), u64be(1), bh]);
 const pre = new Uint8Array(143);
-pre.set(u16be(1), 0); pre.set(u64be(CHAIN_ID), 2); pre.set(fromHex(genesisHex), 10); pre.set(fromHex(genesisHex), 74);
+pre.set(u16be(1), 0); pre.set(u64be(CHAIN_ID), 2); pre.set(fromHex(genesisHex), 10); pre.set(fromHex(genesisHex), 42); pre.set(fromHex(genesisHex), 74);
 pre[106] = 4; pre.set(u16be(1), 107); pre.set(u16be(1), 109); pre.set(qcPayload, 111);
 function lpField(str) {
   const b = enc.encode(str);
