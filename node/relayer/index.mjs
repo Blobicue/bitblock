@@ -15,8 +15,37 @@ import {
 } from './lib.mjs';
 
 const GAMELADDER_URL = process.env.GAMELADDER_URL || 'http://127.0.0.1:8787';
-const GAMELADDER_GATE_KEY = process.env.GAMELADDER_GATE_KEY || '';
+const GAMELADDER_GATE_KEY_ENV = process.env.GAMELADDER_GATE_KEY || '';
+const GATE_KEY_ENV_FILE = process.env.GATE_KEY_ENV_FILE || '';
 const L1_RPC_URL = process.env.L1_RPC_URL || 'http://127.0.0.1:8640';
+
+/**
+ * Resolve the current Gameladder soft-launch gate key without ever logging its value.
+ * Prefers `GATE_KEY_ENV_FILE` (read-only mount of shared `rngcoin-node/.runtime/relayer/relayer.env`)
+ * so Owen's single `sync-relayer-gate-key.sh` run activates both relayers live on the next tick.
+ */
+function resolveGateKey() {
+  if (GATE_KEY_ENV_FILE) {
+    try {
+      const raw = fs.readFileSync(GATE_KEY_ENV_FILE, 'utf8');
+      for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        if (trimmed.startsWith('GAMELADDER_GATE_KEY=')) {
+          const val = trimmed
+            .slice('GAMELADDER_GATE_KEY='.length)
+            .replace(/^\uFEFF/, '')
+            .replace(/^["']|["']$/g, '')
+            .trim();
+          if (val) return val;
+        }
+      }
+    } catch {
+      // File may not exist yet before Owner runs sync-relayer-gate-key.sh; fall back safely.
+    }
+  }
+  return GAMELADDER_GATE_KEY_ENV;
+}
 const APP_ID = process.env.APP_ID || 'gameladder';
 const WASM_PATH = process.env.WASM_PATH || DEFAULT_WASM_PATH;
 const POLL_MS = Math.max(250, Number(process.env.POLL_MS || 5_000));
@@ -84,9 +113,10 @@ async function tick() {
   if (running) return;
   running = true;
   try {
+    const gateKey = resolveGateKey();
     const res = await runBitsRelayerCycle({
       gameladderUrl: GAMELADDER_URL,
-      gateKey: GAMELADDER_GATE_KEY,
+      gateKey,
       l1RpcUrl: L1_RPC_URL,
       relayerKey,
       wasm,

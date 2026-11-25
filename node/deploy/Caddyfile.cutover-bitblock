@@ -1,0 +1,52 @@
+# Phase 2 Cutover Caddyfile for rng-rpc-lb — ACTIVE BITBLOCK SOAK MODE.
+#
+# - Both `/` and `/bits-shadow/*` route to merged Bitblock bb-rpc-lb:8645.
+# - Legacy rng-node-0..3 stay running hot on 127.0.0.1:8545..8548 throughout the 7-day soak;
+#   rolling back to `Caddyfile.cutover-rng` + `caddy reload` reverts `/` in <50ms.
+{
+	auto_https off
+	admin localhost:2019
+}
+
+:8545 {
+	request_body {
+		max_size 64KB
+	}
+
+	handle_path /bits-shadow/* {
+		reverse_proxy bb-rpc-lb:8645 {
+			request_buffers 64KB
+			lb_retries 2
+			lb_retry_match {
+				expression `{method} in ['GET', 'HEAD', 'OPTIONS'] || ({method} == 'POST' && {path} == '/tx')`
+			}
+			lb_try_duration 3s
+			lb_try_interval 150ms
+			transport http {
+				dial_timeout 1s
+				response_header_timeout 8s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy bb-rpc-lb:8645 {
+			request_buffers 64KB
+			lb_retries 3
+			lb_retry_match {
+				expression `{method} in ['GET', 'HEAD', 'OPTIONS'] || ({method} == 'POST' && {path} == '/tx')`
+			}
+			lb_try_duration 4s
+			lb_try_interval 150ms
+			health_uri /health
+			health_interval 2s
+			health_timeout 1s
+			fail_duration 10s
+			max_fails 1
+			transport http {
+				dial_timeout 1s
+				response_header_timeout 8s
+			}
+		}
+	}
+}
