@@ -755,9 +755,11 @@ artifact, gate, and non-claim.
    kernel-locked `SIGNER-OPS-1` watermarks, real OS crash/partition/respawn recovery, live `CE-44`
    `v1 -> v2` switchover, and 200/200 independently vectored protocol schemas)
    to `BOUNDED` and
-   `VM-1` to `IMPLEMENTED`, unlocking **`PROD-OPS-1@base=READY`** (`PS-094`) alongside
-   `PROGRAM-STATE-1@base=READY`, `COST-1@base=READY`, `VERKLE-R1@base=READY`, and
-   `HASH-SOURCE-R1@base=READY` (while `L1-CANDIDATE`, `L1-PRODUCTION`, and `VALUE-1` stay locked
+   `VM-1` to `IMPLEMENTED`, and `COST-1@base` (`PS-062`, PR #115 `66d79db`,
+   `docs/COST_1_RECEIPT.md` / `docs/cost-1-platform-v1.json`) to `BOUNDED`, leaving the 4-entry
+   READY frontier `VERKLE-R1@base=READY`, `PROGRAM-STATE-1@base=READY`, `HASH-SOURCE-R1@base=READY`,
+   and **`PROD-OPS-1@base=READY`** (`PS-094`, parked for owner) (while `L1-CANDIDATE`,
+   `L1-PRODUCTION`, and `VALUE-1` stay locked
    on their remaining prerequisites, with `program-active` and `verkle-selected`
    kept explicitly inactive at launch genesis).
 

@@ -102,7 +102,7 @@ candidate to choose its own authority.
 | PS-059 | L1-CANDIDATE | base | LOCKED |
 | PS-060 | L1-PRODUCTION | base | LOCKED |
 | PS-061 | VALUE-1 | base | LOCKED |
-| PS-062 | COST-1 | base | READY |
+| PS-062 | COST-1 | base | BOUNDED |
 | PS-063 | COST-1 | budget | BOUNDED |
 | PS-064 | CODEC-1 | base | BOUNDED |
 | PS-065 | EXECUTOR-1 | base | BOUNDED |
@@ -1400,7 +1400,7 @@ is invalid input, not a third collision row.
 
 ### `COST-1` — cheapness budgets and measurements
 
-- **Status:** `PS-062:COST-1@base=READY`, `PS-063:COST-1@budget=BOUNDED`.
+- **Status:** `PS-062:COST-1@base=BOUNDED`, `PS-063:COST-1@budget=BOUNDED`.
 - **Depends on:** `WORLD-0`, `OBSERVE-0`, `TICK-0`, `REPLAY-0`, `PROOF-0`; repeats for every
   activated feature.
 - **Motive:** turn “as cheap as possible” into separate, attackable resource claims.
@@ -1409,10 +1409,12 @@ is invalid input, not a third collision row.
   for default binary/dependency size, touched-state memory, tick work, renderer/collision work,
   commitment updates, proof verification, bandwidth, database writes, retained history, recovery,
   and idle overhead; [`COST_1_COMMIT_1_MEASUREMENTS.md`](COST_1_COMMIT_1_MEASUREMENTS.md) and
-  [`cost-1-commit-1-v1.json`](cost-1-commit-1-v1.json) (`examples/commit_1_cost_probe.rs`, PR #20
-  commit `2ee1e0c874a6849b67d14997cb35bc23e651b93c` per-file baseline and PR #24 commit
-  `b9d11c57c225db10fb835bf181530d15e12bb4a8` batched `nodes/nodes.pack` measurement) extend the
-  budget with research-gated `COMMIT-1` measurements and powered proof-cap controls.
+  [`cost-1-commit-1-v1.json`](cost-1-commit-1-v1.json) extend the budget with research-gated
+  `COMMIT-1` measurements; and [`COST_1_RECEIPT.md`](COST_1_RECEIPT.md) /
+  [`cost-1-platform-v1.json`](cost-1-platform-v1.json) (`crates/research/src/cost_1.rs`,
+  `tools/cost_1_vectors.py`, `examples/cost_1_platform_probe.rs`, PR #115 `66d79db`, 10/10 CI
+  green, `bbmutate cost_1`: 25/25 KILLED) close the bounded browser-game-platform cost envelope
+  across `BITS-ECONOMY-1` and `bitblock-light-wasm` with 6/6 powered negative controls.
 - **Gate:** every reported number identifies build, workload, machine where relevant, deterministic
   counters where possible, distribution/failure point, and powered control; budgets are fixed before
   optimizing against them.
@@ -2034,9 +2036,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
 | 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-062:COST-1@base=READY` |
-| 4 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 5 | `PS-094:PROD-OPS-1@base=READY` |
+| 3 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 4 | `PS-094:PROD-OPS-1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2069,7 +2070,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `5` |
+| `ready_frontier_count_u32` | `4` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
