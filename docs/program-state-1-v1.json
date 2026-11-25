@@ -1,0 +1,48 @@
+{
+  "schema": "bitblock/program-state-1/receipt-measurements/v1",
+  "capabilityId": "PS-048:PROGRAM-STATE-1@base",
+  "promotedStatus": "BOUNDED",
+  "testnetOnly": true,
+  "provenance": {
+    "pr": 117,
+    "mergedCommit": "ff8df59bcacc2c31d5ebc9c94cfaff3657178926",
+    "mergedTree": "2131b8133279f092bcbd4d7fc3335486d61858dd",
+    "parentCommit": "d7f9d32b46f2ad714a43be554c01de073a8b0a14",
+    "ciRunIds": [
+      45560665769,
+      45560658455
+    ],
+    "ciChecksPassed": "10/10",
+    "bbmutate": {
+      "module": "program_state_1",
+      "sitesKilled": 20,
+      "sitesTotal": 20,
+      "killRatePct": 100
+    },
+    "host": "aarch64-unknown-linux-gnu",
+    "rustc": "1.96.0",
+    "command": "cargo run --release --quiet --features protocol-research --example program_state_1_probe"
+  },
+  "goldenVectorTags": {
+    "codeRecord": "#bb.policy.sha256.qmmm3akwhwhy42jblombezj6chppxzdfxzrtualsrmone6i3xtfa",
+    "stateRoots": "#bb.receipt.sha256.gbzdt7lyv2ej5ewweyqw3xf6bce4pghgs5vqzs4x5h4piln2lj4q",
+    "execReceipt": "#bb.receipt.sha256.4pvmwu57ahsryqvsiyox5qwgsfnljtdcjx752cynhpag4y2zbqla"
+  },
+  "probe": {
+    "runs": 64,
+    "codeTag": "#bb.policy.sha256.qmmm3akwhwhy42jblombezj6chppxzdfxzrtualsrmone6i3xtfa",
+    "rootsTag": "#bb.receipt.sha256.wvr3k63g6xrjbna3rqb2bgglel6gczugfo7wlkkegvwhxdmutjsq",
+    "execReceiptTag": "#bb.receipt.sha256.wtvpxbka7ar2btkkw5o2j6rj62htv43qnh6codkp42gc6jotfzpa",
+    "registerCodeP50Us": 3.63,
+    "executeAdmittedP50Us": 9.25,
+    "trapRollbackP50Us": 1.01,
+    "proveInstanceP50Us": 3.38,
+    "verifyProofP50Us": 0.91,
+    "rebuildParityP50Us": 8.21
+  },
+  "nonClaims": [
+    "PROGRAM-CONSENSUS remains LOCKED",
+    "PROD-OPS-1, L1-CANDIDATE, L1-PRODUCTION, and VALUE-1 remain excluded",
+    "Non-isolated ARM64 timings do not certify quiet-host x86_64 p99 latency or consensus safety"
+  ]
+}

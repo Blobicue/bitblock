@@ -88,7 +88,7 @@ candidate to choose its own authority.
 | PS-045 | LANGUAGE-R1 | grammar-choice | BOUNDED |
 | PS-046 | VM-D1 | base | BOUNDED |
 | PS-047 | VM-1 | base | IMPLEMENTED |
-| PS-048 | PROGRAM-STATE-1 | base | READY |
+| PS-048 | PROGRAM-STATE-1 | base | BOUNDED |
 | PS-049 | EMERGENCE-R1 | base | BOUNDED |
 | PS-050 | PROGRAM-CONSENSUS | base | LOCKED |
 | PS-051 | SCALE-1 | base | BOUNDED |
@@ -1123,13 +1123,20 @@ is invalid input, not a third collision row.
 
 ### `PROGRAM-STATE-1` — deterministic code and program-state commitments
 
-- **Status:** `PS-048:PROGRAM-STATE-1@base=READY`.
+- **Status:** `PS-048:PROGRAM-STATE-1@base=BOUNDED`.
 - **Depends on:** `VM-1`, `TRANSITION-SPEC-1`, `PROFILE-D1`, `CODEC-1`, `COMMIT-1`, `BOUNDS-1`.
 - **Motive:** produce canonical code/program state and roots before the execution-root composer or
   shared-authority layer consumes them.
 - **Artifact:** canonical code identity and byte-availability references, program instances and
   storage, separately typed code/program roots, deterministic activation/execution/trap receipts,
-  and the resolved transition adapter for the exact language profile.
+  and the resolved transition adapter for the exact language profile — realized in
+  `crates/research/src/program_state_1.rs`, `tools/program_state_1_vectors.py`,
+  `tests/wave36_program_state_1.rs`, and `examples/program_state_1_probe.rs`, with merged-head
+  receipt [`PROGRAM_STATE_1_RECEIPT.md`](PROGRAM_STATE_1_RECEIPT.md) and measurements
+  [`program-state-1-v1.json`](program-state-1-v1.json) anchored to `origin/main` commit
+  `ff8df59bcacc2c31d5ebc9c94cfaff3657178926` (tree `2131b8133279f092bcbd4d7fc3335486d61858dd`,
+  PR #117 CI runs `45560665769` and `45560658455`, 10/10 jobs green; `bbmutate program_state_1`:
+  20/20 sites KILLED).
 - **Gate:** independent codecs, parser/interpreter, full-rebuild/incremental roots, proofs, receipts,
   restart, and recovery agree; malformed/unavailable code, stale versions, hidden state, uncharged
   work, cross-domain roots, and partial program writes reject before root publication.
@@ -2035,9 +2042,8 @@ implementation, activation, or profile authority. Each entry must remain byte-eq
 | Frontier ordinal | Authoritative READY projection |
 | ---: | --- |
 | 1 | `PS-016:VERKLE-R1@base=READY` |
-| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |
-| 3 | `PS-071:HASH-SOURCE-R1@base=READY` |
-| 4 | `PS-094:PROD-OPS-1@base=READY` |
+| 2 | `PS-071:HASH-SOURCE-R1@base=READY` |
+| 3 | `PS-094:PROD-OPS-1@base=READY` |
 
 ## `PlanningCheckerSummaryV1`
 
@@ -2070,7 +2076,7 @@ proof.
 | `foundation_node_count_u32` | `6` |
 | `detailed_node_count_u32` | `66` |
 | `phase_status_count_u32` | `95` |
-| `ready_frontier_count_u32` | `4` |
+| `ready_frontier_count_u32` | `3` |
 | `base_dependency_edge_count_u32` | `312` |
 | `phase_dependency_edge_count_u32` | `7` |
 | `conditional_edge_count_u32` | `44` |
