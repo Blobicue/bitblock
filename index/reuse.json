@@ -140,6 +140,12 @@
     ]
    },
    {
+    "item": "BYTES_PER_MIB",
+    "modules": [
+     "cost_1"
+    ]
+   },
+   {
     "item": "BitProbe",
     "modules": [
      "world"
@@ -269,6 +275,24 @@
     "item": "COORDINATE_EVIDENCE_SCHEMA",
     "modules": [
      "sequential"
+    ]
+   },
+   {
+    "item": "COST_1_MEASUREMENT_RECEIPT_SCHEMA",
+    "modules": [
+     "cost_1"
+    ]
+   },
+   {
+    "item": "COST_1_PLATFORM_BUDGET_PROFILE_SCHEMA",
+    "modules": [
+     "cost_1"
+    ]
+   },
+   {
+    "item": "COST_1_VERSION",
+    "modules": [
+     "cost_1"
     ]
    },
    {
@@ -1346,6 +1370,12 @@
     ]
    },
    {
+    "item": "SECONDS_PER_YEAR",
+    "modules": [
+     "cost_1"
+    ]
+   },
+   {
     "item": "SENSOR_CHALLENGE_SCHEMA",
     "modules": [
      "physical_sensor"
@@ -2186,12 +2216,6 @@
     ]
    },
    {
-    "item": "profile_tag",
-    "modules": [
-     "physical_sensor"
-    ]
-   },
-   {
     "item": "raw_measurement",
     "modules": [
      "physical_sensor"
@@ -2331,7 +2355,7 @@
     ]
    }
   ],
-  "pub_items": 2253,
+  "pub_items": 2272,
   "unreferenced": [
    {
     "item": "into_challenge",
@@ -2355,7 +2379,7 @@
  },
  "duplication": {
   "production": {
-   "code_lines": 86416,
+   "code_lines": 86735,
    "duplicated_lines": 407,
    "regions": [
     {
@@ -2536,7 +2560,7 @@
    ]
   },
   "test": {
-   "code_lines": 29344,
+   "code_lines": 29387,
    "duplicated_lines": 341,
    "regions": [
     {
