@@ -1,15 +1,19 @@
-# 4-validator localhost-only Bitblock L1 Bits Shadow Testnet (Phase 1).
+# 4-validator localhost-only Bitblock L1 Bits Shadow Testnet (Phase 1 / Phase 2).
 #
 # STRICT BOUNDARY:
 # - Testnet / devnet ONLY (`lab: true`, `DEVNET-TEST-KEYS-NOT-PRODUCTION-CUSTODY`).
 # - All host bindings stay strictly on 127.0.0.1 shadow ports (8640 LB, 8645..8648 nodes,
-#   19100..19103 P2P) so this stack never interferes with legacy rngcoin-node (8540/8545..8548).
+#   19100..19103 P2P, 8690 relayer) so this stack never conflicts with legacy rngcoin-node
+#   (8540/8545..8548/8590).
 # - The optional `named-tunnel` profile is an inert opt-in template ONLY: it does NOT create
 #   or route any Cloudflare Tunnel or DNS record. Tunnel credentials and DNS belong to Owen.
 #
-# Usage:
+# Usage (persistent localhost shadow stack):
 #   ./node/deploy/init-docker-testnet.sh
-#   BB_UID=$(id -u) BB_GID=$(id -g) docker compose -f node/deploy/docker-compose.testnet.yml up -d --build
+#   BB_UID=$(id -u) BB_GID=$(id -g) docker compose -p bitblock-shadow \
+#     -f node/deploy/docker-compose.testnet.yml \
+#     -f node/deploy/docker-compose.cutover.yml \
+#     --profile relayer up -d --build
 
 services:
   node-0:
@@ -102,6 +106,34 @@ services:
       - node-1
       - node-2
       - node-3
+    restart: unless-stopped
+    networks: [bbnet]
+
+  relayer:
+    build:
+      context: ../..
+      dockerfile: node/relayer/Dockerfile
+    image: bitblock-relayer:shadow-testnet
+    container_name: bb-relayer
+    profiles: ["relayer"]
+    user: "${BB_UID:-1000}:${BB_GID:-1000}"
+    env_file:
+      - path: ../.runtime/relayer/relayer.env
+        required: false
+    environment:
+      - GAMELADDER_URL=${GAMELADDER_URL:-https://gameladder.io}
+      - L1_RPC_URL=http://rpc-lb:8645
+      - RELAYER_DATA_DIR=/data
+      - POLL_MS=${RELAYER_POLL_MS:-10000}
+      - HEALTH_HOST=0.0.0.0
+      - HEALTH_PORT=8690
+    volumes:
+      - ../.runtime/relayer:/data
+    ports:
+      - "127.0.0.1:8690:8690"
+    depends_on:
+      rpc-lb:
+        condition: service_healthy
     restart: unless-stopped
     networks: [bbnet]
 

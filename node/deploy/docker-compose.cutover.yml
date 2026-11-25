@@ -1,0 +1,27 @@
+# Phase 2 Cutover Compose Override (paired with node/deploy/docker-compose.testnet.yml).
+#
+# 1. Attaches `bb-rpc-lb` to the existing `rngcoin-node_rngnet` bridge under DNS alias `bb-rpc-lb`
+#    so `rng-rpc-lb` can hot-reload traffic to Bitblock L1 with ZERO Cloudflare/DNS changes.
+# 2. Mounts `${RNGCOIN_RELAYER_DIR:-/home/juzz/rngcoin-node/.runtime/relayer}` READ-ONLY at
+#    `/etc/rng-relayer:ro` inside `bb-relayer` (`GATE_KEY_ENV_FILE=/etc/rng-relayer/relayer.env`)
+#    so Owen's single run of `~/rngcoin-node/scripts/sync-relayer-gate-key.sh` activates BOTH
+#    relayers live without ever copying the secret into `~/bitblock`.
+
+services:
+  rpc-lb:
+    networks:
+      bbnet: {}
+      rngnet:
+        aliases:
+          - bb-rpc-lb
+
+  relayer:
+    environment:
+      - GATE_KEY_ENV_FILE=/etc/rng-relayer/relayer.env
+    volumes:
+      - ${RNGCOIN_RELAYER_DIR:-/home/juzz/rngcoin-node/.runtime/relayer}:/etc/rng-relayer:ro
+
+networks:
+  rngnet:
+    external: true
+    name: rngcoin-node_rngnet

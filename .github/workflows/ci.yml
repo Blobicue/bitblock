@@ -87,6 +87,10 @@ jobs:
           cargo build --manifest-path node/Cargo.toml --release --target wasm32-unknown-unknown -p bitblock-light-wasm
           node node/tools/light_wasm_parity_check.mjs node/target/wasm32-unknown-unknown/release/bitblock_light_wasm.wasm
           cargo build --manifest-path node/Cargo.toml -p bitblock-node
+          bash -n node/deploy/init-docker-testnet.sh node/scripts/cutover-switch.sh node/scripts/sync-relayer-gate-key.sh
+          bash node/scripts/cutover-switch.sh --mode shadow --dry-run
+          bash node/scripts/cutover-switch.sh --mode bitblock --dry-run
+          bash node/scripts/cutover-switch.sh --mode rollback --dry-run
           node node/scripts/verify-shadow-testnet.mjs
 
   python-tools:

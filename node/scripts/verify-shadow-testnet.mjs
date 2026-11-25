@@ -252,7 +252,16 @@ try {
     eventCount: 12,
   };
 
+  const mockGateKey = 'synthetic-ci-shadow-gate-key';
+  const mockGateEnvFile = path.join(workDir, 'shared-relayer.env');
+  fs.writeFileSync(mockGateEnvFile, `GAMELADDER_GATE_KEY=${mockGateKey}\n`, { mode: 0o600 });
+
   mockGlServer = http.createServer((req, res) => {
+    if (req.headers['x-gate-key'] !== mockGateKey) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, reason: 'missing or wrong x-gate-key' }));
+      return;
+    }
     if (req.url === '/api/bits/relayer/pending-intents') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, intents: pendingIntents }));
@@ -285,6 +294,7 @@ try {
     env: {
       ...process.env,
       GAMELADDER_URL: `http://127.0.0.1:${mockGlPort}`,
+      GATE_KEY_ENV_FILE: mockGateEnvFile,
       L1_RPC_URL: rpc0,
       WASM_PATH,
       POLL_MS: '350',
@@ -450,6 +460,26 @@ try {
   });
   assert.equal(node3Caught.head.treasuryBalance, 50);
   assert.equal(node3Caught.head.simulatedPayoutEscrow, 100);
+
+  // 9b. Run Phase 2 health/invariant watchdog directly against the live 4-node cluster + relayer!
+  const healthOut = execFileSync(
+    process.execPath,
+    [
+      path.join(__dirname, 'check-bits-testnet-health.mjs'),
+      '--rpc', rpc0,
+      '--node-ports', [rpcBase, rpcBase + 1, rpcBase + 2, rpcBase + 3].join(','),
+      '--relayer', `${relayerUrl}/health`,
+      '--strict-relayer',
+      '--advance-ms', '1500',
+    ],
+    { encoding: 'utf8' },
+  );
+  const healthJson = JSON.parse(healthOut);
+  assert.equal(healthJson.ok, true, `check-bits-testnet-health failed: ${healthOut}`);
+  assert.equal(healthJson.qcVerified, true);
+  assert.equal(healthJson.conservationOk, true);
+  assert.equal(healthJson.bodyCapStatus, 413);
+  assert.equal(healthJson.relayerMode, 'active');
 
   // 10. Optional live headless Chrome `/l1.html` visual verification against running node-0!
   if (screenshotPath) {
