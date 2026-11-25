@@ -112,6 +112,9 @@
    "protocol",
    "world"
   ],
+  "cost_1": [
+   "protocol"
+  ],
   "crypto_1": [
    "crypto_d1",
    "identity_d1",
@@ -651,7 +654,7 @@
    "protocol"
   ]
  },
- "edges": 482,
+ "edges": 483,
  "stratum": {
   "asset_1": 12,
   "asset_d1": 3,
@@ -667,6 +670,7 @@
   "consensus_1": 21,
   "consensus_gov_d1": 4,
   "coordinate_episode": 6,
+  "cost_1": 1,
   "crypto_1": 3,
   "crypto_d1": 1,
   "display": 5,
@@ -754,6 +758,7 @@
   "consensus_1": 8,
   "consensus_gov_d1": 34,
   "coordinate_episode": 37,
+  "cost_1": 0,
   "crypto_1": 5,
   "crypto_d1": 39,
   "display": 7,
@@ -792,7 +797,7 @@
   "profile_bootstrap": 33,
   "profile_d1": 20,
   "program": 61,
-  "protocol": 83,
+  "protocol": 84,
   "protocol_id_1": 21,
   "release_1": 3,
   "release_r1": 4,

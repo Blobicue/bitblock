@@ -242,6 +242,16 @@
   ]
  },
  {
+  "id": "sub:cost-1",
+  "members": [
+   "module:cost_1"
+  ],
+  "name": "cost-1",
+  "terms": [
+   "cost"
+  ]
+ },
+ {
   "id": "sub:crypto-1",
   "members": [
    "module:crypto_1"

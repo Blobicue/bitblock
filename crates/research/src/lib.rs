@@ -28,6 +28,7 @@ pub mod commit_state;
 pub mod consensus_1;
 pub mod consensus_gov_d1;
 pub mod coordinate_episode;
+pub mod cost_1;
 pub mod crypto_1;
 pub mod crypto_d1;
 pub mod display_artifact;

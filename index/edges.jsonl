@@ -1253,6 +1253,8 @@
 {"from": "module:consensus_gov_d1", "kind": "declares", "to": "schema:bitblock/governance-d1/policy/v1"}
 {"from": "module:coordinate_episode", "kind": "declares", "to": "schema:bitblock/coordinate-episode-derivation-policy/v1"}
 {"from": "module:coordinate_episode", "kind": "declares", "to": "schema:bitblock/coordinate-episode-evidence/v1"}
+{"from": "module:cost_1", "kind": "declares", "to": "schema:bitblock/cost-1/measurement-receipt/v1"}
+{"from": "module:cost_1", "kind": "declares", "to": "schema:bitblock/cost-1/platform-budget-profile/v1"}
 {"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-backup-envelope/v1"}
 {"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-ctr/v1"}
 {"from": "module:crypto_1", "kind": "declares", "to": "schema:bitblock/crypto-1/custody-enc/v1"}
@@ -1523,6 +1525,7 @@
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:program"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:coordinate_episode", "kind": "depends_on", "to": "module:world"}
+{"from": "module:cost_1", "kind": "depends_on", "to": "module:protocol"}
 {"from": "module:crypto_1", "kind": "depends_on", "to": "module:crypto_d1"}
 {"from": "module:crypto_1", "kind": "depends_on", "to": "module:identity_d1"}
 {"from": "module:crypto_1", "kind": "depends_on", "to": "module:protocol"}
@@ -2075,6 +2078,9 @@
 {"from": "example:examples/commit_r1_assay_probe.rs", "kind": "uses", "to": "module:world"}
 {"from": "example:examples/compositor_buffer_probe.rs", "kind": "uses", "to": "module:sidebar"}
 {"from": "example:examples/consensus_1_bft_probe.rs", "kind": "uses", "to": "module:consensus_1"}
+{"from": "example:examples/cost_1_platform_probe.rs", "kind": "uses", "to": "module:bits_economy_1"}
+{"from": "example:examples/cost_1_platform_probe.rs", "kind": "uses", "to": "module:cost_1"}
+{"from": "example:examples/cost_1_platform_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_1"}
 {"from": "example:examples/crypto_1_lifecycle_probe.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:examples/economic_state_1_probe.rs", "kind": "uses", "to": "module:asset_d1"}
@@ -2507,6 +2513,9 @@
 {"from": "example:tests/wave33_testnet_1.rs", "kind": "uses", "to": "module:testnet_1"}
 {"from": "example:tests/wave34_bits_economy_1.rs", "kind": "uses", "to": "module:bits_economy_1"}
 {"from": "example:tests/wave34_bits_economy_1.rs", "kind": "uses", "to": "module:crypto_d1"}
+{"from": "example:tests/wave35_cost_1.rs", "kind": "uses", "to": "module:bits_economy_1"}
+{"from": "example:tests/wave35_cost_1.rs", "kind": "uses", "to": "module:cost_1"}
+{"from": "example:tests/wave35_cost_1.rs", "kind": "uses", "to": "module:crypto_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:commit_state"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:consensus_gov_d1"}
 {"from": "example:tests/wave3_bootstrap_and_language_r1.rs", "kind": "uses", "to": "module:crypto_d1"}
@@ -2647,6 +2656,8 @@
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/content-tag/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/coordinate-episode-derivation-policy/v1"}
 {"from": "tool:coordinate_episode_vectors", "kind": "vectors", "to": "schema:bitblock/coordinate-episode-evidence/v1"}
+{"from": "tool:cost_1_vectors", "kind": "vectors", "to": "schema:bitblock/cost-1/measurement-receipt/v1"}
+{"from": "tool:cost_1_vectors", "kind": "vectors", "to": "schema:bitblock/cost-1/platform-budget-profile/v1"}
 {"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-backup-envelope/v1"}
 {"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-ctr/v1"}
 {"from": "tool:crypto_1_vectors", "kind": "vectors", "to": "schema:bitblock/crypto-1/custody-enc/v1"}
