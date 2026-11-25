@@ -269,13 +269,13 @@ EXPECTED_NODE_IDS = frozenset(
     SUCCESSOR-ACTIVATION-1
     """.split()
 )
-EXPECTED_STATUS_DIGEST = "f1e4d04e3a7e3500177dbc89c81da943bf32533182c59ebef34294a47f39f468"
+EXPECTED_STATUS_DIGEST = "9ddca7d9f2aaf6c5656dbd252b92c6345ec283a45e7627a7b729c1ea69ebef00"
 EXPECTED_BASE_DEPENDENCY_DIGEST = (
     "ab4fcdaa8167a306e34d3b8de89b518ef018c733cfbcddf0df00112ab842a148"
 )
 EXPECTED_PHASE_STATUS_IDS = frozenset(f"PS-{number:03d}" for number in range(1, 96))
 EXPECTED_PHASE_STATUS_DIGEST = (
-    "e5aebfe5530ba76af6ed52a01397a6da080e5ca1a0131d2d13368cb1f046bbc4"
+    "86e7c081560683132eb85c6f318c295b175c63cba7ac027eae3fc99333e8b12b"
 )
 EXPECTED_PHASE_DEPENDENCY_IDS = frozenset(f"PD-{number:02d}" for number in range(1, 8))
 EXPECTED_PHASE_DEPENDENCY_DIGEST = (
@@ -7779,7 +7779,7 @@ def run_self_tests(
     parse_capability(boundary_probe)
 
     frontier_locked = text.replace(
-        "| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |",
+        "| 2 | `PS-071:HASH-SOURCE-R1@base=READY` |",
         "| 2 | `PS-019:VERKLE-R1@prototype=LOCKED` |",
         1,
     )
@@ -7805,7 +7805,7 @@ def run_self_tests(
     )
 
     frontier_omission = text.replace(
-        "| 4 | `PS-094:PROD-OPS-1@base=READY` |\n",
+        "| 3 | `PS-094:PROD-OPS-1@base=READY` |\n",
         "",
         1,
     )
@@ -7818,9 +7818,9 @@ def run_self_tests(
     )
 
     frontier_duplicate = text.replace(
-        "| 4 | `PS-094:PROD-OPS-1@base=READY` |",
-        "| 4 | `PS-094:PROD-OPS-1@base=READY` |\n"
-        "| 5 | `PS-016:VERKLE-R1@base=READY` |",
+        "| 3 | `PS-094:PROD-OPS-1@base=READY` |",
+        "| 3 | `PS-094:PROD-OPS-1@base=READY` |\n"
+        "| 4 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
     if frontier_duplicate == text:
@@ -7833,10 +7833,10 @@ def run_self_tests(
 
     frontier_reorder = text.replace(
         "| 1 | `PS-016:VERKLE-R1@base=READY` |",
-        "| 1 | `PS-048:PROGRAM-STATE-1@base=READY` |",
+        "| 1 | `PS-071:HASH-SOURCE-R1@base=READY` |",
         1,
     ).replace(
-        "| 2 | `PS-048:PROGRAM-STATE-1@base=READY` |",
+        "| 2 | `PS-071:HASH-SOURCE-R1@base=READY` |",
         "| 2 | `PS-016:VERKLE-R1@base=READY` |",
         1,
     )
