@@ -19,6 +19,7 @@ pub use bitblock_core::{
 pub mod asset_1;
 pub mod asset_d1;
 pub mod auth_commit_1;
+pub mod bits_economy_1;
 pub mod bounds_1;
 pub mod chain_launch_1;
 pub mod client_1;

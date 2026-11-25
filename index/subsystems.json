@@ -66,6 +66,16 @@
   ]
  },
  {
+  "id": "sub:bits-1",
+  "members": [
+   "module:bits_economy_1"
+  ],
+  "name": "bits-1",
+  "terms": [
+   "bits"
+  ]
+ },
+ {
   "id": "sub:bounds-1",
   "members": [
    "module:bounds_1"

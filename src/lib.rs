@@ -8,17 +8,17 @@ pub use bitblock_core::*;
 
 #[cfg(feature = "protocol-research")]
 pub use bitblock_research::{
-    asset_1, asset_d1, auth_commit_1, bounds_1, chain_launch_1, client_1, commit_r1, commit_state,
-    consensus_1, consensus_gov_d1, coordinate_episode, crypto_1, crypto_d1, display_artifact,
-    display_store, economic_state_1, emergence_r1, execution_root_1, executor_1, genesis_d1,
-    genesis_root_parity_1, governance_1, history_store, identity_1, identity_d1, journal,
-    ladder_bridge, language_r1, local_bounds, multi_1, octree_commit, optimization, output_color,
-    output_topology, physical_sensor, presentation, presentation_output, presentation_output_v2,
-    profile_1, profile_bootstrap, profile_d1, protocol_id_1, release_1, release_r1,
-    replay_evidence, resource_1, rule_1, scale_assay, sequencer_1, sequential, signer_ops_1,
-    storage, successor_activation_1, sync_1, sync_replay_authority_1, testnet_1, threat_1,
-    transition_spec, transition_spec_1, upgrade_1, upgrade_framework_1, validator_econ_1,
-    validator_schedule_1, verkle_feasibility, vm_1, vm_d1,
+    asset_1, asset_d1, auth_commit_1, bits_economy_1, bounds_1, chain_launch_1, client_1,
+    commit_r1, commit_state, consensus_1, consensus_gov_d1, coordinate_episode, crypto_1,
+    crypto_d1, display_artifact, display_store, economic_state_1, emergence_r1, execution_root_1,
+    executor_1, genesis_d1, genesis_root_parity_1, governance_1, history_store, identity_1,
+    identity_d1, journal, ladder_bridge, language_r1, local_bounds, multi_1, octree_commit,
+    optimization, output_color, output_topology, physical_sensor, presentation,
+    presentation_output, presentation_output_v2, profile_1, profile_bootstrap, profile_d1,
+    protocol_id_1, release_1, release_r1, replay_evidence, resource_1, rule_1, scale_assay,
+    sequencer_1, sequential, signer_ops_1, storage, successor_activation_1, sync_1,
+    sync_replay_authority_1, testnet_1, threat_1, transition_spec, transition_spec_1, upgrade_1,
+    upgrade_framework_1, validator_econ_1, validator_schedule_1, verkle_feasibility, vm_1, vm_d1,
 };
 #[cfg(all(windows, feature = "protocol-research"))]
 pub use bitblock_research::{windows_timing, windows_topology};
