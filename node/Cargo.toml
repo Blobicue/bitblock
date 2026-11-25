@@ -2,22 +2,42 @@
 resolver = "2"
 members = [
     "crates/bitblock-light-wasm",
+    "crates/bitblock-store",
+    "crates/bitblock-net",
+    "crates/bitblock-node",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.85"
+license = "Apache-2.0"
 publish = false
 
 [workspace.dependencies]
 bitblock-core = { path = "../crates/core" }
 bitblock-research = { path = "../crates/research" }
-sha2 = { version = "=0.10.9", default-features = false }
+bitblock-light-wasm = { path = "crates/bitblock-light-wasm" }
+bitblock-store = { path = "crates/bitblock-store" }
+bitblock-net = { path = "crates/bitblock-net" }
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 thiserror = "2"
+zeroize = "1"
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+redb = "2"
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+clap = { version = "4", features = ["derive"] }
+libp2p = { version = "0.54", features = ["tokio", "dns", "quic", "tcp", "noise", "yamux", "gossipsub", "kad", "identify", "request-response", "macros"] }
+futures = "0.3"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [profile.release]
 lto = true

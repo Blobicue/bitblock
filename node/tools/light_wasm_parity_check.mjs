@@ -95,7 +95,7 @@ function qcCommitSigningDigest(chainId, genesisHex, height, round, epoch, blockH
     u16be(1),
     u64be(chainId),
     genesis,
-    Buffer.alloc(32),
+    genesis,
     genesis,
     Buffer.from([4]), // SigningDomainTagV1::ConsensusVote = 4
     u16be(1),

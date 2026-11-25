@@ -1,0 +1,34 @@
+# Multi-validator HA reverse proxy for Bitblock L1 shadow testnet proof doors (localhost only).
+# Primary-with-failover (`lb_policy first`) keeps consecutive proof reads monotonic under
+# normal operation while failing over cleanly to node-1..3 if node-0 restarts.
+{
+	auto_https off
+	admin off
+}
+
+:8645 {
+	request_body {
+		max_size 64KB
+	}
+	# Retry idempotent reads and signed POST /tx (deduplicated by sender_actor + seq + tx_hash).
+	# Excludes non-idempotent POST /faucet.
+	reverse_proxy node-0:8645 node-1:8645 node-2:8645 node-3:8645 {
+		lb_policy first
+		request_buffers 64KB
+		lb_retries 3
+		lb_retry_match {
+			expression `{method} in ['GET', 'HEAD', 'OPTIONS'] || ({method} == 'POST' && {path} == '/tx')`
+		}
+		lb_try_duration 4s
+		lb_try_interval 150ms
+		health_uri /health
+		health_interval 2s
+		health_timeout 1s
+		fail_duration 10s
+		max_fails 1
+		transport http {
+			dial_timeout 1s
+			response_header_timeout 8s
+		}
+	}
+}

@@ -1,0 +1,25 @@
+[package]
+name = "bitblock-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aes-gcm.workspace = true
+argon2.workspace = true
+axum.workspace = true
+bitblock-light-wasm.workspace = true
+bitblock-net.workspace = true
+bitblock-research.workspace = true
+bitblock-store.workspace = true
+clap.workspace = true
+hex.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zeroize.workspace = true
