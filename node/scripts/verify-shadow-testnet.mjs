@@ -18,22 +18,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadLightWasm, relayerKeyFromSeedHex, sha256Hex } from '../relayer/lib.mjs';
+import {
+  loadLightWasm,
+  relayerKeyFromSeedHex,
+  resolveDefaultWasmPath,
+  sha256Hex,
+} from '../relayer/lib.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
-const WASM_PATH = path.join(
-  REPO_ROOT,
-  'node/target/wasm32-unknown-unknown/release/bitblock_light_wasm.wasm',
-);
+const WASM_PATH = process.env.WASM_PATH || resolveDefaultWasmPath();
 const VERIFIER_HTML = path.join(__dirname, 'l1-shadow-verifier.html');
 
-// Locate bitblock-node binary (prefer release if present, else debug).
+// Locate bitblock-node binary (prefer release if present, else debug; supports Windows .exe & staged bin).
 function findNodeBin() {
   const candidates = [
     process.env.BITBLOCK_NODE_BIN,
+    path.join(REPO_ROOT, 'node/target/release/bitblock-node.exe'),
     path.join(REPO_ROOT, 'node/target/release/bitblock-node'),
+    path.join(REPO_ROOT, 'node/target/debug/bitblock-node.exe'),
     path.join(REPO_ROOT, 'node/target/debug/bitblock-node'),
+    path.join(REPO_ROOT, 'node/.runtime/bin/bitblock-node.exe'),
+    path.join(REPO_ROOT, 'node/.runtime/bin/bitblock-node'),
   ].filter(Boolean);
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -234,18 +240,28 @@ try {
     'Live 4-validator Ed25519 HotStuff QC must verify via bitblock-light-wasm',
   );
 
-  // 3. Spin up localhost mock Gameladder intent + proof-door server.
+  // 3. Spin up localhost mock Gameladder intent + ack + proof-door server.
   const buyerKey = relayerKeyFromSeedHex('a1'.repeat(32));
+  const compatKey = relayerKeyFromSeedHex('b2'.repeat(32));
   const creatorKey = relayerKeyFromSeedHex('c1'.repeat(32));
   const pendingIntents = [
     {
+      // Live Gameladder field name (`toPubkeyHex` from server/bits-router.js)
       kind: 'signup_grant',
       intentId: 'signup-buyer-1',
-      grantId: sha256Hex('signup-buyer-1'),
-      recipientPubkeyHex: buyerKey.pubkeyHex,
+      toPubkeyHex: buyerKey.pubkeyHex,
       amountBits: 1000,
     },
+    {
+      // Backwards-compatible legacy field name (`recipientPubkeyHex`)
+      kind: 'signup_grant',
+      intentId: 'signup-compat-1',
+      grantId: sha256Hex('signup-compat-1'),
+      recipientPubkeyHex: compatKey.pubkeyHex,
+      amountBits: 250,
+    },
   ];
+  const ackedIntents = new Map();
   const mockGlState = {
     height: 7,
     root: sha256Hex('gameladder-epoch-7'),
@@ -262,12 +278,40 @@ try {
       res.end(JSON.stringify({ ok: false, reason: 'missing or wrong x-gate-key' }));
       return;
     }
-    if (req.url === '/api/bits/relayer/pending-intents') {
+    if (req.method === 'GET' && req.url === '/api/bits/relayer/pending-intents') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, intents: pendingIntents }));
+      res.end(
+        JSON.stringify({
+          ok: true,
+          intents: pendingIntents.filter((i) => !ackedIntents.has(i.intentId)),
+        }),
+      );
       return;
     }
-    if (req.url === '/api/market/proof') {
+    if (req.method === 'POST' && req.url === '/api/bits/relayer/ack') {
+      let body = '';
+      req.on('data', (d) => { body += d.toString(); });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body || '{}');
+          const acks = Array.isArray(parsed.acks) ? parsed.acks : [parsed];
+          const confirmed = [];
+          for (const a of acks) {
+            if (a && typeof a.intentId === 'string' && typeof a.txHash === 'string') {
+              ackedIntents.set(a.intentId, a);
+              confirmed.push(a.intentId);
+            }
+          }
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, confirmedCount: confirmed.length, confirmed }));
+        } catch {
+          res.writeHead(400, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: 'bad JSON' }));
+        }
+      });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/market/proof') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
@@ -305,20 +349,28 @@ try {
     },
   });
 
-  // Wait for relayer health + 1,000 Bits signup grant + audit-only L2 anchor!
+  // Wait for relayer health + both signup grants (`toPubkeyHex` & `recipientPubkeyHex`) + /ack + L2 anchor!
   const relayerUrl = `http://127.0.0.1:${relayerHealthPort}`;
-  await waitFor('relayer active with signup grant & L2 anchor', 15_000, async () => {
+  await waitFor('relayer active with signup grants, /ack & L2 anchor', 15_000, async () => {
     const r = await fetch(`${relayerUrl}/health`);
     if (!r.ok) return null;
     const h = await r.json();
-    return h.ok && h.mode === 'active' && h.signupGrantsRelayed >= 1 && h.anchoredCount >= 1 ? h : null;
+    return h.ok && h.mode === 'active' && h.signupGrantsRelayed >= 2 && h.ackedIntentsCount >= 2 && h.anchoredCount >= 1
+      ? h
+      : null;
   });
+  assert.ok(ackedIntents.has('signup-buyer-1'), 'toPubkeyHex signup grant must be acked via POST /api/bits/relayer/ack');
+  assert.ok(ackedIntents.has('signup-compat-1'), 'recipientPubkeyHex signup grant must be acked via POST /api/bits/relayer/ack');
+  assert.ok(ackedIntents.get('signup-buyer-1').finalizedHeight >= 1, 'ack must include finalizedHeight >= 1');
 
-  // 5. Verify buyer received 1,000 Bits via Amendment 1 dual lookup + Patricia proof!
+  // 5. Verify buyer (toPubkeyHex) and compat user (recipientPubkeyHex) received grants + Patricia proofs!
   const buyerWallet = await waitFor('buyer 1,000 Bits signup grant commitment', 15_000, async () => {
     const w = await fetch(`${rpc0}/proof/wallet/${buyerKey.pubkeyHex}`).then((r) => r.json());
     return w.balance === 1000 ? w : null;
   });
+  const compatWallet = await fetch(`${rpc0}/proof/wallet/${compatKey.pubkeyHex}`).then((r) => r.json());
+  assert.equal(compatWallet.balance, 250);
+  assert.equal(wasm.verifyWalletProof(compatWallet), 1);
   const buyerByActor = await fetch(`${rpc0}/proof/wallet/${buyerWallet.actorId}`).then((r) => r.json());
   assert.equal(buyerWallet.actorId, buyerByActor.actorId);
   assert.equal(wasm.verifyWalletProof(buyerWallet), 1);
@@ -425,7 +477,7 @@ try {
   const headAfter = await fetch(`${rpc0}/proof`).then((r) => r.json());
   assert.equal(headAfter.head.treasuryBalance, 50);
   assert.equal(headAfter.head.simulatedPayoutEscrow, 100);
-  assert.equal(headAfter.head.grantPoolRemaining, 1_000_000_000 - 1_000);
+  assert.equal(headAfter.head.grantPoolRemaining, 1_000_000_000 - 1_250);
 
   // 8. Hardening checks: 413 on >64 KiB POST body & <=100 /proof/blocks cap.
   const bigRes = await fetch(`${rpc0}/tx`, {

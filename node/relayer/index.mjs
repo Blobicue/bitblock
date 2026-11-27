@@ -7,10 +7,10 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import {
-  DEFAULT_WASM_PATH,
   generateRelayerKey,
   loadLightWasm,
   relayerKeyFromSeedHex,
+  resolveDefaultWasmPath,
   runBitsRelayerCycle,
 } from './lib.mjs';
 
@@ -47,7 +47,7 @@ function resolveGateKey() {
   return GAMELADDER_GATE_KEY_ENV;
 }
 const APP_ID = process.env.APP_ID || 'gameladder';
-const WASM_PATH = process.env.WASM_PATH || DEFAULT_WASM_PATH;
+const WASM_PATH = process.env.WASM_PATH || resolveDefaultWasmPath();
 const POLL_MS = Math.max(250, Number(process.env.POLL_MS || 5_000));
 const HEALTH_HOST = process.env.HEALTH_HOST || '127.0.0.1';
 const HEALTH_PORT = Number(process.env.HEALTH_PORT || 8690);
@@ -78,6 +78,8 @@ let state = fs.existsSync(STATE_FILE)
       anchoredCount: 0,
       signupGrantsRelayed: 0,
       intentsRelayed: 0,
+      ackedIntentsCount: 0,
+      pendingAcks: [],
       lastTxHash: null,
       processedIntentIds: [],
     };
@@ -135,11 +137,12 @@ async function tick() {
       status.mode = 'active';
       status.lastError = null;
       if (res.nextState) saveStateAtomic(res.nextState);
-      if (res.submittedTxs && res.submittedTxs.length > 0) {
+      if ((res.submittedTxs && res.submittedTxs.length > 0) || res.ackedCount > 0) {
         log('info', 'relayed Bits transactions to Bitblock L1', {
-          count: res.submittedTxs.length,
+          count: res.submittedTxs ? res.submittedTxs.length : 0,
           signupGrantsCount: res.signupGrantsCount,
           signedIntentsCount: res.signedIntentsCount,
+          ackedCount: res.ackedCount || 0,
           anchored: res.anchored,
           lastTxHash: res.lastTxHash,
         });
@@ -170,6 +173,8 @@ const server = http.createServer((req, res) => {
         anchoredCount: state.anchoredCount,
         signupGrantsRelayed: state.signupGrantsRelayed,
         intentsRelayed: state.intentsRelayed,
+        ackedIntentsCount: state.ackedIntentsCount || 0,
+        pendingAcksCount: Array.isArray(state.pendingAcks) ? state.pendingAcks.length : 0,
         lastTxHash: state.lastTxHash,
       }),
     );

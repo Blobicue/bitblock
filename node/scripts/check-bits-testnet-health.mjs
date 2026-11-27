@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_WASM_PATH, loadLightWasm } from '../relayer/lib.mjs';
+import { loadLightWasm, resolveDefaultWasmPath } from '../relayer/lib.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +30,7 @@ const RELAYER_URL = getArg('--relayer', process.env.BITS_RELAYER_HEALTH_URL || '
 const NODE_PORTS_CSV = getArg('--node-ports', process.env.BITS_NODE_PORTS || '8645,8646,8647,8648');
 const NODE_PORTS = NODE_PORTS_CSV.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 const ADVANCE_WAIT_MS = Number(getArg('--advance-ms', process.env.ADVANCE_WAIT_MS || '4500'));
-const WASM_PATH = getArg('--wasm', process.env.WASM_PATH || DEFAULT_WASM_PATH);
+const WASM_PATH = getArg('--wasm', process.env.WASM_PATH || resolveDefaultWasmPath());
 const STRICT_RELAYER = process.argv.includes('--strict-relayer');
 const SKIP_RELAYER = process.argv.includes('--skip-relayer');
 
@@ -197,6 +197,7 @@ const report = {
   ts: new Date().toISOString(),
   rpcUrl: RPC_URL,
   protocol: proof2.json?.protocol ?? null,
+  chainId: proof2.json?.chainId ?? null,
   lab: proof2.json?.lab ?? null,
   validatorsOnline: onlineNodes.length,
   validatorsExpected: NODE_PORTS.length,
