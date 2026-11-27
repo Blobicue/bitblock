@@ -21,6 +21,16 @@ export const DEFAULT_WASM_PATH = path.resolve(
   __dirname,
   '../target/wasm32-unknown-unknown/release/bitblock_light_wasm.wasm',
 );
+export const STAGED_WASM_PATH = path.resolve(
+  __dirname,
+  '../.runtime/bin/bitblock_light_wasm.wasm',
+);
+
+export function resolveDefaultWasmPath() {
+  if (fs.existsSync(DEFAULT_WASM_PATH)) return DEFAULT_WASM_PATH;
+  if (fs.existsSync(STAGED_WASM_PATH)) return STAGED_WASM_PATH;
+  return DEFAULT_WASM_PATH;
+}
 export const DEFAULT_MAX_KEY_LOOKUPS_PER_CYCLE = 40;
 export const DEFAULT_MAX_KEY_LOOKUPS_PER_HOUR = 100;
 export const DEFAULT_K1_POS_TTL_MS = 60 * 60_000;
@@ -218,9 +228,14 @@ export async function runBitsRelayerCycle({
   let grantPoolSeq = Number(gpWallet.seq || 0);
 
   const processedIds = new Set(Array.isArray(state.processedIntentIds) ? state.processedIntentIds : []);
+  const pendingAcks = Array.isArray(state.pendingAcks)
+    ? state.pendingAcks.filter((a) => a && typeof a.intentId === 'string' && typeof a.txHash === 'string')
+    : [];
+  const pendingAckIds = new Set(pendingAcks.map((a) => a.intentId));
   const submittedTxs = [];
   let signupGrantsCount = 0;
   let signedIntentsCount = 0;
+  let ackedCount = 0;
   let lastTxHash = state.lastTxHash || null;
 
   // 2. Poll Gameladder pending Bits intents (if endpoint exists).
@@ -239,7 +254,8 @@ export async function runBitsRelayerCycle({
 
       if (intent.kind === 'signup_grant') {
         if (!l1Head.lab) continue;
-        const recipientPubkey = String(intent.recipientPubkeyHex || '').toLowerCase();
+        // Accept both Gameladder's `toPubkeyHex` (server/bits-router.js) and legacy `recipientPubkeyHex`.
+        const recipientPubkey = String(intent.recipientPubkeyHex || intent.toPubkeyHex || '').toLowerCase();
         if (!/^[0-9a-f]{64}$/.test(recipientPubkey)) continue;
 
         // Amendment 1: resolve canonical ActorIdV1 via L1 proof door.
@@ -284,6 +300,10 @@ export async function runBitsRelayerCycle({
           signupGrantsCount += 1;
           lastTxHash = postJson.txHash || encoded.txHashHex;
           submittedTxs.push({ intentId: id, kind: 'signup_grant', txHash: lastTxHash });
+          if (!pendingAckIds.has(id)) {
+            pendingAcks.push({ intentId: id, txHash: lastTxHash, submittedHeight: l1Height });
+            pendingAckIds.add(id);
+          }
         } else {
           grantPoolSeq -= 1;
         }
@@ -301,6 +321,42 @@ export async function runBitsRelayerCycle({
           submittedTxs.push({ intentId: id, kind: 'signed_tx', txHash: lastTxHash });
         }
       }
+    }
+  }
+
+  // 2b. Acknowledge L1-finalized signup grants back to Gameladder (`POST /api/bits/relayer/ack`).
+  const readyAcks = [];
+  let remainingPendingAcks = [];
+  for (const entry of pendingAcks) {
+    const txRes = await fetchImpl(`${l1Base}/proof/tx/${entry.txHash}`);
+    if (txRes.ok) {
+      const txJson = await txRes.json().catch(() => null);
+      const fh = Number(txJson?.height ?? txJson?.receipt?.block_height ?? 0);
+      if (txJson?.ok && Number.isSafeInteger(fh) && fh > 0) {
+        readyAcks.push({ intentId: entry.intentId, txHash: entry.txHash, finalizedHeight: fh });
+        continue;
+      }
+    }
+    // If an unconfirmed tx outlived its 200-block validity window, release it for clean retry.
+    if (txRes.status === 404 && l1Height - Number(entry.submittedHeight || 0) > 250) {
+      processedIds.delete(entry.intentId);
+      continue;
+    }
+    remainingPendingAcks.push(entry);
+  }
+  if (readyAcks.length > 0) {
+    const ackRes = await fetchImpl(`${glBase}/api/bits/relayer/ack`, {
+      method: 'POST',
+      headers: { ...glHeaders, 'content-type': 'application/json' },
+      body: JSON.stringify({ acks: readyAcks }),
+    });
+    if (ackRes.ok) {
+      ackedCount = readyAcks.length;
+    } else if (ackRes.status !== 404) {
+      // Transient/auth error: retain in pendingAcks so the next healthy cycle retries cleanly.
+      remainingPendingAcks = remainingPendingAcks.concat(
+        readyAcks.map((a) => ({ intentId: a.intentId, txHash: a.txHash, submittedHeight: l1Height })),
+      );
     }
   }
 
@@ -368,6 +424,8 @@ export async function runBitsRelayerCycle({
     anchoredCount,
     signupGrantsRelayed: Number(state.signupGrantsRelayed || 0) + signupGrantsCount,
     intentsRelayed: Number(state.intentsRelayed || 0) + signedIntentsCount,
+    ackedIntentsCount: Number(state.ackedIntentsCount || 0) + ackedCount,
+    pendingAcks: remainingPendingAcks.slice(-256),
     lastTxHash,
     lastCycleAtMs: nowMs,
     processedIntentIds: [...processedIds].slice(-4096),
@@ -378,6 +436,7 @@ export async function runBitsRelayerCycle({
     anchored,
     signupGrantsCount,
     signedIntentsCount,
+    ackedCount,
     submittedTxs,
     lastTxHash,
     nextState,

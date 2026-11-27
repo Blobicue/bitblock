@@ -60,6 +60,7 @@ function parseOnlineCount(raw) {
  * Evaluates parsed soak probe records against the dual-gate Phase 3 criteria.
  */
 export function evaluateSoakRecords(records, opts = {}) {
+  const standalone = Boolean(opts.standalone);
   const t = { ...DEFAULT_THRESHOLDS, ...(opts.thresholds || {}) };
   const rows = Array.isArray(records) ? records.slice() : [];
   rows.sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0));
@@ -205,14 +206,17 @@ export function evaluateSoakRecords(records, opts = {}) {
   if (rollbackFlags > 0) chainBlockers.push(`${rollbackFlags} rollbackRecommended trigger(s)`);
   if (protocolMismatches > 0) chainBlockers.push(`${protocolMismatches} protocol/chainId mismatch(es)`);
   if (!heightMonotonic) chainBlockers.push(`${heightRegressions} finalized height regression(s)`);
-  if (rngFallbackPct < t.minRngFallbackPct) {
+  if (!standalone && rngFallbackPct < t.minRngFallbackPct) {
     chainBlockers.push(`hot rng-node-0..3 fallback ${rngFallbackPct}% < ${t.minRngFallbackPct}%`);
   }
 
   const relayerBlockers = [];
   if (relayerActiveSamples < t.minRelayerActiveSamples) {
+    const syncHint = standalone
+      ? 'awaiting Owen GATE_PASSWORD sync into node/.runtime/relayer/relayer.env'
+      : 'awaiting Owen ~/rngcoin-node/scripts/sync-relayer-gate-key.sh';
     relayerBlockers.push(
-      `relayer active criterion open (${relayerActiveSamples} active sample(s); awaiting Owen ~/rngcoin-node/scripts/sync-relayer-gate-key.sh)`
+      `relayer active criterion open (${relayerActiveSamples} active sample(s); ${syncHint})`
     );
   } else if (relayerActiveHours < t.minRelayerActiveHours) {
     relayerBlockers.push(
@@ -226,6 +230,7 @@ export function evaluateSoakRecords(records, opts = {}) {
   return {
     schema: 'bitblock/phase3-soak-scorecard/v1',
     testnetOnly: true,
+    standalone,
     windowStartUtc: effectiveStartMs !== null ? new Date(effectiveStartMs).toISOString() : null,
     windowEndUtc: lastTsMs !== null ? new Date(lastTsMs).toISOString() : null,
     elapsedHours,
@@ -248,6 +253,7 @@ export function evaluateSoakRecords(records, opts = {}) {
       heightRegressions,
       walWritesStart,
       walWritesEnd,
+      rngFallbackRequired: !standalone,
       rngFallbackHealthySamples,
       rngFallbackPct,
     },
@@ -298,7 +304,9 @@ export function renderMarkdown(report) {
     `| Validator shortfalls (< 3/4) | ${report.invariants.validatorShortfalls} | ${report.invariants.validatorShortfalls === 0 ? 'PASS' : 'FAIL'} |`,
     `| Rollback triggers | ${report.invariants.rollbackFlags} | ${report.invariants.rollbackFlags === 0 ? 'PASS' : 'FAIL'} |`,
     `| Finalized height monotonicity | ${report.invariants.heightStart ?? '—'} → ${report.invariants.heightEnd ?? '—'} | ${report.invariants.heightMonotonic ? 'PASS' : 'FAIL'} |`,
-    `| Hot rng-node-0..3 fallback (4/4) | ${report.invariants.rngFallbackPct}% | ${report.invariants.rngFallbackPct >= 99.5 ? 'PASS' : 'FAIL'} |`,
+    report.standalone
+      ? '| Hot rng-node-0..3 fallback (4/4) | N/A (standalone host) | SKIP |'
+      : `| Hot rng-node-0..3 fallback (4/4) | ${report.invariants.rngFallbackPct}% | ${report.invariants.rngFallbackPct >= 99.5 ? 'PASS' : 'FAIL'} |`,
     `| Relayer active window | ${report.relayer.activeSamples} probes (${report.relayer.activeHours}h, latest=\`${report.relayer.latestMode ?? 'unknown'}\`) | ${report.relayerBlockers.length === 0 ? 'PASS' : 'OPEN'} |`,
   ];
   if (report.blockers.length > 0) {
@@ -390,10 +398,41 @@ export function runSelfTest() {
   assert(md.includes('**Gate 1 (`chainSoakReady`):** **READY**'), 'markdown missing Gate 1');
   assert(md.includes('**Gate 2 (`fullPhase3Ready`):** **NOT READY**'), 'markdown missing Gate 2');
 
+  // 8. Standalone host mode: passes 168h without legacy rng-node-0..3 fallback, still fails on QC fault
+  const standaloneRows = makeSyntheticSeries(673, { relayerActiveFromIndex: 480 }).map((r) => {
+    const copy = { ...r };
+    delete copy.rngHotFallbackOnline;
+    delete copy.rngHotFallbackHeight;
+    return copy;
+  });
+  const standaloneNoFlag = evaluateSoakRecords(standaloneRows);
+  assert(standaloneNoFlag.gates.chainSoakReady === false, 'default mode must still require rng fallback');
+  const standalonePass = evaluateSoakRecords(standaloneRows, { standalone: true });
+  assert(standalonePass.standalone === true, 'standalone flag must be reflected in report');
+  assert(standalonePass.gates.chainSoakReady === true, 'standalonePass chainSoakReady must be true');
+  assert(standalonePass.gates.fullPhase3Ready === true, 'standalonePass fullPhase3Ready must be true');
+  assert(renderMarkdown(standalonePass).includes('N/A (standalone host)'), 'standalone markdown must mark fallback N/A');
+
+  const standaloneBadQc = standaloneRows.map((r) => ({ ...r }));
+  standaloneBadQc[100].qcVerified = false;
+  standaloneBadQc[100].ok = false;
+  const standaloneBad = evaluateSoakRecords(standaloneBadQc, { standalone: true });
+  assert(standaloneBad.gates.chainSoakReady === false, 'standalone mode must still fail on QC error');
+
   return {
     ok: true,
-    testsPassed: 7,
-    scenarios: ['fullPass', 'standbyOnlyDualGate', 'conservationFault', 'heightRegression', 'shortWindow', 'hotFallbackDegraded', 'markdownRender'],
+    testsPassed: 9,
+    scenarios: [
+      'fullPass',
+      'standbyOnlyDualGate',
+      'conservationFault',
+      'heightRegression',
+      'shortWindow',
+      'hotFallbackDegraded',
+      'markdownRender',
+      'standalonePass',
+      'standaloneQcFault',
+    ],
   };
 }
 
@@ -415,15 +454,20 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(2);
   }
   let manifestStartedAtUtc = null;
+  let manifestStandalone = false;
   if (existsSync(manifestPath)) {
     try {
-      manifestStartedAtUtc = JSON.parse(readFileSync(manifestPath, 'utf8')).startedAtUtc ?? null;
+      const m = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      manifestStartedAtUtc = m.startedAtUtc ?? null;
+      manifestStandalone = m.mode === 'standalone';
     } catch {
       manifestStartedAtUtc = null;
+      manifestStandalone = false;
     }
   }
+  const standalone = args.includes('--standalone') || manifestStandalone;
   const records = parseJsonlText(readFileSync(inputPath, 'utf8'));
-  const report = evaluateSoakRecords(records, { manifestStartedAtUtc });
+  const report = evaluateSoakRecords(records, { manifestStartedAtUtc, standalone });
   if (args.includes('--markdown')) {
     process.stdout.write(renderMarkdown(report));
   } else {

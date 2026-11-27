@@ -92,6 +92,7 @@ jobs:
           bash node/scripts/cutover-switch.sh --mode bitblock --dry-run
           bash node/scripts/cutover-switch.sh --mode rollback --dry-run
           node tools/soak_report.mjs --self-test
+          node node/scripts/run-soak-probe.mjs --self-test
           node node/scripts/verify-shadow-testnet.mjs
 
   python-tools:
