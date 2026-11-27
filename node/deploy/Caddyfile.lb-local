@@ -10,7 +10,8 @@
 	admin off
 }
 
-127.0.0.1:8640 {
+:8640 {
+	bind 127.0.0.1
 	request_body {
 		max_size 64KB
 	}
