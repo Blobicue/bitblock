@@ -33,14 +33,24 @@ use tokio::net::TcpStream;
 use tokio::sync::oneshot;
 
 fn pick_free_port_block(count: u16) -> u16 {
-    // Bind one ephemeral port to find an unused region, then verify contiguous ports are free.
-    for _ in 0..32 {
-        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
-        let base = probe.local_addr().unwrap().port();
-        drop(probe);
-        if base > 55_000 {
-            continue;
-        }
+    // Try OS ephemeral allocations first, then fall back to a deterministic-stride scan
+    // in the unprivileged non-ephemeral range (handles Windows when ephemeral ports are >55k).
+    let max_start = 65_000_u16.saturating_sub(count);
+    for attempt in 0..96_u16 {
+        let base = if attempt < 32 {
+            let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+            let p = probe.local_addr().unwrap().port();
+            drop(probe);
+            if p > max_start {
+                continue;
+            }
+            p
+        } else {
+            let seed = (std::process::id() as u16)
+                .wrapping_mul(31)
+                .wrapping_add(attempt.wrapping_mul(257));
+            22_000 + (seed % 24_000)
+        };
         let mut guards = Vec::new();
         let mut ok = true;
         for off in 0..count {
@@ -623,5 +633,78 @@ async fn lab_false_structurally_refuses_faucet() {
 
     let _ = stop_tx.send(());
     let _ = handle.await;
+    let _ = std::fs::remove_dir_all(&base_dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn four_validator_cluster_paces_blocks_cluster_wide_by_block_ms() {
+    let base_dir = std::env::temp_dir().join(format!(
+        "bb_pacing_e2e_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let p2p_base = pick_free_port_block(4);
+    let rpc_base = pick_free_port_block(4);
+    let block_ms = 500_u64;
+
+    let init = init_testnet(
+        base_dir.clone(),
+        4,
+        p2p_base,
+        rpc_base,
+        block_ms,
+        Some(50),
+        "pacing-e2e-pass".into(),
+        true,
+        vec![],
+    )
+    .expect("init_testnet");
+    assert_eq!(
+        init.genesis_id_hex, "41f01536332d15db43cc393002a92a3f790b2d655b524209050389a2ae367556",
+        "genesis_id must stay unchanged regardless of block_ms"
+    );
+
+    let mut stops = Vec::new();
+    let mut handles = Vec::new();
+    for i in 0..4 {
+        let cfg = init.node_configs[i].clone();
+        let pass = init.password_files[i].clone();
+        let (tx, rx) = oneshot::channel();
+        stops.push(Some(tx));
+        handles.push(Some(tokio::spawn(async move {
+            run_node_with_shutdown(cfg, Some(pass), false, Some(rx))
+                .await
+                .unwrap();
+        })));
+    }
+
+    // Warm up until all 4 validators have connected and finalized height >= 2.
+    let p0 = wait_for_height(rpc_base, 2, Duration::from_secs(20)).await;
+    let h0 = p0["head"]["height"].as_u64().unwrap();
+    let t0 = Instant::now();
+
+    // Advancing 4 consecutive blocks across 4 distinct leaders must take at least
+    // 3 full `block_ms` intervals (~1.5s minus poll granularity), ruling out the old
+    // per-validator throttle that burst 4 blocks in a single 500ms window.
+    let p1 = wait_for_height(rpc_base, h0 + 4, Duration::from_secs(20)).await;
+    let elapsed = t0.elapsed();
+    let h1 = p1["head"]["height"].as_u64().unwrap();
+    assert!(h1 >= h0 + 4);
+    assert!(
+        elapsed >= Duration::from_millis(1_400),
+        "4 consecutive blocks at block_ms={block_ms} finalized too fast ({elapsed:?}, h={h0}->{h1}); expected cluster-wide pacing"
+    );
+
+    for i in 0..4 {
+        if let Some(tx) = stops[i].take() {
+            let _ = tx.send(());
+        }
+        if let Some(h) = handles[i].take() {
+            let _ = h.await;
+        }
+    }
     let _ = std::fs::remove_dir_all(&base_dir);
 }

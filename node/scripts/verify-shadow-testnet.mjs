@@ -166,6 +166,9 @@ let demoServer = null;
 
 function spawnManaged(cmd, args, opts = {}) {
   const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts });
+  // Drain pipes so verbose tracing output can never fill small OS pipe buffers (e.g. 4 KiB on Windows).
+  child.stdout?.resume();
+  child.stderr?.resume();
   children.push(child);
   return child;
 }
@@ -512,6 +515,14 @@ try {
   });
   assert.equal(node3Caught.head.treasuryBalance, 50);
   assert.equal(node3Caught.head.simulatedPayoutEscrow, 100);
+
+  // Give the restarted validator a moment to establish >=2 P2P peers before strict mesh watchdog.
+  await waitFor('4-node P2P mesh convergence (peers >= 2)', 10_000, async () => {
+    const hs = await Promise.all(
+      [0, 1, 2, 3].map((i) => fetch(`http://127.0.0.1:${rpcBase + i}/health`).then((r) => r.json())),
+    );
+    return hs.every((h) => h.ok && (h.peers ?? 0) >= 2) ? hs : null;
+  });
 
   // 9b. Run Phase 2 health/invariant watchdog directly against the live 4-node cluster + relayer!
   const healthOut = execFileSync(

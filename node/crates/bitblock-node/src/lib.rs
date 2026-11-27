@@ -449,7 +449,9 @@ pub async fn run_node_with_shutdown(
     let block_interval = Duration::from_millis(cfg.block_ms.max(150));
     let round_timeout = Duration::from_millis(cfg.block_ms.max(150).saturating_mul(3).max(900));
     let mut tick = tokio::time::interval(Duration::from_millis((cfg.block_ms / 4).clamp(60, 250)));
-    let mut last_propose_attempt = Instant::now() - block_interval;
+    let mut last_finalized_at = Instant::now()
+        .checked_sub(block_interval)
+        .unwrap_or_else(Instant::now);
     let mut last_sync_req = Instant::now() - Duration::from_secs(5);
 
     let committee_map: HashMap<String, &ValidatorGenesisEntry> = genesis
@@ -488,15 +490,19 @@ pub async fn run_node_with_shutdown(
                     }
                 }
 
-                // If we are the deterministic leader for (next_height, round), propose!
+                // If we are the deterministic leader for (next_height, round), propose once
+                // `block_interval` has elapsed since the last finalized block (cluster-wide pacing)
+                // or immediately on view-change (`round > 0`).
                 if let Some(my_idx) = local_val_idx {
                     let proposer_idx =
                         ((next_height as usize).wrapping_add(round as usize)) % genesis.validators.len();
-                    if proposer_idx == my_idx
-                        && !proposed_rounds.contains(&(next_height, round))
-                        && (last_propose_attempt.elapsed() >= block_interval || round > 0)
-                    {
-                        last_propose_attempt = Instant::now();
+                    if should_propose_next_block(
+                        proposer_idx == my_idx,
+                        proposed_rounds.contains(&(next_height, round)),
+                        round,
+                        last_finalized_at.elapsed(),
+                        block_interval,
+                    ) {
                         proposed_rounds.insert((next_height, round));
 
                         let mut sim = state.clone();
@@ -597,6 +603,7 @@ pub async fn run_node_with_shutdown(
                                             &mut head_hash,
                                             &mut round,
                                             &mut round_started,
+                                            &mut last_finalized_at,
                                             &mut mempool,
                                             &mut mempool_hashes,
                                             &store,
@@ -719,6 +726,7 @@ pub async fn run_node_with_shutdown(
                                 &mut head_hash,
                                 &mut round,
                                 &mut round_started,
+                                &mut last_finalized_at,
                                 &mut proposed_rounds,
                                 &mut voted_rounds,
                                 &mut pending_proposals,
@@ -762,6 +770,7 @@ pub async fn run_node_with_shutdown(
                                     &mut head_hash,
                                     &mut round,
                                     &mut round_started,
+                                    &mut last_finalized_at,
                                     &mut proposed_rounds,
                                     &mut voted_rounds,
                                     &mut pending_proposals,
@@ -915,6 +924,7 @@ pub async fn run_node_with_shutdown(
                                 &mut head_hash,
                                 &mut round,
                                 &mut round_started,
+                                &mut last_finalized_at,
                                 &mut mempool,
                                 &mut mempool_hashes,
                                 &store,
@@ -984,6 +994,7 @@ pub async fn run_node_with_shutdown(
                                 &mut head_hash,
                                 &mut round,
                                 &mut round_started,
+                                &mut last_finalized_at,
                                 &mut mempool,
                                 &mut mempool_hashes,
                                 &store,
@@ -1066,6 +1077,7 @@ fn try_finalize(
     head_hash: &mut [u8; 32],
     round: &mut u32,
     round_started: &mut Instant,
+    last_finalized_at: &mut Instant,
     mempool: &mut Vec<(BitsSignedTxV1, Vec<u8>, [u8; 32])>,
     mempool_hashes: &mut HashSet<[u8; 32]>,
     store: &ChainStore,
@@ -1118,11 +1130,13 @@ fn try_finalize(
         return;
     }
 
+    let now = Instant::now();
     *state = prop.next_state;
     *head_height = height;
     *head_hash = block_hash;
     *round = 0;
-    *round_started = Instant::now();
+    *round_started = now;
+    *last_finalized_at = now;
     shared.bft_round.store(0, Ordering::Relaxed);
 
     prune_committed_and_stale(
@@ -1154,6 +1168,7 @@ fn apply_external_finalized(
     head_hash: &mut [u8; 32],
     round: &mut u32,
     round_started: &mut Instant,
+    last_finalized_at: &mut Instant,
     proposed_rounds: &mut HashSet<(u64, u32)>,
     voted_rounds: &mut HashSet<(u64, u32)>,
     pending_proposals: &mut HashMap<(u64, u32, [u8; 32]), PendingProposal>,
@@ -1211,11 +1226,13 @@ fn apply_external_finalized(
         return;
     }
 
+    let now = Instant::now();
     *state = sim;
     *head_height = h;
     *head_hash = bh;
     *round = 0;
-    *round_started = Instant::now();
+    *round_started = now;
+    *last_finalized_at = now;
     shared.bft_round.store(0, Ordering::Relaxed);
 
     prune_committed_and_stale(
@@ -1272,4 +1289,98 @@ fn prune_committed_and_stale(
     voted_rounds.retain(|(h, _)| *h > committed_height);
     pending_proposals.retain(|(h, _, _), _| *h > committed_height);
     votes.retain(|(h, _, _), _| *h > committed_height);
+}
+
+/// Decides whether the local validator may emit a block proposal on this tick.
+///
+/// Enforces cluster-wide pacing against `since_last_finalized` on `round == 0` so a
+/// multi-validator committee produces ~1 block per `block_interval` rather than
+/// `validators` blocks per `block_interval`. View-change rounds (`round > 0`) may
+/// propose immediately to preserve liveness when a leader is offline.
+fn should_propose_next_block(
+    is_leader: bool,
+    already_proposed: bool,
+    round: u32,
+    since_last_finalized: Duration,
+    block_interval: Duration,
+) -> bool {
+    is_leader && !already_proposed && (since_last_finalized >= block_interval || round > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PINNED_GENESIS_ID_HEX: &str =
+        "41f01536332d15db43cc393002a92a3f790b2d655b524209050389a2ae367556";
+    const PINNED_TREASURY_ACTOR_HEX: &str =
+        "e169706cae9f1e0839cc1c0ab8e8d6edda0abfe040ef0bab615db3ddf8a4d4b1";
+
+    #[test]
+    fn cluster_wide_block_pacing_gates_round_zero_until_interval() {
+        let interval = Duration::from_millis(3_000);
+        // Round 0 leader must wait until `block_interval` elapses since last finalized block.
+        assert!(!should_propose_next_block(
+            true,
+            false,
+            0,
+            Duration::from_millis(0),
+            interval,
+        ));
+        assert!(!should_propose_next_block(
+            true,
+            false,
+            0,
+            Duration::from_millis(2_999),
+            interval,
+        ));
+        assert!(should_propose_next_block(
+            true,
+            false,
+            0,
+            Duration::from_millis(3_000),
+            interval,
+        ));
+        // Non-leader or duplicate (height, round) never proposes.
+        assert!(!should_propose_next_block(
+            false,
+            false,
+            0,
+            Duration::from_millis(10_000),
+            interval,
+        ));
+        assert!(!should_propose_next_block(
+            true,
+            true,
+            0,
+            Duration::from_millis(10_000),
+            interval,
+        ));
+        // View-change (`round > 0`) proposes immediately without waiting another interval.
+        assert!(should_propose_next_block(
+            true,
+            false,
+            1,
+            Duration::from_millis(0),
+            interval,
+        ));
+    }
+
+    #[test]
+    fn genesis_id_is_invariant_across_block_ms_values() {
+        for block_ms in [250_u64, 1_000, 1_500, 2_000, 3_000] {
+            let genesis = BitsGenesisFile::testnet_default(vec![], vec![], block_ms);
+            let gid = hex::encode(genesis.genesis_id().expect("genesis_id"));
+            assert_eq!(
+                gid, PINNED_GENESIS_ID_HEX,
+                "genesis_id must remain invariant for block_ms={block_ms}"
+            );
+            assert_eq!(
+                genesis.platform_treasury_actor_hex, PINNED_TREASURY_ACTOR_HEX,
+                "platform_treasury must remain invariant for block_ms={block_ms}"
+            );
+            assert_eq!(genesis.block_ms, block_ms);
+            assert!(genesis.lab);
+        }
+    }
 }
